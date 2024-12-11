@@ -1,0 +1,39 @@
+XCIAP DEFINITIONS AUTOMATIC TAGS ::=
+BEGIN
+
+XCIAP256Header ::= SEQUENCE {
+    epoch INTEGER (0 .. 65535),
+    ack_epoch INTEGER (0 .. 65535),
+    channel INTEGER (0 .. 255),
+    acks BIT STRING SIZE (256)
+}
+
+XCIAP64Header ::= SEQUENCE {
+    epoch INTEGER (0 .. 65535),
+    ack_epoch INTEGER (0 .. 65535),
+    channel INTEGER (0 .. 63),
+    acks BIT STRING SIZE (64)
+}
+
+XCIAP16Header ::= SEQUENCE {
+    epoch INTEGER (0 .. 65535),
+    ack_epoch INTEGER (0 .. 65535),
+    channel INTEGER (0 .. 15),
+    acks BIT STRING SIZE (16)
+}
+
+XCIAP4Header ::= SEQUENCE {
+    epoch INTEGER (0 .. 65535),
+    ack_epoch INTEGER (0 .. 65535),
+    channel INTEGER (0 .. 3),
+    acks BIT STRING SIZE (4)
+}
+
+XCIAPHeader ::= CHOICE {
+    XCIAP4 XCIAP4Header,
+    XCIAP16 XCIAP16Header,
+    XCIAP64 XCIAP64Header,
+    XCIAP256 XCIAP256Header
+}
+
+END

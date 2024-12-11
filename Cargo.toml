@@ -29,3 +29,41 @@ exclude = [
     ".gitignore"
 ]
 edition = "2018"
+
+[features]
+default = ["gssapi", "log", "openssl", "unix"]
+gssapi = [
+    "constellation-auth/gssapi",
+    "constellation-common/gssapi"
+]
+log = [
+    "dep:log",
+    "constellation-auth/log",
+    "constellation-common/log"
+]
+openssl = [
+    "constellation-auth/openssl",
+    "constellation-common/openssl"
+]
+openssl-vendored = [
+    "constellation-auth/openssl-vendored",
+    "constellation-common/openssl-vendored"
+]
+unix = [
+    "constellation-auth/unix",
+    "constellation-common/unix"
+]
+
+[dependencies]
+asn1rs = { version = "0.2" }
+bitvec = { version = "1.0" }
+constellation-auth = { git = "https://github.com/constellation-system/constellation-auth.git", branch = "import", default-features = false }
+constellation-common = { git = "https://github.com/constellation-system/constellation-common.git", branch = "import", default-features = false }
+log = { version = "0.4", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+
+[build-dependencies]
+asn1rs = { version = "0.2" }
+
+[dev-dependencies]
+serde_yaml = { version = "0.9" }
