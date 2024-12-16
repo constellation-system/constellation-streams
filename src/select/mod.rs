@@ -1944,6 +1944,11 @@ where
         Self::StartBatchError
     > {
         match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchStartError::Select { .. } =>
+                panic!("Impossible case!"),
             SelectorBatchStartError::Stream {
                 selected,
                 stream: err
@@ -2453,6 +2458,11 @@ where
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchStartError::Select { .. } =>
+                panic!("Impossible case!"),
             SelectorBatchStartError::Stream {
                 selected,
                 stream: err
@@ -2573,6 +2583,11 @@ where
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchStartError::Select { .. } =>
+                panic!("Impossible case!"),
             // This is the one case where we need to cancel.
             SelectorBatchStartError::Stream {
                 selected,
