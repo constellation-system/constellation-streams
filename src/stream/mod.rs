@@ -108,7 +108,7 @@ pub trait StreamFlags {
     );
 }
 
-// XXX this is a workaround for an OpenSSL implementation issue.
+// This is a workaround for an OpenSSL implementation issue.
 
 pub trait ConcurrentStream {
     fn condvar(&self) -> Arc<Condvar>;
@@ -421,8 +421,8 @@ pub trait PushStream<Ctx> {
     ) -> Result<(), Self::ReportError>;
 }
 
-// XXX these traits are error-prone as implemented.  There should be
-// one function that takes an Option<BatchID>
+// ISSUE #7: these traits are error-prone as implemented.  There
+// should be one function that takes an Option<BatchID>
 
 pub trait PushStreamReportError<Error> {
     type ReportError: Display;

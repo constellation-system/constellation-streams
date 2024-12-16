@@ -111,7 +111,7 @@ struct ThreadedStreamSelectorConnections<
     Ctx
 > {
     ctx: PhantomData<Ctx>,
-    // XXX try to make these into RwLocks
+    // ISSUE #12: try to make these into RwLocks
     /// Source of counterparty addresses to use to get raw streams.
     addrs: Mutex<Resolve>,
     /// Sources of channels from which to get raw streams.
@@ -2668,8 +2668,8 @@ where
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     where
         I: Iterator<Item = Self::PartyID> {
-        // XXX find a better way to do this that doesn't involve
-        // creating arrays
+        // ISSUE #13: find a better way to do this that doesn't
+        // involve creating arrays
         let parties: Vec<Self::PartyID> = parties.collect();
 
         // Try to select a stream.

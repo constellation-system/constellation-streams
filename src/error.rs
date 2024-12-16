@@ -77,7 +77,7 @@ pub enum CompoundBatchError<Idx, Success, Err> {
     }
 }
 
-// XXX this actually isn't used everywhere it probably should be.
+// ISSUE #6: this actually isn't used everywhere it probably should be.
 
 /// A convenience type for implementing instances of
 /// [push](crate::stream::PushStreamSingle::push).

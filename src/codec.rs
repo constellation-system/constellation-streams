@@ -503,7 +503,7 @@ where
     type PullError = DatagramCodecStreamError<Codec::DecodeError, Error>;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
-        // XXX avoid creating arrays like this
+        // ISSUE #4: avoid creating arrays like this
         let mut buf = [0; Codec::MAX_BYTES];
 
         let readlen = self
@@ -536,7 +536,8 @@ where
         msg: &Msg
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        // XXX Find a way to avoid repeatedly encoding messages like this
+        // ISSUE #5: Find a way to avoid repeatedly encoding messages
+        // like this
         let buf = self
             .codec
             .encode_to_vec(msg)

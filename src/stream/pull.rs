@@ -65,7 +65,7 @@ where
     AuthN: Clone + MsgAuthN<Msg, Wrapper> {
     msg: PhantomData<Msg>,
     authn: AuthN,
-    // XXX this will need to send credentials
+    // ISSUE #11: this will need to send credentials
     buf: Sender<(AuthN::Prin, Msg)>,
     shutdown: ShutdownFlag,
     stream: ThreadedStream<Stream>,
@@ -106,7 +106,7 @@ where
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send {
     authn: AuthN,
     shutdown: ShutdownFlag,
-    // XXX this will need to send credentials
+    // ISSUE #11: this will need to send credentials
     buf: Sender<(AuthN::Prin, Msg)>,
     streams: Arc<
         Mutex<
@@ -274,7 +274,7 @@ where
         trace!(target: "pull-streams-recv-thread",
                "handling incoming message from {}",
                self.addr);
-        // XXX future: unwrap XCIAP here and report successes.
+        // ISSUE #10: future: unwrap XCIAP here and report successes.
 
         match self.authn.msg_authn(&self.session_prin, msg) {
             Ok(AuthNResult::Accept((prin, msg))) => self
@@ -396,7 +396,7 @@ where
                           "received new incoming stream from {}",
                           addr);
 
-                    // XXX handle session-level credentials and
+                    // ISSUE #11: handle session-level credentials and
                     // authentication here.
 
                     let stream = ThreadedStream::new(stream);
