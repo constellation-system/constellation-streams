@@ -99,15 +99,14 @@ pub struct BatchSlotsConfig {
 ///
 /// The YAML format has three fields, two of which are mandatory:
 ///
-/// * `channels`: Extra configuration information for the channels.
-///   This type must have a [Default] instance, and this field is
-///   optional.
+/// * `channels`: Extra configuration information for the channels. This type
+///   must have a [Default] instance, and this field is optional.
 ///
-/// * `channel-names`: An array of names of channels (defined
-///   elsewhere) that can be used to reach the endpoints.
+/// * `channel-names`: An array of names of channels (defined elsewhere) that
+///   can be used to reach the endpoints.
 ///
-/// * `endpoints`: An array of endpoints (often IP addresses and/or
-///   Unix socket addresses).
+/// * `endpoints`: An array of endpoints (often IP addresses and/or Unix socket
+///   addresses).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "connections-config")]
@@ -225,17 +224,16 @@ pub struct FarSchedulerConfig {
 ///
 /// The YAML format has five fields, only one of which is mandatory:
 ///
-/// * `connections`: An array of [ConnectionConfig] structures, each
-///   specifying a combination of endpoints and channels to reach
-///   those endpoints.  Multiple such structures are allowed, in order
-///   to permit users to group endpoints and channels appropriately.
+/// * `connections`: An array of [ConnectionConfig] structures, each specifying
+///   a combination of endpoints and channels to reach those endpoints.
+///   Multiple such structures are allowed, in order to permit users to group
+///   endpoints and channels appropriately.
 ///
-/// * `scheduler`: A [FarSchedulerConfig] structure to use for
-///   configuring the scheduler.
+/// * `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
+///   scheduler.
 ///
-/// * `resolve`: A structure specifying the parameters for the name
-///   resolved.  The exact format depends on the `Resolver` type
-///   parameter.
+/// * `resolve`: A structure specifying the parameters for the name resolved.
+///   The exact format depends on the `Resolver` type parameter.
 ///
 /// * `retry`: Retry configuration used for generating backoff delays.
 ///

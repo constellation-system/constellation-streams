@@ -121,12 +121,6 @@ pub struct StreamMulticasterReporter<
     rev_map: Vec<Reporter>
 }
 
-/// Error indicating that a batch batch ID was given.
-#[derive(Debug)]
-pub struct StreamMulticasterBadID {
-    id: CompoundBatchID
-}
-
 /// Errors that can occur while canceling a push operation.
 #[derive(Clone)]
 pub enum StreamMulticasterCancelPushError<Cancel, Flags, BatchID> {
@@ -861,23 +855,6 @@ where
                 )
             }
         }
-    }
-}
-
-impl ScopedError for StreamMulticasterBadID {
-    #[inline]
-    fn scope(&self) -> ErrorScope {
-        ErrorScope::Batch
-    }
-}
-
-impl BatchError for StreamMulticasterBadID {
-    type Completable = Infallible;
-    type Permanent = StreamMulticasterBadID;
-
-    #[inline]
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
-        (None, Some(self))
     }
 }
 
@@ -2823,15 +2800,6 @@ impl<BatchID> From<Vec<BatchID>> for StreamMulticasterBatch<BatchID> {
             batch_ids: val,
             active: bitvec![0; len]
         }
-    }
-}
-
-impl Display for StreamMulticasterBadID {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        write!(f, "bad batch ID ({})", self.id)
     }
 }
 

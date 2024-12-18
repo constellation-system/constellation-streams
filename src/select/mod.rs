@@ -1947,8 +1947,9 @@ where
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
             // for this.
-            SelectorBatchStartError::Select { .. } =>
-                panic!("Impossible case!"),
+            SelectorBatchStartError::Select { .. } => {
+                panic!("Impossible case!")
+            }
             SelectorBatchStartError::Stream {
                 selected,
                 stream: err
@@ -2461,8 +2462,9 @@ where
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
             // for this.
-            SelectorBatchStartError::Select { .. } =>
-                panic!("Impossible case!"),
+            SelectorBatchStartError::Select { .. } => {
+                panic!("Impossible case!")
+            }
             SelectorBatchStartError::Stream {
                 selected,
                 stream: err
@@ -2586,8 +2588,9 @@ where
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
             // for this.
-            SelectorBatchStartError::Select { .. } =>
-                panic!("Impossible case!"),
+            SelectorBatchStartError::Select { .. } => {
+                panic!("Impossible case!")
+            }
             // This is the one case where we need to cancel.
             SelectorBatchStartError::Stream {
                 selected,

@@ -47,21 +47,20 @@
 //! sending of single messages being a derived form.  It also provides
 //! a number of useful combinators for building push streams:
 //!
-//! * [StreamSelector](crate::select::StreamSelector): Selects from
-//!   among several options for communicating with a given
-//!   counterparty, and maintains a success/failure history for
-//!   informing the selection.
+//! * [StreamSelector](crate::select::StreamSelector): Selects from among
+//!   several options for communicating with a given counterparty, and maintains
+//!   a success/failure history for informing the selection.
 //!
 //! * [StreamMulticaster](crate::multicast::StreamMulticaster): Synthetic
-//!   multicasting combinator, manages communications with multiple
-//!   parties as a single stream.
+//!   multicasting combinator, manages communications with multiple parties as a
+//!   single stream.
 //!
 //! * [SharedPrivateChannelStream](crate::channels::SharedPrivateChannelStream):
-//! Allows shared (genuine multicast) and private (unicast) streams to
-//! be combined by a higher-level combinator.  This in turn allows
-//! `StreamMulticaster` and `StreamSelector` to correctly manage a mix
-//! of shared and private streams, combining the communications of
-//! parties who select the same shared stream.
+//!   Allows shared (genuine multicast) and private (unicast) streams to
+//!   be combined by a higher-level combinator.  This in turn allows
+//!   `StreamMulticaster` and `StreamSelector` to correctly manage a mix
+//!   of shared and private streams, combining the communications of
+//!   parties who select the same shared stream.
 //!
 //! The push API also interacts with the pull API to install any new
 //! streams created when sending messages into the pull side,
