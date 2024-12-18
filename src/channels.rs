@@ -561,6 +561,19 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     }
 }
 
+impl<Private, Shared> SharedPrivateChannels<Private, Shared> {
+    #[inline]
+    pub fn new(
+        private: Private,
+        shared: Shared
+    ) -> Self {
+        SharedPrivateChannels {
+            private: private,
+            shared: shared
+        }
+    }
+}
+
 impl<Private, Shared, Ctx> Channels<Ctx>
     for SharedPrivateChannels<Private, Shared>
 where

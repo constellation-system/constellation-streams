@@ -99,15 +99,14 @@ pub struct BatchSlotsConfig {
 ///
 /// The YAML format has three fields, two of which are mandatory:
 ///
-/// * `channels`: Extra configuration information for the channels.
-///   This type must have a [Default] instance, and this field is
-///   optional.
+/// * `channels`: Extra configuration information for the channels. This type
+///   must have a [Default] instance, and this field is optional.
 ///
-/// * `channel-names`: An array of names of channels (defined
-///   elsewhere) that can be used to reach the endpoints.
+/// * `channel-names`: An array of names of channels (defined elsewhere) that
+///   can be used to reach the endpoints.
 ///
-/// * `endpoints`: An array of endpoints (often IP addresses and/or
-///   Unix socket addresses).
+/// * `endpoints`: An array of endpoints (often IP addresses and/or Unix socket
+///   addresses).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "connections-config")]
@@ -225,17 +224,16 @@ pub struct FarSchedulerConfig {
 ///
 /// The YAML format has five fields, only one of which is mandatory:
 ///
-/// * `connections`: An array of [ConnectionConfig] structures, each
-///   specifying a combination of endpoints and channels to reach
-///   those endpoints.  Multiple such structures are allowed, in order
-///   to permit users to group endpoints and channels appropriately.
+/// * `connections`: An array of [ConnectionConfig] structures, each specifying
+///   a combination of endpoints and channels to reach those endpoints.
+///   Multiple such structures are allowed, in order to permit users to group
+///   endpoints and channels appropriately.
 ///
-/// * `scheduler`: A [FarSchedulerConfig] structure to use for
-///   configuring the scheduler.
+/// * `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
+///   scheduler.
 ///
-/// * `resolve`: A structure specifying the parameters for the name
-///   resolved.  The exact format depends on the `Resolver` type
-///   parameter.
+/// * `resolve`: A structure specifying the parameters for the name resolved.
+///   The exact format depends on the `Resolver` type parameter.
 ///
 /// * `retry`: Retry configuration used for generating backoff delays.
 ///
@@ -645,18 +643,20 @@ fn test_party_config() {
     let addr_10000: SocketAddr = "10.10.10.10:10000".parse().unwrap();
     let channames_10000 = vec!["chan-1", "chan-2"];
     let endpoints_10000 = vec![addr_10000];
-    let connection_10000 = ConnectionConfig::new(
-        (), channames_10000, endpoints_10000
-    );
+    let connection_10000 =
+        ConnectionConfig::new((), channames_10000, endpoints_10000);
     let addr_9999: SocketAddr = "10.10.10.10:9999".parse().unwrap();
     let channames_9999 = vec!["chan-2"];
     let endpoints_9999 = vec![addr_9999];
-    let connection_9999 = ConnectionConfig::new(
-        (), channames_9999, endpoints_9999
-    );
+    let connection_9999 =
+        ConnectionConfig::new((), channames_9999, endpoints_9999);
     let connections = vec![connection_10000, connection_9999];
     let expected = PartyConfig::new(
-        FarSchedulerConfig::default(), (), retry, connections, None
+        FarSchedulerConfig::default(),
+        (),
+        retry,
+        connections,
+        None
     );
     let actual = serde_yaml::from_str(yaml).unwrap();
 
