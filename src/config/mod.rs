@@ -225,9 +225,9 @@ pub struct FarSchedulerConfig {
 /// The YAML format has five fields, only one of which is mandatory:
 ///
 /// * `connections`: An array of [ConnectionConfig] structures, each specifying
-///   a combination of endpoints and channels to reach those endpoints.
-///   Multiple such structures are allowed, in order to permit users to group
-///   endpoints and channels appropriately.
+///   a combination of endpoints and channels to reach those endpoints. Multiple
+///   such structures are allowed, in order to permit users to group endpoints
+///   and channels appropriately.
 ///
 /// * `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
 ///   scheduler.
