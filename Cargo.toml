@@ -56,7 +56,7 @@ unix = [
 ]
 
 [dependencies]
-asn1rs = { version = "0.2" }
+asn1rs = { version = "0.3" }
 bitvec = { version = "1.0" }
 constellation-auth = { git = "https://github.com/constellation-system/constellation-auth.git", branch = "import", default-features = false }
 constellation-common = { git = "https://github.com/constellation-system/constellation-common.git", branch = "import", default-features = false }
@@ -64,7 +64,7 @@ log = { version = "0.4", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
-asn1rs = { version = "0.2" }
+asn1rs = { version = "0.3" }
 
 [dev-dependencies]
 serde_yaml = { version = "0.9" }
