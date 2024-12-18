@@ -525,6 +525,23 @@ where
     Resolver: Default,
     Channels: Default
 {
+    #[inline]
+    pub fn new(
+        scheduler: FarSchedulerConfig,
+        resolve: Resolver,
+        retry: Retry,
+        connections: Vec<ConnectionConfig<Channels, Channel, Endpoint>>,
+        size_hint: Option<usize>
+    ) -> Self {
+        PartyConfig {
+            scheduler: scheduler,
+            resolve: resolve,
+            retry: retry,
+            connections: connections,
+            size_hint: size_hint
+        }
+    }
+
     /// Get the scheduler configuration.
     #[inline]
     pub fn scheduler(&self) -> &FarSchedulerConfig {
@@ -601,41 +618,47 @@ fn test_connection_config() {
     assert_eq!(expected, actual);
 }
 
-// #[test]
-// fn test_party_config() {
-// let yaml = concat!(
-// "retry:\n",
-// "  factor: 100\n",
-// "  exp-base: 2.0\n",
-// "  exp-factor: 1.0\n",
-// "  exp-rounds-cap: 20\n",
-// "  linear-factor: 1.0\n",
-// "  linear-rounds-cap: 50\n",
-// "  max-random: 100\n",
-// "  addend: 50\n",
-// "connections:\n",
-// "  - channel-names:\n",
-// "      - \"chan-1\"\n",
-// "      - \"chan-2\"\n",
-// "    endpoints:\n",
-// "      - 10.10.10.10:10000\n",
-// "  - channel-names:\n",
-// "      - \"chan-2\"\n",
-// "    endpoints:\n",
-// "      - 10.10.10.10:9999\n",
-// "udp:\n",
-// "  addr: 10.10.10.10\n",
-// "  port: 10000\n"
-// );
-// let retry = Retry::new(100, 2.0, 1.0, 20, 1.0, Some(50), 100, 50);
-// let addr: SocketAddr = "10.10.10.10:10000".parse().unwrap();
-// let udp = UDPFarChannelConfig::new(addr.ip(), addr.port());
-// let endpoint = CompoundFarChannelConfig::UDP { udp: udp };
-// let expected = PartyConfig {
-// retry: retry,
-// endpoint: endpoint
-// };
-// let actual = serde_yaml::from_str(yaml).unwrap();
-//
-// assert_eq!(expected, actual);
-// }
+#[test]
+fn test_party_config() {
+    let yaml = concat!(
+        "retry:\n",
+        "  factor: 100\n",
+        "  exp-base: 2.0\n",
+        "  exp-factor: 1.0\n",
+        "  exp-rounds-cap: 20\n",
+        "  linear-factor: 1.0\n",
+        "  linear-rounds-cap: 50\n",
+        "  max-random: 100\n",
+        "  addend: 50\n",
+        "connections:\n",
+        "  - channel-names:\n",
+        "      - \"chan-1\"\n",
+        "      - \"chan-2\"\n",
+        "    endpoints:\n",
+        "      - 10.10.10.10:10000\n",
+        "  - channel-names:\n",
+        "      - \"chan-2\"\n",
+        "    endpoints:\n",
+        "      - 10.10.10.10:9999\n",
+    );
+    let retry = Retry::new(100, 2.0, 1.0, 20, 1.0, Some(50), 100, 50);
+    let addr_10000: SocketAddr = "10.10.10.10:10000".parse().unwrap();
+    let channames_10000 = vec!["chan-1", "chan-2"];
+    let endpoints_10000 = vec![addr_10000];
+    let connection_10000 = ConnectionConfig::new(
+        (), channames_10000, endpoints_10000
+    );
+    let addr_9999: SocketAddr = "10.10.10.10:9999".parse().unwrap();
+    let channames_9999 = vec!["chan-2"];
+    let endpoints_9999 = vec![addr_9999];
+    let connection_9999 = ConnectionConfig::new(
+        (), channames_9999, endpoints_9999
+    );
+    let connections = vec![connection_10000, connection_9999];
+    let expected = PartyConfig::new(
+        FarSchedulerConfig::default(), (), retry, connections, None
+    );
+    let actual = serde_yaml::from_str(yaml).unwrap();
+
+    assert_eq!(expected, actual);
+}
