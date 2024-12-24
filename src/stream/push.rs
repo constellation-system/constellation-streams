@@ -16,13 +16,13 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::fmt::Display;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -40,20 +40,6 @@ use log::debug;
 use log::error;
 use log::info;
 use log::trace;
-
-pub trait PushStreamSharedMsgs<Party, Msg> {
-    /// Type of errors that can occur when collecting messages.
-    type MsgsError: Display + ScopedError;
-
-    /// Collect and report outbound messages.
-    ///
-    /// This will provide the outbound messages, if there are any, as
-    /// well as the time at which to check again for new messages.
-    fn msgs(
-        &mut self
-    ) -> Result<(Option<Vec<(Vec<Party>, Vec<Msg>)>>, Option<Instant>),
-                Self::MsgsError>;
-}
 
 enum PushEntry<Msg, Stream, Ctx>
 where
@@ -133,7 +119,7 @@ where
     Stream::StreamFlags: Send,
     Stream::PartyID: From<usize> + Send,
     Stream::BatchID: Send,
-    Msgs: PushStreamSharedMsgs<Stream::PartyID, Msg>,
+    Msgs: SharedMsgs<Stream::PartyID, Msg>,
     Msg: Clone + Send,
     Ctx: Send + Sync {
     ctx: Ctx,
@@ -843,7 +829,7 @@ where
     Stream::StreamFlags: Send,
     Stream::PartyID: From<usize> + Send,
     Stream::BatchID: Send,
-    Msgs: 'static + PushStreamSharedMsgs<Stream::PartyID, Msg> + Send,
+    Msgs: 'static + SharedMsgs<Stream::PartyID, Msg> + Send,
     Msg: 'static + Clone + Send,
     Ctx: 'static + Send + Sync
 {
