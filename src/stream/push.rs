@@ -16,10 +16,13 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::fmt::Display;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use constellation_common::error::ErrorScope;
+use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -39,13 +42,17 @@ use log::info;
 use log::trace;
 
 pub trait PushStreamSharedMsgs<Party, Msg> {
+    /// Type of errors that can occur when collecting messages.
+    type MsgsError: Display + ScopedError;
+
     /// Collect and report outbound messages.
     ///
     /// This will provide the outbound messages, if there are any, as
     /// well as the time at which to check again for new messages.
     fn msgs(
         &mut self
-    ) -> (Option<Vec<(Vec<Party>, Vec<Msg>)>>, Option<Instant>);
+    ) -> Result<(Option<Vec<(Vec<Party>, Vec<Msg>)>>, Option<Instant>),
+                Self::MsgsError>;
 }
 
 enum PushEntry<Msg, Stream, Ctx>
@@ -884,11 +891,13 @@ where
         self.notify.clone()
     }
 
-    fn update_from_outbound(&mut self) -> Option<Instant> {
+    fn update_from_outbound(
+        &mut self
+    ) -> Result<Option<Instant>, Msgs::MsgsError>  {
         debug!(target: "push-stream-shared-thread",
                "fetching new outbound messages");
 
-        let (groups, next) = self.msgs.msgs();
+        let (groups, next) = self.msgs.msgs()?;
 
         if let Some(groups) = groups {
             // Go through each group and try sending it
@@ -905,7 +914,7 @@ where
             }
         }
 
-        next
+        Ok(next)
     }
 
     fn retry_pending(
@@ -964,7 +973,20 @@ where
             if let Some(when) = next_outbound &&
                 when <= now
             {
-                next_outbound = self.update_from_outbound()
+                match self.update_from_outbound() {
+                    Ok(next) => {
+                        next_outbound = next
+                    }
+                    Err(err) => {
+                        error!(target: "push-stream-shared-thread",
+                               "error obtaining messages: {}",
+                               err);
+
+                        if err.scope() >= ErrorScope::Shutdown {
+                            valid = false
+                        }
+                    }
+                }
             }
 
             if let Some(next) = next_pending &&
