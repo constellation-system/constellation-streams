@@ -44,6 +44,7 @@ use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 
 pub mod pull;
+pub mod push;
 
 /// Trait for caches used in stream creation to allow shared streams.
 ///
