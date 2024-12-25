@@ -58,7 +58,6 @@ where
         + PushStreamAddParty<Ctx>
         + Send,
     Msg: Clone + Send {
-    //    Ctx: NSNameCachesCtx {
     Batch {
         msgs: Vec<Msg>,
         parties: Vec<Stream::PartyID>,
@@ -153,7 +152,6 @@ where
             Stream::BatchID
         > + Send,
     Msg: Clone + Send
-    //    Ctx: NSNameCachesCtx
 {
     fn when(&self) -> Instant {
         match self {
@@ -190,7 +188,6 @@ where
         + Send,
     Stream::PartyID: From<usize>,
     Msg: 'static + Clone + Send
-    //    Ctx: 'static + NSNameCachesCtx + Send + Sync
 {
     fn complete_cancel_batch(
         ctx: &mut Ctx,
