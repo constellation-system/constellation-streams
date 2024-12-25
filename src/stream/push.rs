@@ -27,6 +27,10 @@ use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::sync::Notify;
+use log::debug;
+use log::error;
+use log::info;
+use log::trace;
 
 use crate::error::BatchError;
 use crate::stream::PushStreamAdd;
@@ -36,10 +40,6 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use log::debug;
-use log::error;
-use log::info;
-use log::trace;
 
 enum PushEntry<Msg, Stream, Ctx>
 where
@@ -58,7 +58,7 @@ where
         + PushStreamAddParty<Ctx>
         + Send,
     Msg: Clone + Send {
-//    Ctx: NSNameCachesCtx {
+    //    Ctx: NSNameCachesCtx {
     Batch {
         msgs: Vec<Msg>,
         parties: Vec<Stream::PartyID>,
@@ -152,8 +152,8 @@ where
             <Stream::AddPartiesError as BatchError>::Permanent,
             Stream::BatchID
         > + Send,
-    Msg: Clone + Send,
-//    Ctx: NSNameCachesCtx
+    Msg: Clone + Send
+    //    Ctx: NSNameCachesCtx
 {
     fn when(&self) -> Instant {
         match self {
@@ -189,8 +189,8 @@ where
         + PushStreamAdd<Msg, Ctx>
         + Send,
     Stream::PartyID: From<usize>,
-    Msg: 'static + Clone + Send,
-//    Ctx: 'static + NSNameCachesCtx + Send + Sync
+    Msg: 'static + Clone + Send
+    //    Ctx: 'static + NSNameCachesCtx + Send + Sync
 {
     fn complete_cancel_batch(
         ctx: &mut Ctx,
@@ -803,19 +803,23 @@ where
 
 impl<Msg, Msgs, Stream, Ctx> PushStreamSharedThread<Msg, Msgs, Stream, Ctx>
 where
-    Stream: 'static +
-        PushStreamReportBatchError<
+    Stream: 'static
+        + PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportError<
+        >
+        + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
+        >
+        + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportBatchError<
+        >
+        + PushStreamReportBatchError<
             <Stream::AddPartiesError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamSharedSingle<Msg, Ctx>
+        >
+        + PushStreamSharedSingle<Msg, Ctx>
         + PushStreamShared
         + PushStreamParties
         + Send,
@@ -879,7 +883,7 @@ where
 
     fn update_from_outbound(
         &mut self
-    ) -> Result<Option<Instant>, Msgs::MsgsError>  {
+    ) -> Result<Option<Instant>, Msgs::MsgsError> {
         debug!(target: "push-stream-shared-thread",
                "fetching new outbound messages");
 
@@ -960,9 +964,7 @@ where
                 when <= now
             {
                 match self.update_from_outbound() {
-                    Ok(next) => {
-                        next_outbound = next
-                    }
+                    Ok(next) => next_outbound = next,
                     Err(err) => {
                         error!(target: "push-stream-shared-thread",
                                "error obtaining messages: {}",
