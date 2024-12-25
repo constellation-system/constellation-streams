@@ -41,6 +41,9 @@ use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 
+/// Backlog entry for push threads.
+///
+/// This records the state of a partially-completed operation.
 enum PushEntry<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
