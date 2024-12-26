@@ -26,12 +26,12 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 
+use constellation_auth::authn::AuthNMsgReporter;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
@@ -58,17 +58,17 @@ where
     stream: ThreadedStream<Stream>
 }
 
-struct RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+struct RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> {
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Reporter: AuthNMsgReporter<AuthN::Prin, Msg> {
     msg: PhantomData<Msg>,
     authn: AuthN,
-    // ISSUE #11: this will need to send credentials
-    buf: Sender<(AuthN::Prin, Msg)>,
     shutdown: ShutdownFlag,
     stream: ThreadedStream<Stream>,
+    reporter: Reporter,
     addr: Addr,
     session_prin: AuthN::SessionPrin,
     recvs: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>
@@ -104,10 +104,9 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send {
+    msg: PhantomData<Msg>,
     authn: AuthN,
     shutdown: ShutdownFlag,
-    // ISSUE #11: this will need to send credentials
-    buf: Sender<(AuthN::Prin, Msg)>,
     streams: Arc<
         Mutex<
             HashMap<Listener::Addr, RecvThreadEntry<Wrapper, Listener::Stream>>
@@ -233,12 +232,13 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN> Drop
-    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Reporter> Drop
+    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper>
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Reporter: AuthNMsgReporter<AuthN::Prin, Msg>
 {
     fn drop(&mut self) {
         if self.shutdown.is_live() {
@@ -260,15 +260,16 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN>
-    RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
+    RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper>
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Reporter: AuthNMsgReporter<AuthN::Prin, Msg>
 {
     fn handle_msg(
-        &self,
+        &mut self,
         msg: Wrapper
     ) -> Result<(), RecvSendError<AuthN::Error>> {
         trace!(target: "pull-streams-recv-thread",
@@ -278,8 +279,8 @@ where
 
         match self.authn.msg_authn(&self.session_prin, msg) {
             Ok(AuthNResult::Accept((prin, msg))) => self
-                .buf
-                .send((prin, msg))
+                .reporter
+                .report_auth_msg(&prin, msg)
                 .map_err(|_| RecvSendError::Shutdown),
             Ok(AuthNResult::Reject) => {
                 warn!(target: "pull-streams-recv-thread",
@@ -372,15 +373,17 @@ where
     Wrapper: 'static + Send,
     Msg: 'static + Send
 {
-    fn run<Reporter>(
+    fn run<S, M, Prin>(
         &mut self,
-        mut reporter: Reporter
+        mut stream_reporter: S,
+        msg_reporter: M
     ) where
-        Reporter: StreamReporter<
+        S: StreamReporter<
             Stream = ThreadedStream<Listener::Stream>,
             Prin = Listener::Prin,
             Src = Listener::Addr
-        > {
+        >,
+        M: AuthNMsgReporter<Prin, Msg> {
         let mut valid = true;
 
         debug!(target: "pull-streams-listen-thread",
@@ -401,7 +404,7 @@ where
 
                     let stream = ThreadedStream::new(stream);
 
-                    match reporter.report(addr.clone(), prin, stream) {
+                    match stream_reporter.report(addr.clone(), prin, stream) {
                         Ok(None) => {
                             debug!(target: "pull-streams-listen-thread",
                                    "incoming stream registered for {}",
@@ -434,24 +437,27 @@ where
     }
 
     #[inline]
-    pub fn start<Reporter>(
+    pub fn start<S, M, Prin>(
         mut self,
-        reporter: Reporter
+        stream_reporter: S,
+        msg_reporter: M
     ) -> JoinHandle<()>
     where
-        Reporter: 'static
+        S: 'static
             + StreamReporter<
                 Stream = ThreadedStream<Listener::Stream>,
                 Prin = Listener::Prin,
                 Src = Listener::Addr
             >
-            + Send {
-        spawn(move || self.run(reporter))
+            + Send,
+        M: 'static + AuthNMsgReporter<Prin, Msg> + Send
+    {
+        spawn(move || self.run(stream_reporter, msg_reporter))
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN> StreamReporter
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN>
+impl<Msg, Wrapper, Listener, AuthN, Reporter> StreamReporter
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Reporter>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: 'static + ConcurrentStream + Credentials + Send,
@@ -463,6 +469,7 @@ where
         + Clone
         + MsgAuthN<Msg, Wrapper, SessionPrin = Listener::Prin>
         + Send,
+    Reporter: AuthNMsgReporter<AuthN::Prin, Msg>,
     AuthN::Prin: 'static + Send
 {
     type Prin = AuthN::SessionPrin;
@@ -493,7 +500,7 @@ where
                     let mut thread = RecvThread {
                         msg: PhantomData,
                         authn: self.inner.authn.clone(),
-                        buf: self.inner.buf.clone(),
+                        reporter: self.inner.reporter.clone(),
                         shutdown: self.inner.shutdown.clone(),
                         stream: stream.clone(),
                         addr: src.clone(),
@@ -567,8 +574,8 @@ where
                "launching listener thread");
 
         let streams = PullStreams {
+            msg: PhantomData,
             authn: authn,
-            buf: send,
             shutdown: shutdown,
             streams: streams
         };
