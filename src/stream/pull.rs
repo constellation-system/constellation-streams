@@ -153,33 +153,33 @@ where
     }
 }
 
-unsafe impl<Msg, Wrapper, Listener, AuthN, Reporter> Send
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Reporter>
+unsafe impl<Msg, Wrapper, Listener, AuthN, Recv> Send
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Reporter: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
 }
 
-unsafe impl<Msg, Wrapper, Listener, AuthN, Reporter> Sync
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Reporter>
+unsafe impl<Msg, Wrapper, Listener, AuthN, Recv> Sync
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Reporter: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
 }
 
-impl<Msg, Wrapper, Listener, AuthN, Reporter> Clone
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Reporter>
+impl<Msg, Wrapper, Listener, AuthN, Recv> Clone
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Reporter: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn clone(&self) -> Self {
         PullStreamsReporter {
@@ -229,13 +229,13 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN, Reporter> Drop
-    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv> Drop
+    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
     AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Reporter: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn drop(&mut self) {
         if self.shutdown.is_live() {
@@ -257,13 +257,13 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
-    RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Reporter>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv>
+    RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
     AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Reporter: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn handle_msg(
         &mut self,
@@ -448,8 +448,8 @@ where
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN, Reporter> StreamReporter
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Reporter>
+impl<Msg, Wrapper, Listener, AuthN, Recv> StreamReporter
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: 'static + ConcurrentStream + Credentials + Send,
@@ -461,7 +461,7 @@ where
         + Clone
         + MsgAuthN<Msg, Wrapper, SessionPrin = Listener::Prin>
         + Send,
-    Reporter: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Clone + Send,
+    Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Clone + Send,
     AuthN::Prin: 'static + Send
 {
     type Prin = AuthN::SessionPrin;
