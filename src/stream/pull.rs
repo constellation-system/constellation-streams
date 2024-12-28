@@ -372,7 +372,7 @@ where
 {
     fn run<S>(
         &mut self,
-        mut stream_reporter: S,
+        mut stream_reporter: S
     ) where
         S: StreamReporter<
             Stream = ThreadedStream<Listener::Stream>,
@@ -434,7 +434,7 @@ where
     #[inline]
     pub fn start<S>(
         mut self,
-        stream_reporter: S,
+        stream_reporter: S
     ) -> JoinHandle<()>
     where
         S: 'static
@@ -443,8 +443,7 @@ where
                 Prin = Listener::Prin,
                 Src = Listener::Addr
             >
-            + Send
-    {
+            + Send {
         spawn(move || self.run(stream_reporter))
     }
 }
@@ -537,7 +536,7 @@ where
     Wrapper: 'static + Send,
     Msg: 'static + Send,
     Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send
 {
     fn create(
         listener: Listener,
