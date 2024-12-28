@@ -24,14 +24,12 @@ use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::sync::mpsc::channel;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 
+use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
@@ -58,17 +56,17 @@ where
     stream: ThreadedStream<Stream>
 }
 
-struct RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+struct RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> {
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
     msg: PhantomData<Msg>,
     authn: AuthN,
-    // ISSUE #11: this will need to send credentials
-    buf: Sender<(AuthN::Prin, Msg)>,
     shutdown: ShutdownFlag,
     stream: ThreadedStream<Stream>,
+    recv: Recv,
     addr: Addr,
     session_prin: AuthN::SessionPrin,
     recvs: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>
@@ -99,15 +97,16 @@ where
 }
 
 /// Representation of the entire "pull side" in the streams API.
-pub struct PullStreams<Msg, Wrapper, Listener, AuthN>
+pub struct PullStreams<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send {
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    msg: PhantomData<Msg>,
     authn: AuthN,
     shutdown: ShutdownFlag,
-    // ISSUE #11: this will need to send credentials
-    buf: Sender<(AuthN::Prin, Msg)>,
+    recv: Recv,
     streams: Arc<
         Mutex<
             HashMap<Listener::Addr, RecvThreadEntry<Wrapper, Listener::Stream>>
@@ -119,28 +118,13 @@ where
 ///
 /// This is typically created once initialization is finished, and
 /// given to the push side as a reporter.
-pub struct PullStreamsReporter<Msg, Wrapper, Listener, AuthN>
+pub struct PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send {
-    inner: Arc<PullStreams<Msg, Wrapper, Listener, AuthN>>
-}
-
-/// A [PullStream] instance representing the entire "pull side".
-///
-/// This will receive *all* messages that have been authenticated
-/// successfully.  This can be used as a single receive point by
-/// higher abstractions.
-pub struct PullStreamsReceiver<Prin, Msg> {
-    recv: Receiver<(Prin, Msg)>
-}
-
-/// Errors that can occur in the [pull](PullStream::pull) operation
-/// for [PullStreamsReceiver].
-#[derive(Debug)]
-pub enum PullStreamsReceiverError {
-    Shutdown
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    inner: Arc<PullStreams<Msg, Wrapper, Listener, AuthN, Recv>>
 }
 
 /// Errors that can occur reporting a stream through
@@ -156,15 +140,6 @@ enum RecvSendError<AuthN> {
     Shutdown
 }
 
-impl ScopedError for PullStreamsReceiverError {
-    #[inline]
-    fn scope(&self) -> ErrorScope {
-        match self {
-            PullStreamsReceiverError::Shutdown => ErrorScope::Shutdown
-        }
-    }
-}
-
 impl<AuthN> ScopedError for RecvSendError<AuthN>
 where
     AuthN: ScopedError
@@ -178,12 +153,33 @@ where
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN> Clone
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN>
+unsafe impl<Msg, Wrapper, Listener, AuthN, Recv> Send
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+{
+}
+
+unsafe impl<Msg, Wrapper, Listener, AuthN, Recv> Sync
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
+where
+    Listener: PullStreamListener<Wrapper>,
+    Listener::Stream: ConcurrentStream + Credentials,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+{
+}
+
+impl<Msg, Wrapper, Listener, AuthN, Recv> Clone
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
+where
+    Listener: PullStreamListener<Wrapper>,
+    Listener::Stream: ConcurrentStream + Credentials,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn clone(&self) -> Self {
         PullStreamsReporter {
@@ -233,12 +229,13 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN> Drop
-    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv> Drop
+    for RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper>
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn drop(&mut self) {
         if self.shutdown.is_live() {
@@ -260,15 +257,16 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN>
-    RecvThread<Msg, Wrapper, Addr, Stream, AuthN>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv>
+    RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper>
+    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
     fn handle_msg(
-        &self,
+        &mut self,
         msg: Wrapper
     ) -> Result<(), RecvSendError<AuthN::Error>> {
         trace!(target: "pull-streams-recv-thread",
@@ -278,8 +276,8 @@ where
 
         match self.authn.msg_authn(&self.session_prin, msg) {
             Ok(AuthNResult::Accept((prin, msg))) => self
-                .buf
-                .send((prin, msg))
+                .recv
+                .recv_auth_msg(&prin, msg)
                 .map_err(|_| RecvSendError::Shutdown),
             Ok(AuthNResult::Reject) => {
                 warn!(target: "pull-streams-recv-thread",
@@ -372,11 +370,11 @@ where
     Wrapper: 'static + Send,
     Msg: 'static + Send
 {
-    fn run<Reporter>(
+    fn run<S>(
         &mut self,
-        mut reporter: Reporter
+        mut stream_reporter: S
     ) where
-        Reporter: StreamReporter<
+        S: StreamReporter<
             Stream = ThreadedStream<Listener::Stream>,
             Prin = Listener::Prin,
             Src = Listener::Addr
@@ -401,7 +399,7 @@ where
 
                     let stream = ThreadedStream::new(stream);
 
-                    match reporter.report(addr.clone(), prin, stream) {
+                    match stream_reporter.report(addr.clone(), prin, stream) {
                         Ok(None) => {
                             debug!(target: "pull-streams-listen-thread",
                                    "incoming stream registered for {}",
@@ -434,24 +432,24 @@ where
     }
 
     #[inline]
-    pub fn start<Reporter>(
+    pub fn start<S>(
         mut self,
-        reporter: Reporter
+        stream_reporter: S
     ) -> JoinHandle<()>
     where
-        Reporter: 'static
+        S: 'static
             + StreamReporter<
                 Stream = ThreadedStream<Listener::Stream>,
                 Prin = Listener::Prin,
                 Src = Listener::Addr
             >
             + Send {
-        spawn(move || self.run(reporter))
+        spawn(move || self.run(stream_reporter))
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN> StreamReporter
-    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN>
+impl<Msg, Wrapper, Listener, AuthN, Recv> StreamReporter
+    for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: 'static + ConcurrentStream + Credentials + Send,
@@ -463,6 +461,7 @@ where
         + Clone
         + MsgAuthN<Msg, Wrapper, SessionPrin = Listener::Prin>
         + Send,
+    Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Clone + Send,
     AuthN::Prin: 'static + Send
 {
     type Prin = AuthN::SessionPrin;
@@ -493,7 +492,7 @@ where
                     let mut thread = RecvThread {
                         msg: PhantomData,
                         authn: self.inner.authn.clone(),
-                        buf: self.inner.buf.clone(),
+                        recv: self.inner.recv.clone(),
                         shutdown: self.inner.shutdown.clone(),
                         stream: stream.clone(),
                         addr: src.clone(),
@@ -527,7 +526,8 @@ where
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN> PullStreams<Msg, Wrapper, Listener, AuthN>
+impl<Msg, Wrapper, Listener, AuthN, Recv>
+    PullStreams<Msg, Wrapper, Listener, AuthN, Recv>
 where
     Listener: 'static + PullStreamListener<Wrapper> + Send,
     Listener::Stream: 'static + ConcurrentStream + Credentials + Send,
@@ -535,11 +535,12 @@ where
     Listener::Prin: 'static + Send,
     Wrapper: 'static + Send,
     Msg: 'static + Send,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    AuthN::Prin: 'static + Send
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send
 {
     fn create(
         listener: Listener,
+        recv: Recv,
         shutdown: ShutdownFlag,
         streams: Arc<
             Mutex<
@@ -550,12 +551,7 @@ where
             >
         >,
         authn: AuthN
-    ) -> (
-        Self,
-        PullStreamsListenThread<Msg, Wrapper, Listener>,
-        PullStreamsReceiver<AuthN::Prin, Msg>
-    ) {
-        let (send, recv) = channel();
+    ) -> (Self, PullStreamsListenThread<Msg, Wrapper, Listener>) {
         let thread = PullStreamsListenThread {
             msg: PhantomData,
             listener: listener,
@@ -567,14 +563,14 @@ where
                "launching listener thread");
 
         let streams = PullStreams {
+            msg: PhantomData,
             authn: authn,
-            buf: send,
+            recv: recv,
             shutdown: shutdown,
             streams: streams
         };
-        let recv = PullStreamsReceiver { recv: recv };
 
-        (streams, thread, recv)
+        (streams, thread)
     }
 
     /// Create a new `PullStreams` from its essential components.
@@ -584,20 +580,16 @@ where
     /// is a [ShutdownFlag] that will be used to shut down the pull
     /// side.  The `authn` parameter is the authenticator.
     ///
-    /// This will also create a [PullStreamsListenThread] and a
-    /// [PullStreamsReceiver].
+    /// This will also create a [PullStreamsListenThread].
     pub fn new(
         listener: Listener,
+        recv: Recv,
         shutdown: ShutdownFlag,
         authn: AuthN
-    ) -> (
-        Self,
-        PullStreamsListenThread<Msg, Wrapper, Listener>,
-        PullStreamsReceiver<AuthN::Prin, Msg>
-    ) {
+    ) -> (Self, PullStreamsListenThread<Msg, Wrapper, Listener>) {
         let streams = Arc::new(Mutex::new(HashMap::new()));
 
-        Self::create(listener, shutdown, streams, authn)
+        Self::create(listener, recv, shutdown, streams, authn)
     }
 
     /// Create a new `PullStreams` from its essential components with
@@ -612,38 +604,24 @@ where
     /// [PullStreamsReceiver].
     pub fn with_capacity(
         listener: Listener,
+        recv: Recv,
         shutdown: ShutdownFlag,
         authn: AuthN,
         size: usize
-    ) -> (
-        Self,
-        PullStreamsListenThread<Msg, Wrapper, Listener>,
-        PullStreamsReceiver<AuthN::Prin, Msg>
-    ) {
+    ) -> (Self, PullStreamsListenThread<Msg, Wrapper, Listener>) {
         let streams = Arc::new(Mutex::new(HashMap::with_capacity(size)));
 
-        Self::create(listener, shutdown, streams, authn)
+        Self::create(listener, recv, shutdown, streams, authn)
     }
 
     /// Convert this into a [PullStreamsReporter].
     #[inline]
     pub fn reporter(
         self
-    ) -> PullStreamsReporter<Msg, Wrapper, Listener, AuthN> {
+    ) -> PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv> {
         PullStreamsReporter {
             inner: Arc::new(self)
         }
-    }
-}
-
-impl<Prin, Msg> PullStream<(Prin, Msg)> for PullStreamsReceiver<Prin, Msg> {
-    type PullError = PullStreamsReceiverError;
-
-    #[inline]
-    fn pull(&mut self) -> Result<(Prin, Msg), Self::PullError> {
-        self.recv
-            .recv()
-            .map_err(|_| PullStreamsReceiverError::Shutdown)
     }
 }
 
@@ -667,19 +645,6 @@ where
         match self {
             RecvSendError::AuthN { err } => err.fmt(f),
             RecvSendError::Shutdown => write!(f, "upstream channel shut down")
-        }
-    }
-}
-
-impl Display for PullStreamsReceiverError {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        match self {
-            PullStreamsReceiverError::Shutdown => {
-                write!(f, "upstream channel shut down")
-            }
         }
     }
 }
