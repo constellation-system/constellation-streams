@@ -46,10 +46,10 @@ use crate::stream::NullBatches;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamAddParty;
+use crate::stream::PushStreamPartyID;
+use crate::stream::PushStreamPrivate;
+use crate::stream::PushStreamPrivateSingle;
 use crate::stream::PushStreamReportError;
-use crate::stream::PushStreamShared;
-use crate::stream::PushStreamSingle;
 
 /// Private unicast stream built from a [Read]/[Write] instance and a
 /// [DatagramCodec].
@@ -187,15 +187,12 @@ where
     Stream: Write,
     Codec: DatagramCodec<Msg> + Send
 {
-    type AbortBatchRetry = Infallible;
     type BatchID = ();
     type CancelBatchError = Infallible;
     type CancelBatchRetry = Infallible;
     type FinishBatchError = Infallible;
     type FinishBatchRetry = Infallible;
     type ReportError = Infallible;
-    type StartBatchError = Infallible;
-    type StartBatchRetry = Infallible;
     type StartBatchStreamBatches = NullBatches<()>;
     type StreamFlags = ();
 
@@ -207,72 +204,6 @@ where
         NullBatches::default()
     }
 
-    #[inline]
-    fn start_batch(
-        &mut self,
-        _ctx: &mut Ctx,
-        _batches: &mut Self::StartBatchStreamBatches
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        Ok(RetryResult::Success(()))
-    }
-
-    #[inline]
-    fn retry_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        _retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        error!(target: "datagram-codec-stream",
-               "should never call retry_start_batch");
-
-        self.start_batch(ctx, batches)
-    }
-
-    #[inline]
-    fn complete_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        _err: <Self::StartBatchError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        error!(target: "datagram-codec-stream",
-               "should never call complete_start_batch");
-
-        self.start_batch(ctx, batches)
-    }
-
-    #[inline]
-    fn abort_start_batch(
-        &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Completable
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        RetryResult::Success(())
-    }
-
-    #[inline]
-    fn retry_abort_start_batch(
-        &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _retry: Self::AbortBatchRetry
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        error!(target: "datagram-codec-stream",
-               "should never call retry_abort_start_batch");
-
-        RetryResult::Success(())
-    }
 
     #[inline]
     fn finish_batch(
@@ -386,6 +317,15 @@ where
     }
 }
 
+impl<Msg, Stream, Codec> PushStreamPartyID
+    for DatagramCodecStream<Msg, Stream, Codec>
+where
+    Stream: Write,
+    Codec: DatagramCodec<Msg> + Send
+{
+    type PartyID = ();
+}
+
 impl<Ctx, Msg, Stream, Codec> PushStreamAdd<Msg, Ctx>
     for DatagramCodecStream<Msg, Stream, Codec>
 where
@@ -434,62 +374,81 @@ where
     }
 }
 
-impl<Msg, Stream, Codec> PushStreamShared
+impl<Ctx, Msg, Stream, Codec> PushStreamPrivate<Ctx>
     for DatagramCodecStream<Msg, Stream, Codec>
 where
     Stream: Write,
     Codec: DatagramCodec<Msg> + Send
 {
-    type PartyID = ();
-}
-
-impl<Ctx, Msg, Stream, Codec> PushStreamAddParty<Ctx>
-    for DatagramCodecStream<Msg, Stream, Codec>
-where
-    Stream: Write,
-    Codec: DatagramCodec<Msg> + Send
-{
-    type AddPartiesError = Infallible;
-    type AddPartiesRetry = Infallible;
+    type AbortBatchRetry = Infallible;
+    type StartBatchError = Infallible;
+    type StartBatchRetry = Infallible;
 
     #[inline]
-    fn add_parties<I>(
+    fn start_batch(
         &mut self,
         _ctx: &mut Ctx,
-        _parties: I,
-        _batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    where
-        I: Iterator<Item = Self::PartyID> {
+        _batches: &mut Self::StartBatchStreamBatches
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
         Ok(RetryResult::Success(()))
     }
 
     #[inline]
-    fn retry_add_parties(
+    fn retry_start_batch(
         &mut self,
-        _ctx: &mut Ctx,
-        _batch: &Self::BatchID,
-        _retry: Self::AddPartiesRetry
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        _retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
         error!(target: "datagram-codec-stream",
-               "should never call retry_add_parties");
+               "should never call retry_start_batch");
 
-        Ok(RetryResult::Success(()))
+        self.start_batch(ctx, batches)
     }
 
     #[inline]
-    fn complete_add_parties(
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        _err: <Self::StartBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_start_batch");
+
+        self.start_batch(ctx, batches)
+    }
+
+    #[inline]
+    fn abort_start_batch(
         &mut self,
         _ctx: &mut Ctx,
-        _batch: &Self::BatchID,
-        _err: <Self::AddPartiesError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
-        error!(target: "datagram-codec-stream",
-               "should never call complete_add_parties");
+        _flags: &mut Self::StreamFlags,
+        _err: <Self::StartBatchError as BatchError>::Completable
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        RetryResult::Success(())
+    }
 
-        Ok(RetryResult::Success(()))
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_abort_start_batch");
+
+        RetryResult::Success(())
     }
 }
 
@@ -518,7 +477,7 @@ where
     }
 }
 
-impl<Ctx, Msg, Stream, Codec> PushStreamSingle<Msg, Ctx>
+impl<Ctx, Msg, Stream, Codec> PushStreamPrivateSingle<Msg, Ctx>
     for DatagramCodecStream<Msg, Stream, Codec>
 where
     Stream: Write,

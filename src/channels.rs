@@ -49,11 +49,12 @@ use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamAddParty;
+use crate::stream::PushStreamPartyID;
+use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::stream::PushStreamSingle;
+use crate::stream::PushStreamPrivateSingle;
 use crate::stream::StreamBatches;
 use crate::stream::StreamFlags;
 use crate::stream::StreamReporter;
@@ -900,13 +901,9 @@ where
 impl<Ctx, Shared, Private> PushStream<Ctx>
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    Shared: PushStream<Ctx> + PushStreamAddParty<Ctx>,
+    Shared: PushStream<Ctx> + PushStreamPartyID,
     Private: PushStream<Ctx>
 {
-    type AbortBatchRetry = SharedPrivateStreamRetry<
-        Private::AbortBatchRetry,
-        Shared::AbortBatchRetry
-    >;
     type BatchID = SharedPrivateID<Private::BatchID, Shared::BatchID>;
     type CancelBatchError = SharedPrivateStreamError<
         Private::CancelBatchError,
@@ -926,178 +923,12 @@ where
     >;
     type ReportError =
         SharedPrivateStreamError<Private::ReportError, Shared::ReportError>;
-    type StartBatchError = SharedPrivateStreamError<
-        Private::StartBatchError,
-        Shared::StartBatchError
-    >;
-    type StartBatchRetry = SharedPrivateStreamRetry<
-        Private::StartBatchRetry,
-        Shared::StartBatchRetry
-    >;
     type StartBatchStreamBatches = SharedPrivateStreamCaches<
         Private::StartBatchStreamBatches,
         Shared::StartBatchStreamBatches
     >;
     type StreamFlags =
         SharedPrivateStreamCaches<Private::StreamFlags, Shared::StreamFlags>;
-
-    fn start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        match self {
-            SharedPrivateChannelStream::Private { stream } => Ok(stream
-                .start_batch(ctx, &mut batches.private)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Private { id: id })),
-            SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
-                .start_batch(ctx, &mut batches.shared)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Shared { id: id }))
-        }
-    }
-
-    fn retry_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        match (self, retry) {
-            (
-                SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamRetry::Private { retry }
-            ) => Ok(stream
-                .retry_start_batch(ctx, &mut batches.private, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Private { id: id })),
-            (
-                SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamRetry::Shared { retry }
-            ) => Ok(stream
-                .retry_start_batch(ctx, &mut batches.shared, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
-        }
-    }
-
-    fn complete_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        err: <Self::StartBatchError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        match (self, err) {
-            (
-                SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
-            ) => Ok(stream
-                .complete_start_batch(ctx, &mut batches.private, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Private { id: id })),
-            (
-                SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
-            ) => Ok(stream
-                .complete_start_batch(ctx, &mut batches.shared, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
-                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                    retry: retry
-                })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
-        }
-    }
-
-    fn abort_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        match (self, err) {
-            (
-                SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
-            ) => stream
-                .abort_start_batch(ctx, &mut flags.private, err)
-                .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                    retry: retry
-                }),
-            (
-                SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
-            ) => stream
-                .abort_start_batch(ctx, &mut flags.shared, err)
-                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                    retry: retry
-                }),
-            _ => {
-                error!(target: "shared-private-channels-stream",
-                       "mismatch between stream and error subtypes");
-
-                RetryResult::Success(())
-            }
-        }
-    }
-
-    fn retry_abort_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        flags: &mut Self::StreamFlags,
-        retry: Self::AbortBatchRetry
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        match (self, retry) {
-            (
-                SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamRetry::Private { retry }
-            ) => stream
-                .retry_abort_start_batch(ctx, &mut flags.private, retry)
-                .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                    retry: retry
-                }),
-            (
-                SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamRetry::Shared { retry }
-            ) => stream
-                .retry_abort_start_batch(ctx, &mut flags.shared, retry)
-                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                    retry: retry
-                }),
-            _ => {
-                error!(target: "shared-private-channels-stream",
-                       "mismatch between stream and error subtypes");
-
-                RetryResult::Success(())
-            }
-        }
-    }
 
     fn finish_batch(
         &mut self,
@@ -1361,7 +1192,7 @@ where
 impl<Shared, Private, T, Ctx> PushStreamAdd<T, Ctx>
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    Shared: PushStreamAdd<T, Ctx> + PushStreamAddParty<Ctx>,
+    Shared: PushStreamAdd<T, Ctx> + PushStreamPartyID,
     Private: PushStreamAdd<T, Ctx>
 {
     type AddError =
@@ -1466,101 +1297,197 @@ where
     }
 }
 
-impl<Shared, Private> PushStreamShared
+impl<Shared, Private> PushStreamPartyID
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    Shared: PushStreamShared
+    Shared: PushStreamPartyID,
 {
     type PartyID = ();
 }
 
-impl<Shared, Private, Ctx> PushStreamAddParty<Ctx>
+impl<Ctx, Shared, Private> PushStreamPrivate<Ctx>
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    Private: PushStream<Ctx>,
-    Shared: PushStreamAddParty<Ctx>
+    Shared: PushStreamShared<Ctx> + PushStreamPartyID,
+    Private: PushStreamPrivate<Ctx>
 {
-    type AddPartiesError =
-        SharedPrivateStreamError<Infallible, Shared::AddPartiesError>;
-    type AddPartiesRetry =
-        SharedPrivateStreamRetry<Infallible, Shared::AddPartiesRetry>;
+    type AbortBatchRetry = SharedPrivateStreamRetry<
+        Private::AbortBatchRetry,
+        Shared::AbortBatchRetry
+    >;
+    type StartBatchError = SharedPrivateStreamError<
+        Private::StartBatchError,
+        Shared::StartBatchError
+    >;
+    type StartBatchRetry = SharedPrivateStreamRetry<
+        Private::StartBatchRetry,
+        Shared::StartBatchRetry
+    >;
 
-    fn add_parties<I>(
+    fn start_batch(
         &mut self,
         ctx: &mut Ctx,
-        _parties: I,
-        batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    where
-        I: Iterator<Item = ()> {
-        match (self, batch) {
-            (
-                SharedPrivateChannelStream::Private { .. },
-                SharedPrivateID::Private { .. }
-            ) => Ok(RetryResult::Success(())),
-            (
-                SharedPrivateChannelStream::Shared { stream, party },
-                SharedPrivateID::Shared { id }
-            ) => Ok(stream
-                .add_parties(ctx, once(party.clone()), id)
+        batches: &mut Self::StartBatchStreamBatches
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match self {
+            SharedPrivateChannelStream::Private { stream } => Ok(stream
+                .start_batch(ctx, &mut batches.private)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map(|id| SharedPrivateID::Private { id: id })),
+            SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
+                .start_batch(ctx, &mut batches.shared)
                 .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                })
+                .map(|id| SharedPrivateID::Shared { id: id }))
         }
     }
 
-    fn retry_add_parties(
+    fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batch: &Self::BatchID,
-        retry: Self::AddPartiesRetry
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
-        match (self, batch, retry) {
+        batches: &mut Self::StartBatchStreamBatches,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match (self, retry) {
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamRetry::Private { retry }
+            ) => Ok(stream
+                .retry_start_batch(ctx, &mut batches.private, retry)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map(|id| SharedPrivateID::Private { id: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
-                .retry_add_parties(ctx, id, retry)
+                .retry_start_batch(ctx, &mut batches.shared, retry)
                 .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                })),
+                })
+                .map(|id| SharedPrivateID::Shared { id: id })),
             _ => Err(SharedPrivateStreamError::Mismatch)
         }
     }
 
-    fn complete_add_parties(
+    fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batch: &Self::BatchID,
-        err: <Self::AddPartiesError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
-        match (self, batch, err) {
+        batches: &mut Self::StartBatchStreamBatches,
+        err: <Self::StartBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match (self, err) {
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamError::Private { err }
+            ) => Ok(stream
+                .complete_start_batch(ctx, &mut batches.private, err)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map(|id| SharedPrivateID::Private { id: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
                 SharedPrivateStreamError::Shared { err }
             ) => Ok(stream
-                .complete_add_parties(ctx, id, err)
+                .complete_start_batch(ctx, &mut batches.shared, err)
                 .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                })),
+                })
+                .map(|id| SharedPrivateID::Shared { id: id })),
             _ => Err(SharedPrivateStreamError::Mismatch)
+        }
+    }
+
+    fn abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as BatchError>::Permanent
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        match (self, err) {
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamError::Private { err }
+            ) => stream
+                .abort_start_batch(ctx, &mut flags.private, err)
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                }),
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateStreamError::Shared { err }
+            ) => stream
+                .abort_start_batch(ctx, &mut flags.shared, err)
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                }),
+            _ => {
+                error!(target: "shared-private-channels-stream",
+                       "mismatch between stream and error subtypes");
+
+                RetryResult::Success(())
+            }
+        }
+    }
+
+    fn retry_abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        match (self, retry) {
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamRetry::Private { retry }
+            ) => stream
+                .retry_abort_start_batch(ctx, &mut flags.private, retry)
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                }),
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateStreamRetry::Shared { retry }
+            ) => stream
+                .retry_abort_start_batch(ctx, &mut flags.shared, retry)
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                }),
+            _ => {
+                error!(target: "shared-private-channels-stream",
+                       "mismatch between stream and error subtypes");
+
+                RetryResult::Success(())
+            }
         }
     }
 }
 
-impl<Shared, Private, T, Ctx> PushStreamSingle<T, Ctx>
+impl<Shared, Private, T, Ctx> PushStreamPrivateSingle<T, Ctx>
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    Shared: PushStreamSharedSingle<T, Ctx>,
-    Private: PushStreamSingle<T, Ctx>
+    Shared: PushStreamSharedSingle<T, Ctx> + PushStreamPartyID,
+    Private: PushStreamPrivateSingle<T, Ctx>
 {
     type CancelPushError = SharedPrivateStreamError<
         Private::CancelPushError,
