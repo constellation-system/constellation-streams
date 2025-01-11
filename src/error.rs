@@ -167,15 +167,12 @@ where
 
                 (
                     completable,
-                    permanent.map(|err| SelectionsError::Inner {
-                        inner: err
-                    })
+                    permanent.map(|err| SelectionsError::Inner { inner: err })
                 )
-            },
-            SelectionsError::NoSelections { info } =>
-                (None, Some(SelectionsError::NoSelections {
-                    info: info
-                }))
+            }
+            SelectionsError::NoSelections { info } => {
+                (None, Some(SelectionsError::NoSelections { info: info }))
+            }
         }
     }
 }
@@ -187,6 +184,20 @@ impl BatchError for Infallible {
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         (None, Some(self))
+    }
+}
+
+impl<Inner, Info, T> ErrorReportInfo<T> for SelectionsError<Inner, Info>
+where
+    Inner: ErrorReportInfo<T>
+{
+    #[inline]
+    fn report_info(&self) -> Option<T> {
+        if let SelectionsError::Inner { inner } = self {
+            inner.report_info()
+        } else {
+            None
+        }
     }
 }
 
@@ -421,8 +432,9 @@ where
     ) -> Result<(), std::fmt::Error> {
         match self {
             SelectionsError::Inner { inner } => inner.fmt(f),
-            SelectionsError::NoSelections { .. } =>
+            SelectionsError::NoSelections { .. } => {
                 write!(f, "no selections for stream")
+            }
         }
     }
 }

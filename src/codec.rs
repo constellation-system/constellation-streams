@@ -375,11 +375,11 @@ where
     type AbortBatchRetry = Infallible;
     type CreateBatchError = Infallible;
     type CreateBatchRetry = Infallible;
-    type StartBatchError = Infallible;
-    type StartBatchRetry = Infallible;
     type SelectError = Infallible;
     type SelectRetry = Infallible;
     type Selections = ();
+    type StartBatchError = Infallible;
+    type StartBatchRetry = Infallible;
     type StartBatchStreamBatches = ();
 
     #[inline]
@@ -388,17 +388,16 @@ where
     #[inline]
     fn empty_batches_with_capacity(
         _size: usize
-    ) -> Self::StartBatchStreamBatches {}
+    ) -> Self::StartBatchStreamBatches {
+    }
 
     #[inline]
     fn select(
         &mut self,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
         Ok(RetryResult::Success(()))
     }
 
@@ -408,10 +407,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
         error!(target: "datagram-codec-stream",
                "should never call retry_select");
 
@@ -424,10 +421,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _err: <Self::SelectError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
         error!(target: "datagram-codec-stream",
                "should never call complete_select");
 
@@ -484,7 +479,7 @@ where
     #[inline]
     fn start_batch(
         &mut self,
-        _ctx: &mut Ctx,
+        _ctx: &mut Ctx
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError

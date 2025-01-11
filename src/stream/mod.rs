@@ -46,7 +46,6 @@ use crate::error::ErrorReportInfo;
 pub mod pull;
 pub mod push;
 
-
 // This is a workaround for an OpenSSL implementation issue.
 
 pub trait ConcurrentStream {
@@ -460,10 +459,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
@@ -478,10 +474,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >;
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Retry a previously-failed call to
     /// [select](PushStream::select).
@@ -493,10 +486,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >;
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Create a new batch.
     ///
@@ -682,10 +672,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >;
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
     /// Retry a previous call to [start_batch](PushStream::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
@@ -696,10 +683,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >;
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Retry a previously-failed call to
     /// [select](PushStream::select).
@@ -711,10 +695,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >;
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Create a new batch.
     ///
@@ -932,8 +913,8 @@ pub trait PushStreamSharedSingle<T, Ctx>:
 /// on a [PushStream].  In many cases, this will be a "derived form",
 /// using the batching functionality to send a batch of size one.  In
 /// some cases; however, it may be a more efficient implementation.
-pub trait PushStreamPrivateSingle<T, Ctx>: PushStreamAdd<T, Ctx>
-    + PushStreamPrivate<Ctx> {
+pub trait PushStreamPrivateSingle<T, Ctx>:
+    PushStreamAdd<T, Ctx> + PushStreamPrivate<Ctx> {
     /// Type of errors that can occur when sending a single message.
     type PushError: BatchError;
     /// Type of information given by a [RetryResult] for sending a
@@ -1492,14 +1473,14 @@ impl<Ctx, Inner> PushStreamPrivate<Ctx> for ThreadedStream<Inner>
 where
     Inner: PushStreamPrivate<Ctx>
 {
-    type SelectError = ThreadedStreamError<Inner::SelectError>;
-    type SelectRetry = Inner::SelectRetry;
     type AbortBatchRetry = Inner::AbortBatchRetry;
-    type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
-    type StartBatchRetry = Inner::StartBatchRetry;
     type CreateBatchError = ThreadedStreamError<Inner::CreateBatchError>;
     type CreateBatchRetry = Inner::CreateBatchRetry;
+    type SelectError = ThreadedStreamError<Inner::SelectError>;
+    type SelectRetry = Inner::SelectRetry;
     type Selections = Inner::Selections;
+    type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
+    type StartBatchRetry = Inner::StartBatchRetry;
     type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
 
     #[inline]
@@ -1518,10 +1499,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -1537,10 +1515,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -1556,10 +1531,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -1729,14 +1701,14 @@ impl<Ctx, Inner> PushStreamShared<Ctx> for ThreadedStream<Inner>
 where
     Inner: PushStreamShared<Ctx>
 {
-    type SelectError = ThreadedStreamError<Inner::SelectError>;
-    type SelectRetry = Inner::SelectRetry;
     type AbortBatchRetry = Inner::AbortBatchRetry;
-    type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
-    type StartBatchRetry = Inner::StartBatchRetry;
     type CreateBatchError = ThreadedStreamError<Inner::CreateBatchError>;
     type CreateBatchRetry = Inner::CreateBatchRetry;
+    type SelectError = ThreadedStreamError<Inner::SelectError>;
+    type SelectRetry = Inner::SelectRetry;
     type Selections = Inner::Selections;
+    type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
+    type StartBatchRetry = Inner::StartBatchRetry;
     type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
 
     #[inline]
@@ -1756,10 +1728,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    >
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -1778,10 +1747,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -1797,10 +1763,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<(), Self::SelectRetry>,
-        Self::SelectError
-    > {
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
             .lock()

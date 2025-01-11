@@ -484,9 +484,9 @@ where
                         })
                     }
                     // More errors; recurse again.
-                    Err(err) => Self::complete_start_batch(
-                        ctx, stream, msgs, err
-                    )
+                    Err(err) => {
+                        Self::complete_start_batch(ctx, stream, msgs, err)
+                    }
                 }
             }
             // Permanent errors always kill the batch.
@@ -539,9 +539,7 @@ where
                     retry: retry
                 })
             }
-            Err(err) => Self::complete_start_batch(
-                ctx, stream, msgs, err
-            )
+            Err(err) => Self::complete_start_batch(ctx, stream, msgs, err)
         }
     }
 
@@ -551,10 +549,9 @@ where
         stream: &mut Stream
     ) -> RetryResult<(), Self> {
         match self {
-            PushEntry::Batch {
-                msgs,
-                retry
-            } => match stream.retry_start_batch(ctx, retry) {
+            PushEntry::Batch { msgs, retry } => match stream
+                .retry_start_batch(ctx, retry)
+            {
                 // It succeeded.
                 Ok(RetryResult::Success(batch_id)) => {
                     Self::try_add(ctx, stream, msgs, batch_id)
@@ -566,9 +563,7 @@ where
                         retry: retry
                     })
                 }
-                Err(err) => Self::complete_start_batch(
-                    ctx, stream, msgs, err
-                )
+                Err(err) => Self::complete_start_batch(ctx, stream, msgs, err)
             },
             PushEntry::Abort { mut flags, retry } => stream
                 .retry_abort_start_batch(ctx, &mut flags, retry)
