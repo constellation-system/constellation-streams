@@ -34,7 +34,6 @@ use log::trace;
 
 use crate::error::BatchError;
 use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamAddParty;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
@@ -54,27 +53,17 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportBatchError<
-            <Stream::AddPartiesError as BatchError>::Permanent,
-            Stream::BatchID
         > + PushStreamAdd<Msg, Ctx>
-        + PushStreamAddParty<Ctx>
+        + PushStreamShared<Ctx>
         + Send,
     Msg: Clone + Send {
     Batch {
         msgs: Vec<Msg>,
-        parties: Vec<Stream::PartyID>,
-        batches: Stream::StartBatchStreamBatches,
         retry: Stream::StartBatchRetry
     },
     Abort {
         flags: Stream::StreamFlags,
         retry: Stream::AbortBatchRetry
-    },
-    Parties {
-        msgs: Vec<Msg>,
-        batch: Stream::BatchID,
-        retry: Stream::AddPartiesRetry
     },
     Add {
         msgs: Vec<Msg>,
@@ -104,17 +93,13 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportBatchError<
-            <Stream::AddPartiesError as BatchError>::Permanent,
-            Stream::BatchID
         > + PushStreamSharedSingle<Msg, Ctx>
-        + PushStreamShared
+        + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
     Stream::StartBatchStreamBatches: Send,
     Stream::StartBatchRetry: Send,
     Stream::AbortBatchRetry: Send,
-    Stream::AddPartiesRetry: Send,
     Stream::AddRetry: Send,
     Stream::FinishBatchRetry: Send,
     Stream::CancelBatchRetry: Send,
@@ -141,7 +126,7 @@ where
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
 where
     Stream: PushStreamAdd<Msg, Ctx>
-        + PushStreamAddParty<Ctx>
+        + PushStreamShared<Ctx>
         + PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
             Stream::BatchID
@@ -150,9 +135,6 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportBatchError<
-            <Stream::AddPartiesError as BatchError>::Permanent,
-            Stream::BatchID
         > + Send,
     Msg: Clone + Send
 {
@@ -160,7 +142,6 @@ where
         match self {
             PushEntry::Batch { retry, .. } => retry.when(),
             PushEntry::Abort { retry, .. } => retry.when(),
-            PushEntry::Parties { retry, .. } => retry.when(),
             PushEntry::Add { retry, .. } => retry.when(),
             PushEntry::Finish { retry, .. } => retry.when(),
             PushEntry::Cancel { retry, .. } => retry.when()
@@ -182,12 +163,8 @@ where
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
         >
-        + PushStreamReportBatchError<
-            <Stream::AddPartiesError as BatchError>::Permanent,
-            Stream::BatchID
-        >
-        + PushStreamAddParty<Ctx>
         + PushStreamAdd<Msg, Ctx>
+        + PushStreamShared<Ctx>
         + Send,
     Stream::PartyID: From<usize>,
     Msg: 'static + Clone + Send
@@ -480,99 +457,10 @@ where
         }
     }
 
-    fn complete_add_parties(
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        msgs: Vec<Msg>,
-        batch_id: Stream::BatchID,
-        err: Stream::AddPartiesError
-    ) -> RetryResult<(), Self> {
-        trace!(target: "push-entry",
-               "attempting to recover from error while adding parties");
-
-        match err.split() {
-            (Some(completable), None) => {
-                match stream.complete_add_parties(ctx, &batch_id, completable) {
-                    // It succeeded.
-                    Ok(RetryResult::Success(())) => {
-                        trace!(target: "push-entry",
-                           "successfully added parties");
-
-                        Self::try_add(ctx, stream, msgs, batch_id)
-                    }
-                    // We got a retry.
-                    Ok(RetryResult::Retry(retry)) => {
-                        RetryResult::Retry(PushEntry::Parties {
-                            msgs: msgs,
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    // More errors; recurse again.
-                    Err(err) => Self::complete_add_parties(
-                        ctx, stream, msgs, batch_id, err
-                    )
-                }
-            }
-            // Permanent errors always kill the batch.
-            (_, Some(permanent)) => {
-                // Unrecoverable errors occurred adding the message.
-                error!(target: "push-entry",
-                       "unrecoverable error adding parties: {}",
-                       permanent);
-
-                // Report the failure
-                if let Err(err) =
-                    stream.report_error_with_batch(&batch_id, &permanent)
-                {
-                    error!(target: "push-entry",
-                           "failed to report errors to stream: {}",
-                           err);
-                }
-
-                Self::try_cancel_batch(ctx, stream, batch_id)
-            }
-            (None, None) => {
-                error!(target: "push-entry",
-                       "neither completable nor permanent errors reported");
-
-                RetryResult::Success(())
-            }
-        }
-    }
-
-    fn try_add_parties(
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        parties: Vec<Stream::PartyID>,
-        msgs: Vec<Msg>,
-        batch_id: Stream::BatchID
-    ) -> RetryResult<(), Self> {
-        match stream.add_parties(ctx, parties.into_iter(), &batch_id) {
-            // It succeeded.
-            Ok(RetryResult::Success(_)) => {
-                Self::try_add(ctx, stream, msgs, batch_id)
-            }
-            // We got a retry.
-            Ok(RetryResult::Retry(retry)) => {
-                RetryResult::Retry(PushEntry::Parties {
-                    msgs: msgs,
-                    batch: batch_id,
-                    retry: retry
-                })
-            }
-            Err(err) => {
-                Self::complete_add_parties(ctx, stream, msgs, batch_id, err)
-            }
-        }
-    }
-
     fn complete_start_batch(
         ctx: &mut Ctx,
         stream: &mut Stream,
-        parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>,
-        mut batches: Stream::StartBatchStreamBatches,
         err: Stream::StartBatchError
     ) -> RetryResult<(), Self> {
         trace!(target: "push-entry",
@@ -580,33 +468,25 @@ where
 
         match err.split() {
             (Some(completable), None) => {
-                match stream.complete_start_batch(
-                    ctx,
-                    &mut batches,
-                    completable
-                ) {
+                match stream.complete_start_batch(ctx, completable) {
                     // It succeeded.
                     Ok(RetryResult::Success(batch_id)) => {
                         trace!(target: "push-entry",
                            "successfully created batch");
 
-                        Self::try_add_parties(
-                            ctx, stream, parties, msgs, batch_id
-                        )
+                        Self::try_add(ctx, stream, msgs, batch_id)
                     }
                     // We got a retry.
                     Ok(RetryResult::Retry(retry)) => {
                         RetryResult::Retry(PushEntry::Batch {
                             msgs: msgs,
-                            batches: batches,
-                            parties: parties,
                             retry: retry
                         })
                     }
                     // More errors; recurse again.
-                    Err(err) => Self::complete_start_batch(
-                        ctx, stream, parties, msgs, batches, err
-                    )
+                    Err(err) => {
+                        Self::complete_start_batch(ctx, stream, msgs, err)
+                    }
                 }
             }
             // Permanent errors always kill the batch.
@@ -647,25 +527,19 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> RetryResult<(), Self> {
-        let mut batches = stream.empty_batches();
-
-        match stream.start_batch(ctx, &mut batches) {
+        match stream.start_batch(ctx, parties.iter()) {
             // It succeeded.
             Ok(RetryResult::Success(batch_id)) => {
-                Self::try_add_parties(ctx, stream, parties, msgs, batch_id)
+                Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
                 RetryResult::Retry(PushEntry::Batch {
                     msgs: msgs,
-                    batches: batches,
-                    parties: parties,
                     retry: retry
                 })
             }
-            Err(err) => Self::complete_start_batch(
-                ctx, stream, parties, msgs, batches, err
-            )
+            Err(err) => Self::complete_start_batch(ctx, stream, msgs, err)
         }
     }
 
@@ -675,28 +549,21 @@ where
         stream: &mut Stream
     ) -> RetryResult<(), Self> {
         match self {
-            PushEntry::Batch {
-                msgs,
-                parties,
-                mut batches,
-                retry
-            } => match stream.retry_start_batch(ctx, &mut batches, retry) {
+            PushEntry::Batch { msgs, retry } => match stream
+                .retry_start_batch(ctx, retry)
+            {
                 // It succeeded.
                 Ok(RetryResult::Success(batch_id)) => {
-                    Self::try_add_parties(ctx, stream, parties, msgs, batch_id)
+                    Self::try_add(ctx, stream, msgs, batch_id)
                 }
                 // We got a retry.
                 Ok(RetryResult::Retry(retry)) => {
                     RetryResult::Retry(PushEntry::Batch {
                         msgs: msgs,
-                        batches: batches,
-                        parties: parties,
                         retry: retry
                     })
                 }
-                Err(err) => Self::complete_start_batch(
-                    ctx, stream, parties, msgs, batches, err
-                )
+                Err(err) => Self::complete_start_batch(ctx, stream, msgs, err)
             },
             PushEntry::Abort { mut flags, retry } => stream
                 .retry_abort_start_batch(ctx, &mut flags, retry)
@@ -704,25 +571,6 @@ where
                     flags: flags,
                     retry: retry
                 }),
-            PushEntry::Parties { msgs, batch, retry } => {
-                match stream.retry_add_parties(ctx, &batch, retry) {
-                    // It succeeded.
-                    Ok(RetryResult::Success(_)) => {
-                        Self::try_add(ctx, stream, msgs, batch)
-                    }
-                    // We got a retry.
-                    Ok(RetryResult::Retry(retry)) => {
-                        RetryResult::Retry(PushEntry::Parties {
-                            msgs: msgs,
-                            batch: batch,
-                            retry: retry
-                        })
-                    }
-                    Err(err) => Self::complete_add_parties(
-                        ctx, stream, msgs, batch, err
-                    )
-                }
-            }
             PushEntry::Add {
                 msgs,
                 msg,
@@ -815,18 +663,13 @@ where
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
         >
-        + PushStreamReportBatchError<
-            <Stream::AddPartiesError as BatchError>::Permanent,
-            Stream::BatchID
-        >
         + PushStreamSharedSingle<Msg, Ctx>
-        + PushStreamShared
+        + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
     Stream::StartBatchStreamBatches: Send,
     Stream::StartBatchRetry: Send,
     Stream::AbortBatchRetry: Send,
-    Stream::AddPartiesRetry: Send,
     Stream::AddRetry: Send,
     Stream::FinishBatchRetry: Send,
     Stream::CancelBatchRetry: Send,
@@ -916,11 +759,16 @@ where
 
         let mut curr = Vec::with_capacity(self.pending.len());
 
+        // XXX Use a better data structure to avoid sorting this array
+        // over and over.
+
         // First, sort the array by times, but reverse the order so we
         // can pop the earliest.
         self.pending
             .sort_unstable_by_key(|b| std::cmp::Reverse(b.when()));
 
+        // Go through the sorted pending items and get all the ones
+        // whose times are less than the present.
         while self.pending.last().map_or(false, |ent| ent.when() <= now) {
             match self.pending.pop() {
                 Some(ent) => {
@@ -955,8 +803,9 @@ where
         let mut valid = true;
 
         info!(target: "push-stream-shared-thread",
-              "consensus component send thread starting");
+              "push stream send thread starting");
 
+        // Loop until told to shut down.
         while valid && self.shutdown.is_live() {
             let now = Instant::now();
 
@@ -1031,7 +880,7 @@ where
         }
 
         debug!(target: "push-stream-shared-thread",
-               "consensus component send thread exiting");
+               "push stream send thread exiting");
     }
 
     pub fn start(self) -> JoinHandle<()> {

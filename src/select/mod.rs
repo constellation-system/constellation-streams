@@ -69,17 +69,19 @@ use crate::config::PartyConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::error::PartiesBatchError;
+use crate::error::SelectionsError;
 use crate::select::sched::FarHistory;
 use crate::select::sched::FarHistoryConfig;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamAddParty;
+use crate::stream::PushStreamPartyID;
+use crate::stream::PushStreamPrivate;
+use crate::stream::PushStreamPrivateSingle;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::stream::PushStreamSingle;
 use crate::stream::StreamID;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStreamError;
@@ -258,6 +260,14 @@ struct StreamEntry<Addr, ChannelID, Param, Stream> {
     stream: Option<Stream>
 }
 
+/// Type of [Selections](PushStreamShared::Selections) used by
+/// [StreamSelector].
+#[derive(Clone)]
+pub struct SelectorSelections<ID, Inner> {
+    id: Option<ID>,
+    inner: Inner
+}
+
 /// Errors that can occur when refreshing the connections.
 #[derive(Debug)]
 pub enum StreamSelectorError<Addrs, Param> {
@@ -404,11 +414,13 @@ pub enum SelectorReportFailureError<Epoch, Item, Err> {
 
 /// Errors that can occur when creating batches.
 #[derive(Clone)]
-pub enum SelectorBatchStartError<Select, Stream, Epoch> {
+pub enum SelectorBatchSelectError<Select, Parties, Stream, Epoch> {
     /// Error occurred while selecting a stream.
     Select {
         /// Error while selecting a stream.
-        select: Select
+        select: Select,
+        /// Parties for the batch, if applicable.
+        parties: Parties
     },
     /// Error occurred on the underlying stream.
     Stream {
@@ -424,6 +436,19 @@ pub enum SelectorBatchStartError<Select, Stream, Epoch> {
 pub struct SelectorStartRetry<PartyID> {
     when: Instant,
     parties: Vec<PartyID>
+}
+
+impl<ID, Inner> Default for SelectorSelections<ID, Inner>
+where
+    Inner: Default
+{
+    #[inline]
+    fn default() -> Self {
+        SelectorSelections {
+            inner: Inner::default(),
+            id: None
+        }
+    }
 }
 
 impl<Src, Resolve, Ctx> ThreadedStreamSelectorConnections<Src, Resolve, Ctx>
@@ -1418,7 +1443,7 @@ where
     /// [refresh](StreamSelector::refresh).  Then, the scheduler
     /// will be used to select from among the possible streams.  Both
     /// the stream and its dense index will be returned.
-    pub fn select(
+    pub fn select_stream(
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
@@ -1598,8 +1623,8 @@ where
     }
 }
 
-impl<Select, Stream, Epoch> ScopedError
-    for SelectorBatchStartError<Select, Stream, Epoch>
+impl<Select, Parties, Stream, Epoch> ScopedError
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
     Select: ScopedError,
     Stream: ScopedError,
@@ -1607,50 +1632,58 @@ where
 {
     fn scope(&self) -> ErrorScope {
         match self {
-            SelectorBatchStartError::Select { select } => select.scope(),
-            SelectorBatchStartError::Stream { stream, .. } => stream.scope()
+            SelectorBatchSelectError::Select { select, .. } => select.scope(),
+            SelectorBatchSelectError::Stream { stream, .. } => stream.scope()
         }
     }
 }
 
-impl<Select, Stream, Epoch> BatchError
-    for SelectorBatchStartError<Select, Stream, Epoch>
+impl<Select, Parties, Stream, Epoch> BatchError
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
     Select: BatchError,
     Stream: BatchError,
+    Parties: Clone,
     Epoch: Clone
 {
-    type Completable = SelectorBatchStartError<
+    type Completable = SelectorBatchSelectError<
         Select::Completable,
+        Parties,
         Stream::Completable,
         Epoch
     >;
-    type Permanent =
-        SelectorBatchStartError<Select::Permanent, Stream::Permanent, Epoch>;
+    type Permanent = SelectorBatchSelectError<
+        Select::Permanent,
+        Parties,
+        Stream::Permanent,
+        Epoch
+    >;
 
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         match self {
-            SelectorBatchStartError::Select { select } => {
+            SelectorBatchSelectError::Select { select, parties } => {
                 let (completable, permanent) = select.split();
 
                 (
-                    completable.map(|err| SelectorBatchStartError::Select {
-                        select: err
+                    completable.map(|err| SelectorBatchSelectError::Select {
+                        select: err,
+                        parties: parties.clone()
                     }),
-                    permanent.map(|err| SelectorBatchStartError::Select {
-                        select: err
+                    permanent.map(|err| SelectorBatchSelectError::Select {
+                        select: err,
+                        parties: parties
                     })
                 )
             }
-            SelectorBatchStartError::Stream { stream, selected } => {
+            SelectorBatchSelectError::Stream { stream, selected } => {
                 let (completable, permanent) = stream.split();
 
                 (
-                    completable.map(|err| SelectorBatchStartError::Stream {
+                    completable.map(|err| SelectorBatchSelectError::Stream {
                         stream: err,
                         selected: selected.clone()
                     }),
-                    permanent.map(|err| SelectorBatchStartError::Stream {
+                    permanent.map(|err| SelectorBatchSelectError::Stream {
                         stream: err,
                         selected: selected
                     })
@@ -1667,14 +1700,14 @@ impl<PartyID> RetryWhen for SelectorStartRetry<PartyID> {
     }
 }
 
-impl<Select, Stream, Epoch> ErrorReportInfo<DenseItemID<Epoch>>
-    for SelectorBatchStartError<Select, Stream, Epoch>
+impl<Select, Parties, Stream, Epoch> ErrorReportInfo<DenseItemID<Epoch>>
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
     Epoch: Clone
 {
     #[inline]
     fn report_info(&self) -> Option<DenseItemID<Epoch>> {
-        if let SelectorBatchStartError::Stream { selected, .. } = self {
+        if let SelectorBatchSelectError::Stream { selected, .. } = self {
             Some(selected.clone())
         } else {
             None
@@ -1682,8 +1715,8 @@ where
     }
 }
 
-impl<Select, Stream, Epoch> RetryWhen
-    for SelectorBatchStartError<Select, Stream, Epoch>
+impl<Select, Parties, Stream, Epoch> RetryWhen
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
     Select: RetryWhen,
     Stream: RetryWhen
@@ -1691,8 +1724,8 @@ where
     #[inline]
     fn when(&self) -> Instant {
         match self {
-            SelectorBatchStartError::Select { select } => select.when(),
-            SelectorBatchStartError::Stream { stream, .. } => stream.when()
+            SelectorBatchSelectError::Select { select, .. } => select.when(),
+            SelectorBatchSelectError::Stream { stream, .. } => stream.when()
         }
     }
 }
@@ -1772,7 +1805,6 @@ where
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
     Src::Stream: Clone + PushStream<Ctx> + Send
 {
-    type AbortBatchRetry = Infallible;
     type BatchID = StreamSelectorBatch<
         Epochs::Item,
         <Src::Stream as PushStream<Ctx>>::BatchID
@@ -1792,197 +1824,11 @@ where
         StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
         <Src::Stream as PushStream<Ctx>>::ReportError
     >;
-    type StartBatchError = SelectorBatchError<
-        Epochs::Item,
-        SelectorBatchStartError<
-            StreamSelectorSelectError<
-                Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
-            >,
-            <Src::Stream as PushStream<Ctx>>::StartBatchError,
-            Epochs::Item
-        >
-    >;
-    type StartBatchRetry = SelectorBatchStartError<
-        Instant,
-        <Src::Stream as PushStream<Ctx>>::StartBatchRetry,
-        Epochs::Item
-    >;
-    type StartBatchStreamBatches =
-        <Src::Stream as PushStream<Ctx>>::StartBatchStreamBatches;
     type StreamFlags = <Src::Stream as PushStream<Ctx>>::StreamFlags;
 
-    fn start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        // Try to select a stream.
-        match self.select(ctx).map_err(|err| SelectorBatchError::Batch {
-            batch: SelectorBatchStartError::Select { select: err }
-        })? {
-            // We succeeded, now create a batch on that stream.
-            RetryResult::Success((mut stream, id)) => match stream
-                .start_batch(ctx, batches)
-                .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchStartError::Stream {
-                        selected: id.clone(),
-                        stream: err
-                    }
-                })? {
-                // We succeeded, so we can package it up and return it.
-                RetryResult::Success(batch_id) => {
-                    Ok(RetryResult::Success(StreamSelectorBatch {
-                        stream: id,
-                        batch_id: batch_id
-                    }))
-                }
-                // We got a retry when creating the batch on the stream.
-                RetryResult::Retry(retry) => {
-                    Ok(RetryResult::Retry(SelectorBatchStartError::Stream {
-                        selected: id,
-                        stream: retry
-                    }))
-                }
-            },
-            // We got a retry for selecting the stream.
-            RetryResult::Retry(retry) => {
-                Ok(RetryResult::Retry(SelectorBatchStartError::Select {
-                    select: retry
-                }))
-            }
-        }
-    }
-
-    fn retry_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        match retry {
-            // We got a retry in the select phase; just restart the whole thing.
-            SelectorBatchStartError::Select { .. } => {
-                self.start_batch(ctx, batches)
-            }
-            // We got a retry once the stream was selected.
-            SelectorBatchStartError::Stream {
-                selected,
-                stream: retry
-            } => {
-                let mut stream = self
-                    .dense_id_stream(&selected)
-                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
-
-                match stream.retry_start_batch(ctx, batches, retry).map_err(
-                    |err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
-                            selected: selected.clone(),
-                            stream: err
-                        }
-                    }
-                )? {
-                    // We created the batch, wrap it up and return it.
-                    RetryResult::Success(batch_id) => {
-                        Ok(RetryResult::Success(StreamSelectorBatch {
-                            stream: selected,
-                            batch_id: batch_id
-                        }))
-                    }
-                    // We have to retry again.
-                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
-                            selected: selected,
-                            stream: retry
-                        }
-                    ))
-                }
-            }
-        }
-    }
-
     #[inline]
-    fn abort_start_batch(
-        &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Permanent
-    ) -> RetryResult<(), Infallible> {
-        // We don't actually have to do anything here.  There's no
-        // state prior to creating a batch on the underlying stream.
-
-        RetryResult::Success(())
-    }
-
-    #[inline]
-    fn retry_abort_start_batch(
-        &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _retry: Infallible
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        error!(target: "stream-selector",
-               "should never call retry_abort_start_batch on this stream");
-
-        RetryResult::Success(())
-    }
-
-    fn complete_start_batch(
-        &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
-        err: <Self::StartBatchError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
-        match err {
-            // This is here as a placeholder; this type is
-            // uninhabited, and Rust > 1.81 clippy generates an error
-            // for this.
-            SelectorBatchStartError::Select { .. } => {
-                panic!("Impossible case!")
-            }
-            SelectorBatchStartError::Stream {
-                selected,
-                stream: err
-            } => {
-                let mut stream = self
-                    .dense_id_stream(&selected)
-                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
-
-                match stream.complete_start_batch(ctx, batches, err).map_err(
-                    |err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
-                            selected: selected.clone(),
-                            stream: err
-                        }
-                    }
-                )? {
-                    // We created the batch, wrap it up and return it.
-                    RetryResult::Success(batch_id) => {
-                        Ok(RetryResult::Success(StreamSelectorBatch {
-                            stream: selected,
-                            batch_id: batch_id
-                        }))
-                    }
-                    // We have to retry again.
-                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
-                            selected: selected,
-                            stream: retry
-                        }
-                    ))
-                }
-            }
-        }
+    fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags {
+        Src::Stream::empty_flags_with_capacity(size)
     }
 
     fn finish_batch(
@@ -2240,7 +2086,7 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamShared
+impl<Epochs, Src, Resolve, Ctx> PushStreamPartyID
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     Epochs: Iterator,
@@ -2250,12 +2096,12 @@ where
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamShared + Send
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send
 {
-    type PartyID = <Src::Stream as PushStreamShared>::PartyID;
+    type PartyID = <Src::Stream as PushStreamPartyID>::PartyID;
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamAddParty<Ctx>
+impl<Epochs, Src, Resolve, Ctx> PushStreamShared<Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     Epochs: Iterator,
@@ -2265,118 +2111,335 @@ where
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamAddParty<Ctx> + Send
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send
 {
-    type AddPartiesError = SelectorBatchError<
-        Epochs::Item,
-        <Src::Stream as PushStreamAddParty<Ctx>>::AddPartiesError
+    type AbortBatchRetry = Infallible;
+    type CreateBatchError = SelectionsError<
+        SelectorBatchError<
+            Epochs::Item,
+            <Src::Stream as PushStreamShared<Ctx>>::CreateBatchError
+        >,
+        ()
     >;
-    type AddPartiesRetry =
-        <Src::Stream as PushStreamAddParty<Ctx>>::AddPartiesRetry;
+    type CreateBatchRetry =
+        <Src::Stream as PushStreamShared<Ctx>>::CreateBatchRetry;
+    type SelectError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
+            <Src::Stream as PushStreamShared<Ctx>>::SelectError,
+            Epochs::Item
+        >
+    >;
+    type SelectRetry = SelectorBatchSelectError<
+        Instant,
+        Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
+        <Src::Stream as PushStreamShared<Ctx>>::SelectRetry,
+        Epochs::Item
+    >;
+    type Selections = SelectorSelections<
+        DenseItemID<Epochs::Item>,
+        <Src::Stream as PushStreamShared<Ctx>>::Selections
+    >;
+    type StartBatchError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
+            <Src::Stream as PushStreamShared<Ctx>>::StartBatchError,
+            Epochs::Item
+        >
+    >;
+    type StartBatchRetry = SelectorBatchSelectError<
+        Instant,
+        Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
+        <Src::Stream as PushStreamShared<Ctx>>::StartBatchRetry,
+        Epochs::Item
+    >;
+    type StartBatchStreamBatches =
+        <Src::Stream as PushStreamShared<Ctx>>::StartBatchStreamBatches;
 
-    fn add_parties<I>(
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        SelectorSelections {
+            inner: Src::Stream::empty_selections_with_capacity(size),
+            id: None
+        }
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Src::Stream::empty_batches_with_capacity(size)
+    }
+
+    fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
-        parties: I,
-        batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
+        selections: &mut Self::Selections,
+        parties: I
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>
     where
-        I: Iterator<Item = Self::PartyID> {
-        self.batch_stream(batch)
-            .map_err(|err| SelectorBatchError::Stream { err: err })?
-            .add_parties(ctx, parties, &batch.batch_id)
-            .map_err(|err| SelectorBatchError::Batch { batch: err })
-    }
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        let parties: Vec<Self::PartyID> = parties.cloned().collect();
 
-    fn retry_add_parties(
-        &mut self,
-        ctx: &mut Ctx,
-        batch: &Self::BatchID,
-        retry: Self::AddPartiesRetry
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
-        self.batch_stream(batch)
-            .map_err(|err| SelectorBatchError::Stream { err: err })?
-            .retry_add_parties(ctx, &batch.batch_id, retry)
-            .map_err(|err| SelectorBatchError::Batch { batch: err })
-    }
-
-    fn complete_add_parties(
-        &mut self,
-        ctx: &mut Ctx,
-        batch: &Self::BatchID,
-        err: <Self::AddPartiesError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::AddPartiesRetry>, Self::AddPartiesError>
-    {
-        self.batch_stream(batch)
-            .map_err(|err| SelectorBatchError::Stream { err: err })?
-            .complete_add_parties(ctx, &batch.batch_id, err)
-            .map_err(|err| SelectorBatchError::Batch { batch: err })
-    }
-}
-
-impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamSingle<Msg, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
-where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::Config: Default,
-    Src::Reporter: Clone,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStreamSingle<Msg, Ctx> + Send
-{
-    type CancelPushError = SelectorBatchError<
-        Epochs::Item,
-        SelectorBatchStartError<
-            StreamSelectorSelectError<
-                Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
-            >,
-            <Src::Stream as PushStreamSingle<Msg, Ctx>>::CancelPushError,
-            Epochs::Item
-        >
-    >;
-    type CancelPushRetry = SelectorBatchStartError<
-        Instant,
-        <Src::Stream as PushStreamSingle<Msg, Ctx>>::CancelPushRetry,
-        Epochs::Item
-    >;
-    type PushError = SelectorBatchError<
-        Epochs::Item,
-        SelectorBatchStartError<
-            StreamSelectorSelectError<
-                Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
-            >,
-            <Src::Stream as PushStreamSingle<Msg, Ctx>>::PushError,
-            Epochs::Item
-        >
-    >;
-    type PushRetry = SelectorBatchStartError<
-        Instant,
-        <Src::Stream as PushStreamSingle<Msg, Ctx>>::PushRetry,
-        Epochs::Item
-    >;
-
-    fn push(
-        &mut self,
-        ctx: &mut Ctx,
-        msg: &Msg
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
         // Try to select a stream.
-        match self.select(ctx).map_err(|err| SelectorBatchError::Batch {
-            batch: SelectorBatchStartError::Select { select: err }
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    parties: parties.clone(),
+                    select: err
+                }
+            }
+        })? {
+            // We succeeded, now create a batch on that stream.
+            RetryResult::Success((mut stream, id)) => {
+                selections.id = Some(id.clone());
+
+                match stream
+                    .select(ctx, &mut selections.inner, parties.iter())
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: id.clone(),
+                            stream: err
+                        }
+                    })? {
+                    // We succeeded.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We got a retry when selecting on the inner stream.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: id,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+            // We got a retry for selecting the stream.
+            RetryResult::Retry(retry) => {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
+                    parties: parties,
+                    select: retry
+                }))
+            }
+        }
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { parties, .. } => {
+                self.select(ctx, selections, parties.iter())
+            }
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream
+                    .retry_select(ctx, &mut selections.inner, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchSelectError::Select { .. } => {
+                panic!("Impossible case!")
+            }
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream
+                    .complete_select(ctx, &mut selections.inner, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .create_batch(ctx, batches, &selections.inner)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .retry_create_batch(ctx, batches, &selections.inner, retry)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .complete_create_batch(ctx, batches, &selections.inner, err)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn start_batch<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        parties: I
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        let parties: Vec<Self::PartyID> = parties.cloned().collect();
+
+        // Try to select a stream.
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    parties: parties.clone(),
+                    select: err
+                }
+            }
         })? {
             // We succeeded, now create a batch on that stream.
             RetryResult::Success((mut stream, id)) => match stream
-                .push(ctx, msg)
+                .start_batch(ctx, parties.iter())
                 .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchStartError::Stream {
+                    batch: SelectorBatchSelectError::Stream {
                         selected: id.clone(),
                         stream: err
                     }
@@ -2390,7 +2453,7 @@ where
                 }
                 // We got a retry when creating the batch on the stream.
                 RetryResult::Retry(retry) => {
-                    Ok(RetryResult::Retry(SelectorBatchStartError::Stream {
+                    Ok(RetryResult::Retry(SelectorBatchSelectError::Stream {
                         selected: id,
                         stream: retry
                     }))
@@ -2398,25 +2461,29 @@ where
             },
             // We got a retry for selecting the stream.
             RetryResult::Retry(retry) => {
-                Ok(RetryResult::Retry(SelectorBatchStartError::Select {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
+                    parties: parties,
                     select: retry
                 }))
             }
         }
     }
 
-    fn retry_push(
+    fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        msg: &Msg,
-        retry: Self::PushRetry
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
-            SelectorBatchStartError::Select { .. } => self.push(ctx, msg),
+            SelectorBatchSelectError::Select { parties, .. } => {
+                self.start_batch(ctx, parties.iter())
+            }
             // We got a retry once the stream was selected.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
             } => {
@@ -2424,9 +2491,9 @@ where
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
-                match stream.retry_push(ctx, msg, retry).map_err(|err| {
+                match stream.retry_start_batch(ctx, retry).map_err(|err| {
                     SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
@@ -2441,7 +2508,710 @@ where
                     }
                     // We have to retry again.
                     RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchSelectError::Select { .. } => {
+                panic!("Impossible case!")
+            }
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream.complete_start_batch(ctx, err).map_err(|err| {
+                    SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    }
+                })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(batch_id) => {
+                        Ok(RetryResult::Success(StreamSelectorBatch {
+                            stream: selected,
+                            batch_id: batch_id
+                        }))
+                    }
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    #[inline]
+    fn abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _err: <Self::StartBatchError as BatchError>::Permanent
+    ) -> RetryResult<(), Infallible> {
+        // We don't actually have to do anything here.  There's no
+        // state prior to creating a batch on the underlying stream.
+
+        RetryResult::Success(())
+    }
+
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _retry: Infallible
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        error!(target: "stream-selector",
+               "should never call retry_abort_start_batch on this stream");
+
+        RetryResult::Success(())
+    }
+}
+
+impl<Epochs, Src, Resolve, Ctx> PushStreamPrivate<Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    Epochs: Iterator,
+    Epochs::Item: Clone + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send
+{
+    type AbortBatchRetry = Infallible;
+    type CreateBatchError = SelectionsError<
+        SelectorBatchError<
+            Epochs::Item,
+            <Src::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+        >,
+        ()
+    >;
+    type CreateBatchRetry =
+        <Src::Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry;
+    type SelectError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as PushStreamPrivate<Ctx>>::SelectError,
+            Epochs::Item
+        >
+    >;
+    type SelectRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+        Epochs::Item
+    >;
+    type Selections = SelectorSelections<
+        DenseItemID<Epochs::Item>,
+        <Src::Stream as PushStreamPrivate<Ctx>>::Selections
+    >;
+    type StartBatchError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
+            Epochs::Item
+        >
+    >;
+    type StartBatchRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchRetry,
+        Epochs::Item
+    >;
+    type StartBatchStreamBatches =
+        <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches;
+
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        SelectorSelections {
+            inner: Src::Stream::empty_selections_with_capacity(size),
+            id: None
+        }
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Src::Stream::empty_batches_with_capacity(size)
+    }
+
+    fn select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        // Try to select a stream.
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    parties: (),
+                    select: err
+                }
+            }
+        })? {
+            // We succeeded, now create a batch on that stream.
+            RetryResult::Success((mut stream, id)) => {
+                selections.id = Some(id.clone());
+
+                match stream.select(ctx, &mut selections.inner).map_err(
+                    |err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: id.clone(),
+                            stream: err
+                        }
+                    }
+                )? {
+                    // We succeeded.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We got a retry when selecting on the inner stream.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: id,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+            // We got a retry for selecting the stream.
+            RetryResult::Retry(retry) => {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
+                    parties: (),
+                    select: retry
+                }))
+            }
+        }
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { .. } => {
+                self.select(ctx, selections)
+            }
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream
+                    .retry_select(ctx, &mut selections.inner, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchSelectError::Select { .. } => {
+                panic!("Impossible case!")
+            }
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream
+                    .complete_select(ctx, &mut selections.inner, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(()) => Ok(RetryResult::Success(())),
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .create_batch(ctx, batches, &selections.inner)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .retry_create_batch(ctx, batches, &selections.inner, retry)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let selected = match &selections.id {
+            Some(selections) => Ok(selections),
+            None => Err(SelectionsError::NoSelections { info: () })
+        }?;
+        let mut stream = self.dense_id_stream(selected).map_err(|err| {
+            SelectionsError::Inner {
+                inner: SelectorBatchError::Stream { err: err }
+            }
+        })?;
+
+        Ok(stream
+            .complete_create_batch(ctx, batches, &selections.inner, err)
+            .map_err(|err| SelectionsError::Inner {
+                inner: SelectorBatchError::Batch { batch: err }
+            })?
+            .map(|batch_id| StreamSelectorBatch {
+                stream: selected.clone(),
+                batch_id: batch_id
+            }))
+    }
+
+    fn start_batch(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        // Try to select a stream.
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    parties: (),
+                    select: err
+                }
+            }
+        })? {
+            // We succeeded, now create a batch on that stream.
+            RetryResult::Success((mut stream, id)) => match stream
+                .start_batch(ctx)
+                .map_err(|err| SelectorBatchError::Batch {
+                    batch: SelectorBatchSelectError::Stream {
+                        selected: id.clone(),
+                        stream: err
+                    }
+                })? {
+                // We succeeded, so we can package it up and return it.
+                RetryResult::Success(batch_id) => {
+                    Ok(RetryResult::Success(StreamSelectorBatch {
+                        stream: id,
+                        batch_id: batch_id
+                    }))
+                }
+                // We got a retry when creating the batch on the stream.
+                RetryResult::Retry(retry) => {
+                    Ok(RetryResult::Retry(SelectorBatchSelectError::Stream {
+                        selected: id,
+                        stream: retry
+                    }))
+                }
+            },
+            // We got a retry for selecting the stream.
+            RetryResult::Retry(retry) => {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
+                    parties: (),
+                    select: retry
+                }))
+            }
+        }
+    }
+
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { .. } => self.start_batch(ctx),
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream.retry_start_batch(ctx, retry).map_err(|err| {
+                    SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    }
+                })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(batch_id) => {
+                        Ok(RetryResult::Success(StreamSelectorBatch {
+                            stream: selected,
+                            batch_id: batch_id
+                        }))
+                    }
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        match err {
+            // This is here as a placeholder; this type is
+            // uninhabited, and Rust > 1.81 clippy generates an error
+            // for this.
+            SelectorBatchSelectError::Select { .. } => {
+                panic!("Impossible case!")
+            }
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream.complete_start_batch(ctx, err).map_err(|err| {
+                    SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    }
+                })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(batch_id) => {
+                        Ok(RetryResult::Success(StreamSelectorBatch {
+                            stream: selected,
+                            batch_id: batch_id
+                        }))
+                    }
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
+                            selected: selected,
+                            stream: retry
+                        }
+                    ))
+                }
+            }
+        }
+    }
+
+    #[inline]
+    fn abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _err: <Self::StartBatchError as BatchError>::Permanent
+    ) -> RetryResult<(), Infallible> {
+        // We don't actually have to do anything here.  There's no
+        // state prior to creating a batch on the underlying stream.
+
+        RetryResult::Success(())
+    }
+
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _retry: Infallible
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        error!(target: "stream-selector",
+               "should never call retry_abort_start_batch on this stream");
+
+        RetryResult::Success(())
+    }
+}
+
+impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    Epochs: Iterator,
+    Epochs::Item: Clone + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Src::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send
+{
+    type CancelPushError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushError,
+            Epochs::Item
+        >
+    >;
+    type CancelPushRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushRetry,
+        Epochs::Item
+    >;
+    type PushError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushError,
+            Epochs::Item
+        >
+    >;
+    type PushRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushRetry,
+        Epochs::Item
+    >;
+
+    fn push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &Msg
+    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        // Try to select a stream.
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    select: err,
+                    parties: ()
+                }
+            }
+        })? {
+            // We succeeded, now create a batch on that stream.
+            RetryResult::Success((mut stream, id)) => match stream
+                .push(ctx, msg)
+                .map_err(|err| SelectorBatchError::Batch {
+                    batch: SelectorBatchSelectError::Stream {
+                        selected: id.clone(),
+                        stream: err
+                    }
+                })? {
+                // We succeeded, so we can package it up and return it.
+                RetryResult::Success(batch_id) => {
+                    Ok(RetryResult::Success(StreamSelectorBatch {
+                        stream: id,
+                        batch_id: batch_id
+                    }))
+                }
+                // We got a retry when creating the batch on the stream.
+                RetryResult::Retry(retry) => {
+                    Ok(RetryResult::Retry(SelectorBatchSelectError::Stream {
+                        selected: id,
+                        stream: retry
+                    }))
+                }
+            },
+            // We got a retry for selecting the stream.
+            RetryResult::Retry(retry) => {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
+                    select: retry,
+                    parties: ()
+                }))
+            }
+        }
+    }
+
+    fn retry_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &Msg,
+        retry: Self::PushRetry
+    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { .. } => self.push(ctx, msg),
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                match stream.retry_push(ctx, msg, retry).map_err(|err| {
+                    SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    }
+                })? {
+                    // We created the batch, wrap it up and return it.
+                    RetryResult::Success(batch_id) => {
+                        Ok(RetryResult::Success(StreamSelectorBatch {
+                            stream: selected,
+                            batch_id: batch_id
+                        }))
+                    }
+                    // We have to retry again.
+                    RetryResult::Retry(retry) => Ok(RetryResult::Retry(
+                        SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }
@@ -2462,10 +3232,10 @@ where
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
             // for this.
-            SelectorBatchStartError::Select { .. } => {
+            SelectorBatchSelectError::Select { .. } => {
                 panic!("Impossible case!")
             }
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
             } => {
@@ -2475,7 +3245,7 @@ where
 
                 match stream.complete_push(ctx, msg, err).map_err(|err| {
                     SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
@@ -2490,7 +3260,7 @@ where
                     }
                     // We have to retry again.
                     RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
+                        SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }
@@ -2512,11 +3282,11 @@ where
             // The batch was never created.
             SelectorBatchError::Batch { batch } => match batch {
                 // The batch was never created.
-                SelectorBatchStartError::Select { .. } => {
+                SelectorBatchSelectError::Select { .. } => {
                     Ok(RetryResult::Success(()))
                 }
                 // This is the one case where we need to cancel.
-                SelectorBatchStartError::Stream {
+                SelectorBatchSelectError::Stream {
                     selected,
                     stream: err
                 } => {
@@ -2528,12 +3298,12 @@ where
                     Ok(stream
                         .cancel_push(ctx, err)
                         .map_err(|err| SelectorBatchError::Batch {
-                            batch: SelectorBatchStartError::Stream {
+                            batch: SelectorBatchSelectError::Stream {
                                 selected: selected.clone(),
                                 stream: err
                             }
                         })?
-                        .map_retry(|retry| SelectorBatchStartError::Stream {
+                        .map_retry(|retry| SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }))
@@ -2550,11 +3320,11 @@ where
     {
         match retry {
             // The batch was never created.
-            SelectorBatchStartError::Select { .. } => {
+            SelectorBatchSelectError::Select { .. } => {
                 Ok(RetryResult::Success(()))
             }
             // This is the one case where we need to cancel.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
             } => {
@@ -2565,12 +3335,12 @@ where
                 Ok(stream
                     .retry_cancel_push(ctx, retry)
                     .map_err(|err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
                     })?
-                    .map_retry(|retry| SelectorBatchStartError::Stream {
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
                         selected: selected,
                         stream: retry
                     }))
@@ -2588,11 +3358,11 @@ where
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
             // for this.
-            SelectorBatchStartError::Select { .. } => {
+            SelectorBatchSelectError::Select { .. } => {
                 panic!("Impossible case!")
             }
             // This is the one case where we need to cancel.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
             } => {
@@ -2603,12 +3373,12 @@ where
                 Ok(stream
                     .complete_cancel_push(ctx, err)
                     .map_err(|err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
                     })?
-                    .map_retry(|retry| SelectorBatchStartError::Stream {
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
                         selected: selected,
                         stream: retry
                     }))
@@ -2627,11 +3397,12 @@ where
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStreamSharedSingle<Msg, Ctx> + Send
+    Src::Stream:
+        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
-        SelectorBatchStartError<
+        SelectorBatchSelectError<
             PartiesBatchError<
                 Vec<Self::PartyID>,
                 StreamSelectorSelectError<
@@ -2644,18 +3415,20 @@ where
                     >
                 >
             >,
+            (),
             <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushError,
             Epochs::Item
         >
     >;
-    type CancelPushRetry = SelectorBatchStartError<
+    type CancelPushRetry = SelectorBatchSelectError<
         SelectorStartRetry<Self::PartyID>,
+        (),
         <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushRetry,
         Epochs::Item
     >;
     type PushError = SelectorBatchError<
         Epochs::Item,
-        SelectorBatchStartError<
+        SelectorBatchSelectError<
             PartiesBatchError<
                 Vec<Self::PartyID>,
                 StreamSelectorSelectError<
@@ -2668,39 +3441,45 @@ where
                     >
                 >
             >,
+            (),
             <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushError,
             Epochs::Item
         >
     >;
-    type PushRetry = SelectorBatchStartError<
+    type PushRetry = SelectorBatchSelectError<
         SelectorStartRetry<Self::PartyID>,
+        (),
         <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushRetry,
         Epochs::Item
     >;
 
-    fn push<I>(
+    fn push<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         parties: I,
         msg: &Msg
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     where
-        I: Iterator<Item = Self::PartyID> {
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
         // ISSUE #13: find a better way to do this that doesn't
         // involve creating arrays
-        let parties: Vec<Self::PartyID> = parties.collect();
+        let parties: Vec<Self::PartyID> = parties.cloned().collect();
 
         // Try to select a stream.
-        match self.select(ctx).map_err(|err| SelectorBatchError::Batch {
-            batch: SelectorBatchStartError::Select {
-                select: PartiesBatchError::new(parties.clone(), err)
+        match self.select_stream(ctx).map_err(|err| {
+            SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    select: PartiesBatchError::new(parties.clone(), err),
+                    parties: ()
+                }
             }
         })? {
             // We succeeded, now create a batch on that stream.
             RetryResult::Success((mut stream, id)) => match stream
-                .push(ctx, parties.into_iter(), msg)
+                .push(ctx, parties.iter(), msg)
                 .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchStartError::Stream {
+                    batch: SelectorBatchSelectError::Stream {
                         selected: id.clone(),
                         stream: err
                     }
@@ -2714,7 +3493,7 @@ where
                 }
                 // We got a retry when creating the batch on the stream.
                 RetryResult::Retry(retry) => {
-                    Ok(RetryResult::Retry(SelectorBatchStartError::Stream {
+                    Ok(RetryResult::Retry(SelectorBatchSelectError::Stream {
                         selected: id,
                         stream: retry
                     }))
@@ -2722,11 +3501,12 @@ where
             },
             // We got a retry for selecting the stream.
             RetryResult::Retry(retry) => {
-                Ok(RetryResult::Retry(SelectorBatchStartError::Select {
+                Ok(RetryResult::Retry(SelectorBatchSelectError::Select {
                     select: SelectorStartRetry {
                         when: retry,
                         parties: parties
-                    }
+                    },
+                    parties: ()
                 }))
             }
         }
@@ -2741,11 +3521,12 @@ where
     {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
-            SelectorBatchStartError::Select {
-                select: SelectorStartRetry { parties, .. }
-            } => self.push(ctx, parties.into_iter(), msg),
+            SelectorBatchSelectError::Select {
+                select: SelectorStartRetry { parties, .. },
+                ..
+            } => self.push(ctx, parties.iter(), msg),
             // We got a retry once the stream was selected.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
             } => {
@@ -2755,7 +3536,7 @@ where
 
                 match stream.retry_push(ctx, msg, retry).map_err(|err| {
                     SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
@@ -2770,7 +3551,7 @@ where
                     }
                     // We have to retry again.
                     RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
+                        SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }
@@ -2788,14 +3569,14 @@ where
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         match err {
-            SelectorBatchStartError::Select { select } => {
+            SelectorBatchSelectError::Select { select, .. } => {
                 error!(target: "stream-selector",
                        concat!("should never call complete_push ",
                                "with select error"));
 
-                self.push(ctx, select.take_parties().into_iter(), msg)
+                self.push(ctx, select.take_parties().iter(), msg)
             }
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
             } => {
@@ -2805,7 +3586,7 @@ where
 
                 match stream.complete_push(ctx, msg, err).map_err(|err| {
                     SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
@@ -2820,7 +3601,7 @@ where
                     }
                     // We have to retry again.
                     RetryResult::Retry(retry) => Ok(RetryResult::Retry(
-                        SelectorBatchStartError::Stream {
+                        SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }
@@ -2842,11 +3623,11 @@ where
             // The batch was never created.
             SelectorBatchError::Batch { batch } => match batch {
                 // The batch was never created.
-                SelectorBatchStartError::Select { .. } => {
+                SelectorBatchSelectError::Select { .. } => {
                     Ok(RetryResult::Success(()))
                 }
                 // This is the one case where we need to cancel.
-                SelectorBatchStartError::Stream {
+                SelectorBatchSelectError::Stream {
                     selected,
                     stream: err
                 } => {
@@ -2858,12 +3639,12 @@ where
                     Ok(stream
                         .cancel_push(ctx, err)
                         .map_err(|err| SelectorBatchError::Batch {
-                            batch: SelectorBatchStartError::Stream {
+                            batch: SelectorBatchSelectError::Stream {
                                 selected: selected.clone(),
                                 stream: err
                             }
                         })?
-                        .map_retry(|retry| SelectorBatchStartError::Stream {
+                        .map_retry(|retry| SelectorBatchSelectError::Stream {
                             selected: selected,
                             stream: retry
                         }))
@@ -2880,11 +3661,11 @@ where
     {
         match retry {
             // The batch was never created.
-            SelectorBatchStartError::Select { .. } => {
+            SelectorBatchSelectError::Select { .. } => {
                 Ok(RetryResult::Success(()))
             }
             // This is the one case where we need to cancel.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
             } => {
@@ -2895,12 +3676,12 @@ where
                 Ok(stream
                     .retry_cancel_push(ctx, retry)
                     .map_err(|err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
                     })?
-                    .map_retry(|retry| SelectorBatchStartError::Stream {
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
                         selected: selected,
                         stream: retry
                     }))
@@ -2916,11 +3697,11 @@ where
     {
         match err {
             // The batch was never created.
-            SelectorBatchStartError::Select { .. } => {
+            SelectorBatchSelectError::Select { .. } => {
                 Ok(RetryResult::Success(()))
             }
             // This is the one case where we need to cancel.
-            SelectorBatchStartError::Stream {
+            SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
             } => {
@@ -2931,12 +3712,12 @@ where
                 Ok(stream
                     .complete_cancel_push(ctx, err)
                     .map_err(|err| SelectorBatchError::Batch {
-                        batch: SelectorBatchStartError::Stream {
+                        batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
                             stream: err
                         }
                     })?
-                    .map_retry(|retry| SelectorBatchStartError::Stream {
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
                         selected: selected,
                         stream: retry
                     }))
@@ -3086,8 +3867,8 @@ impl Display for StreamsIdx {
     }
 }
 
-impl<Select, Stream, Epoch> Display
-    for SelectorBatchStartError<Select, Stream, Epoch>
+impl<Select, Parties, Stream, Epoch> Display
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
     Select: Display,
     Stream: Display
@@ -3097,8 +3878,8 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            SelectorBatchStartError::Select { select } => select.fmt(f),
-            SelectorBatchStartError::Stream { stream, .. } => stream.fmt(f)
+            SelectorBatchSelectError::Select { select, .. } => select.fmt(f),
+            SelectorBatchSelectError::Stream { stream, .. } => stream.fmt(f)
         }
     }
 }
