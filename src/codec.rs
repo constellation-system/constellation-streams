@@ -42,7 +42,6 @@ use log::error;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::stream::ConcurrentStream;
-use crate::stream::NullBatches;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
@@ -193,17 +192,10 @@ where
     type FinishBatchError = Infallible;
     type FinishBatchRetry = Infallible;
     type ReportError = Infallible;
-    type StartBatchStreamBatches = NullBatches<()>;
     type StreamFlags = ();
 
     #[inline]
-    fn empty_flags(&self) -> Self::StreamFlags {}
-
-    #[inline]
-    fn empty_batches(&self) -> Self::StartBatchStreamBatches {
-        NullBatches::default()
-    }
-
+    fn empty_flags_with_capacity(_size: usize) -> Self::StreamFlags {}
 
     #[inline]
     fn finish_batch(
@@ -381,14 +373,118 @@ where
     Codec: DatagramCodec<Msg> + Send
 {
     type AbortBatchRetry = Infallible;
+    type CreateBatchError = Infallible;
+    type CreateBatchRetry = Infallible;
     type StartBatchError = Infallible;
     type StartBatchRetry = Infallible;
+    type SelectError = Infallible;
+    type SelectRetry = Infallible;
+    type Selections = ();
+    type StartBatchStreamBatches = ();
+
+    #[inline]
+    fn empty_selections_with_capacity(_size: usize) -> Self::Selections {}
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        _size: usize
+    ) -> Self::StartBatchStreamBatches {}
+
+    #[inline]
+    fn select(
+        &mut self,
+        _ctx: &mut Ctx,
+        _selections: &mut Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        _retry: Self::SelectRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_select");
+
+        self.select(ctx, selections)
+    }
+
+    #[inline]
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        _err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_select");
+
+        self.select(ctx, selections)
+    }
+
+    #[inline]
+    fn create_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _batches: &mut Self::StartBatchStreamBatches,
+        _selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        _retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_create_batch");
+
+        self.create_batch(ctx, batches, selections)
+    }
+
+    #[inline]
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        _err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_create_batch");
+
+        self.create_batch(ctx, batches, selections)
+    }
 
     #[inline]
     fn start_batch(
         &mut self,
         _ctx: &mut Ctx,
-        _batches: &mut Self::StartBatchStreamBatches
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -400,7 +496,6 @@ where
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         _retry: Self::StartBatchRetry
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -409,14 +504,13 @@ where
         error!(target: "datagram-codec-stream",
                "should never call retry_start_batch");
 
-        self.start_batch(ctx, batches)
+        self.start_batch(ctx)
     }
 
     #[inline]
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         _err: <Self::StartBatchError as BatchError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -425,7 +519,7 @@ where
         error!(target: "datagram-codec-stream",
                "should never call complete_start_batch");
 
-        self.start_batch(ctx, batches)
+        self.start_batch(ctx)
     }
 
     #[inline]

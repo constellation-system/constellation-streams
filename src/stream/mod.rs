@@ -46,68 +46,6 @@ use crate::error::ErrorReportInfo;
 pub mod pull;
 pub mod push;
 
-/// Trait for caches used in stream creation to allow shared streams.
-///
-/// This is a trait for types of caches that are used in the
-/// (start_batch)[PushStream::start_batch] process.  This is primarily
-/// used with shared streams, to ensure that only one batch is created
-/// for any given shared stream.
-pub trait StreamBatches {
-    /// ID for batches.
-    type BatchID: Clone;
-    /// ID for streams.
-    type StreamID: Clone;
-
-    /// Create an empty instance.
-    fn new() -> Self;
-
-    /// Create an empty instance with a size hint.
-    fn with_capacity(size: usize) -> Self;
-
-    /// Get the batch corresponding to the `stream`.
-    fn batch(
-        &self,
-        stream: &Self::StreamID
-    ) -> Option<Self::BatchID>;
-
-    /// Add `batch` as the batch ID corresponding to `stream`.
-    fn add_batch(
-        &mut self,
-        stream: Self::StreamID,
-        batch: Self::BatchID
-    );
-}
-
-/// Trait for flags used to manage adding messages to shared streams.
-///
-/// This is a trait for types of flags that are used in the
-/// [add](PushStreamAdd::add),
-/// [finish_batch](PushStream::finish_batch), and
-/// [cancel_batch](PushStream::cancel_batch) process.  This is
-/// primarily used with shared streams, to ensure that only one batch
-/// is created for any given shared stream.
-pub trait StreamFlags {
-    /// Type of stream IDs.
-    type StreamID: Clone;
-
-    /// Create an empty instance.
-    fn new() -> Self;
-
-    /// Create an empty instance with a size hint.
-    fn with_capacity(size: usize) -> Self;
-
-    /// Check if the flag is set for the given stream.
-    fn is_set(
-        &self,
-        stream: &Self::StreamID
-    ) -> bool;
-
-    /// Set the flag for the given stream.
-    fn set(
-        &mut self,
-        stream: Self::StreamID
-    );
-}
 
 // This is a workaround for an OpenSSL implementation issue.
 
@@ -204,8 +142,6 @@ pub trait PullStreamListener<T> {
 pub trait PushStream<Ctx> {
     /// ID for batches.
     type BatchID: Clone;
-    /// Type of [StreamBatches] used in [start_batch](PushStream::start_batch).
-    type StartBatchStreamBatches: StreamBatches;
     /// Type of errors that can occur when canceling a batch.
     type CancelBatchError: BatchError;
     /// Type of information given by a [RetryResult] for canceling a new batch.
@@ -214,22 +150,21 @@ pub trait PushStream<Ctx> {
     type FinishBatchError: BatchError;
     /// Type of information given by a [RetryResult] for finishing a new batch.
     type FinishBatchRetry: RetryWhen + Clone;
-    /// Type of [StreamFlags] used in [add](PushStreamAdd::add).
-    type StreamFlags: StreamFlags;
+    /// Type of stream flags used in [add](PushStreamAdd::add).
+    type StreamFlags: Default;
     /// Type of error that can occur when reporting failures.
     type ReportError: Display;
 
     /// Create an empty
     /// [StreamFlags](PushStream::StreamFlags).
+    #[inline]
     fn empty_flags(&self) -> Self::StreamFlags {
-        Self::StreamFlags::new()
+        Self::StreamFlags::default()
     }
 
     /// Create an empty
-    /// [StartBatchStreamBatches](PushStream::StartBatchStreamBatches).
-    fn empty_batches(&self) -> Self::StartBatchStreamBatches {
-        Self::StartBatchStreamBatches::new()
-    }
+    /// [StreamFlags](PushStream::StreamFlags).
+    fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags;
 
     /// Finish a batch, and guarantee that all of its messages have
     /// been sent.
@@ -470,6 +405,16 @@ pub trait PushStreamParties: PushStreamPartyID {
 }
 
 pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
+    /// Type of errors that can occur when selecting streams for a new
+    /// batch.
+    type SelectError: BatchError;
+    /// Type of information given by a [RetryResult] for selecting
+    /// streams for a new batch.
+    type SelectRetry: RetryWhen + Clone;
+    /// Type of errors that can occur when creating a new batch.
+    type CreateBatchError: BatchError;
+    /// Type of information given by a [RetryResult] for creating a new batch.
+    type CreateBatchRetry: RetryWhen + Clone;
     /// Type of errors that can occur when creating a new batch.
     type StartBatchError: BatchError;
     /// Type of information given by a [RetryResult] for creating a new batch.
@@ -477,6 +422,130 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone;
+    /// Type of selection cache used in [select](PushStream::select).
+    type Selections: Clone + Default;
+    /// Type of batch cache used in [start_batch](PushStream::start_batch).
+    type StartBatchStreamBatches: Clone + Default;
+
+    /// Create an empty
+    /// [Selections](PushStreamShared::Selections).
+    #[inline]
+    fn empty_selections(&self) -> Self::Selections {
+        Self::Selections::default()
+    }
+
+    /// Create an empty
+    /// [Selections](PushStreamShared::Selections).
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections;
+
+    /// Create an empty
+    /// [StartBatchStreamBatches](PushStreamShared::StartBatchStreamBatches).
+    #[inline]
+    fn empty_batches(&self) -> Self::StartBatchStreamBatches {
+        Self::StartBatchStreamBatches::default()
+    }
+
+    /// Create an empty
+    /// [StartBatchStreamBatches](PushStreamShared::StartBatchStreamBatches).
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches;
+
+    /// Select streams for a new batch.
+    ///
+    /// This will do any stream selection, and will record decisions
+    /// in `batches`.
+    fn select<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        parties: I
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a;
+
+    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    ///
+    /// This allows a call to `start_batch` that had returned a
+    /// [Retry](RetryResult::Retry) to be retried in an
+    /// implementation-agnostic manner.
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >;
+
+    /// Retry a previously-failed call to
+    /// [select](PushStream::select).
+    ///
+    /// This allows a call to `select` that had returned a recoverable
+    /// error to be retried in an implementation-agnostic manner.
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >;
+
+    /// Create a new batch.
+    ///
+    /// This creates a new batch, referenced by a
+    /// [BatchID](PushStream::BatchID).  This is not meant to be used
+    /// directly; [start_batch](PushStream::start_batch) should be
+    /// used instead.
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
+
+    /// Retry a previous call to [create_batch](PushStream::create_batch).
+    ///
+    /// This allows a call to `create_batch` that had returned a
+    /// [Retry](RetryResult::Retry) to be retried in an
+    /// implementation-agnostic manner.
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
+
+    /// Retry a previously-failed call to
+    /// [create_batch](PushStream::create_batch).
+    ///
+    /// This allows a call to `create_batch` that had returned a
+    /// recoverable error to be retried in an implementation-agnostic
+    /// manner.
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
 
     /// Start a new batch.
     ///
@@ -488,14 +557,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// on the underlying stream that will need to be freed using
     /// [finish_batch](PushStream::finish_batch) or
     /// [cancel_batch](PushStream::cancel_batch).
-    ///
-    /// The [StreamBatches] implementation `batches` will be used to
-    /// ensure that shared streams have only one batch created for
-    /// them.
     fn start_batch<'a, I>(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         parties: I
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -513,7 +577,6 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -529,7 +592,6 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         err: <Self::StartBatchError as BatchError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -566,13 +628,142 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
 }
 
 pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
+    /// Type of errors that can occur when selecting streams for a new
+    /// batch.
+    type SelectError: BatchError;
+    /// Type of information given by a [RetryResult] for selecting
+    /// streams for a new batch.
+    type SelectRetry: RetryWhen + Clone;
     /// Type of errors that can occur when creating a new batch.
-    type StartBatchError: BatchError;
+    type CreateBatchError: BatchError;
     /// Type of information given by a [RetryResult] for creating a new batch.
+    type CreateBatchRetry: RetryWhen + Clone;
+    /// Type of errors that can occur when starting a new batch.
+    type StartBatchError: BatchError;
+    /// Type of information given by a [RetryResult] for starting a new batch.
     type StartBatchRetry: RetryWhen + Clone;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone;
+    /// Type of selection cache used in [select](PushStream::select).
+    type Selections: Clone + Default;
+    /// Type of batch cache used in [start_batch](PushStream::start_batch).
+    type StartBatchStreamBatches: Clone + Default;
+
+    /// Create an empty
+    /// [Selections](PushStreamPrivate::Selections).
+    #[inline]
+    fn empty_selections(&self) -> Self::Selections {
+        Self::Selections::default()
+    }
+
+    /// Create an empty
+    /// [Selections](PushStreamPrivate::Selections).
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections;
+
+    /// Create an empty
+    /// [StartBatchStreamBatches](PushStreamPrivate::StartBatchStreamBatches).
+    #[inline]
+    fn empty_batches(&self) -> Self::StartBatchStreamBatches {
+        Self::StartBatchStreamBatches::default()
+    }
+
+    /// Create an empty
+    /// [StartBatchStreamBatches](PushStreamPrivate::StartBatchStreamBatches).
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches;
+
+    /// Select streams for a new batch.
+    ///
+    /// This will do any stream selection, and will record decisions
+    /// in `batches`.
+    fn select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >;
+    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    ///
+    /// This allows a call to `start_batch` that had returned a
+    /// [Retry](RetryResult::Retry) to be retried in an
+    /// implementation-agnostic manner.
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >;
+
+    /// Retry a previously-failed call to
+    /// [select](PushStream::select).
+    ///
+    /// This allows a call to `select` that had returned a recoverable
+    /// error to be retried in an implementation-agnostic manner.
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >;
+
+    /// Create a new batch.
+    ///
+    /// This creates a new batch, referenced by a
+    /// [BatchID](PushStream::BatchID).  This is not meant to be used
+    /// directly; [start_batch](PushStream::start_batch) should be
+    /// used instead.
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
+
+    /// Retry a previous call to [create_batch](PushStream::create_batch).
+    ///
+    /// This allows a call to `create_batch` that had returned a
+    /// [Retry](RetryResult::Retry) to be retried in an
+    /// implementation-agnostic manner.
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
+
+    /// Retry a previously-failed call to
+    /// [create_batch](PushStream::create_batch).
+    ///
+    /// This allows a call to `create_batch` that had returned a
+    /// recoverable error to be retried in an implementation-agnostic
+    /// manner.
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    >;
 
     /// Start a new batch.
     ///
@@ -590,8 +781,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// them.
     fn start_batch(
         &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches
+        ctx: &mut Ctx
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -605,7 +795,6 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -621,7 +810,6 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         err: <Self::StartBatchError as BatchError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -685,14 +873,15 @@ pub trait PushStreamSharedSingle<T, Ctx>:
     /// single-element batch, and may often be implemented that way.
     /// The batch ID returned is for downstream tracking purposes, and
     /// can be used as the equivalent of a message ID.
-    fn push<I>(
+    fn push<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         parties: I,
         msg: &T
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     where
-        I: Iterator<Item = Self::PartyID>;
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a;
 
     /// Retry a previous call to [push](PushStreamSharedSingle::push).
     ///
@@ -839,14 +1028,6 @@ pub struct CompoundBatches<Batch> {
     batches: Vec<Option<Batch>>,
     avail: BitVec,
     config: BatchSlotsConfig
-}
-
-/// Implementation of [StreamBatches] that does not perform caching.
-///
-/// This is intended for use when implementing low-level streams with
-/// private unicast channels, which *should not* cache batch creation.
-pub struct NullBatches<BatchID: Clone> {
-    batch: PhantomData<BatchID>
 }
 
 /// Wrapper around [PushStream] and sub-traits that adds
@@ -1058,8 +1239,12 @@ where
     type FinishBatchError = ThreadedStreamError<Inner::FinishBatchError>;
     type FinishBatchRetry = Inner::FinishBatchRetry;
     type ReportError = ThreadedStreamError<Inner::ReportError>;
-    type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
     type StreamFlags = Inner::StreamFlags;
+
+    #[inline]
+    fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags {
+        Inner::empty_flags_with_capacity(size)
+    }
 
     fn finish_batch(
         &mut self,
@@ -1307,14 +1492,146 @@ impl<Ctx, Inner> PushStreamPrivate<Ctx> for ThreadedStream<Inner>
 where
     Inner: PushStreamPrivate<Ctx>
 {
+    type SelectError = ThreadedStreamError<Inner::SelectError>;
+    type SelectRetry = Inner::SelectRetry;
     type AbortBatchRetry = Inner::AbortBatchRetry;
     type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
     type StartBatchRetry = Inner::StartBatchRetry;
+    type CreateBatchError = ThreadedStreamError<Inner::CreateBatchError>;
+    type CreateBatchRetry = Inner::CreateBatchRetry;
+    type Selections = Inner::Selections;
+    type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
+
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        Inner::empty_selections_with_capacity(size)
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Inner::empty_batches_with_capacity(size)
+    }
+
+    fn select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .select(ctx, selections)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .retry_select(ctx, selections, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .complete_select(ctx, selections, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .create_batch(ctx, batches, selections)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .retry_create_batch(ctx, batches, selections, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .complete_create_batch(ctx, batches, selections, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
 
     fn start_batch(
         &mut self,
-        ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches
+        ctx: &mut Ctx
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -1325,14 +1642,13 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .start_batch(ctx, batches)
+            .start_batch(ctx)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -1344,14 +1660,13 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .retry_start_batch(ctx, batches, retry)
+            .retry_start_batch(ctx, retry)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         err: <Self::StartBatchError as BatchError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -1363,7 +1678,7 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .complete_start_batch(ctx, batches, err)
+            .complete_start_batch(ctx, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
@@ -1414,14 +1729,150 @@ impl<Ctx, Inner> PushStreamShared<Ctx> for ThreadedStream<Inner>
 where
     Inner: PushStreamShared<Ctx>
 {
+    type SelectError = ThreadedStreamError<Inner::SelectError>;
+    type SelectRetry = Inner::SelectRetry;
     type AbortBatchRetry = Inner::AbortBatchRetry;
     type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
     type StartBatchRetry = Inner::StartBatchRetry;
+    type CreateBatchError = ThreadedStreamError<Inner::CreateBatchError>;
+    type CreateBatchRetry = Inner::CreateBatchRetry;
+    type Selections = Inner::Selections;
+    type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
+
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        Inner::empty_selections_with_capacity(size)
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Inner::empty_batches_with_capacity(size)
+    }
+
+    fn select<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        parties: I
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .select(ctx, selections, parties)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .retry_select(ctx, selections, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<(), Self::SelectRetry>,
+        Self::SelectError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .complete_select(ctx, selections, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .create_batch(ctx, batches, selections)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .retry_create_batch(ctx, batches, selections, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .complete_create_batch(ctx, batches, selections, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
 
     fn start_batch<'a, I>(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         parties: I
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -1436,14 +1887,13 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .start_batch(ctx, batches, parties)
+            .start_batch(ctx, parties)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -1455,14 +1905,13 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .retry_start_batch(ctx, batches, retry)
+            .retry_start_batch(ctx, retry)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        batches: &mut Self::StartBatchStreamBatches,
         err: <Self::StartBatchError as BatchError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
@@ -1474,7 +1923,7 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .complete_start_batch(ctx, batches, err)
+            .complete_start_batch(ctx, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
@@ -1530,14 +1979,15 @@ where
     type PushError = ThreadedStreamError<Inner::PushError>;
     type PushRetry = Inner::PushRetry;
 
-    fn push<I>(
+    fn push<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         parties: I,
         msg: &T
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     where
-        I: Iterator<Item = Self::PartyID> {
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
         let mut guard = self
             .inner
             .lock()
@@ -1798,79 +2248,6 @@ impl<Inner> ThreadedStream<Inner> {
         ThreadedStream {
             inner: Arc::new(Mutex::new(inner))
         }
-    }
-}
-
-impl<BatchID> Default for NullBatches<BatchID>
-where
-    BatchID: Clone
-{
-    #[inline]
-    fn default() -> Self {
-        NullBatches { batch: PhantomData }
-    }
-}
-
-impl<BatchID> StreamBatches for NullBatches<BatchID>
-where
-    BatchID: Clone
-{
-    type BatchID = BatchID;
-    type StreamID = ();
-
-    #[inline]
-    fn new() -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    fn with_capacity(_size: usize) -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    fn batch(
-        &self,
-        _stream: &Self::StreamID
-    ) -> Option<Self::BatchID> {
-        None
-    }
-
-    #[inline]
-    fn add_batch(
-        &mut self,
-        _stream: Self::StreamID,
-        _batch: Self::BatchID
-    ) {
-    }
-}
-
-impl StreamFlags for () {
-    type StreamID = ();
-
-    #[inline]
-    fn new() -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    fn with_capacity(_size: usize) -> Self {
-        Self::default()
-    }
-
-    #[inline]
-    fn is_set(
-        &self,
-        _stream: &Self::StreamID
-    ) -> bool {
-        false
-    }
-
-    #[inline]
-    fn set(
-        &mut self,
-        _stream: Self::StreamID
-    ) {
     }
 }
 

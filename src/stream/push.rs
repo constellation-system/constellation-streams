@@ -59,7 +59,6 @@ where
     Msg: Clone + Send {
     Batch {
         msgs: Vec<Msg>,
-        batches: Stream::StartBatchStreamBatches,
         retry: Stream::StartBatchRetry
     },
     Abort {
@@ -462,7 +461,6 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         msgs: Vec<Msg>,
-        mut batches: Stream::StartBatchStreamBatches,
         err: Stream::StartBatchError
     ) -> RetryResult<(), Self> {
         trace!(target: "push-entry",
@@ -470,11 +468,7 @@ where
 
         match err.split() {
             (Some(completable), None) => {
-                match stream.complete_start_batch(
-                    ctx,
-                    &mut batches,
-                    completable
-                ) {
+                match stream.complete_start_batch(ctx, completable) {
                     // It succeeded.
                     Ok(RetryResult::Success(batch_id)) => {
                         trace!(target: "push-entry",
@@ -486,13 +480,12 @@ where
                     Ok(RetryResult::Retry(retry)) => {
                         RetryResult::Retry(PushEntry::Batch {
                             msgs: msgs,
-                            batches: batches,
                             retry: retry
                         })
                     }
                     // More errors; recurse again.
                     Err(err) => Self::complete_start_batch(
-                        ctx, stream, msgs, batches, err
+                        ctx, stream, msgs, err
                     )
                 }
             }
@@ -534,9 +527,7 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> RetryResult<(), Self> {
-        let mut batches = stream.empty_batches();
-
-        match stream.start_batch(ctx, &mut batches, parties.iter()) {
+        match stream.start_batch(ctx, parties.iter()) {
             // It succeeded.
             Ok(RetryResult::Success(batch_id)) => {
                 Self::try_add(ctx, stream, msgs, batch_id)
@@ -545,12 +536,11 @@ where
             Ok(RetryResult::Retry(retry)) => {
                 RetryResult::Retry(PushEntry::Batch {
                     msgs: msgs,
-                    batches: batches,
                     retry: retry
                 })
             }
             Err(err) => Self::complete_start_batch(
-                ctx, stream, msgs, batches, err
+                ctx, stream, msgs, err
             )
         }
     }
@@ -563,9 +553,8 @@ where
         match self {
             PushEntry::Batch {
                 msgs,
-                mut batches,
                 retry
-            } => match stream.retry_start_batch(ctx, &mut batches, retry) {
+            } => match stream.retry_start_batch(ctx, retry) {
                 // It succeeded.
                 Ok(RetryResult::Success(batch_id)) => {
                     Self::try_add(ctx, stream, msgs, batch_id)
@@ -574,12 +563,11 @@ where
                 Ok(RetryResult::Retry(retry)) => {
                     RetryResult::Retry(PushEntry::Batch {
                         msgs: msgs,
-                        batches: batches,
                         retry: retry
                     })
                 }
                 Err(err) => Self::complete_start_batch(
-                    ctx, stream, msgs, batches, err
+                    ctx, stream, msgs, err
                 )
             },
             PushEntry::Abort { mut flags, retry } => stream
