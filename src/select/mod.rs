@@ -53,6 +53,7 @@ use constellation_common::sched::RefreshError;
 use constellation_common::sched::ReportError;
 use constellation_common::sched::Scheduler;
 use constellation_common::sched::SelectError;
+use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
 use log::trace;
@@ -461,6 +462,7 @@ where
     /// Create a single connections from its configuration objects.
     fn create<EndpointConfig>(
         ctx: &mut Ctx,
+        shutdown: ShutdownFlag,
         reporter: Src::Reporter,
         addrs_config: &Resolve::Config,
         config: ConnectionConfig<Src::Config, String, EndpointConfig>
@@ -475,9 +477,9 @@ where
         Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
         Resolve::Config: Clone {
         let (channels, srcs, endpoints) = config.take();
-        let channels =
-            Src::create(ctx, reporter, channels, srcs).map_err(|err| {
-                StreamSelectorConnectionCreateError::Channels { err: err }
+        let channels = Src::create(ctx, shutdown, reporter, channels, srcs)
+            .map_err(|err| StreamSelectorConnectionCreateError::Channels {
+                err: err
             })?;
         let addrs = Resolve::create(ctx, addrs_config.clone(), endpoints)
             .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
@@ -1094,6 +1096,7 @@ where
     /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
     pub fn create<EndpointConfig>(
         ctx: &mut Ctx,
+        shutdown: ShutdownFlag,
         reporter: Src::Reporter,
         config: PartyConfig<
             Resolve::Config,
@@ -1125,6 +1128,7 @@ where
             conns.push(
                 ThreadedStreamSelectorConnections::create(
                     ctx,
+                    shutdown.clone(),
                     reporter.clone(),
                     &resolver,
                     connection

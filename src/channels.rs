@@ -43,6 +43,7 @@ use constellation_common::error::ScopedError;
 use constellation_common::net::IPEndpointAddr;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::shutdown::ShutdownFlag;
 use log::error;
 
 use crate::error::BatchError;
@@ -164,6 +165,7 @@ pub trait ChannelsCreate<Ctx, Srcs>: Sized + Channels<Ctx> {
     /// Create an instance of this `Channels`.
     fn create(
         ctx: &mut Ctx,
+        shutdown: ShutdownFlag,
         reporter: Self::Reporter,
         config: Self::Config,
         srcs: Srcs

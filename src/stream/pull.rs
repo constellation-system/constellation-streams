@@ -397,7 +397,8 @@ where
                     // ISSUE #11: handle session-level credentials and
                     // authentication here.
 
-                    let stream = ThreadedStream::new(stream);
+                    let stream =
+                        ThreadedStream::new(self.shutdown.clone(), stream);
 
                     match stream_reporter.report(addr.clone(), prin, stream) {
                         Ok(None) => {

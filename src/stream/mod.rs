@@ -34,6 +34,7 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
 use log::trace;
@@ -1014,6 +1015,7 @@ pub struct CompoundBatches<Batch> {
 /// Wrapper around [PushStream] and sub-traits that adds
 /// synchronization.
 pub struct ThreadedStream<Inner> {
+    shutdown: ShutdownFlag,
     inner: Arc<Mutex<Inner>>
 }
 
@@ -1021,7 +1023,8 @@ pub struct ThreadedStream<Inner> {
 #[derive(Debug)]
 pub enum ThreadedStreamError<Inner> {
     Inner { error: Inner },
-    MutexPoison
+    MutexPoison,
+    Shutdown
 }
 
 /// Type used to combine results from
@@ -1676,6 +1679,7 @@ where
 
                 RetryResult::Success(())
             }
+            ThreadedStreamError::Shutdown => RetryResult::Success(())
         }
     }
 
@@ -1912,6 +1916,7 @@ where
 
                 RetryResult::Success(())
             }
+            ThreadedStreamError::Shutdown => RetryResult::Success(())
         }
     }
 
@@ -2012,7 +2017,8 @@ where
                     .cancel_push(ctx, error)
                     .map_err(|err| ThreadedStreamError::Inner { error: err })
             }
-            ThreadedStreamError::MutexPoison => Ok(RetryResult::Success(()))
+            ThreadedStreamError::MutexPoison => Ok(RetryResult::Success(())),
+            ThreadedStreamError::Shutdown => Ok(RetryResult::Success(()))
         }
     }
 
@@ -2125,7 +2131,8 @@ where
                     .cancel_push(ctx, error)
                     .map_err(|err| ThreadedStreamError::Inner { error: err })
             }
-            ThreadedStreamError::MutexPoison => Ok(RetryResult::Success(()))
+            ThreadedStreamError::MutexPoison => Ok(RetryResult::Success(())),
+            ThreadedStreamError::Shutdown => Ok(RetryResult::Success(()))
         }
     }
 
@@ -2174,7 +2181,7 @@ where
             .lock()
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
-        loop {
+        while self.shutdown.is_live() {
             match guard.pull() {
                 Ok(msg) => return Ok(msg),
                 Err(err) => {
@@ -2184,14 +2191,13 @@ where
                 }
             }
 
-            trace!(target: "threaded-stream",
-                   "waiting on condvar");
-
             match guard.condvar().wait(guard) {
                 Ok(newguard) => guard = newguard,
                 Err(_) => return Err(ThreadedStreamError::MutexPoison)
             }
         }
+
+        Err(ThreadedStreamError::Shutdown)
     }
 }
 
@@ -2199,6 +2205,7 @@ impl<Inner> Clone for ThreadedStream<Inner> {
     #[inline]
     fn clone(&self) -> Self {
         ThreadedStream {
+            shutdown: self.shutdown.clone(),
             inner: self.inner.clone()
         }
     }
@@ -2207,8 +2214,12 @@ impl<Inner> Clone for ThreadedStream<Inner> {
 impl<Inner> ThreadedStream<Inner> {
     /// Create a new `ThreadedStream` from its inner stream.
     #[inline]
-    pub fn new(inner: Inner) -> Self {
+    pub fn new(
+        shutdown: ShutdownFlag,
+        inner: Inner
+    ) -> Self {
         ThreadedStream {
+            shutdown: shutdown,
             inner: Arc::new(Mutex::new(inner))
         }
     }
@@ -2380,6 +2391,7 @@ where
     fn scope(&self) -> ErrorScope {
         match self {
             ThreadedStreamError::Inner { error } => error.scope(),
+            ThreadedStreamError::Shutdown => ErrorScope::Shutdown,
             ThreadedStreamError::MutexPoison => ErrorScope::Unrecoverable
         }
     }
@@ -2402,6 +2414,9 @@ where
                     permanent
                         .map(|err| ThreadedStreamError::Inner { error: err })
                 )
+            }
+            ThreadedStreamError::Shutdown => {
+                (None, Some(ThreadedStreamError::Shutdown))
             }
             ThreadedStreamError::MutexPoison => {
                 (None, Some(ThreadedStreamError::MutexPoison))
@@ -2429,6 +2444,7 @@ where
     ) -> Result<(), std::fmt::Error> {
         match self {
             ThreadedStreamError::Inner { error } => error.fmt(f),
+            ThreadedStreamError::Shutdown => write!(f, "shutdown"),
             ThreadedStreamError::MutexPoison => write!(f, "mutex poisoned")
         }
     }
