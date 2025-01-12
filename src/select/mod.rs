@@ -477,9 +477,9 @@ where
         Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
         Resolve::Config: Clone {
         let (channels, srcs, endpoints) = config.take();
-        let channels =
-            Src::create(ctx, shutdown, reporter, channels, srcs).map_err(|err| {
-                StreamSelectorConnectionCreateError::Channels { err: err }
+        let channels = Src::create(ctx, shutdown, reporter, channels, srcs)
+            .map_err(|err| StreamSelectorConnectionCreateError::Channels {
+                err: err
             })?;
         let addrs = Resolve::create(ctx, addrs_config.clone(), endpoints)
             .map_err(|err| StreamSelectorConnectionCreateError::Addrs {

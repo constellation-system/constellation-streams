@@ -1679,9 +1679,7 @@ where
 
                 RetryResult::Success(())
             }
-            ThreadedStreamError::Shutdown => {
-                RetryResult::Success(())
-            }
+            ThreadedStreamError::Shutdown => RetryResult::Success(())
         }
     }
 
@@ -1918,9 +1916,7 @@ where
 
                 RetryResult::Success(())
             }
-            ThreadedStreamError::Shutdown => {
-                RetryResult::Success(())
-            }
+            ThreadedStreamError::Shutdown => RetryResult::Success(())
         }
     }
 
