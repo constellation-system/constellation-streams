@@ -267,7 +267,6 @@ pub trait PushStream<Ctx> {
     ) -> Result<(), Self::ReportError>;
 }
 
-
 /// Report an error on a stream.
 ///
 /// This is used to propagate errors back up to a scheduling or
@@ -296,10 +295,10 @@ pub trait PushStreamReportError<Error> {
 /// have only occurred on a subset of streams.
 ///
 /// An example of a case where this should be used is found in
-/// [ErrorSet](crate::error;:ErrorSet) and
+/// [ErrorSet](crate::error::ErrorSet) and
 /// [CompoundBatchError](crate::error::CompoundBatchError), both of
 /// which are associated with
-/// [StreamMulticaster](crate::multicast::StreamMulticast).
+/// [StreamMulticaster](crate::multicast::StreamMulticaster).
 pub trait PushStreamReportBatchError<Error, Batch> {
     type ReportBatchError: Display;
 
@@ -443,9 +442,11 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone;
-    /// Type of selection cache used in [select](PushStream::select).
+    /// Type of selection cache used in
+    /// [select](PushStreamShared::select).
     type Selections: Clone + Default;
-    /// Type of batch cache used in [start_batch](PushStream::start_batch).
+    /// Type of batch cache used in
+    /// [start_batch](PushStreamShared::start_batch).
     type StartBatchStreamBatches: Clone + Default;
 
     /// Create an empty
@@ -475,7 +476,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Select streams for a new batch.
     ///
     /// This will do any stream selection, and will record decisions
-    /// in `batches`.
+    /// in `selections`.
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
@@ -486,7 +487,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
 
-    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    /// Retry a previous call to
+    /// [start_batch](PushStreamShared::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -499,7 +501,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Retry a previously-failed call to
-    /// [select](PushStream::select).
+    /// [select](PushStreamShared::select).
     ///
     /// This allows a call to `select` that had returned a recoverable
     /// error to be retried in an implementation-agnostic manner.
@@ -514,8 +516,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ///
     /// This creates a new batch, referenced by a
     /// [BatchID](PushStream::BatchID).  This is not meant to be used
-    /// directly; [start_batch](PushStream::start_batch) should be
-    /// used instead.
+    /// directly; [start_batch](PushStreamShared::start_batch) should
+    /// be used instead.
     fn create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -526,7 +528,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         Self::CreateBatchError
     >;
 
-    /// Retry a previous call to [create_batch](PushStream::create_batch).
+    /// Retry a previous call to
+    /// [create_batch](PushStreamShared::create_batch).
     ///
     /// This allows a call to `create_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -543,7 +546,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     >;
 
     /// Retry a previously-failed call to
-    /// [create_batch](PushStream::create_batch).
+    /// [create_batch](PushStreamShared::create_batch).
     ///
     /// This allows a call to `create_batch` that had returned a
     /// recoverable error to be retried in an implementation-agnostic
@@ -581,7 +584,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
 
-    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    /// Retry a previous call to
+    /// [start_batch](PushStreamShared::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -596,7 +600,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     >;
 
     /// Retry a previously-failed call to
-    /// [start_batch](PushStream::start_batch).
+    /// [start_batch](PushStreamShared::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// recoverable error to be retried in an implementation-agnostic
@@ -611,10 +615,10 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     >;
 
     /// Abort a previously-failed call to
-    /// [start_batch](PushStream::start_batch).
+    /// [start_batch](PushStreamShared::start_batch).
     ///
     /// This will release any resources that were allocated in the
-    /// call to [start_batch](PushStream::start_batch).
+    /// call to [start_batch](PushStreamShared::start_batch).
     ///
     /// In order to avoid an endless cycle, this represents a
     /// "best-effort", and will not return an error.
@@ -626,7 +630,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 
     /// Retry a previous call to
-    /// [abort_start_batch](PushStream::abort_start_batch).
+    /// [abort_start_batch](PushStreamShared::abort_start_batch).
     ///
     /// This allows a call to `abort_start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -657,9 +661,11 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone;
-    /// Type of selection cache used in [select](PushStream::select).
+    /// Type of selection cache used in
+    /// [select](PushStreamPrivate::select).
     type Selections: Clone + Default;
-    /// Type of batch cache used in [start_batch](PushStream::start_batch).
+    /// Type of batch cache used in
+    /// [start_batch](PushStreamPrivate::create_batch).
     type StartBatchStreamBatches: Clone + Default;
 
     /// Create an empty
@@ -689,13 +695,14 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// Select streams for a new batch.
     ///
     /// This will do any stream selection, and will record decisions
-    /// in `batches`.
+    /// in `selections`.
     fn select(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
-    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    /// Retry a previous call to
+    /// [start_batch](PushStreamPrivate::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -708,7 +715,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Retry a previously-failed call to
-    /// [select](PushStream::select).
+    /// [select](PushStreamPrivate::select).
     ///
     /// This allows a call to `select` that had returned a recoverable
     /// error to be retried in an implementation-agnostic manner.
@@ -723,8 +730,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ///
     /// This creates a new batch, referenced by a
     /// [BatchID](PushStream::BatchID).  This is not meant to be used
-    /// directly; [start_batch](PushStream::start_batch) should be
-    /// used instead.
+    /// directly; [start_batch](PushStreamPrivate::start_batch) should
+    /// be used instead.
     fn create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -735,7 +742,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         Self::CreateBatchError
     >;
 
-    /// Retry a previous call to [create_batch](PushStream::create_batch).
+    /// Retry a previous call to
+    /// [create_batch](PushStreamPrivate::create_batch).
     ///
     /// This allows a call to `create_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -752,7 +760,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     >;
 
     /// Retry a previously-failed call to
-    /// [create_batch](PushStream::create_batch).
+    /// [create_batch](PushStreamPrivate::create_batch).
     ///
     /// This allows a call to `create_batch` that had returned a
     /// recoverable error to be retried in an implementation-agnostic
@@ -778,10 +786,6 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// on the underlying stream that will need to be freed using
     /// [finish_batch](PushStream::finish_batch) or
     /// [cancel_batch](PushStream::cancel_batch).
-    ///
-    /// The [StreamBatches] implementation `batches` will be used to
-    /// ensure that shared streams have only one batch created for
-    /// them.
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
@@ -790,7 +794,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         Self::StartBatchError
     >;
 
-    /// Retry a previous call to [start_batch](PushStream::start_batch).
+    /// Retry a previous call to
+    /// [start_batch](PushStreamPrivate::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -805,7 +810,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     >;
 
     /// Retry a previously-failed call to
-    /// [start_batch](PushStream::start_batch).
+    /// [start_batch](PushStreamPrivate::start_batch).
     ///
     /// This allows a call to `start_batch` that had returned a
     /// recoverable error to be retried in an implementation-agnostic
@@ -820,10 +825,10 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     >;
 
     /// Abort a previously-failed call to
-    /// [start_batch](PushStream::start_batch).
+    /// [start_batch](PushStreamPrivate::start_batch).
     ///
     /// This will release any resources that were allocated in the
-    /// call to [start_batch](PushStream::start_batch).
+    /// call to [start_batch](PushStreamPrivate::start_batch).
     ///
     /// In order to avoid an endless cycle, this represents a
     /// "best-effort", and will not return an error.
@@ -835,7 +840,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 
     /// Retry a previous call to
-    /// [abort_start_batch](PushStream::abort_start_batch).
+    /// [abort_start_batch](PushStreamPrivate::abort_start_batch).
     ///
     /// This allows a call to `abort_start_batch` that had returned a
     /// [Retry](RetryResult::Retry) to be retried in an
@@ -1405,8 +1410,8 @@ where
     }
 }
 
-impl<Inner, Error, Batch>
-    PushStreamReportBatchError<Error, Batch> for ThreadedStream<Inner>
+impl<Inner, Error, Batch> PushStreamReportBatchError<Error, Batch>
+    for ThreadedStream<Inner>
 where
     Inner: PushStreamReportBatchError<Error, Batch>
 {

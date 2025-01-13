@@ -601,8 +601,7 @@ where
     /// is a [ShutdownFlag] that will be used to shut down the pull
     /// side.  The `authn` parameter is the authenticator.
     ///
-    /// This will also create a [PullStreamsListenThread] and a
-    /// [PullStreamsReceiver].
+    /// This will also create a [PullStreamsListenThread].
     pub fn with_capacity(
         listener: Listener,
         recv: Recv,

@@ -87,8 +87,7 @@ pub struct StreamMulticasterSelections<Inner> {
 ///
 /// This combinator maintains a separate stream for each of a set of
 /// counterparties, and replicates batching commands on each of these
-/// streams.  It also allows for the recipients for each batch to be
-/// controlled through the [PushStreamAddParty] interface.
+/// streams.
 ///
 /// In its most simple use case, this can be used to implement
 /// synthetic multicasting functionality on top of unicast streams.

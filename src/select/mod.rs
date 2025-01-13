@@ -177,7 +177,7 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// # Stream Abstractions
 ///
 /// This type also implements the [PushStream], [PushStreamAdd],
-/// [PushStreamSingle], and [PushStreamSharedSingle] traits, allowing
+/// [PushStreamPrivate], and [PushStreamShared] traits, allowing
 /// it to function as an abstract stream in and of itself.  When used
 /// in this manner, the scheduler is used to select from one of the
 /// possible streams to create a batch.  All subsequent batch

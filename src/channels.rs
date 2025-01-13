@@ -53,8 +53,8 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReportBatchError;
+use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamReporter;
@@ -291,10 +291,8 @@ pub enum SharedPrivateChannelAddr<Private, Shared> {
 /// Type of streams for [SharedPrivateChannels].
 ///
 /// This implements the basic [PushStream], [PushStreamAdd], and
-/// [PushStreamSingle] traits that would be expected for *private*
-/// channels.  It keeps the intended recipient for any shared channel,
-/// which it transparently adds to any batch using the stream's
-/// [PushStreamAddParty] trait.
+/// [PushStreamPrivate] traits that would be expected for *private*
+/// channels.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SharedPrivateChannelStream<Private, Shared, Party> {
     /// Stream for the private channels.
@@ -341,7 +339,11 @@ pub enum SharedPrivateStreamError<Private, Shared> {
     Mismatch
 }
 
-/// [StreamBatches] and [StreamFlags] instance for [SharedPrivateChannelStream].
+/// Common structure for
+/// [StartBatchStreamBatches](PushStreamPrivate::StartBatchStreamBatches),
+/// [Selections](PushStreamPrivate::Selections) and
+/// [StreamFlags](PushStream::StreamFlags) for
+/// [SharedPrivateChannelStream].
 #[derive(Clone)]
 pub struct SharedPrivateStreamCaches<Private, Shared> {
     shared: Shared,
@@ -1080,10 +1082,19 @@ where
     }
 }
 
-impl <Shared, Private, SharedError, PrivateError, SharedBatch, PrivateBatch, PartyID>
-    PushStreamReportBatchError<SharedPrivateStreamError<PrivateError, SharedError>,
-                               SharedPrivateID<PrivateBatch, SharedBatch>>
-    for SharedPrivateChannelStream<Private, Shared, PartyID>
+impl<
+        Shared,
+        Private,
+        SharedError,
+        PrivateError,
+        SharedBatch,
+        PrivateBatch,
+        PartyID
+    >
+    PushStreamReportBatchError<
+        SharedPrivateStreamError<PrivateError, SharedError>,
+        SharedPrivateID<PrivateBatch, SharedBatch>
+    > for SharedPrivateChannelStream<Private, Shared, PartyID>
 where
     Private: PushStreamReportBatchError<PrivateError, PrivateBatch>,
     Shared: PushStreamReportBatchError<SharedError, SharedBatch>
