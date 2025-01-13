@@ -666,31 +666,6 @@ where
 }
 
 impl<Party, Idx, Msg, Stream, Ctx, Success, Err>
-    PushStreamReportError<CompoundBatchError<Idx, Success, Err>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Ctx>
-where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReportError<Err>,
-    Err: Display
-{
-    type ReportError =
-        ErrorSet<Idx, (), <Stream as PushStreamReportError<Err>>::ReportError>;
-
-    fn report_error(
-        &mut self,
-        errors: &CompoundBatchError<Idx, Success, Err>
-    ) -> Result<(), Self::ReportError> {
-        if let CompoundBatchError::Batch { errs } = errors {
-            self.report_error(errs)
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<Party, Idx, Msg, Stream, Ctx, Success, Err>
     PushStreamReportBatchError<
         CompoundBatchError<Idx, Success, Err>,
         CompoundBatchID

@@ -267,18 +267,39 @@ pub trait PushStream<Ctx> {
     ) -> Result<(), Self::ReportError>;
 }
 
-// ISSUE #7: these traits are error-prone as implemented.  There
-// should be one function that takes an Option<BatchID>
 
+/// Report an error on a stream.
+///
+/// This is used to propagate errors back up to a scheduling or
+/// selection mechanism, usually
+/// [StreamSelector](crate::select::StreamSelector).
 pub trait PushStreamReportError<Error> {
+    /// Type of errors that can occur reporting the original error.
     type ReportError: Display;
 
+    /// Report an error that occurred during some stream operation.
     fn report_error(
         &mut self,
         error: &Error
     ) -> Result<(), Self::ReportError>;
 }
 
+/// Report an error on a stream, with a known associated batch.
+///
+/// This is generally used to report errors associated with compound
+/// batches and streams, meaning, those that are composed of multilpe
+/// independent sub-streams and therefore whose batches are composed
+/// of multiple different batches on each stream.
+///
+/// In such cases, it is necessary to have both the error and the
+/// batch, as batches may not include every sub-stream, and errors may
+/// have only occurred on a subset of streams.
+///
+/// An example of a case where this should be used is found in
+/// [ErrorSet](crate::error;:ErrorSet) and
+/// [CompoundBatchError](crate::error::CompoundBatchError), both of
+/// which are associated with
+/// [StreamMulticaster](crate::multicast::StreamMulticast).
 pub trait PushStreamReportBatchError<Error, Batch> {
     type ReportBatchError: Display;
 
@@ -1380,6 +1401,31 @@ where
 
         guard
             .report_error(error)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+}
+
+impl<Inner, Error, Batch>
+    PushStreamReportBatchError<Error, Batch> for ThreadedStream<Inner>
+where
+    Inner: PushStreamReportBatchError<Error, Batch>
+{
+    type ReportBatchError = ThreadedStreamError<
+        <Inner as PushStreamReportBatchError<Error, Batch>>::ReportBatchError
+    >;
+
+    fn report_error_with_batch(
+        &mut self,
+        batch: &Batch,
+        error: &Error
+    ) -> Result<(), Self::ReportBatchError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .report_error_with_batch(batch, error)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }
