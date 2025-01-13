@@ -87,8 +87,7 @@ pub struct StreamMulticasterSelections<Inner> {
 ///
 /// This combinator maintains a separate stream for each of a set of
 /// counterparties, and replicates batching commands on each of these
-/// streams.  It also allows for the recipients for each batch to be
-/// controlled through the [PushStreamAddParty] interface.
+/// streams.
 ///
 /// In its most simple use case, this can be used to implement
 /// synthetic multicasting functionality on top of unicast streams.
@@ -661,31 +660,6 @@ where
                 }
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
-        }
-    }
-}
-
-impl<Party, Idx, Msg, Stream, Ctx, Success, Err>
-    PushStreamReportError<CompoundBatchError<Idx, Success, Err>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Ctx>
-where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReportError<Err>,
-    Err: Display
-{
-    type ReportError =
-        ErrorSet<Idx, (), <Stream as PushStreamReportError<Err>>::ReportError>;
-
-    fn report_error(
-        &mut self,
-        errors: &CompoundBatchError<Idx, Success, Err>
-    ) -> Result<(), Self::ReportError> {
-        if let CompoundBatchError::Batch { errs } = errors {
-            self.report_error(errs)
-        } else {
-            Ok(())
         }
     }
 }

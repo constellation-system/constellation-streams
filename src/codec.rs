@@ -48,7 +48,6 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportError;
 
 /// Private unicast stream built from a [Read]/[Write] instance and a
 /// [DatagramCodec].
@@ -287,24 +286,6 @@ where
         &mut self,
         _batch: &Self::BatchID
     ) -> Result<(), Self::ReportError> {
-        Ok(())
-    }
-}
-
-impl<Msg, Stream, Codec> PushStreamReportError<Infallible>
-    for DatagramCodecStream<Msg, Stream, Codec>
-where
-    Codec: DatagramCodec<Msg> + Send
-{
-    type ReportError = Infallible;
-
-    fn report_error(
-        &mut self,
-        _error: &Infallible
-    ) -> Result<(), Self::ReportError> {
-        error!(target: "datagram-codec-stream",
-               "should never call report_error");
-
         Ok(())
     }
 }

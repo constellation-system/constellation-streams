@@ -78,7 +78,6 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
@@ -178,7 +177,7 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// # Stream Abstractions
 ///
 /// This type also implements the [PushStream], [PushStreamAdd],
-/// [PushStreamSingle], and [PushStreamSharedSingle] traits, allowing
+/// [PushStreamPrivate], and [PushStreamShared] traits, allowing
 /// it to function as an abstract stream in and of itself.  When used
 /// in this manner, the scheduler is used to select from one of the
 /// possible streams to create a batch.  All subsequent batch
@@ -2000,33 +1999,6 @@ where
         } else {
             Ok(())
         }
-    }
-}
-
-impl<Epochs, Src, Resolve, Ctx, Error>
-    PushStreamReportBatchError<Error, <Self as PushStream<Ctx>>::BatchID>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
-where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::Config: Default,
-    Src::Reporter: Clone,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
-{
-    type ReportBatchError = <Self as PushStream<Ctx>>::ReportError;
-
-    fn report_error_with_batch(
-        &mut self,
-        batch: &StreamSelectorBatch<
-            Epochs::Item,
-            <Src::Stream as PushStream<Ctx>>::BatchID
-        >,
-        _error: &Error
-    ) -> Result<(), Self::ReportBatchError> {
-        self.report_failure(batch)
     }
 }
 

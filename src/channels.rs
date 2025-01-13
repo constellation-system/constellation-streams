@@ -53,6 +53,7 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
+use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
@@ -290,10 +291,8 @@ pub enum SharedPrivateChannelAddr<Private, Shared> {
 /// Type of streams for [SharedPrivateChannels].
 ///
 /// This implements the basic [PushStream], [PushStreamAdd], and
-/// [PushStreamSingle] traits that would be expected for *private*
-/// channels.  It keeps the intended recipient for any shared channel,
-/// which it transparently adds to any batch using the stream's
-/// [PushStreamAddParty] trait.
+/// [PushStreamPrivate] traits that would be expected for *private*
+/// channels.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SharedPrivateChannelStream<Private, Shared, Party> {
     /// Stream for the private channels.
@@ -340,7 +339,11 @@ pub enum SharedPrivateStreamError<Private, Shared> {
     Mismatch
 }
 
-/// [StreamBatches] and [StreamFlags] instance for [SharedPrivateChannelStream].
+/// Common structure for
+/// [StartBatchStreamBatches](PushStreamPrivate::StartBatchStreamBatches),
+/// [Selections](PushStreamPrivate::Selections) and
+/// [StreamFlags](PushStream::StreamFlags) for
+/// [SharedPrivateChannelStream].
 #[derive(Clone)]
 pub struct SharedPrivateStreamCaches<Private, Shared> {
     shared: Shared,
@@ -1073,6 +1076,53 @@ where
                 SharedPrivateID::Shared { id }
             ) => stream
                 .report_failure(id)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err }),
+            _ => Err(SharedPrivateStreamError::Mismatch)
+        }
+    }
+}
+
+impl<
+        Shared,
+        Private,
+        SharedError,
+        PrivateError,
+        SharedBatch,
+        PrivateBatch,
+        PartyID
+    >
+    PushStreamReportBatchError<
+        SharedPrivateStreamError<PrivateError, SharedError>,
+        SharedPrivateID<PrivateBatch, SharedBatch>
+    > for SharedPrivateChannelStream<Private, Shared, PartyID>
+where
+    Private: PushStreamReportBatchError<PrivateError, PrivateBatch>,
+    Shared: PushStreamReportBatchError<SharedError, SharedBatch>
+{
+    type ReportBatchError = SharedPrivateStreamError<
+        <Private as PushStreamReportBatchError<PrivateError, PrivateBatch>>::ReportBatchError,
+        <Shared as PushStreamReportBatchError<SharedError, SharedBatch>>::ReportBatchError
+    >;
+
+    fn report_error_with_batch(
+        &mut self,
+        batch: &SharedPrivateID<PrivateBatch, SharedBatch>,
+        error: &SharedPrivateStreamError<PrivateError, SharedError>
+    ) -> Result<(), Self::ReportBatchError> {
+        match (self, batch, error) {
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateID::Private { id },
+                SharedPrivateStreamError::Private { err }
+            ) => stream
+                .report_error_with_batch(id, err)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateID::Shared { id },
+                SharedPrivateStreamError::Shared { err }
+            ) => stream
+                .report_error_with_batch(id, err)
                 .map_err(|err| SharedPrivateStreamError::Shared { err: err }),
             _ => Err(SharedPrivateStreamError::Mismatch)
         }

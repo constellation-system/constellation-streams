@@ -77,27 +77,6 @@ pub enum CompoundBatchError<Idx, Success, Err> {
     }
 }
 
-// ISSUE #6: this actually isn't used everywhere it probably should be.
-
-/// A convenience type for implementing instances of
-/// [push](crate::stream::PushStreamSingle::push).
-///
-/// Frequently, `push` will be implemented simply by creating a new
-/// batch, adding the one message, and then pushing the batch.  This
-/// type can serve as the error returned from such an implementation.
-pub enum PushError<Batch, Parties, Add, Finish, Other> {
-    /// Error occurred creating the batch.
-    Batch { err: Batch },
-    /// Error occurred adding messages to the batch.
-    Parties { err: Parties },
-    /// Error occurred adding messages to the batch.
-    Add { err: Add },
-    /// Error occurred finishing the batch.
-    Finish { err: Finish },
-    /// Other errors that can occur.
-    Other { err: Other }
-}
-
 /// A collection of both errors and successes that happened when
 /// performing a batch operation.
 ///
