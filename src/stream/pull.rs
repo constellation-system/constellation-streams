@@ -424,8 +424,11 @@ where
                     if now < until {
                         let delay = until - now;
 
-                        debug!("retrying listen in {}.{:03}s",
-                               delay.as_secs(), delay.subsec_millis());
+                        debug!(
+                            "retrying listen in {}.{:03}s",
+                            delay.as_secs(),
+                            delay.subsec_millis()
+                        );
 
                         sleep(delay)
                     }
