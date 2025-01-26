@@ -26,8 +26,10 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::thread::sleep;
 use std::thread::spawn;
 use std::thread::JoinHandle;
+use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
@@ -35,6 +37,7 @@ use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::retry::RetryResult;
 use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
@@ -389,13 +392,10 @@ where
                    "listening for connection");
 
             match self.listener.listen() {
-                Ok((addr, prin, stream)) => {
+                Ok(RetryResult::Success((stream, addr, prin))) => {
                     info!(target: "pull-streams-listen-thread",
                           "received new incoming stream from {}",
                           addr);
-
-                    // ISSUE #11: handle session-level credentials and
-                    // authentication here.
 
                     let stream =
                         ThreadedStream::new(self.shutdown.clone(), stream);
@@ -416,6 +416,21 @@ where
                                    "error reporting new stream: {}",
                                    err)
                         }
+                    }
+                }
+                Ok(RetryResult::Retry(until)) => {
+                    let now = Instant::now();
+
+                    if now < until {
+                        let delay = until - now;
+
+                        debug!(
+                            "retrying listen in {}.{:03}s",
+                            delay.as_secs(),
+                            delay.subsec_millis()
+                        );
+
+                        sleep(delay)
                     }
                 }
                 Err(err) => {

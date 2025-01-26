@@ -113,7 +113,10 @@ pub trait PullStreamListener<T> {
     /// This call will generally block the calling thread.
     fn listen(
         &mut self
-    ) -> Result<(Self::Addr, Self::Prin, Self::Stream), Self::ListenError>;
+    ) -> Result<
+        RetryResult<(Self::Stream, Self::Addr, Self::Prin)>,
+        Self::ListenError
+    >;
 }
 
 /// Basic interface for a push stream.
