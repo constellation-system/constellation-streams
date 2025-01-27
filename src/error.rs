@@ -77,27 +77,6 @@ pub enum CompoundBatchError<Idx, Success, Err> {
     }
 }
 
-// ISSUE #6: this actually isn't used everywhere it probably should be.
-
-/// A convenience type for implementing instances of
-/// [push](crate::stream::PushStreamSingle::push).
-///
-/// Frequently, `push` will be implemented simply by creating a new
-/// batch, adding the one message, and then pushing the batch.  This
-/// type can serve as the error returned from such an implementation.
-pub enum PushError<Batch, Parties, Add, Finish, Other> {
-    /// Error occurred creating the batch.
-    Batch { err: Batch },
-    /// Error occurred adding messages to the batch.
-    Parties { err: Parties },
-    /// Error occurred adding messages to the batch.
-    Add { err: Add },
-    /// Error occurred finishing the batch.
-    Finish { err: Finish },
-    /// Other errors that can occur.
-    Other { err: Other }
-}
-
 /// A collection of both errors and successes that happened when
 /// performing a batch operation.
 ///
@@ -127,6 +106,56 @@ pub struct PartiesBatchError<Parties, Err> {
     err: Err
 }
 
+/// Wrapper for errors that need to indicate no selection was made.
+pub enum SelectionsError<Inner, Info> {
+    /// Underlying error type.
+    Inner {
+        /// Underlying error.
+        inner: Inner
+    },
+    /// Selections were not created for a stream.
+    NoSelections {
+        /// Information about selections.
+        info: Info
+    }
+}
+
+impl<Inner, Info> ScopedError for SelectionsError<Inner, Info>
+where
+    Inner: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            SelectionsError::Inner { inner } => inner.scope(),
+            SelectionsError::NoSelections { .. } => ErrorScope::Unrecoverable
+        }
+    }
+}
+
+impl<Inner, Info> BatchError for SelectionsError<Inner, Info>
+where
+    Inner: BatchError
+{
+    type Completable = Inner::Completable;
+    type Permanent = SelectionsError<Inner::Permanent, Info>;
+
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            SelectionsError::Inner { inner } => {
+                let (completable, permanent) = inner.split();
+
+                (
+                    completable,
+                    permanent.map(|err| SelectionsError::Inner { inner: err })
+                )
+            }
+            SelectionsError::NoSelections { info } => {
+                (None, Some(SelectionsError::NoSelections { info: info }))
+            }
+        }
+    }
+}
+
 impl BatchError for Infallible {
     type Completable = Infallible;
     type Permanent = Infallible;
@@ -134,6 +163,20 @@ impl BatchError for Infallible {
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         (None, Some(self))
+    }
+}
+
+impl<Inner, Info, T> ErrorReportInfo<T> for SelectionsError<Inner, Info>
+where
+    Inner: ErrorReportInfo<T>
+{
+    #[inline]
+    fn report_info(&self) -> Option<T> {
+        if let SelectionsError::Inner { inner } = self {
+            inner.report_info()
+        } else {
+            None
+        }
     }
 }
 
@@ -355,6 +398,23 @@ impl<Idx, Success, Err> ErrorSet<Idx, Success, Err> {
     #[inline]
     pub fn take(self) -> (Vec<(Idx, Success)>, Vec<(Idx, Err)>) {
         (self.successes, self.errors)
+    }
+}
+
+impl<Inner, Info> Display for SelectionsError<Inner, Info>
+where
+    Inner: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            SelectionsError::Inner { inner } => inner.fmt(f),
+            SelectionsError::NoSelections { .. } => {
+                write!(f, "no selections for stream")
+            }
+        }
     }
 }
 
