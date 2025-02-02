@@ -106,8 +106,7 @@ where
     }
 }
 
-impl<Msg, IO, Codec> ConcurrentStream
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Codec> ConcurrentStream for DatagramCodecStream<Msg, IO, Codec>
 where
     Codec: DatagramCodec<Msg> + Send,
     IO: ConcurrentStream
@@ -445,8 +444,7 @@ where
     }
 }
 
-impl<Msg, IO, Codec> PushStreamPartyID
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Codec> PushStreamPartyID for BytestreamCodecStream<Msg, IO, Codec>
 where
     IO: Write,
     Codec: BytestreamCodec<Msg> + Send
@@ -454,8 +452,7 @@ where
     type PartyID = ();
 }
 
-impl<Msg, IO, Codec> PushStreamPartyID
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Codec> PushStreamPartyID for DatagramCodecStream<Msg, IO, Codec>
 where
     IO: Write,
     Codec: DatagramCodec<Msg> + Send
@@ -910,8 +907,7 @@ where
     }
 }
 
-impl<Msg, IO, Codec> PullStream<Msg>
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Codec> PullStream<Msg> for BytestreamCodecStream<Msg, IO, Codec>
 where
     IO: Read,
     Codec: BytestreamCodec<Msg> + Send
@@ -925,8 +921,7 @@ where
     }
 }
 
-impl<Msg, IO, Codec> PullStream<Msg>
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Codec> PullStream<Msg> for DatagramCodecStream<Msg, IO, Codec>
 where
     IO: Read,
     Codec: DatagramCodec<Msg> + Send
@@ -968,8 +963,7 @@ where
         msg: &Msg
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        self
-            .codec
+        self.codec
             .encode_to_stream(&mut self.io, msg)
             .map(|_| RetryResult::Success(()))
     }
@@ -985,8 +979,7 @@ where
         error!(target: "datagram-codec-stream",
                "should never call retry_push");
 
-        self.push(ctx, msg)
-            .map(|_| RetryResult::Success(()))
+        self.push(ctx, msg).map(|_| RetryResult::Success(()))
     }
 
     #[inline]
@@ -997,8 +990,7 @@ where
         _err: <Self::PushError as BatchError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        self.push(ctx, msg)
-            .map(|_| RetryResult::Success(()))
+        self.push(ctx, msg).map(|_| RetryResult::Success(()))
     }
 
     fn cancel_push(

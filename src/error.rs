@@ -139,10 +139,8 @@ where
                 let (completable, permanent) = err.split();
 
                 (
-                    completable
-                        .map(|res| CodecStreamError::IO { err: res }),
-                    permanent
-                        .map(|res| CodecStreamError::IO { err: res })
+                    completable.map(|res| CodecStreamError::IO { err: res }),
+                    permanent.map(|res| CodecStreamError::IO { err: res })
                 )
             }
         }
