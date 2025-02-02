@@ -34,7 +34,9 @@ use std::sync::Condvar;
 use std::time::Instant;
 
 use constellation_auth::cred::Credentials;
+use constellation_common::codec::BytestreamCodec;
 use constellation_common::codec::DatagramCodec;
+use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
@@ -64,26 +66,20 @@ use crate::stream::PushStreamPrivateSingle;
 /// will ignore all batching-related API calls.  It will immediately
 /// encode and send messages when its implementation of
 /// [add](PushStreamAdd::add) is called.
-pub struct DatagramCodecStream<Msg, Stream, Codec: DatagramCodec<Msg> + Send> {
+pub struct DatagramCodecStream<Msg, IO, Codec: DatagramCodec<Msg> + Send> {
     msg: PhantomData<Msg>,
     /// Codec to use.
     codec: Codec,
     /// Low-level IO stream.
-    stream: Stream
+    io: IO
 }
 
-/// Errors that can occur when sending a message.
-pub enum DatagramCodecStreamError<Codec, IO> {
-    /// Error occurred when encoding or decoding the message.
-    Codec {
-        /// Error while encoding or decoding the message.
-        codec: Codec
-    },
-    /// I/O level error occurred.
-    IO {
-        /// Error while writing to the I/O object.
-        err: IO
-    }
+pub struct BytestreamCodecStream<Msg, IO, Codec: BytestreamCodec<Msg> + Send> {
+    msg: PhantomData<Msg>,
+    /// Codec to use.
+    codec: Codec,
+    /// Low-level IO stream.
+    io: IO
 }
 
 /// Errors that can occur when sending an object fragment.
@@ -110,17 +106,15 @@ where
     }
 }
 
-impl<Codec, IO, T> ErrorReportInfo<T> for DatagramCodecStreamError<Codec, IO>
+impl<Msg, IO, Codec> ConcurrentStream
+    for DatagramCodecStream<Msg, IO, Codec>
 where
-    Codec: ErrorReportInfo<T>
+    Codec: DatagramCodec<Msg> + Send,
+    IO: ConcurrentStream
 {
     #[inline]
-    fn report_info(&self) -> Option<T> {
-        if let DatagramCodecStreamError::Codec { codec } = self {
-            codec.report_info()
-        } else {
-            None
-        }
+    fn condvar(&self) -> Arc<Condvar> {
+        self.io.condvar()
     }
 }
 
@@ -137,28 +131,39 @@ where
     }
 }
 
-impl<Codec, IO> ScopedError for DatagramCodecStreamError<Codec, IO>
+impl<Msg, IO, Codec> BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: ScopedError
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send
 {
     #[inline]
-    fn scope(&self) -> ErrorScope {
-        match self {
-            DatagramCodecStreamError::Codec { .. } => ErrorScope::Msg,
-            DatagramCodecStreamError::IO { err } => err.scope()
+    pub fn create(
+        codec: Codec,
+        io: IO
+    ) -> Self {
+        BytestreamCodecStream {
+            msg: PhantomData,
+            codec: codec,
+            io: io
         }
     }
 }
 
-impl<Msg, Stream, Codec> ConcurrentStream
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Msg, IO, Codec> DatagramCodecStream<Msg, IO, Codec>
 where
-    Codec: DatagramCodec<Msg> + Send,
-    Stream: ConcurrentStream
+    IO: Write,
+    Codec: DatagramCodec<Msg> + Send
 {
     #[inline]
-    fn condvar(&self) -> Arc<Condvar> {
-        self.stream.condvar()
+    pub fn create(
+        codec: Codec,
+        io: IO
+    ) -> Self {
+        DatagramCodecStream {
+            msg: PhantomData,
+            codec: codec,
+            io: io
+        }
     }
 }
 
@@ -190,70 +195,149 @@ where
     }
 }
 
-impl<Encode, Write> BatchError for DatagramCodecStreamError<Encode, Write>
+impl<Msg, IO, Codec> Credentials for BytestreamCodecStream<Msg, IO, Codec>
 where
-    Encode: Display,
-    Write: BatchError
+    IO: Credentials,
+    Codec: BytestreamCodec<Msg> + Send
 {
-    type Completable = DatagramCodecStreamError<Infallible, Write::Completable>;
-    type Permanent = DatagramCodecStreamError<Encode, Write::Permanent>;
-
-    #[inline]
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
-        match self {
-            DatagramCodecStreamError::Codec { codec } => {
-                (None, Some(DatagramCodecStreamError::Codec { codec }))
-            }
-            DatagramCodecStreamError::IO { err } => {
-                let (completable, permanent) = err.split();
-
-                (
-                    completable
-                        .map(|res| DatagramCodecStreamError::IO { err: res }),
-                    permanent
-                        .map(|res| DatagramCodecStreamError::IO { err: res })
-                )
-            }
-        }
-    }
-}
-
-impl<Msg, Stream, Codec> DatagramCodecStream<Msg, Stream, Codec>
-where
-    Stream: Write,
-    Codec: DatagramCodec<Msg> + Send
-{
-    #[inline]
-    pub fn create(
-        codec: Codec,
-        stream: Stream
-    ) -> Self {
-        DatagramCodecStream {
-            msg: PhantomData,
-            codec: codec,
-            stream: stream
-        }
-    }
-}
-
-impl<Msg, Stream, Codec> Credentials for DatagramCodecStream<Msg, Stream, Codec>
-where
-    Stream: Credentials,
-    Codec: DatagramCodec<Msg> + Send
-{
-    type Cred = Stream::Cred;
-    type CredError = Stream::CredError;
+    type Cred = IO::Cred;
+    type CredError = IO::CredError;
 
     #[inline]
     fn creds(&self) -> Result<Option<Self::Cred>, Self::CredError> {
-        self.stream.creds()
+        self.io.creds()
     }
 }
 
-impl<Ctx, Msg, Stream, Codec> PushStream<Ctx>
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Msg, IO, Codec> Credentials for DatagramCodecStream<Msg, IO, Codec>
 where
-    Stream: Write,
+    IO: Credentials,
+    Codec: DatagramCodec<Msg> + Send
+{
+    type Cred = IO::Cred;
+    type CredError = IO::CredError;
+
+    #[inline]
+    fn creds(&self) -> Result<Option<Self::Cred>, Self::CredError> {
+        self.io.creds()
+    }
+}
+
+impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
+    for BytestreamCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send
+{
+    type BatchID = ();
+    type CancelBatchError = Infallible;
+    type CancelBatchRetry = Infallible;
+    type FinishBatchError = Infallible;
+    type FinishBatchRetry = Infallible;
+    type ReportError = Infallible;
+    type StreamFlags = ();
+
+    #[inline]
+    fn empty_flags_with_capacity(_size: usize) -> Self::StreamFlags {}
+
+    #[inline]
+    fn finish_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_finish_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID,
+        _retry: Self::FinishBatchRetry
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_finish_batch");
+
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn complete_finish_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID,
+        _err: <Self::FinishBatchError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_finish_batch");
+
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn cancel_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_cancel_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID,
+        _retry: Self::CancelBatchRetry
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_cancel_batch");
+
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn complete_cancel_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _batch: &Self::BatchID,
+        _err: <Self::CancelBatchError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_cancel_batch");
+
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn cancel_batches(&mut self) {}
+
+    #[inline]
+    fn report_failure(
+        &mut self,
+        _batch: &Self::BatchID
+    ) -> Result<(), Self::ReportError> {
+        Ok(())
+    }
+}
+
+impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
+    for DatagramCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
     Codec: DatagramCodec<Msg> + Send
 {
     type BatchID = ();
@@ -361,22 +445,32 @@ where
     }
 }
 
-impl<Msg, Stream, Codec> PushStreamPartyID
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Msg, IO, Codec> PushStreamPartyID
+    for BytestreamCodecStream<Msg, IO, Codec>
 where
-    Stream: Write,
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send
+{
+    type PartyID = ();
+}
+
+impl<Msg, IO, Codec> PushStreamPartyID
+    for DatagramCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
     Codec: DatagramCodec<Msg> + Send
 {
     type PartyID = ();
 }
 
-impl<Ctx, Msg, Stream, Codec> PushStreamAdd<Msg, Ctx>
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
+    for BytestreamCodecStream<Msg, IO, Codec>
 where
-    Stream: Write,
-    Codec: DatagramCodec<Msg> + Send
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send,
+    Codec::StreamEncodeError: BatchError
 {
-    type AddError = DatagramCodecStreamError<Codec::EncodeError, Error>;
+    type AddError = Codec::StreamEncodeError;
     type AddRetry = Infallible;
 
     #[inline]
@@ -418,10 +512,233 @@ where
     }
 }
 
-impl<Ctx, Msg, Stream, Codec> PushStreamPrivate<Ctx>
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
+    for DatagramCodecStream<Msg, IO, Codec>
 where
-    Stream: Write,
+    IO: Write,
+    Codec: DatagramCodec<Msg> + Send
+{
+    type AddError = CodecStreamError<Codec::EncodeError, Error>;
+    type AddRetry = Infallible;
+
+    #[inline]
+    fn add(
+        &mut self,
+        ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        msg: &Msg,
+        _batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.push(ctx, msg)
+    }
+
+    #[inline]
+    fn retry_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &Msg,
+        batch: &Self::BatchID,
+        _retry: Self::AddRetry
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_add");
+
+        self.add(ctx, flags, msg, batch)
+    }
+
+    #[inline]
+    fn complete_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &Msg,
+        batch: &Self::BatchID,
+        _err: <Self::AddError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.add(ctx, flags, msg, batch)
+    }
+}
+
+impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
+    for BytestreamCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send
+{
+    type AbortBatchRetry = Infallible;
+    type CreateBatchError = Infallible;
+    type CreateBatchRetry = Infallible;
+    type SelectError = Infallible;
+    type SelectRetry = Infallible;
+    type Selections = ();
+    type StartBatchError = Infallible;
+    type StartBatchRetry = Infallible;
+    type StartBatchStreamBatches = ();
+
+    #[inline]
+    fn empty_selections_with_capacity(_size: usize) -> Self::Selections {}
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        _size: usize
+    ) -> Self::StartBatchStreamBatches {
+    }
+
+    #[inline]
+    fn select(
+        &mut self,
+        _ctx: &mut Ctx,
+        _selections: &mut Self::Selections
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        _retry: Self::SelectRetry
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_select");
+
+        self.select(ctx, selections)
+    }
+
+    #[inline]
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        _err: <Self::SelectError as BatchError>::Completable
+    ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_select");
+
+        self.select(ctx, selections)
+    }
+
+    #[inline]
+    fn create_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _batches: &mut Self::StartBatchStreamBatches,
+        _selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        _retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_create_batch");
+
+        self.create_batch(ctx, batches, selections)
+    }
+
+    #[inline]
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        _err: <Self::CreateBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_create_batch");
+
+        self.create_batch(ctx, batches, selections)
+    }
+
+    #[inline]
+    fn start_batch(
+        &mut self,
+        _ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        Ok(RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        _retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_start_batch");
+
+        self.start_batch(ctx)
+    }
+
+    #[inline]
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        _err: <Self::StartBatchError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_start_batch");
+
+        self.start_batch(ctx)
+    }
+
+    #[inline]
+    fn abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _err: <Self::StartBatchError as BatchError>::Completable
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        RetryResult::Success(())
+    }
+
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        _ctx: &mut Ctx,
+        _flags: &mut Self::StreamFlags,
+        _retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_abort_start_batch");
+
+        RetryResult::Success(())
+    }
+}
+
+impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
+    for DatagramCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
     Codec: DatagramCodec<Msg> + Send
 {
     type AbortBatchRetry = Infallible;
@@ -593,39 +910,140 @@ where
     }
 }
 
-impl<Msg, Stream, Codec> PullStream<Msg>
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Msg, IO, Codec> PullStream<Msg>
+    for BytestreamCodecStream<Msg, IO, Codec>
 where
-    Stream: Read,
+    IO: Read,
+    Codec: BytestreamCodec<Msg> + Send
+{
+    type PullError = Codec::StreamDecodeError;
+
+    fn pull(&mut self) -> Result<Msg, Self::PullError> {
+        self.codec
+            .decode_from_stream(&mut self.io)
+            .map(|(msg, _)| msg)
+    }
+}
+
+impl<Msg, IO, Codec> PullStream<Msg>
+    for DatagramCodecStream<Msg, IO, Codec>
+where
+    IO: Read,
     Codec: DatagramCodec<Msg> + Send
 {
-    type PullError = DatagramCodecStreamError<Codec::DecodeError, Error>;
+    type PullError = CodecStreamError<Codec::DecodeError, Error>;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
         // ISSUE #4: avoid creating arrays like this
         let mut buf = vec![0; Codec::MAX_BYTES];
 
         let readlen = self
-            .stream
+            .io
             .read(&mut buf)
-            .map_err(|err| DatagramCodecStreamError::IO { err: err })?;
+            .map_err(|err| CodecStreamError::IO { err: err })?;
 
         self.codec
             .decode(&buf[..readlen])
             .map(|(msg, _)| msg)
-            .map_err(|err| DatagramCodecStreamError::Codec { codec: err })
+            .map_err(|err| CodecStreamError::Codec { err: err })
     }
 }
 
-impl<Ctx, Msg, Stream, Codec> PushStreamPrivateSingle<Msg, Ctx>
-    for DatagramCodecStream<Msg, Stream, Codec>
+impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
+    for BytestreamCodecStream<Msg, IO, Codec>
 where
-    Stream: Write,
+    IO: Write,
+    Codec: BytestreamCodec<Msg> + Send,
+    Codec::StreamEncodeError: BatchError
+{
+    type CancelPushError = Infallible;
+    type CancelPushRetry = Infallible;
+    type PushError = Codec::StreamEncodeError;
+    type PushRetry = Infallible;
+
+    #[inline]
+    fn push(
+        &mut self,
+        _ctx: &mut Ctx,
+        msg: &Msg
+    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        self
+            .codec
+            .encode_to_stream(&mut self.io, msg)
+            .map(|_| RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn retry_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &Msg,
+        _retry: Self::PushRetry
+    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_push");
+
+        self.push(ctx, msg)
+            .map(|_| RetryResult::Success(()))
+    }
+
+    #[inline]
+    fn complete_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &Msg,
+        _err: <Self::PushError as BatchError>::Completable
+    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        self.push(ctx, msg)
+            .map(|_| RetryResult::Success(()))
+    }
+
+    fn cancel_push(
+        &mut self,
+        _ctx: &mut Ctx,
+        _err: <Self::PushError as BatchError>::Permanent
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        Ok(RetryResult::Success(()))
+    }
+
+    fn retry_cancel_push(
+        &mut self,
+        _ctx: &mut Ctx,
+        _retry: Self::CancelPushRetry
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call retry_cancel_push");
+
+        Ok(RetryResult::Success(()))
+    }
+
+    fn complete_cancel_push(
+        &mut self,
+        _ctx: &mut Ctx,
+        _err: <Self::CancelPushError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        error!(target: "datagram-codec-stream",
+               "should never call complete_cancel_push");
+
+        Ok(RetryResult::Success(()))
+    }
+}
+
+impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
+    for DatagramCodecStream<Msg, IO, Codec>
+where
+    IO: Write,
     Codec: DatagramCodec<Msg> + Send
 {
     type CancelPushError = Infallible;
     type CancelPushRetry = Infallible;
-    type PushError = DatagramCodecStreamError<Codec::EncodeError, Error>;
+    type PushError = CodecStreamError<Codec::EncodeError, Error>;
     type PushRetry = Infallible;
 
     #[inline]
@@ -640,12 +1058,12 @@ where
         let buf = self
             .codec
             .encode_to_vec(msg)
-            .map_err(|err| DatagramCodecStreamError::Codec { codec: err })?;
+            .map_err(|err| CodecStreamError::Codec { err: err })?;
 
-        self.stream
+        self.io
             .write_all(&buf)
             .map(RetryResult::Success)
-            .map_err(|err| DatagramCodecStreamError::IO { err: err })
+            .map_err(|err| CodecStreamError::IO { err: err })
     }
 
     #[inline]
@@ -767,21 +1185,6 @@ where
         match self {
             DatagramCodecFragError::Frag { err } => err.fmt(f),
             DatagramCodecFragError::Stream { err } => err.fmt(f)
-        }
-    }
-}
-impl<Encode, Write> Display for DatagramCodecStreamError<Encode, Write>
-where
-    Encode: Display,
-    Write: Display
-{
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
-        match self {
-            DatagramCodecStreamError::Codec { codec } => codec.fmt(f),
-            DatagramCodecStreamError::IO { err } => err.fmt(f)
         }
     }
 }
