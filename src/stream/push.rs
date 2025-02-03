@@ -1,4 +1,4 @@
-// Copyright © 2024 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -769,7 +769,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.pending.last().map_or(false, |ent| ent.when() <= now) {
+        while self.pending.last().is_none_or(|ent| ent.when() <= now) {
             match self.pending.pop() {
                 Some(ent) => {
                     curr.push(ent);
