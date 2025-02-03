@@ -528,7 +528,7 @@ impl<Msg, Stream, Codec> PullStream<Msg>
     for DatagramCodecStream<Msg, Stream, Codec>
 where
     Stream: Read,
-    Codec: DatagramCodec<Msg> + Send,
+    Codec: DatagramCodec<Msg> + Send
 {
     type PullError = DatagramCodecStreamError<Codec::DecodeError, Error>;
 
