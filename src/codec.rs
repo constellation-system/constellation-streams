@@ -529,13 +529,12 @@ impl<Msg, Stream, Codec> PullStream<Msg>
 where
     Stream: Read,
     Codec: DatagramCodec<Msg> + Send,
-    [(); Codec::MAX_BYTES]:
 {
     type PullError = DatagramCodecStreamError<Codec::DecodeError, Error>;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
         // ISSUE #4: avoid creating arrays like this
-        let mut buf = [0; Codec::MAX_BYTES];
+        let mut buf = vec![0; Codec::MAX_BYTES];
 
         let readlen = self
             .stream

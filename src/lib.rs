@@ -77,7 +77,6 @@
 //! messages.  Messages delivered to the upper layer are then
 //! identified by a *counterparty*, not an address.
 #![feature(let_chains)]
-#![feature(generic_const_exprs)]
 #![allow(incomplete_features)]
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
