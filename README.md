@@ -8,4 +8,4 @@ guarantees at present.**
 
 * [Developer documentation for `devel` branch](https://constellation-system.github.io/constellation-streams/index.html)
 * [Coverage reports for `devel` branch](https://constellation-system.github.io/constellation-streams/coverage/index.html)
-* [Contribution guide](https://github.com/constellation-system/constellation-auth/blob/devel/CONTRIBUTING.md)
+* [Contribution guide](https://github.com/constellation-system/constellation-streams/blob/devel/CONTRIBUTING.md)
