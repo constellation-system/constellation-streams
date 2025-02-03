@@ -1,4 +1,4 @@
-// Copyright © 2024 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -169,8 +169,10 @@ where
     Stream: Credentials,
     Codec: DatagramCodec<Msg> + Send
 {
-    type Cred<'a> = Stream::Cred<'a>
-    where Self: 'a;
+    type Cred<'a>
+        = Stream::Cred<'a>
+    where
+        Self: 'a;
     type CredError = Stream::CredError;
 
     #[inline]
@@ -526,14 +528,13 @@ impl<Msg, Stream, Codec> PullStream<Msg>
     for DatagramCodecStream<Msg, Stream, Codec>
 where
     Stream: Read,
-    Codec: DatagramCodec<Msg> + Send,
-    [(); Codec::MAX_BYTES]:
+    Codec: DatagramCodec<Msg> + Send
 {
     type PullError = DatagramCodecStreamError<Codec::DecodeError, Error>;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
         // ISSUE #4: avoid creating arrays like this
-        let mut buf = [0; Codec::MAX_BYTES];
+        let mut buf = vec![0; Codec::MAX_BYTES];
 
         let readlen = self
             .stream
