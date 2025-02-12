@@ -87,6 +87,7 @@ pub mod channels;
 pub mod codec;
 pub mod config;
 pub mod error;
+pub mod frags;
 pub mod multicast;
 pub mod select;
 pub mod state_machine;
