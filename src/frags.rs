@@ -80,57 +80,6 @@ impl InboundFrags {
         }
     }
 
-    fn add_data_frag_postlude(
-        &mut self,
-        data: Vec<u8>,
-        offset: usize,
-        data_len: usize,
-        postlude: InboundFrag,
-        start_idx: usize,
-        end_idx: usize
-    ) {
-        // Replace the existing fragment with the data.
-        self.frags[start_idx] = InboundFrag::Data {
-            offset: offset,
-            len: data_len,
-            data: vec![data]
-        };
-
-        if end_idx + 1 < self.frags.len() {
-            if let InboundFrag::Needed {
-                offset: frag_offset,
-                len: frag_len,
-                ..
-            } = &mut self.frags[end_idx + 1] {
-                *frag_len = (*frag_offset + *frag_len) - (offset + data_len);
-                *frag_offset = offset + data_len;
-
-                // Drop any additional fragments.
-                if start_idx + 1 <= end_idx {
-                    let _ = self.frags.drain(start_idx + 1..end_idx + 1);
-                }
-            } else if start_idx + 1 <= end_idx {
-                self.frags[start_idx + 1] = postlude;
-
-                // Drop any additional fragments.
-                if start_idx + 2 <= end_idx {
-                    let _ = self.frags.drain(start_idx + 2..end_idx + 1);
-                }
-            } else {
-                self.frags.insert(start_idx + 1, postlude);
-            }
-        } else if start_idx + 1 <= end_idx {
-            self.frags[start_idx + 1] = postlude;
-
-            // Drop any additional fragments.
-            if start_idx + 2 <= end_idx {
-                let _ = self.frags.drain(start_idx + 2..end_idx + 1);
-            }
-        } else {
-            self.frags.insert(start_idx + 1, postlude);
-        }
-    }
-
     fn add_data_frag(
         &mut self,
         data: Vec<u8>,
@@ -297,23 +246,57 @@ impl InboundFrags {
                     data: vec![data]
                 };
 
+                let merged = if end_idx + 1 < self.frags.len() {
+                    if let InboundFrag::Needed {
+                        offset: frag_offset,
+                        len: frag_len,
+                        ..
+                    } = &mut self.frags[end_idx + 1] {
+                        *frag_len = (*frag_offset + *frag_len) - (offset + data_len);
+                        *frag_offset = offset + data_len;
+
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
                 // See if we can fit the data and postlude.
                 if start_idx + 1 <= end_idx {
                     // We can fit both.
                     self.frags[start_idx] = data;
-                    self.frags[start_idx + 1] = postlude;
 
-                    // Drop any additional fragments.
-                    if start_idx + 2 <= end_idx {
-                        let _ = self.frags.drain(start_idx + 2..end_idx + 1);
+                    if !merged {
+                        self.frags[start_idx + 1] = postlude;
+
+                        // Drop any additional fragments.
+                        if start_idx + 2 <= end_idx {
+                            let _ = self.frags
+                                .drain(start_idx + 2..end_idx + 1);
+                        }
+                    } else {
+                        // Drop any additional fragments.
+                        if start_idx + 1 <= end_idx {
+                            let _ = self.frags
+                                .drain(start_idx + 2..end_idx + 1);
+                        }
                     }
                 } else if start_idx <= end_idx {
                     // We can fit the data, but not the postlude.
                     self.frags[start_idx] = data;
-                    self.frags.insert(start_idx + 1, postlude);
+
+                    if !merged {
+                        self.frags.insert(start_idx + 1, postlude)
+                    }
                 } else {
                     // We can't fit either.
-                    self.frags.insert(start_idx, postlude);
+
+                    if !merged {
+                        self.frags.insert(start_idx, postlude)
+                    }
+
                     self.frags.insert(start_idx, data);
                 }
             },
@@ -367,62 +350,88 @@ impl InboundFrags {
                 }
             }
             (None, Some(postlude)) => {
-                if start_idx > 0 {
-                    // See if the previous fragment is a data fragment.
-                    if let InboundFrag::Data {
-                        len: frag_len,
-                        data: frag_data,
-                        ..
-                    } = &mut self.frags[start_idx - 1] {
-                        *frag_len += data_len;
-                        frag_data.push(data);
+                // See if the first fragment is a data fragment.
+                if let InboundFrag::Data {
+                    len: frag_len,
+                    data: frag_data,
+                    ..
+                } = &mut self.frags[start_idx] {
+                    *frag_len += data_len;
+                    frag_data.push(data);
 
+                    // Drop any additional fragments.
+                    if start_idx + 1 <= end_idx {
                         // We merged; we can just add the postlude.
-                        self.frags[start_idx] = postlude;
+                        self.frags[start_idx + 1] = postlude;
 
-                        // Drop any additional fragments.
-                        if start_idx + 1 <= end_idx {
-                            let _ = self.frags
-                                .drain(start_idx + 1..end_idx + 1);
-                        }
+                        let _ = self.frags.drain(start_idx + 2..end_idx + 1);
                     } else {
-                        self.add_data_frag_postlude(data, offset, data_len,
-                                                    postlude, start_idx,
-                                                    end_idx)
+                        self.frags.insert(start_idx + 1, postlude)
                     }
                 } else {
-                    self.add_data_frag_postlude(data, offset, data_len,
-                                                postlude, start_idx, end_idx)
+                    // Replace the existing fragment with the data.
+                    self.frags[start_idx] = InboundFrag::Data {
+                        offset: offset,
+                        len: data_len,
+                        data: vec![data]
+                    };
+
+                    if end_idx + 1 < self.frags.len() {
+                        if let InboundFrag::Needed {
+                            offset: frag_offset,
+                            len: frag_len,
+                            ..
+                        } = &mut self.frags[end_idx + 1] {
+                            *frag_len = (*frag_offset + *frag_len) - (offset + data_len);
+                            *frag_offset = offset + data_len;
+
+                            // Drop any additional fragments.
+                            if start_idx + 1 <= end_idx {
+                                let _ = self.frags.drain(start_idx + 1..end_idx + 1);
+                            }
+                        } else if start_idx + 1 <= end_idx {
+                            self.frags[start_idx + 1] = postlude;
+
+                            // Drop any additional fragments.
+                            if start_idx + 2 <= end_idx {
+                                let _ = self.frags.drain(start_idx + 2..end_idx + 1);
+                            }
+                        } else {
+                            self.frags.insert(start_idx + 1, postlude);
+                        }
+                    } else if start_idx + 1 <= end_idx {
+                        self.frags[start_idx + 1] = postlude;
+
+                        // Drop any additional fragments.
+                        if start_idx + 2 <= end_idx {
+                            let _ = self.frags.drain(start_idx + 2..end_idx + 1);
+                        }
+                    } else {
+                        self.frags.insert(start_idx + 1, postlude);
+                    }
                 }
             }
             (None, None) => {
-                println!("start_idx: {}", start_idx);
-
-                let left_merged = //if start_idx > 0 {
-                    // See if the first fragment is a data fragment.
-                    if let InboundFrag::Data {
-                        len: frag_len,
-                        data: frag_data,
-                        ..
-                    } = &mut self.frags[start_idx] {
-                        println!("data fragment");
+                // See if the first fragment is a data fragment.
+                let left_merged = if let InboundFrag::Data {
+                    offset: frag_offset,
+                    data: frag_data,
+                    len: frag_len
+                } = &mut self.frags[start_idx] {
+                    // Don't add the data if the fragment already
+                    // subsumes it.
+                    if offset < *frag_offset ||
+                        data_end > *frag_offset + *frag_len {
                         *frag_len += data_len;
                         frag_data.push(data);
-
-                        true
-                    } else {
-                        self.try_right_merge_only(data, offset, data_len,
-                                                  start_idx, end_idx);
-
-                        false
-/*
                     }
+
+                    true
                 } else {
                     self.try_right_merge_only(data, offset, data_len,
                                               start_idx, end_idx);
 
                     false
-*/
                 };
 
                 if left_merged {
@@ -462,6 +471,7 @@ impl InboundFrags {
                             None
                         }
                     } else {
+
                         // Drop all the intervening fragments.
                         let _ = self.frags.drain(start_idx + 1..end_idx + 1);
 
@@ -488,8 +498,9 @@ impl InboundFrags {
                                            "left fragment should have ",
                                            "been a data fragment"));
                         }
-                    } else {
                     }
+                } else {
+                println!("end_idx: {}", end_idx);
                 }
             }
         }
@@ -995,7 +1006,7 @@ fn test_inject_needed_post_data_before() {
 
     assert_eq!(inbound, expected);
 }
-/*
+
 #[test]
 fn test_inject_needed_pre_post_data_before() {
     let mut inbound = InboundFrags {
@@ -1212,8 +1223,7 @@ fn test_inject_needed_pre_post_needed_after() {
 
     assert_eq!(inbound, expected);
 }
-
-
+/*
 #[test]
 fn test_inject_needed_data_after() {
     let mut inbound = InboundFrags {
@@ -2199,7 +2209,7 @@ fn test_inject_needed_pre_post_data_before_data_after() {
 
     assert_eq!(inbound, expected);
 }
-
+*/
 #[test]
 fn test_inject_data() {
     let mut inbound = InboundFrags {
@@ -2303,10 +2313,697 @@ fn test_inject_data_pre_post() {
 
     assert_eq!(inbound, expected);
 }
-*/
+
+#[test]
+fn test_inject_data_needed_before() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+
+    inbound.inject(vec![4, 5, 6, 7, 8, 9, 10, 11], 4)
+        .expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_pre_needed_before() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+
+    inbound.inject(vec![7, 8, 9, 10, 11], 7).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_post_needed_before() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+
+    inbound.inject(vec![4, 5, 6, 7, 8], 4).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_pre_post_needed_before() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            }
+        ]
+    };
+
+    inbound.inject(vec![7, 8], 7).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
 /*
 #[test]
-fn test_inject_needed_needed_before() {
+fn test_inject_data_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![0, 1, 2, 3, 4, 5, 6, 7], 0).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_pre_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![3, 4, 5, 6, 7], 3).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_post_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            },
+        ]
+    };
+
+    inbound.inject(vec![0, 1, 2, 3, 4], 0).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_pre_post_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 4
+            },
+        ]
+    };
+
+    inbound.inject(vec![3, 4], 3).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_needed_before_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![4, 5, 6, 7, 8, 9, 10, 11], 4)
+        .expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_data_pre_needed_before_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![7, 8, 9, 10, 11], 7).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_needed_post_needed_before_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![4, 5, 6, 7, 8], 4).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_needed_pre_post_needed_before_needed_after() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 4
+            },
+            InboundFrag::Data {
+                data: vec![vec![11, 10, 9, 8, 7, 6, 5, 4]],
+                offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 4
+            }
+        ]
+    };
+
+    inbound.inject(vec![7, 8], 7).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+
+
+
+
+
+#[test]
+fn test_inject_needed_needed() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 16
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![
+                    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+                ],
+                offset: 0,
+                len: 16
+            }
+        ]
+    };
+
+    inbound.inject(
+        vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        0
+    ).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_needed_needed_pre() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 16
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 3
+            },
+            InboundFrag::Data {
+                data: vec![
+                    vec![3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+                ],
+                offset: 3,
+                len: 13
+            }
+        ]
+    };
+
+    inbound.inject(
+        vec![3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+        3
+    ).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_needed_needed_post() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 16
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Data {
+                data: vec![
+                    vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                ],
+                offset: 0,
+                len: 13
+            }
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 13,
+                len: 3
+            }
+        ]
+    };
+
+    inbound.inject(
+        vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        0
+    ).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+
+#[test]
+fn test_inject_needed_needed_pre_post() {
+    let mut inbound = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 8,
+                len: 16
+            }
+        ]
+    };
+    let expected = InboundFrags {
+        frags: vec![
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: 3
+            },
+            InboundFrag::Data {
+                data: vec![
+                    vec![3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+                ],
+                offset: 3,
+                len: 10
+            }
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 13,
+                len: 3
+            }
+        ]
+    };
+
+    inbound.inject(
+        vec![3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        3
+    ).expect("Expected success");
+
+    assert_eq!(inbound, expected);
+}
+
+#[test]
+fn test_inject_needed_needed_needed_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2319,6 +3016,12 @@ fn test_inject_needed_needed_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2332,21 +3035,26 @@ fn test_inject_needed_needed_before() {
                 len: 4
             },
             InboundFrag::Data {
-                data: vec![vec![4, 5, 6, 7, 8, 9, 10, 11]],
+                data: vec![
+                    vec![4, 5, 6, 7, 8, 9, 10, 11,
+                         12, 13, 14, 15, 16, 17, 18, 19]
+                ],
                 offset: 4,
-                len: 8
+                len: 16
             }
         ]
     };
 
-    inbound.inject(vec![4, 5, 6, 7, 8, 9, 10, 11], 4)
-        .expect("Expected success");
+    inbound.inject(
+        vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        4
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_pre_needed_before() {
+fn test_inject_needed_needed_pre_needed_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2359,6 +3067,12 @@ fn test_inject_needed_pre_needed_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2372,20 +3086,25 @@ fn test_inject_needed_pre_needed_before() {
                 len: 7
             },
             InboundFrag::Data {
-                data: vec![vec![7, 8, 9, 10, 11]],
+                data: vec![
+                    vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+                ],
                 offset: 7,
-                len: 5
+                len: 13
             }
         ]
     };
 
-    inbound.inject(vec![7, 8, 9, 10, 11], 7).expect("Expected success");
+    inbound.inject(
+        vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        7
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_post_needed_before() {
+fn test_inject_needed_needed_post_needed_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2399,6 +3118,12 @@ fn test_inject_needed_post_needed_before() {
                 nretries: 0,
                 offset: 4,
                 len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
+                len: 8
             }
         ]
     };
@@ -2411,26 +3136,31 @@ fn test_inject_needed_post_needed_before() {
                 len: 4
             },
             InboundFrag::Data {
-                data: vec![vec![4, 5, 6, 7, 8]],
+                data: vec![
+                    vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+                ],
                 offset: 4,
-                len: 5
-            },
+                len: 13
+            }
             InboundFrag::Needed {
                 when: Instant::now(),
                 nretries: 0,
-                offset: 9,
+                offset: 17,
                 len: 3
             }
         ]
     };
 
-    inbound.inject(vec![4, 5, 6, 7, 8], 4).expect("Expected success");
+    inbound.inject(
+        vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        4
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_pre_post_needed_before() {
+fn test_inject_needed_needed_pre_post_needed_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2443,6 +3173,12 @@ fn test_inject_needed_pre_post_needed_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2456,26 +3192,31 @@ fn test_inject_needed_pre_post_needed_before() {
                 len: 7
             },
             InboundFrag::Data {
-                data: vec![vec![7, 8]],
+                data: vec![
+                    vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+                ],
                 offset: 7,
-                len: 2
-            },
+                len: 10
+            }
             InboundFrag::Needed {
                 when: Instant::now(),
                 nretries: 0,
-                offset: 9,
+                offset: 17,
                 len: 3
             }
         ]
     };
 
-    inbound.inject(vec![7, 8], 7).expect("Expected success");
+    inbound.inject(
+        vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        7
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_data_before() {
+fn test_inject_needed_needed_data_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -2487,6 +3228,12 @@ fn test_inject_needed_data_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2496,22 +3243,25 @@ fn test_inject_needed_data_before() {
             InboundFrag::Data {
                 data: vec![
                     vec![0, 1, 2, 3],
-                    vec![4, 5, 6, 7, 8, 9, 10, 11]
+                    vec![4, 5, 6, 7, 8, 9, 10, 11,
+                         12, 13, 14, 15, 16, 17, 18, 19]
                 ],
                 offset: 0,
-                len: 12
+                len: 20
             }
         ]
     };
 
-    inbound.inject(vec![4, 5, 6, 7, 8, 9, 10, 11], 4)
-        .expect("Expected success");
+    inbound.inject(
+        vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        4
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_pre_data_before() {
+fn test_inject_needed_needed_pre_data_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -2523,6 +3273,12 @@ fn test_inject_needed_pre_data_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2541,20 +3297,25 @@ fn test_inject_needed_pre_data_before() {
                 len: 3
             },
             InboundFrag::Data {
-                data: vec![vec![7, 8, 9, 10, 11]],
+                data: vec![
+                    vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+                ],
                 offset: 7,
-                len: 5
+                len: 13
             }
         ]
     };
 
-    inbound.inject(vec![7, 8, 9, 10, 11], 7).expect("Expected success");
+    inbound.inject(
+        vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+        7
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_post_data_before() {
+fn test_inject_needed_needed_post_data_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -2566,6 +3327,12 @@ fn test_inject_needed_post_data_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2575,27 +3342,30 @@ fn test_inject_needed_post_data_before() {
             InboundFrag::Data {
                 data: vec![
                     vec![0, 1, 2, 3],
-                    vec![4, 5, 6, 7, 8]
+                    vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
                 ],
                 offset: 0,
-                len: 9
-            },
+                len: 17
+            }
             InboundFrag::Needed {
                 when: Instant::now(),
                 nretries: 0,
-                offset: 9,
+                offset: 17,
                 len: 3
             }
         ]
     };
 
-    inbound.inject(vec![4, 5, 6, 7, 8], 4).expect("Expected success");
+    inbound.inject(
+        vec![4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        4
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
 #[test]
-fn test_inject_needed_pre_post_data_before() {
+fn test_inject_needed_needed_pre_post_data_before() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -2607,6 +3377,12 @@ fn test_inject_needed_pre_post_data_before() {
                 when: Instant::now(),
                 nretries: 0,
                 offset: 4,
+                len: 8
+            },
+            InboundFrag::Needed {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 12,
                 len: 8
             }
         ]
@@ -2625,26 +3401,34 @@ fn test_inject_needed_pre_post_data_before() {
                 len: 3
             },
             InboundFrag::Data {
-                data: vec![vec![7, 8]],
+                data: vec![
+                    vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+                ],
                 offset: 7,
-                len: 2
-            },
+                len: 10
+            }
             InboundFrag::Needed {
                 when: Instant::now(),
                 nretries: 0,
-                offset: 9,
+                offset: 17,
                 len: 3
             }
         ]
     };
 
-    inbound.inject(vec![7, 8], 7).expect("Expected success");
+    inbound.inject(
+        vec![7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        7
+    ).expect("Expected success");
 
     assert_eq!(inbound, expected);
 }
 
+
+
+
 #[test]
-fn test_inject_needed_needed_after() {
+fn test_inject_needed_needed_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2683,7 +3467,7 @@ fn test_inject_needed_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_needed_after() {
+fn test_inject_needed_needed_pre_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2728,7 +3512,7 @@ fn test_inject_needed_pre_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_post_needed_after() {
+fn test_inject_needed_needed_post_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2767,7 +3551,7 @@ fn test_inject_needed_post_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_needed_after() {
+fn test_inject_needed_needed_pre_post_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2811,9 +3595,8 @@ fn test_inject_needed_pre_post_needed_after() {
     assert_eq!(inbound, expected);
 }
 
-
 #[test]
-fn test_inject_needed_data_after() {
+fn test_inject_needed_needed_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2848,7 +3631,7 @@ fn test_inject_needed_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_data_after() {
+fn test_inject_needed_needed_pre_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2889,7 +3672,7 @@ fn test_inject_needed_pre_data_after() {
 }
 
 #[test]
-fn test_inject_needed_post_data_after() {
+fn test_inject_needed_needed_post_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2932,7 +3715,7 @@ fn test_inject_needed_post_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_data_after() {
+fn test_inject_needed_needed_pre_post_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -2981,7 +3764,7 @@ fn test_inject_needed_pre_post_data_after() {
 }
 
 #[test]
-fn test_inject_needed_needed_before_needed_after() {
+fn test_inject_needed_needed_needed_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3033,7 +3816,7 @@ fn test_inject_needed_needed_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_needed_before_needed_after() {
+fn test_inject_needed_needed_pre_needed_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3084,7 +3867,7 @@ fn test_inject_needed_pre_needed_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_post_needed_before_needed_after() {
+fn test_inject_needed_needed_post_needed_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3135,7 +3918,7 @@ fn test_inject_needed_post_needed_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_needed_before_needed_after() {
+fn test_inject_needed_needed_pre_post_needed_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3186,7 +3969,7 @@ fn test_inject_needed_pre_post_needed_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_data_before_needed_after() {
+fn test_inject_needed_needed_data_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3234,7 +4017,7 @@ fn test_inject_needed_data_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_data_before_needed_after() {
+fn test_inject_needed_needed_pre_data_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3289,7 +4072,7 @@ fn test_inject_needed_pre_data_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_post_data_before_needed_after() {
+fn test_inject_needed_needed_post_data_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3336,7 +4119,7 @@ fn test_inject_needed_post_data_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_data_before_needed_after() {
+fn test_inject_needed_needed_pre_post_data_before_needed_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3391,7 +4174,7 @@ fn test_inject_needed_pre_post_data_before_needed_after() {
 }
 
 #[test]
-fn test_inject_needed_needed_before_data_after() {
+fn test_inject_needed_needed_needed_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3439,7 +4222,7 @@ fn test_inject_needed_needed_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_needed_before_data_after() {
+fn test_inject_needed_needed_pre_needed_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3486,7 +4269,7 @@ fn test_inject_needed_pre_needed_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_post_needed_before_data_after() {
+fn test_inject_needed_needed_post_needed_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3541,7 +4324,7 @@ fn test_inject_needed_post_needed_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_needed_before_data_after() {
+fn test_inject_needed_needed_pre_post_needed_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Needed {
@@ -3596,7 +4379,7 @@ fn test_inject_needed_pre_post_needed_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_data_before_data_after() {
+fn test_inject_needed_needed_data_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3638,7 +4421,7 @@ fn test_inject_needed_data_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_data_before_data_after() {
+fn test_inject_needed_needed_pre_data_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3689,7 +4472,7 @@ fn test_inject_needed_pre_data_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_post_data_before_data_after() {
+fn test_inject_needed_needed_post_data_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
@@ -3740,7 +4523,7 @@ fn test_inject_needed_post_data_before_data_after() {
 }
 
 #[test]
-fn test_inject_needed_pre_post_data_before_data_after() {
+fn test_inject_needed_needed_pre_post_data_before_data_after() {
     let mut inbound = InboundFrags {
         frags: vec![
             InboundFrag::Data {
