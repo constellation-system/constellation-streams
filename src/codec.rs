@@ -169,14 +169,11 @@ where
     Stream: Credentials,
     Codec: DatagramCodec<Msg> + Send
 {
-    type Cred<'a>
-        = Stream::Cred<'a>
-    where
-        Self: 'a;
+    type Cred = Stream::Cred;
     type CredError = Stream::CredError;
 
     #[inline]
-    fn creds(&self) -> Result<Option<Self::Cred<'_>>, Self::CredError> {
+    fn creds(&self) -> Result<Option<Self::Cred>, Self::CredError> {
         self.stream.creds()
     }
 }
