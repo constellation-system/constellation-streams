@@ -57,7 +57,7 @@ struct FragsIter<'a> {
     idx: usize
 }
 
-pub struct FragsBytesIter<'a> {
+struct FragsBytesIter<'a> {
     frags: &'a mut Frags,
     retry: Retry,
     nbytes: usize,
@@ -70,7 +70,7 @@ pub enum InboundRecvError {
 }
 
 #[derive(Debug)]
-pub enum OutboundAckError {
+pub enum OutboundRecvError {
     OutOfBounds
 }
 
@@ -189,6 +189,85 @@ impl OutboundFrags {
             data: vec![0; len]
         }
     }
+
+    /// Get a reference to the `len` bytes of data at `offset`.
+    #[inline]
+    pub fn data(
+        &self,
+        offset: usize,
+        len: usize
+    ) -> Result<&'_ [u8], usize> {
+        let data_end = offset + len;
+
+        if data_end <= self.data.len() {
+            Ok(&self.data[offset..data_end])
+        } else {
+            Err(self.data.len())
+        }
+    }
+
+    /// Receive fragment data acknowledgements.
+    pub fn recv_acks(
+        &mut self,
+        offset: usize,
+        len: usize
+    ) -> Result<(), OutboundRecvError> {
+        let data_end = offset + len;
+
+        if data_end <= self.data.len() {
+            self.frags.remove(offset, len);
+
+            Ok(())
+        } else {
+            Err(OutboundRecvError::OutOfBounds)
+        }
+    }
+
+    /// Receive fragment data requests.
+    pub fn recv_reqs(
+        &mut self,
+        offset: usize,
+        len: usize
+    ) -> Result<(), OutboundRecvError> {
+        let data_end = offset + len;
+
+        if data_end <= self.data.len() {
+            self.frags.insert(offset, len);
+
+            Ok(())
+        } else {
+            Err(OutboundRecvError::OutOfBounds)
+        }
+    }
+
+    /// Attempt to generate requests for fragments.
+    pub fn reqs(
+        &mut self,
+        buf: &mut [(usize, usize)],
+        max_bytes: usize
+    ) -> RetryResult<usize> {
+        let mut curr = 0;
+        let mut when: Option<Instant> = None;
+
+        for frag in self.frags.bytes_iter(self.retry.clone(), 0, max_bytes) {
+            match frag {
+                RetryResult::Success(frag) => {
+                    buf[curr] = frag;
+                    curr += 1;
+                }
+                RetryResult::Retry(retry) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
+
+                    when = Some(retry);
+                }
+            }
+        }
+
+        match when {
+            Some(when) => RetryResult::Retry(when),
+            None => RetryResult::Success(curr)
+        }
+    }
 }
 
 impl Frags {
@@ -260,7 +339,7 @@ impl Frags {
     }
 
     #[inline]
-    pub fn bytes_iter(
+    fn bytes_iter(
         &mut self,
         retry: Retry,
         offset: usize,
@@ -313,7 +392,7 @@ impl Frags {
         }
     }
 
-    pub fn insert(
+    fn insert(
         &mut self,
         offset: usize,
         len: usize
@@ -685,14 +764,14 @@ impl Display for InboundRecvError {
     }
 }
 
-impl Display for OutboundAckError {
+impl Display for OutboundRecvError {
     fn fmt(
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            OutboundAckError::OutOfBounds => {
-                write!(f, "acknowledgement extends beyond bounds")
+            OutboundRecvError::OutOfBounds => {
+                write!(f, "range extends beyond data bounds")
             }
         }
     }
