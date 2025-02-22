@@ -19,7 +19,11 @@
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
+use std::iter::FusedIterator;
 use std::time::Instant;
+
+use constellation_common::retry::Retry;
+use constellation_common::retry::RetryResult;
 
 #[derive(Debug)]
 struct Frag {
@@ -30,13 +34,38 @@ struct Frag {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Frags {
-    // XXX use a good data structure here, like a splay tree.
+struct Frags {
+    // XXX use a good data structure here, like a red-black tree.
     frags: Vec<Frag>
 }
 
+pub struct InboundFrags {
+    frags: Frags,
+    retry: Retry,
+    data: Vec<u8>
+}
+
+pub struct OutboundFrags {
+    frags: Frags,
+    retry: Retry,
+    data: Vec<u8>
+}
+
+struct FragsIter<'a> {
+    frags: &'a mut Frags,
+    retry: Retry,
+    idx: usize
+}
+
+pub struct FragsBytesIter<'a> {
+    frags: &'a mut Frags,
+    retry: Retry,
+    nbytes: usize,
+    idx: usize
+}
+
 #[derive(Debug)]
-pub enum InboundInjectError {
+pub enum InboundRecvError {
     OutOfBounds
 }
 
@@ -45,7 +74,245 @@ pub enum OutboundAckError {
     OutOfBounds
 }
 
+impl InboundFrags {
+    #[inline]
+    pub fn new(
+        retry: Retry,
+        len: usize
+    ) -> Self {
+        InboundFrags {
+            frags: Frags::empty(),
+            retry: retry,
+            data: vec![0; len]
+        }
+    }
+
+    #[inline]
+    pub fn with_capacity(
+        retry: Retry,
+        len: usize,
+        hint: usize
+    ) -> Self {
+        InboundFrags {
+            frags: Frags::empty_with_capacity(hint),
+            retry: retry,
+            data: vec![0; len]
+        }
+    }
+
+    /// Check if the transfer is complete.
+    #[inline]
+    pub fn is_finished(&self) -> bool {
+        self.frags.is_empty()
+    }
+
+    /// Consume this `InboundFrags` if complete and produce the raw
+    /// data.
+    #[inline]
+    pub fn finish(self) -> Result<Vec<u8>, Self> {
+        if self.is_finished() {
+            Ok(self.data)
+        } else {
+            Err(self)
+        }
+    }
+
+    /// Receive fragment data.
+    pub fn recv(
+        &mut self,
+        data: &[u8],
+        offset: usize
+    ) -> Result<(), InboundRecvError> {
+        let data_end = offset + data.len();
+
+        if data_end <= self.data.len() {
+            self.data[offset..data_end].copy_from_slice(data);
+            self.frags.remove(offset, data.len());
+
+            Ok(())
+        } else {
+            Err(InboundRecvError::OutOfBounds)
+        }
+    }
+
+    /// Attempt to generate requests for fragments.
+    pub fn reqs(
+        &mut self,
+        buf: &mut [(usize, usize)]
+    ) -> RetryResult<usize> {
+        let mut curr = 0;
+        let mut when: Option<Instant> = None;
+
+        for frag in self.frags.frags_iter(self.retry.clone(), 0) {
+            match frag {
+                RetryResult::Success(frag) => {
+                    buf[curr] = frag;
+                    curr += 1;
+                }
+                RetryResult::Retry(retry) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
+
+                    when = Some(retry);
+                }
+            }
+        }
+
+        match when {
+            Some(when) => RetryResult::Retry(when),
+            None => RetryResult::Success(curr)
+        }
+    }
+}
+
+impl OutboundFrags {
+    #[inline]
+    pub fn new(
+        retry: Retry,
+        len: usize
+    ) -> Self {
+        OutboundFrags {
+            frags: Frags::full(len),
+            retry: retry,
+            data: vec![0; len]
+        }
+    }
+
+    #[inline]
+    pub fn with_capacity(
+        retry: Retry,
+        len: usize,
+        hint: usize
+    ) -> Self {
+        OutboundFrags {
+            frags: Frags::full_with_capacity(len, hint),
+            retry: retry,
+            data: vec![0; len]
+        }
+    }
+}
+
 impl Frags {
+    #[inline]
+    fn empty() -> Self {
+        Frags { frags: Vec::new() }
+    }
+
+    #[inline]
+    fn empty_with_capacity(size: usize) -> Self {
+        Frags {
+            frags: Vec::with_capacity(size)
+        }
+    }
+
+    #[inline]
+    fn full(len: usize) -> Self {
+        Frags {
+            frags: vec![Frag {
+                when: Instant::now(),
+                nretries: 0,
+                offset: 0,
+                len: len
+            }]
+        }
+    }
+
+    #[inline]
+    fn full_with_capacity(
+        len: usize,
+        hint: usize
+    ) -> Self {
+        let mut frags = Vec::with_capacity(hint);
+
+        frags.push(Frag {
+            when: Instant::now(),
+            nretries: 0,
+            offset: 0,
+            len: len
+        });
+
+        Frags { frags: frags }
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.frags.is_empty()
+    }
+
+    #[inline]
+    fn frags_iter(
+        &mut self,
+        retry: Retry,
+        offset: usize
+    ) -> FragsIter<'_> {
+        let idx = match self
+            .frags
+            .binary_search_by(|frag| frag.offset.cmp(&offset))
+        {
+            Ok(idx) => idx,
+            Err(idx) => idx
+        };
+
+        FragsIter {
+            frags: self,
+            retry: retry,
+            idx: idx
+        }
+    }
+
+    #[inline]
+    pub fn bytes_iter(
+        &mut self,
+        retry: Retry,
+        offset: usize,
+        bytes: usize
+    ) -> FragsBytesIter<'_> {
+        let idx = match self
+            .frags
+            .binary_search_by(|frag| frag.offset.cmp(&offset))
+        {
+            Ok(idx) => idx,
+            Err(idx) => idx
+        };
+
+        FragsBytesIter {
+            frags: self,
+            retry: retry,
+            nbytes: bytes,
+            idx: idx
+        }
+    }
+
+    fn split(
+        &mut self,
+        retry: &Retry,
+        idx: usize,
+        len: usize
+    ) -> (usize, usize) {
+        let nretries = self.frags[idx].nretries;
+        let delay = retry.retry_delay(nretries);
+        let when = Instant::now() + delay;
+        let offset = self.frags[idx].offset;
+
+        if self.frags[idx].len < len {
+            self.frags[idx].nretries += 1;
+            self.frags[idx].when = when;
+
+            (offset, self.frags[idx].len)
+        } else {
+            self.frags.insert(
+                idx,
+                Frag {
+                    nretries: nretries,
+                    when: when,
+                    offset: offset,
+                    len: len
+                }
+            );
+
+            (offset, len)
+        }
+    }
+
     pub fn insert(
         &mut self,
         offset: usize,
@@ -199,7 +466,7 @@ impl Frags {
     }
 
     /// Remove a range of fragments.
-    pub fn remove(
+    fn remove(
         &mut self,
         offset: usize,
         len: usize
@@ -313,6 +580,87 @@ impl Frags {
     }
 }
 
+impl Iterator for FragsIter<'_> {
+    type Item = RetryResult<(usize, usize)>;
+
+    #[inline]
+    fn next(&mut self) -> Option<RetryResult<(usize, usize)>> {
+        let idx = self.idx;
+
+        if idx < self.frags.frags.len() {
+            self.idx += 1;
+
+            if self.frags.frags[idx].when < Instant::now() {
+                let frag = &self.frags.frags[idx];
+                let nretries = frag.nretries;
+                let offset = frag.offset;
+                let len = frag.len;
+
+                self.frags.frags[idx].nretries += 1;
+
+                let delay = self.retry.retry_delay(nretries);
+                let when = Instant::now() + delay;
+
+                self.frags.frags[idx].when = when;
+
+                Some(RetryResult::Success((offset, len)))
+            } else {
+                Some(RetryResult::Retry(self.frags.frags[idx].when))
+            }
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let hint = self.frags.frags.len();
+
+        (0, Some(hint))
+    }
+}
+
+impl FusedIterator for FragsIter<'_> {}
+
+impl Iterator for FragsBytesIter<'_> {
+    type Item = RetryResult<(usize, usize)>;
+
+    #[inline]
+    fn next(&mut self) -> Option<RetryResult<(usize, usize)>> {
+        let idx = self.idx;
+
+        if idx < self.frags.frags.len() && self.nbytes != 0 {
+            self.idx += 1;
+
+            if self.frags.frags[idx].when < Instant::now() {
+                let (offset, len) =
+                    self.frags.split(&self.retry, idx, self.nbytes);
+
+                if len < self.nbytes {
+                    self.nbytes -= len;
+                } else {
+                    self.nbytes = 0;
+                }
+
+                Some(RetryResult::Success((offset, len)))
+            } else {
+                Some(RetryResult::Retry(self.frags.frags[idx].when))
+            }
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let hint = self.frags.frags.len();
+
+        (0, Some(hint))
+    }
+}
+
+impl FusedIterator for FragsBytesIter<'_> {}
+
 impl PartialEq for Frag {
     fn eq(
         &self,
@@ -324,13 +672,13 @@ impl PartialEq for Frag {
 
 impl Eq for Frag {}
 
-impl Display for InboundInjectError {
+impl Display for InboundRecvError {
     fn fmt(
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            InboundInjectError::OutOfBounds => {
+            InboundRecvError::OutOfBounds => {
                 write!(f, "data extends beyond bounds")
             }
         }
