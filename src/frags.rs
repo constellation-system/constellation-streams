@@ -240,8 +240,8 @@ impl OutboundFrags {
         }
     }
 
-    /// Attempt to generate requests for fragments.
-    pub fn reqs(
+    /// Attempt to generate data fragments to deliver.
+    pub fn data_frags(
         &mut self,
         buf: &mut [(usize, usize)],
         max_bytes: usize
