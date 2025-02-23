@@ -1,0 +1,53 @@
+LargeObj DEFINITIONS AUTOMATIC TAGS ::=
+BEGIN
+
+LargeObjFragHeader ::= SEQUENCE {
+    offset INTEGER,
+    len INTEGER,
+}
+
+LargeObjFragRef ::= SEQUENCE {
+    offset INTEGER,
+    len INTEGER,
+}
+
+LargeObjFragReq ::= CHOICE {
+    Need LargeObjFragRef,
+    Ack LargeObjFragRef
+}
+
+LargeObjFinish ::= SEQUENCE {
+    id INTEGER
+}
+
+LargeObjFrags ::= SEQUENCE {
+    id INTEGER,
+    nfrags INTEGER (1 .. 255)
+}
+
+LargeObjReq ::= SEQUENCE {
+    id INTEGER,
+    reqs SEQUENCE SIZE (1 .. 64) OF LargeObjFragReq
+}
+
+LargeObjReqObj ::= SEQUENCE {
+    hash OCTET STRING SIZE (64),
+    size INTEGER,
+    id INTEGER,
+}
+
+LargeObjOffer ::= SEQUENCE {
+    hash OCTET STRING SIZE (64),
+    size INTEGER,
+    frag LargeObjFragHeader
+}
+
+LargeObjMetadata ::= CHOICE {
+    Offer LargeObjOffer,
+    ReqObj LargeObjReqObj,
+    Frags LargeObjFrags,
+    Req LargeObjReq,
+    Finish LargeObjFinish
+}
+
+END

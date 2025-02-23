@@ -97,3 +97,4 @@ pub mod xciap;
 #[allow(clippy::all)]
 #[rustfmt::skip]
 mod generated;
+mod large_obj;
