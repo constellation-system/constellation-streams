@@ -856,6 +856,22 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
+pub trait LargeObjStream<ID, Ctx>
+where
+    ID: Into<usize> {
+    /// Type of errors that can occur when sending a fragment.
+    type PushFragError;
+    /// Type of outbound fragment structures.
+    type Frags;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<()>, Self::PushFragError>;
+}
+
 /// Helper trait for sending single messages on shared streams.
 ///
 /// This trait implements functionality for sending a single message
@@ -2252,6 +2268,31 @@ where
         }
 
         Err(ThreadedStreamError::Shutdown)
+    }
+}
+
+impl<Ctx, ID, Inner> LargeObjStream<ID, Ctx> for ThreadedStream<Inner>
+where
+    ID: Into<usize>,
+    Inner: LargeObjStream<ID, Ctx>
+{
+    type Frags = Inner::Frags;
+    type PushFragError = ThreadedStreamError<Inner::PushFragError>;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<()>, Self::PushFragError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .push_frag(ctx, id, frags)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }
 

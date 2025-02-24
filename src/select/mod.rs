@@ -73,6 +73,7 @@ use crate::error::PartiesBatchError;
 use crate::error::SelectionsError;
 use crate::select::sched::FarHistory;
 use crate::select::sched::FarHistoryConfig;
+use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
@@ -3048,6 +3049,54 @@ where
                "should never call retry_abort_start_batch on this stream");
 
         RetryResult::Success(())
+    }
+}
+
+impl<ID, Epochs, Src, Resolve, Ctx> LargeObjStream<ID, Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    ID: Into<usize>,
+    Epochs: Iterator,
+    Epochs::Item: Clone + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Src::Stream: Clone + LargeObjStream<ID, Ctx> + PushStream<Ctx> + Send
+{
+    type Frags = <Src::Stream as LargeObjStream<ID, Ctx>>::Frags;
+    type PushFragError = SelectorBatchSelectError<
+        StreamSelectorSelectError<
+            Resolve::AddrsError,
+            Src::ParamError,
+            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+        >,
+        (),
+        <Src::Stream as LargeObjStream<ID, Ctx>>::PushFragError,
+        Epochs::Item
+    >;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<()>, Self::PushFragError> {
+        // Try to select a stream.
+        self.select_stream(ctx)
+            .map_err(|err| SelectorBatchSelectError::Select {
+                select: err,
+                parties: ()
+            })?
+            .flat_map_ok(|(mut stream, selected)| {
+                stream.push_frag(ctx, id, frags).map_err(|err| {
+                    SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: err
+                    }
+                })
+            })
     }
 }
 

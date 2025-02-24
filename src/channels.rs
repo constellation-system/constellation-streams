@@ -48,6 +48,7 @@ use log::error;
 
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
+use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
@@ -1909,6 +1910,34 @@ where
                     retry: retry
                 })),
             _ => Err(SharedPrivateStreamError::Mismatch)
+        }
+    }
+}
+
+impl<Shared, Private, ID, Ctx> LargeObjStream<ID, Ctx>
+    for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
+where
+    ID: Into<usize>,
+    Shared: LargeObjStream<ID, Ctx> + PushStreamPartyID,
+    Private: LargeObjStream<ID, Ctx>
+{
+    type Frags = SharedPrivateChannels<Private::Frags, Shared::Frags>;
+    type PushFragError =
+        SharedPrivateStreamError<Private::PushFragError, Shared::PushFragError>;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<()>, Self::PushFragError> {
+        match self {
+            SharedPrivateChannelStream::Private { stream } => stream
+                .push_frag(ctx, id, &mut frags.private)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+            SharedPrivateChannelStream::Shared { stream, .. } => stream
+                .push_frag(ctx, id, &mut frags.shared)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err })
         }
     }
 }

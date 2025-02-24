@@ -16,6 +16,10 @@ LargeObjFragReq ::= CHOICE {
     Ack LargeObjFragRef
 }
 
+LargeObjFinished ::= SEQUENCE {
+    id INTEGER
+}
+
 LargeObjFinish ::= SEQUENCE {
     id INTEGER
 }
@@ -33,7 +37,13 @@ LargeObjReq ::= SEQUENCE {
 LargeObjReqObj ::= SEQUENCE {
     hash OCTET STRING SIZE (64),
     size INTEGER,
-    id INTEGER,
+    id INTEGER
+}
+
+LargeObjAccept ::= SEQUENCE {
+    hash OCTET STRING SIZE (64),
+    size INTEGER,
+    id INTEGER
 }
 
 LargeObjOffer ::= SEQUENCE {
@@ -44,10 +54,12 @@ LargeObjOffer ::= SEQUENCE {
 
 LargeObjMetadata ::= CHOICE {
     Offer LargeObjOffer,
+    Accept LargeObjAccept,
     ReqObj LargeObjReqObj,
     Frags LargeObjFrags,
     Req LargeObjReq,
-    Finish LargeObjFinish
+    Finish LargeObjFinish,
+    Finished LargeObjFinished
 }
 
 END

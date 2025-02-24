@@ -25,6 +25,8 @@ use std::time::Instant;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 
+use crate::error::ErrorReportInfo;
+
 #[derive(Debug)]
 struct Frag {
     nretries: usize,
@@ -72,6 +74,11 @@ pub enum InboundRecvError {
 #[derive(Debug)]
 pub enum OutboundRecvError {
     OutOfBounds
+}
+
+#[derive(Debug)]
+pub enum OutboundDataError {
+    Empty
 }
 
 impl InboundFrags {
@@ -138,28 +145,36 @@ impl InboundFrags {
     /// Attempt to generate requests for fragments.
     pub fn reqs(
         &mut self,
-        buf: &mut [(usize, usize)]
+        buf: &mut [(bool, usize, usize)]
     ) -> RetryResult<usize> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
         for frag in self.frags.frags_iter(self.retry.clone(), 0) {
-            match frag {
-                RetryResult::Success(frag) => {
-                    buf[curr] = frag;
-                    curr += 1;
-                }
-                RetryResult::Retry(retry) => {
-                    let retry = when.map_or(retry, |when| when.min(retry));
+            if curr < buf.len() {
+                match frag {
+                    RetryResult::Success((offset, len)) => {
+                        buf[curr] = (true, offset, len);
+                        curr += 1;
+                    }
+                    RetryResult::Retry(retry) => {
+                        let retry = when.map_or(retry, |when| when.min(retry));
 
-                    when = Some(retry);
+                        when = Some(retry);
+                    }
                 }
+            } else {
+                break;
             }
         }
 
-        match when {
-            Some(when) => RetryResult::Retry(when),
-            None => RetryResult::Success(curr)
+        if curr != 0 {
+            RetryResult::Success(curr)
+        } else {
+            match when {
+                Some(when) => RetryResult::Retry(when),
+                None => RetryResult::Success(0)
+            }
         }
     }
 }
@@ -168,26 +183,36 @@ impl OutboundFrags {
     #[inline]
     pub fn new(
         retry: Retry,
-        len: usize
+        data: Vec<u8>
     ) -> Self {
         OutboundFrags {
-            frags: Frags::full(len),
+            frags: Frags::full(data.len()),
             retry: retry,
-            data: vec![0; len]
+            data: data
         }
     }
 
     #[inline]
     pub fn with_capacity(
         retry: Retry,
-        len: usize,
+        data: Vec<u8>,
         hint: usize
     ) -> Self {
         OutboundFrags {
-            frags: Frags::full_with_capacity(len, hint),
+            frags: Frags::full_with_capacity(data.len(), hint),
             retry: retry,
-            data: vec![0; len]
+            data: data
         }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 
     /// Get a reference to the `len` bytes of data at `offset`.
@@ -240,12 +265,37 @@ impl OutboundFrags {
         }
     }
 
+    pub fn offer_frag(
+        &mut self,
+        max_bytes: usize
+    ) -> Result<RetryResult<(usize, usize)>, OutboundDataError> {
+        let mut when: Option<Instant> = None;
+
+        for frag in self.frags.bytes_iter(self.retry.clone(), 0, max_bytes) {
+            match frag {
+                RetryResult::Success(frag) => {
+                    return Ok(RetryResult::Success(frag))
+                }
+                RetryResult::Retry(retry) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
+
+                    when = Some(retry);
+                }
+            }
+        }
+
+        match when {
+            Some(when) => Ok(RetryResult::Retry(when)),
+            None => Err(OutboundDataError::Empty)
+        }
+    }
+
     /// Attempt to generate data fragments to deliver.
     pub fn data_frags(
         &mut self,
         buf: &mut [(usize, usize)],
         max_bytes: usize
-    ) -> RetryResult<usize> {
+    ) -> Result<RetryResult<usize>, OutboundDataError> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
@@ -263,9 +313,13 @@ impl OutboundFrags {
             }
         }
 
-        match when {
-            Some(when) => RetryResult::Retry(when),
-            None => RetryResult::Success(curr)
+        if curr != 0 {
+            Ok(RetryResult::Success(curr))
+        } else {
+            match when {
+                Some(when) => Ok(RetryResult::Retry(when)),
+                None => Err(OutboundDataError::Empty)
+            }
         }
     }
 }
@@ -751,6 +805,15 @@ impl PartialEq for Frag {
 
 impl Eq for Frag {}
 
+impl<Info> ErrorReportInfo<Info> for OutboundDataError {
+    #[inline]
+    fn report_info(&self) -> Option<Info> {
+        match self {
+            OutboundDataError::Empty => None
+        }
+    }
+}
+
 impl Display for InboundRecvError {
     fn fmt(
         &self,
@@ -772,6 +835,19 @@ impl Display for OutboundRecvError {
         match self {
             OutboundRecvError::OutOfBounds => {
                 write!(f, "range extends beyond data bounds")
+            }
+        }
+    }
+}
+
+impl Display for OutboundDataError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            OutboundDataError::Empty => {
+                write!(f, "offering from an empty outbound buffer")
             }
         }
     }
