@@ -856,9 +856,9 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
-pub trait LargeObjStream<ID, Ctx>
+pub trait LargeObjStream<ObjID, Ctx>
 where
-    ID: Into<usize> {
+    ObjID: Into<usize> {
     /// Type of errors that can occur when sending a fragment.
     type PushFragError;
     /// Type of outbound fragment structures.
@@ -867,7 +867,7 @@ where
     fn push_frag(
         &mut self,
         ctx: &mut Ctx,
-        id: ID,
+        id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<()>, Self::PushFragError>;
 }
@@ -2271,10 +2271,10 @@ where
     }
 }
 
-impl<Ctx, ID, Inner> LargeObjStream<ID, Ctx> for ThreadedStream<Inner>
+impl<Ctx, ObjID, Inner> LargeObjStream<ObjID, Ctx> for ThreadedStream<Inner>
 where
-    ID: Into<usize>,
-    Inner: LargeObjStream<ID, Ctx>
+    ObjID: Into<usize>,
+    Inner: LargeObjStream<ObjID, Ctx>
 {
     type Frags = Inner::Frags;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
@@ -2282,7 +2282,7 @@ where
     fn push_frag(
         &mut self,
         ctx: &mut Ctx,
-        id: ID,
+        id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<()>, Self::PushFragError> {
         let mut guard = self

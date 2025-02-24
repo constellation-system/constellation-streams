@@ -3052,10 +3052,10 @@ where
     }
 }
 
-impl<ID, Epochs, Src, Resolve, Ctx> LargeObjStream<ID, Ctx>
+impl<ObjID, Epochs, Src, Resolve, Ctx> LargeObjStream<ObjID, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    ID: Into<usize>,
+    ObjID: Into<usize>,
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
@@ -3063,9 +3063,9 @@ where
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + LargeObjStream<ID, Ctx> + PushStream<Ctx> + Send
+    Src::Stream: Clone + LargeObjStream<ObjID, Ctx> + PushStream<Ctx> + Send
 {
-    type Frags = <Src::Stream as LargeObjStream<ID, Ctx>>::Frags;
+    type Frags = <Src::Stream as LargeObjStream<ObjID, Ctx>>::Frags;
     type PushFragError = SelectorBatchSelectError<
         StreamSelectorSelectError<
             Resolve::AddrsError,
@@ -3073,14 +3073,14 @@ where
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >,
         (),
-        <Src::Stream as LargeObjStream<ID, Ctx>>::PushFragError,
+        <Src::Stream as LargeObjStream<ObjID, Ctx>>::PushFragError,
         Epochs::Item
     >;
 
     fn push_frag(
         &mut self,
         ctx: &mut Ctx,
-        id: ID,
+        id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<()>, Self::PushFragError> {
         // Try to select a stream.

@@ -1914,12 +1914,12 @@ where
     }
 }
 
-impl<Shared, Private, ID, Ctx> LargeObjStream<ID, Ctx>
+impl<Shared, Private, ObjID, Ctx> LargeObjStream<ObjID, Ctx>
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
-    ID: Into<usize>,
-    Shared: LargeObjStream<ID, Ctx> + PushStreamPartyID,
-    Private: LargeObjStream<ID, Ctx>
+    ObjID: Into<usize>,
+    Shared: LargeObjStream<ObjID, Ctx> + PushStreamPartyID,
+    Private: LargeObjStream<ObjID, Ctx>
 {
     type Frags = SharedPrivateChannels<Private::Frags, Shared::Frags>;
     type PushFragError =
@@ -1928,7 +1928,7 @@ where
     fn push_frag(
         &mut self,
         ctx: &mut Ctx,
-        id: ID,
+        id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<()>, Self::PushFragError> {
         match self {

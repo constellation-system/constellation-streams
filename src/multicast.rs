@@ -44,8 +44,10 @@ use crate::error::BatchError;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
 use crate::error::SelectionsError;
+use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
+use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -1121,16 +1123,11 @@ where
 
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
-                let mut successes = vec![None; len];
                 let mut results = Vec::with_capacity(len);
                 let mut all_success = true;
 
-                for (idx, res) in elems.into_iter() {
-                    if let RetryResult::Success(()) = &res {
-                        let i: usize = idx.into();
-
-                        successes[i] = Some(())
-                    } else {
+                for (_, res) in elems.into_iter() {
+                    if let RetryResult::Retry(_) = &res {
                         all_success = false
                     }
 
@@ -2609,6 +2606,78 @@ where
         match retries {
             Some(retries) => RetryResult::Retry(retries),
             None => RetryResult::Success(())
+        }
+    }
+}
+
+impl<ObjID, Party, Idx, Stream, Ctx> LargeObjStream<ObjID, Ctx>
+    for StreamMulticaster<Party, Idx, LargeObjMsg, Stream, Ctx>
+where
+    ObjID: Into<usize>,
+    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Display + Eq + Hash,
+    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>,
+{
+    type Frags = Vec<Stream::Frags>;
+    type PushFragError = ErrorSet<Idx, RetryResult<()>, Stream::PushFragError>;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<()>, Self::PushFragError> {
+        let len = self.rev_map.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+
+        // Go through each sub-stream and try to push the fragment.
+        for i in 0..self.rev_map.len() {
+            match self.rev_map[i].stream.push_frag(ctx, id, &mut frags[i]) {
+                // We're good; add this to the output.
+                Ok(id) => results.push((Idx::from(i), id)),
+                // An error happened; record the fact that we still
+                // need to create a batch for this party.
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((Idx::from(i), err)),
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((Idx::from(i), err));
+
+                        errs = Some(vec)
+                    }
+                }
+            }
+        }
+
+        // Figure out what do do based on the responses.
+        match errs {
+            // There were errors.
+            Some(errs) => Err(ErrorSet::create(results, errs)),
+            // No errors, check for retries.
+            None => {
+                results.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut retries = Vec::with_capacity(len);
+                let mut all_success = true;
+
+                for (_, res) in results.into_iter() {
+                    if let RetryResult::Retry(_) = &res {
+                        all_success = false
+                    }
+
+                    retries.push(res);
+                }
+
+                if all_success {
+                    Ok(RetryResult::Success(()))
+                } else {
+                    Ok(RetryResult::Retry(retries))
+                }
+            }
         }
     }
 }

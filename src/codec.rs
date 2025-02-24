@@ -678,10 +678,10 @@ where
     }
 }
 
-impl<Ctx, ID, Stream> LargeObjStream<ID, Ctx>
+impl<Ctx, ObjID, Stream> LargeObjStream<ObjID, Ctx>
     for DatagramCodecStream<LargeObjMsg, Stream, LargeObjMsgCodec>
 where
-    ID: Into<usize>,
+    ObjID: Into<usize>,
     Stream: Write
 {
     type Frags = OutboundFrags;
@@ -690,7 +690,7 @@ where
     fn push_frag(
         &mut self,
         ctx: &mut Ctx,
-        id: ID,
+        id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<()>, Self::PushFragError> {
         LargeObjMsg::frags(frags, id.into(), 1024)
