@@ -31,6 +31,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Condvar;
+use std::time::Instant;
 
 use constellation_auth::cred::Credentials;
 use constellation_common::codec::DatagramCodec;
@@ -158,6 +159,34 @@ where
     #[inline]
     fn condvar(&self) -> Arc<Condvar> {
         self.stream.condvar()
+    }
+}
+
+impl<Frag, Stream> BatchError for DatagramCodecFragError<Frag, Stream>
+where
+    Frag: Display,
+    Stream: BatchError
+{
+    type Completable = DatagramCodecFragError<Infallible, Stream::Completable>;
+    type Permanent = DatagramCodecFragError<Frag, Stream::Permanent>;
+
+    #[inline]
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            DatagramCodecFragError::Frag { err } => {
+                (None, Some(DatagramCodecFragError::Frag { err: err }))
+            }
+            DatagramCodecFragError::Stream { err } => {
+                let (completable, permanent) = err.split();
+
+                (
+                    completable
+                        .map(|res| DatagramCodecFragError::Stream { err: res }),
+                    permanent
+                        .map(|res| DatagramCodecFragError::Stream { err: res })
+                )
+            }
+        }
     }
 }
 
@@ -685,6 +714,7 @@ where
     Stream: Write
 {
     type Frags = OutboundFrags;
+    type PushFragRetry = Instant;
     type PushFragError = DatagramCodecFragError<LargeObjMsgEncodeError, Error>;
 
     fn push_frag(
@@ -692,7 +722,7 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<()>, Self::PushFragError> {
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         LargeObjMsg::frags(frags, id.into(), 1024)
             .map_err(|err| DatagramCodecFragError::Frag { err: err })?
             .map_ok(|msg| {
@@ -702,6 +732,26 @@ where
 
                 Ok(())
             })
+    }
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        _retry: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        self.push_frag(ctx, id, frags)
+    }
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        _err: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        self.push_frag(ctx, id, frags)
     }
 }
 

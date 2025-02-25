@@ -860,7 +860,10 @@ pub trait LargeObjStream<ObjID, Ctx>
 where
     ObjID: Into<usize> {
     /// Type of errors that can occur when sending a fragment.
-    type PushFragError;
+    type PushFragError: BatchError;
+    /// Type of information given by a [RetryResult] for sending a
+    /// single message.
+    type PushFragRetry: RetryWhen + Clone;
     /// Type of outbound fragment structures.
     type Frags;
 
@@ -869,7 +872,23 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<()>, Self::PushFragError>;
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
 }
 
 /// Helper trait for sending single messages on shared streams.
@@ -2277,6 +2296,7 @@ where
     Inner: LargeObjStream<ObjID, Ctx>
 {
     type Frags = Inner::Frags;
+    type PushFragRetry = Inner::PushFragRetry;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
 
     fn push_frag(
@@ -2284,7 +2304,7 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<()>, Self::PushFragError> {
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         let mut guard = self
             .inner
             .lock()
@@ -2292,6 +2312,40 @@ where
 
         guard
             .push_frag(ctx, id, frags)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .retry_push_frag(ctx, id, frags, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .complete_push_frag(ctx, id, frags, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }
