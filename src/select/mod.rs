@@ -3105,17 +3105,18 @@ where
                 parties: ()
             })
             .flat_map_ok(|(mut stream, selected)| {
-                Ok(stream.push_frag(ctx, id, frags)
-                   .map_err(|err| SelectorBatchError::Batch {
-                       batch: SelectorBatchSelectError::Stream {
-                           selected: selected.clone(),
-                           stream: err
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry,
-                   }))
+                Ok(stream
+                    .push_frag(ctx, id, frags)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             })
     }
 
@@ -3128,8 +3129,9 @@ where
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
-            SelectorBatchSelectError::Select { .. } =>
-                self.push_frag(ctx, id, frags),
+            SelectorBatchSelectError::Select { .. } => {
+                self.push_frag(ctx, id, frags)
+            }
             // We got a retry once the stream was selected.
             SelectorBatchSelectError::Stream {
                 selected,
@@ -3139,19 +3141,18 @@ where
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
-                Ok(stream.retry_push_frag(ctx, id, frags, retry)
-                   .map_err(|err| {
-                       SelectorBatchError::Batch {
-                           batch: SelectorBatchSelectError::Stream {
-                               selected: selected.clone(),
-                               stream: err
-                           }
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                Ok(stream
+                    .retry_push_frag(ctx, id, frags, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }
@@ -3173,19 +3174,18 @@ where
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
-                Ok(stream.complete_push_frag(ctx, id, frags, err)
-                   .map_err(|err| {
-                       SelectorBatchError::Batch {
-                           batch: SelectorBatchSelectError::Stream {
-                               selected: selected.clone(),
-                               stream: err
-                           }
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                Ok(stream
+                    .complete_push_frag(ctx, id, frags, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }

@@ -2296,8 +2296,8 @@ where
     Inner: LargeObjStream<ObjID, Ctx>
 {
     type Frags = Inner::Frags;
-    type PushFragRetry = Inner::PushFragRetry;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
+    type PushFragRetry = Inner::PushFragRetry;
 
     fn push_frag(
         &mut self,

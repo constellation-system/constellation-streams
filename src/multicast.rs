@@ -1103,16 +1103,16 @@ where
         &mut self,
         mut elems: Vec<(
             Idx,
-            RetryResult<(), <Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry>
+            RetryResult<
+                (),
+                <Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry
+            >
         )>,
         errs: Option<
             Vec<(Idx, <Stream as LargeObjStream<ObjID, Ctx>>::PushFragError)>
         >
     ) -> Result<
-        RetryResult<
-            (),
-            <Self as LargeObjStream<ObjID, Ctx>>::PushFragRetry
-        >,
+        RetryResult<(), <Self as LargeObjStream<ObjID, Ctx>>::PushFragRetry>,
         <Self as LargeObjStream<ObjID, Ctx>>::PushFragError
     >
     where
@@ -2673,12 +2673,16 @@ where
     ObjID: Clone + Into<usize>,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>,
+    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>
 {
     // XXX This requires a separate copy of the data for each party.
     type Frags = Vec<Stream::Frags>;
+    type PushFragError = ErrorSet<
+        Idx,
+        RetryResult<(), Stream::PushFragRetry>,
+        Stream::PushFragError
+    >;
     type PushFragRetry = Vec<RetryResult<(), Stream::PushFragRetry>>;
-    type PushFragError = ErrorSet<Idx, RetryResult<(), Stream::PushFragRetry>, Stream::PushFragError>;
 
     fn push_frag(
         &mut self,
@@ -2773,9 +2777,12 @@ where
         for (idx, err) in retries {
             let i: usize = idx.into();
 
-            match self.rev_map[i]
-                .stream.complete_push_frag(ctx, id.clone(),
-                                           &mut frags[i], err) {
+            match self.rev_map[i].stream.complete_push_frag(
+                ctx,
+                id.clone(),
+                &mut frags[i],
+                err
+            ) {
                 // We're good; add this to the output.
                 Ok(id) => results.push((Idx::from(i), id)),
                 // An error happened; record the fact that we still
@@ -2795,7 +2802,6 @@ where
 
         self.decide_push_frag_result(results, errs)
     }
-
 }
 
 impl<Party, Idx, Msg, Stream, Ctx> PushStreamSharedSingle<Msg, Ctx>

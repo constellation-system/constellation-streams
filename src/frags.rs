@@ -43,12 +43,14 @@ struct Frags {
 
 pub struct InboundFrags {
     frags: Frags,
+    curr: usize,
     retry: Retry,
     data: Vec<u8>
 }
 
 pub struct OutboundFrags {
     frags: Frags,
+    curr: usize,
     retry: Retry,
     data: Vec<u8>
 }
@@ -88,7 +90,8 @@ impl InboundFrags {
         len: usize
     ) -> Self {
         InboundFrags {
-            frags: Frags::empty(),
+            frags: Frags::full(len),
+            curr: 0,
             retry: retry,
             data: vec![0; len]
         }
@@ -101,7 +104,8 @@ impl InboundFrags {
         hint: usize
     ) -> Self {
         InboundFrags {
-            frags: Frags::empty_with_capacity(hint),
+            frags: Frags::full_with_capacity(len, hint),
+            curr: 0,
             retry: retry,
             data: vec![0; len]
         }
@@ -127,8 +131,8 @@ impl InboundFrags {
     /// Receive fragment data.
     pub fn recv(
         &mut self,
-        data: &[u8],
-        offset: usize
+        offset: usize,
+        data: &[u8]
     ) -> Result<(), InboundRecvError> {
         let data_end = offset + data.len();
 
@@ -142,31 +146,80 @@ impl InboundFrags {
         }
     }
 
-    /// Attempt to generate requests for fragments.
-    pub fn reqs(
+    /// Attempt to generate requests and acknowledgements for fragments.
+    pub fn reqs_acks(
         &mut self,
         buf: &mut [(bool, usize, usize)]
     ) -> RetryResult<usize> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
-        for frag in self.frags.frags_iter(self.retry.clone(), 0) {
+        // In case we left off past the last fragment.
+        self.curr = if self.frags.is_beyond_last(self.curr) &&
+            self.curr < self.data.len() &&
+            curr < buf.len()
+        {
+            // Generate an ack for the gap at the end.
+            buf[curr] = (false, self.curr, self.data.len() - self.curr);
+            curr += 1;
+
+            0
+        } else {
+            self.curr
+        };
+
+        for frag in self.frags.frags_iter(self.retry.clone(), self.curr) {
             if curr < buf.len() {
                 match frag {
-                    RetryResult::Success((offset, len)) => {
+                    (RetryResult::Success(()), offset, len) => {
+                        if self.curr < offset {
+                            let gap = offset - self.curr;
+
+                            buf[curr] = (false, self.curr, gap);
+                            self.curr = offset;
+                            curr += 1;
+
+                            if curr >= buf.len() {
+                                break;
+                            }
+                        }
+
                         buf[curr] = (true, offset, len);
+                        self.curr = offset + len;
                         curr += 1;
                     }
-                    RetryResult::Retry(retry) => {
+                    (RetryResult::Retry(retry), offset, len) => {
                         let retry = when.map_or(retry, |when| when.min(retry));
 
                         when = Some(retry);
+
+                        if self.curr < offset {
+                            let gap = offset - self.curr;
+
+                            buf[curr] = (false, self.curr, gap);
+                            self.curr = offset + len;
+                            curr += 1;
+                        }
                     }
                 }
             } else {
                 break;
             }
         }
+
+        // Try to add the end part if we're past the last fragment.
+        self.curr = if self.frags.is_beyond_last(self.curr) &&
+            self.curr < self.data.len() &&
+            curr < buf.len()
+        {
+            // Generate an ack for the gap at the end.
+            buf[curr] = (false, self.curr, self.data.len() - self.curr);
+            curr += 1;
+
+            0
+        } else {
+            self.curr
+        };
 
         if curr != 0 {
             RetryResult::Success(curr)
@@ -187,6 +240,7 @@ impl OutboundFrags {
     ) -> Self {
         OutboundFrags {
             frags: Frags::full(data.len()),
+            curr: 0,
             retry: retry,
             data: data
         }
@@ -200,6 +254,7 @@ impl OutboundFrags {
     ) -> Self {
         OutboundFrags {
             frags: Frags::full_with_capacity(data.len(), hint),
+            curr: 0,
             retry: retry,
             data: data
         }
@@ -232,7 +287,7 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data acknowledgements.
-    pub fn recv_acks(
+    pub fn recv_ack(
         &mut self,
         offset: usize,
         len: usize
@@ -249,7 +304,7 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data requests.
-    pub fn recv_reqs(
+    pub fn recv_req(
         &mut self,
         offset: usize,
         len: usize
@@ -271,14 +326,27 @@ impl OutboundFrags {
     ) -> Result<RetryResult<(usize, usize)>, OutboundDataError> {
         let mut when: Option<Instant> = None;
 
-        for frag in self.frags.bytes_iter(self.retry.clone(), 0, max_bytes) {
+        // Reset the current offset if needed.
+        self.curr = if self.frags.is_beyond_last(self.curr) {
+            0
+        } else {
+            self.curr
+        };
+
+        for frag in
+            self.frags
+                .bytes_iter(self.retry.clone(), self.curr, max_bytes)
+        {
             match frag {
-                RetryResult::Success(frag) => {
-                    return Ok(RetryResult::Success(frag))
+                (RetryResult::Success(()), offset, len) => {
+                    self.curr = offset + len;
+
+                    return Ok(RetryResult::Success((offset, len)));
                 }
-                RetryResult::Retry(retry) => {
+                (RetryResult::Retry(retry), offset, len) => {
                     let retry = when.map_or(retry, |when| when.min(retry));
 
+                    self.curr = offset + len;
                     when = Some(retry);
                 }
             }
@@ -299,15 +367,31 @@ impl OutboundFrags {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
-        for frag in self.frags.bytes_iter(self.retry.clone(), 0, max_bytes) {
+        // Reset the current offset if needed.
+        self.curr = if self.frags.is_beyond_last(self.curr) {
+            0
+        } else {
+            self.curr
+        };
+
+        for frag in
+            self.frags
+                .bytes_iter(self.retry.clone(), self.curr, max_bytes)
+        {
             match frag {
-                RetryResult::Success(frag) => {
-                    buf[curr] = frag;
-                    curr += 1;
+                (RetryResult::Success(()), offset, len) => {
+                    if curr < buf.len() {
+                        buf[curr] = (offset, len);
+                        self.curr = offset + len;
+                        curr += 1;
+                    } else {
+                        break;
+                    }
                 }
-                RetryResult::Retry(retry) => {
+                (RetryResult::Retry(retry), offset, len) => {
                     let retry = when.map_or(retry, |when| when.min(retry));
 
+                    self.curr = offset + len;
                     when = Some(retry);
                 }
             }
@@ -325,18 +409,6 @@ impl OutboundFrags {
 }
 
 impl Frags {
-    #[inline]
-    fn empty() -> Self {
-        Frags { frags: Vec::new() }
-    }
-
-    #[inline]
-    fn empty_with_capacity(size: usize) -> Self {
-        Frags {
-            frags: Vec::with_capacity(size)
-        }
-    }
-
     #[inline]
     fn full(len: usize) -> Self {
         Frags {
@@ -369,6 +441,21 @@ impl Frags {
     #[inline]
     fn is_empty(&self) -> bool {
         self.frags.is_empty()
+    }
+
+    fn is_beyond_last(
+        &self,
+        offset: usize
+    ) -> bool {
+        let len = self.frags.len();
+
+        if len > 0 {
+            let frag = &self.frags[len - 1];
+
+            frag.offset + frag.len <= offset
+        } else {
+            true
+        }
     }
 
     #[inline]
@@ -432,6 +519,9 @@ impl Frags {
 
             (offset, self.frags[idx].len)
         } else {
+            self.frags[idx].offset += len;
+            self.frags[idx].len -= len;
+
             self.frags.insert(
                 idx,
                 Frag {
@@ -714,21 +804,21 @@ impl Frags {
 }
 
 impl Iterator for FragsIter<'_> {
-    type Item = RetryResult<(usize, usize)>;
+    type Item = (RetryResult<()>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<RetryResult<(usize, usize)>> {
+    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() {
+            let frag = &self.frags.frags[idx];
+            let nretries = frag.nretries;
+            let offset = frag.offset;
+            let len = frag.len;
+
             self.idx += 1;
 
             if self.frags.frags[idx].when < Instant::now() {
-                let frag = &self.frags.frags[idx];
-                let nretries = frag.nretries;
-                let offset = frag.offset;
-                let len = frag.len;
-
                 self.frags.frags[idx].nretries += 1;
 
                 let delay = self.retry.retry_delay(nretries);
@@ -736,9 +826,13 @@ impl Iterator for FragsIter<'_> {
 
                 self.frags.frags[idx].when = when;
 
-                Some(RetryResult::Success((offset, len)))
+                Some((RetryResult::Success(()), offset, len))
             } else {
-                Some(RetryResult::Retry(self.frags.frags[idx].when))
+                Some((
+                    RetryResult::Retry(self.frags.frags[idx].when),
+                    offset,
+                    len
+                ))
             }
         } else {
             None
@@ -756,18 +850,18 @@ impl Iterator for FragsIter<'_> {
 impl FusedIterator for FragsIter<'_> {}
 
 impl Iterator for FragsBytesIter<'_> {
-    type Item = RetryResult<(usize, usize)>;
+    type Item = (RetryResult<()>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<RetryResult<(usize, usize)>> {
+    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() && self.nbytes != 0 {
-            self.idx += 1;
-
             if self.frags.frags[idx].when < Instant::now() {
                 let (offset, len) =
                     self.frags.split(&self.retry, idx, self.nbytes);
+
+                self.idx += 1;
 
                 if len < self.nbytes {
                     self.nbytes -= len;
@@ -775,9 +869,13 @@ impl Iterator for FragsBytesIter<'_> {
                     self.nbytes = 0;
                 }
 
-                Some(RetryResult::Success((offset, len)))
+                Some((RetryResult::Success(()), offset, len))
             } else {
-                Some(RetryResult::Retry(self.frags.frags[idx].when))
+                Some((
+                    RetryResult::Retry(self.frags.frags[idx].when),
+                    self.frags.frags[idx].offset,
+                    self.frags.frags[idx].len
+                ))
             }
         } else {
             None
@@ -6848,4 +6946,222 @@ fn test_frags_remove_three_pre_post_before_after() {
     frags.remove(9, 8);
 
     assert_eq!(frags, expected);
+}
+
+#[test]
+fn test_offer_frag_exact() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
+
+    let first = frags.offer_frag(16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success((0, 16)));
+}
+
+#[test]
+fn test_offer_frag_short() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 8]);
+
+    let first = frags.offer_frag(16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success((0, 8)));
+}
+
+#[test]
+fn test_offer_frag_multi() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 40]);
+
+    let first = frags.offer_frag(16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success((0, 16)));
+
+    let second = frags.offer_frag(16).expect("Expected success");
+
+    assert_eq!(second, RetryResult::Success((16, 16)));
+
+    let third = frags.offer_frag(16).expect("Expected success");
+
+    assert_eq!(third, RetryResult::Success((32, 8)));
+}
+
+#[test]
+fn test_data_frags_exact() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
+    let mut buf = [(0, 0); 1];
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(0, 16));
+}
+
+#[test]
+fn test_data_frags_short() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 8]);
+    let mut buf = [(0, 0); 1];
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(0, 8));
+}
+
+#[test]
+fn test_data_frags_ack() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
+    let mut buf = [(0, 0); 1];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(0, 8));
+}
+
+#[test]
+fn test_data_frags_ack_exact() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
+    let mut buf = [(0, 0); 2];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+}
+
+#[test]
+fn test_data_frags_ack_long() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 24]);
+    let mut buf = [(0, 0); 2];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+}
+
+#[test]
+fn test_data_frags_ack_exact_wrap() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
+    let mut buf = [(0, 0); 2];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+
+    let second = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(second, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+}
+
+#[test]
+fn test_data_frags_ack_gap_wrap() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 24]);
+    let mut buf = [(0, 0); 2];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+
+    frags.recv_ack(20, 4).expect("Expected success");
+
+    let second = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(second, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+}
+
+#[test]
+fn test_data_frags_ack_req_wrap() {
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
+    let mut buf = [(0, 0); 2];
+
+    frags.recv_ack(8, 4).expect("Expected success");
+
+    let first = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(0, 8));
+    assert_eq!(&buf[1], &(12, 8));
+
+    frags.recv_req(8, 4).expect("Expected success");
+
+    let second = frags.data_frags(&mut buf, 16).expect("Expected success");
+
+    assert_eq!(second, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(0, 16));
+}
+
+#[test]
+fn test_reqs_exact() {
+    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let mut buf = [(false, 0, 0); 1];
+
+    let first = frags.reqs_acks(&mut buf);
+
+    assert_eq!(first, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(true, 0, 16));
+}
+
+#[test]
+fn test_reqs_exact_recv_first() {
+    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let mut buf = [(false, 0, 0); 2];
+
+    frags.recv(0, &[0; 8]).expect("expected success");
+
+    let first = frags.reqs_acks(&mut buf);
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(false, 0, 8));
+    assert_eq!(&buf[1], &(true, 8, 8));
+}
+
+#[test]
+fn test_reqs_exact_recv_second() {
+    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let mut buf = [(false, 0, 0); 2];
+
+    frags.recv(8, &[0; 8]).expect("expected success");
+
+    let first = frags.reqs_acks(&mut buf);
+
+    assert_eq!(first, RetryResult::Success(2));
+    assert_eq!(&buf[0], &(true, 0, 8));
+    assert_eq!(&buf[1], &(false, 8, 8));
+}
+
+#[test]
+fn test_reqs_exact_recv_cont() {
+    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let mut buf = [(false, 0, 0); 1];
+
+    frags.recv(8, &[0; 8]).expect("expected success");
+
+    let first = frags.reqs_acks(&mut buf);
+
+    assert_eq!(first, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(true, 0, 8));
+
+    let second = frags.reqs_acks(&mut buf);
+
+    assert_eq!(second, RetryResult::Success(1));
+    assert_eq!(&buf[0], &(false, 8, 8));
 }

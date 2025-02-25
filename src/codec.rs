@@ -714,8 +714,8 @@ where
     Stream: Write
 {
     type Frags = OutboundFrags;
-    type PushFragRetry = Instant;
     type PushFragError = DatagramCodecFragError<LargeObjMsgEncodeError, Error>;
+    type PushFragRetry = Instant;
 
     fn push_frag(
         &mut self,

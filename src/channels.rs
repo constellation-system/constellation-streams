@@ -1922,10 +1922,10 @@ where
     Private: LargeObjStream<ObjID, Ctx>
 {
     type Frags = SharedPrivateChannels<Private::Frags, Shared::Frags>;
-    type PushFragRetry =
-        SharedPrivateStreamRetry<Private::PushFragRetry, Shared::PushFragRetry>;
     type PushFragError =
         SharedPrivateStreamError<Private::PushFragError, Shared::PushFragError>;
+    type PushFragRetry =
+        SharedPrivateStreamRetry<Private::PushFragRetry, Shared::PushFragRetry>;
 
     fn push_frag(
         &mut self,
@@ -1934,24 +1934,18 @@ where
         frags: &mut Self::Frags
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         match self {
-            SharedPrivateChannelStream::Private { stream } =>
-                Ok(stream
-                   .push_frag(ctx, id, &mut frags.private)
-                   .map_err(|err| SharedPrivateStreamError::Private {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                       retry: retry
-                   })),
-            SharedPrivateChannelStream::Shared { stream, .. } =>
-                Ok(stream
-                   .push_frag(ctx, id, &mut frags.shared)
-                   .map_err(|err| SharedPrivateStreamError::Shared {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                       retry: retry
-                   })),
+            SharedPrivateChannelStream::Private { stream } => Ok(stream
+                .push_frag(ctx, id, &mut frags.private)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })),
+            SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
+                .push_frag(ctx, id, &mut frags.shared)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                }))
         }
     }
 
@@ -1963,26 +1957,24 @@ where
         retry: Self::PushFragRetry
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         match (self, retry) {
-            (SharedPrivateChannelStream::Private { stream },
-             SharedPrivateStreamRetry::Private { retry }) =>
-                Ok(stream
-                   .retry_push_frag(ctx, id, &mut frags.private, retry)
-                   .map_err(|err| SharedPrivateStreamError::Private {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                       retry: retry
-                   })),
-            (SharedPrivateChannelStream::Shared { stream, .. },
-             SharedPrivateStreamRetry::Shared { retry }) =>
-                Ok(stream
-                   .retry_push_frag(ctx, id, &mut frags.shared, retry)
-                   .map_err(|err| SharedPrivateStreamError::Shared {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                       retry: retry
-                   })),
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamRetry::Private { retry }
+            ) => Ok(stream
+                .retry_push_frag(ctx, id, &mut frags.private, retry)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })),
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateStreamRetry::Shared { retry }
+            ) => Ok(stream
+                .retry_push_frag(ctx, id, &mut frags.shared, retry)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })),
             _ => Err(SharedPrivateStreamError::Mismatch)
         }
     }
@@ -1995,26 +1987,24 @@ where
         err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
         match (self, err) {
-            (SharedPrivateChannelStream::Private { stream },
-             SharedPrivateStreamError::Private { err }) =>
-                Ok(stream
-                   .complete_push_frag(ctx, id, &mut frags.private, err)
-                   .map_err(|err| SharedPrivateStreamError::Private {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                       retry: retry
-                   })),
-            (SharedPrivateChannelStream::Shared { stream, .. },
-             SharedPrivateStreamError::Shared { err }) =>
-                Ok(stream
-                   .complete_push_frag(ctx, id, &mut frags.shared, err)
-                   .map_err(|err| SharedPrivateStreamError::Shared {
-                       err: err
-                   })?
-                   .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                       retry: retry
-                   })),
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamError::Private { err }
+            ) => Ok(stream
+                .complete_push_frag(ctx, id, &mut frags.private, err)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })),
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateStreamError::Shared { err }
+            ) => Ok(stream
+                .complete_push_frag(ctx, id, &mut frags.shared, err)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })),
             _ => Err(SharedPrivateStreamError::Mismatch)
         }
     }
