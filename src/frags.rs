@@ -37,7 +37,7 @@ struct Frag {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Frags {
-    // XXX use a good data structure here, like a red-black tree.
+    // ISSUE #28: use a good data structure here, like a red-black tree.
     frags: Vec<Frag>
 }
 

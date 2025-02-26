@@ -2675,7 +2675,7 @@ where
     Party: Clone + Display + Eq + Hash,
     Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>
 {
-    // XXX This requires a separate copy of the data for each party.
+    // ISSUE #27: This requires a separate copy of the data for each party.
     type Frags = Vec<Stream::Frags>;
     type PushFragError = ErrorSet<
         Idx,

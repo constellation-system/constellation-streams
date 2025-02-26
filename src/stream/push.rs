@@ -759,8 +759,8 @@ where
 
         let mut curr = Vec::with_capacity(self.pending.len());
 
-        // XXX Use a better data structure to avoid sorting this array
-        // over and over.
+        // ISSUE #29: Use a better data structure to avoid sorting
+        // this array over and over.
 
         // First, sort the array by times, but reverse the order so we
         // can pop the earliest.
