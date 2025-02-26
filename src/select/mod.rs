@@ -73,6 +73,7 @@ use crate::error::PartiesBatchError;
 use crate::error::SelectionsError;
 use crate::select::sched::FarHistory;
 use crate::select::sched::FarHistoryConfig;
+use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
@@ -3051,6 +3052,145 @@ where
     }
 }
 
+impl<ObjID, Epochs, Src, Resolve, Ctx> LargeObjStream<ObjID, Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    ObjID: Into<usize>,
+    Epochs: Iterator,
+    Epochs::Item: Clone + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Src::Stream: Clone + LargeObjStream<ObjID, Ctx> + PushStream<Ctx> + Send
+{
+    type Frags = <Src::Stream as LargeObjStream<ObjID, Ctx>>::Frags;
+    type PushFragError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as LargeObjStream<ObjID, Ctx>>::PushFragError,
+            Epochs::Item
+        >
+    >;
+    type PushFragRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry,
+        Epochs::Item
+    >;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        // Try to select a stream.
+        self.select_stream(ctx)
+            .map_err(|err| SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    select: err,
+                    parties: ()
+                }
+            })?
+            .map_retry(|retry| SelectorBatchSelectError::Select {
+                select: retry,
+                parties: ()
+            })
+            .flat_map_ok(|(mut stream, selected)| {
+                Ok(stream
+                    .push_frag(ctx, id, frags)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            })
+    }
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { .. } => {
+                self.push_frag(ctx, id, frags)
+            }
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                Ok(stream
+                    .retry_push_frag(ctx, id, frags, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            }
+        }
+    }
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        match err {
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                Ok(stream
+                    .complete_push_frag(ctx, id, frags, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            }
+        }
+    }
+}
+
 impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
@@ -3205,12 +3345,6 @@ where
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         match err {
-            // This is here as a placeholder; this type is
-            // uninhabited, and Rust > 1.81 clippy generates an error
-            // for this.
-            SelectorBatchSelectError::Select { .. } => {
-                panic!("Impossible case!")
-            }
             SelectorBatchSelectError::Stream {
                 selected,
                 stream: err

@@ -31,6 +31,7 @@ use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Condvar;
+use std::time::Instant;
 
 use constellation_auth::cred::Credentials;
 use constellation_common::codec::DatagramCodec;
@@ -41,7 +42,13 @@ use log::error;
 
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
+use crate::frags::OutboundFrags;
+use crate::large_obj::LargeObjDataError;
+use crate::large_obj::LargeObjMsg;
+use crate::large_obj::LargeObjMsgCodec;
+use crate::large_obj::LargeObjMsgEncodeError;
 use crate::stream::ConcurrentStream;
+use crate::stream::LargeObjStream;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
@@ -79,6 +86,30 @@ pub enum DatagramCodecStreamError<Codec, IO> {
     }
 }
 
+/// Errors that can occur when sending an object fragment.
+pub enum DatagramCodecFragError<Codec, IO> {
+    Frag {
+        err: LargeObjDataError
+    },
+    Stream {
+        err: DatagramCodecStreamError<Codec, IO>
+    }
+}
+
+impl<Codec, IO, T> ErrorReportInfo<T> for DatagramCodecFragError<Codec, IO>
+where
+    Codec: ErrorReportInfo<T>
+{
+    #[inline]
+    fn report_info(&self) -> Option<T> {
+        if let DatagramCodecFragError::Frag { err } = self {
+            err.report_info()
+        } else {
+            None
+        }
+    }
+}
+
 impl<Codec, IO, T> ErrorReportInfo<T> for DatagramCodecStreamError<Codec, IO>
 where
     Codec: ErrorReportInfo<T>
@@ -89,6 +120,19 @@ where
             codec.report_info()
         } else {
             None
+        }
+    }
+}
+
+impl<Codec, IO> ScopedError for DatagramCodecFragError<Codec, IO>
+where
+    IO: ScopedError
+{
+    #[inline]
+    fn scope(&self) -> ErrorScope {
+        match self {
+            DatagramCodecFragError::Frag { err } => err.scope(),
+            DatagramCodecFragError::Stream { err } => err.scope()
         }
     }
 }
@@ -115,6 +159,34 @@ where
     #[inline]
     fn condvar(&self) -> Arc<Condvar> {
         self.stream.condvar()
+    }
+}
+
+impl<Frag, Stream> BatchError for DatagramCodecFragError<Frag, Stream>
+where
+    Frag: Display,
+    Stream: BatchError
+{
+    type Completable = DatagramCodecFragError<Infallible, Stream::Completable>;
+    type Permanent = DatagramCodecFragError<Frag, Stream::Permanent>;
+
+    #[inline]
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            DatagramCodecFragError::Frag { err } => {
+                (None, Some(DatagramCodecFragError::Frag { err: err }))
+            }
+            DatagramCodecFragError::Stream { err } => {
+                let (completable, permanent) = err.split();
+
+                (
+                    completable
+                        .map(|res| DatagramCodecFragError::Stream { err: res }),
+                    permanent
+                        .map(|res| DatagramCodecFragError::Stream { err: res })
+                )
+            }
+        }
     }
 }
 
@@ -169,14 +241,11 @@ where
     Stream: Credentials,
     Codec: DatagramCodec<Msg> + Send
 {
-    type Cred<'a>
-        = Stream::Cred<'a>
-    where
-        Self: 'a;
+    type Cred = Stream::Cred;
     type CredError = Stream::CredError;
 
     #[inline]
-    fn creds(&self) -> Result<Option<Self::Cred<'_>>, Self::CredError> {
+    fn creds(&self) -> Result<Option<Self::Cred>, Self::CredError> {
         self.stream.creds()
     }
 }
@@ -638,6 +707,69 @@ where
     }
 }
 
+impl<Ctx, ObjID, Stream> LargeObjStream<ObjID, Ctx>
+    for DatagramCodecStream<LargeObjMsg, Stream, LargeObjMsgCodec>
+where
+    ObjID: Into<usize>,
+    Stream: Write
+{
+    type Frags = OutboundFrags;
+    type PushFragError = DatagramCodecFragError<LargeObjMsgEncodeError, Error>;
+    type PushFragRetry = Instant;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        LargeObjMsg::frags(frags, id.into(), 1024)
+            .map_err(|err| DatagramCodecFragError::Frag { err: err })?
+            .map_ok(|msg| {
+                self.push(ctx, &msg).map_err(|err| {
+                    DatagramCodecFragError::Stream { err: err }
+                })?;
+
+                Ok(())
+            })
+    }
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        _retry: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        self.push_frag(ctx, id, frags)
+    }
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        _err: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        self.push_frag(ctx, id, frags)
+    }
+}
+
+impl<Encode, Write> Display for DatagramCodecFragError<Encode, Write>
+where
+    Encode: Display,
+    Write: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            DatagramCodecFragError::Frag { err } => err.fmt(f),
+            DatagramCodecFragError::Stream { err } => err.fmt(f)
+        }
+    }
+}
 impl<Encode, Write> Display for DatagramCodecStreamError<Encode, Write>
 where
     Encode: Display,

@@ -44,8 +44,10 @@ use crate::error::BatchError;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
 use crate::error::SelectionsError;
+use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
+use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -1089,6 +1091,63 @@ where
     }
 }
 
+impl<Party, Idx, Stream, Ctx>
+    StreamMulticaster<Party, Idx, LargeObjMsg, Stream, Ctx>
+where
+    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg, Ctx>,
+    Stream::BatchID: Clone
+{
+    fn decide_push_frag_result<ObjID>(
+        &mut self,
+        mut elems: Vec<(
+            Idx,
+            RetryResult<
+                (),
+                <Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry
+            >
+        )>,
+        errs: Option<
+            Vec<(Idx, <Stream as LargeObjStream<ObjID, Ctx>>::PushFragError)>
+        >
+    ) -> Result<
+        RetryResult<(), <Self as LargeObjStream<ObjID, Ctx>>::PushFragRetry>,
+        <Self as LargeObjStream<ObjID, Ctx>>::PushFragError
+    >
+    where
+        ObjID: Clone + Into<usize>,
+        Stream: LargeObjStream<ObjID, Ctx> {
+        match errs {
+            // There were errors.
+            Some(errs) => Err(ErrorSet::create(elems, errs)),
+            // No errors, check for retries.
+            None => {
+                elems.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut results = Vec::with_capacity(len);
+                let mut all_success = true;
+
+                for (_, res) in elems.into_iter() {
+                    if let RetryResult::Retry(_) = &res {
+                        all_success = false
+                    }
+
+                    results.push(res);
+                }
+
+                if all_success {
+                    Ok(RetryResult::Success(()))
+                } else {
+                    Ok(RetryResult::Retry(results))
+                }
+            }
+        }
+    }
+}
+
 impl<Party, Idx, Msg, Stream, Ctx>
     StreamMulticaster<Party, Idx, Msg, Stream, Ctx>
 where
@@ -1121,16 +1180,11 @@ where
 
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
-                let mut successes = vec![None; len];
                 let mut results = Vec::with_capacity(len);
                 let mut all_success = true;
 
-                for (idx, res) in elems.into_iter() {
-                    if let RetryResult::Success(()) = &res {
-                        let i: usize = idx.into();
-
-                        successes[i] = Some(())
-                    } else {
+                for (_, res) in elems.into_iter() {
+                    if let RetryResult::Retry(_) = &res {
                         all_success = false
                     }
 
@@ -2610,6 +2664,143 @@ where
             Some(retries) => RetryResult::Retry(retries),
             None => RetryResult::Success(())
         }
+    }
+}
+
+impl<ObjID, Party, Idx, Stream, Ctx> LargeObjStream<ObjID, Ctx>
+    for StreamMulticaster<Party, Idx, LargeObjMsg, Stream, Ctx>
+where
+    ObjID: Clone + Into<usize>,
+    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Display + Eq + Hash,
+    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>
+{
+    // ISSUE #27: This requires a separate copy of the data for each party.
+    type Frags = Vec<Stream::Frags>;
+    type PushFragError = ErrorSet<
+        Idx,
+        RetryResult<(), Stream::PushFragRetry>,
+        Stream::PushFragError
+    >;
+    type PushFragRetry = Vec<RetryResult<(), Stream::PushFragRetry>>;
+
+    fn push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        let len = self.rev_map.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+
+        // Go through each sub-stream and try to push the fragment.
+        for (i, frag) in frags.iter_mut().enumerate() {
+            match self.rev_map[i].stream.push_frag(ctx, id.clone(), frag) {
+                // We're good; add this to the output.
+                Ok(id) => results.push((Idx::from(i), id)),
+                // An error happened; record the fact that we still
+                // need to create a batch for this party.
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((Idx::from(i), err)),
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((Idx::from(i), err));
+
+                        errs = Some(vec)
+                    }
+                }
+            }
+        }
+
+        self.decide_push_frag_result(results, errs)
+    }
+
+    fn retry_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        retries: Self::PushFragRetry
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        // Decompose the error set into successes and retries.
+        let mut results = Vec::with_capacity(self.rev_map.len());
+        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+        let len = retries.len();
+
+        // Go through the retries and try to create the batch.
+        for (i, res) in retries.into_iter().enumerate() {
+            let idx = Idx::from(i);
+
+            match res {
+                // Actually do retries.
+                RetryResult::Retry(retry) => match self.rev_map[i]
+                    .stream
+                    .retry_push_frag(ctx, id.clone(), &mut frags[i], retry)
+                {
+                    // We're good; add this to the output.
+                    Ok(id) => results.push((Idx::from(i), id)),
+                    // An error happened; record the fact that we still
+                    // need to create a batch for this party.
+                    Err(err) => match &mut errs {
+                        Some(errs) => errs.push((Idx::from(i), err)),
+                        None => {
+                            let mut vec = Vec::with_capacity(len);
+
+                            vec.push((Idx::from(i), err));
+
+                            errs = Some(vec)
+                        }
+                    }
+                },
+                // Retain prior successes.
+                res => results.push((idx, res))
+            }
+        }
+
+        self.decide_push_frag_result(results, errs)
+    }
+
+    fn complete_push_frag(
+        &mut self,
+        ctx: &mut Ctx,
+        id: ObjID,
+        frags: &mut Self::Frags,
+        retries: <Self::PushFragError as BatchError>::Completable
+    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+        let (mut results, retries) = retries.take();
+        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+        let len = retries.len();
+
+        // Go through the retries and try to create the batch.
+        for (idx, err) in retries {
+            let i: usize = idx.into();
+
+            match self.rev_map[i].stream.complete_push_frag(
+                ctx,
+                id.clone(),
+                &mut frags[i],
+                err
+            ) {
+                // We're good; add this to the output.
+                Ok(id) => results.push((Idx::from(i), id)),
+                // An error happened; record the fact that we still
+                // need to create a batch for this party.
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((Idx::from(i), err)),
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((Idx::from(i), err));
+
+                        errs = Some(vec)
+                    }
+                }
+            }
+        }
+
+        self.decide_push_frag_result(results, errs)
     }
 }
 
