@@ -724,6 +724,11 @@ where
         self.notify.clone()
     }
 
+    #[inline]
+    pub fn parties(&self) -> Result<Stream::PartiesIter, Stream::PartiesError> {
+        self.stream.parties()
+    }
+
     fn update_from_outbound(
         &mut self
     ) -> Result<Option<Instant>, Msgs::MsgsError> {

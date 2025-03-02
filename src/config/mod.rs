@@ -241,14 +241,20 @@ pub struct FarSchedulerConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct PartyConfig<Resolver: Default, Channels: Default, Channel, Endpoint>
-{
+pub struct PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
+where
+    Resolver: Default,
+    Channels: Default,
+    Epochs: Default {
     /// Scheduler configuration.
     #[serde(default)]
     scheduler: FarSchedulerConfig,
     /// Resolver to use for resolving endpoint addresses.
     #[serde(default)]
     resolve: Resolver,
+    /// Configuration for ID generator for epochs.
+    #[serde(default)]
+    epochs: Epochs,
     /// Retry configuration.
     #[serde(default)]
     retry: Retry,
@@ -517,11 +523,12 @@ where
     }
 }
 
-impl<Resolver, Channels, Channel, Endpoint>
-    PartyConfig<Resolver, Channels, Channel, Endpoint>
+impl<Resolver, Channels, Epochs, Channel, Endpoint>
+    PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
 where
     Resolver: Default,
-    Channels: Default
+    Channels: Default,
+    Epochs: Default
 {
     /// Get the scheduler configuration.
     #[inline]
@@ -539,6 +546,12 @@ where
     #[inline]
     pub fn retry(&self) -> &Retry {
         &self.retry
+    }
+
+    /// Get the epoch ID generator configuration.
+    #[inline]
+    pub fn epochs(&self) -> &Epochs {
+        &self.epochs
     }
 
     /// Get the set of possible connections.
@@ -564,6 +577,7 @@ where
     ) -> (
         FarSchedulerConfig,
         Resolver,
+        Epochs,
         Retry,
         Option<usize>,
         Vec<ConnectionConfig<Channels, Channel, Endpoint>>
@@ -571,6 +585,7 @@ where
         (
             self.scheduler,
             self.resolve,
+            self.epochs,
             self.retry,
             self.size_hint,
             self.connections

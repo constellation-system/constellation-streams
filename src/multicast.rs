@@ -21,6 +21,7 @@
 //! This module implements [StreamMulticaster], which provides a
 //! synthetic multicasting capability for [PushStream]s.  See its
 //! documentation for full details.
+
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;

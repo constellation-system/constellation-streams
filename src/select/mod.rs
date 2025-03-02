@@ -42,6 +42,7 @@ use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::ids::IDGen;
 use constellation_common::net::IPEndpointAddr;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
@@ -191,7 +192,8 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// is based on unreliable datagram protocols.
 pub struct StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Default,
     Src: Channels<Ctx>,
     Resolve: Addrs<Addr = Src::Addr>,
     Src::Stream: Clone + PushStream<Ctx> + Send {
@@ -993,7 +995,8 @@ where {
 impl<Epochs, Src, Resolve, Ctx> Clone
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Default,
     Src: Channels<Ctx>,
     Resolve: Addrs<Addr = Src::Addr>,
     Src::Stream: Clone + PushStream<Ctx> + Send
@@ -1049,8 +1052,8 @@ where
 impl<Epochs, Src, Resolve, Reporter, Ctx> PushStreamReporter<Reporter>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -1078,8 +1081,8 @@ where
 
 impl<Epochs, Src, Resolve, Ctx> StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -1101,10 +1104,10 @@ where
         config: PartyConfig<
             Resolve::Config,
             Src::Config,
+            Epochs::Config,
             String,
             EndpointConfig
-        >,
-        epochs: Epochs
+        >
     ) -> Result<
         Self,
         StreamSelectorCreateError<Src::CreateError, Resolve::CreateError>
@@ -1112,8 +1115,9 @@ where
     where
         Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
         Resolve::Config: Clone + Default {
-        let (scheduler, resolver, retry, size_hint, connections) =
+        let (scheduler, resolver, epochs, retry, size_hint, connections) =
             config.take();
+        let epochs = Epochs::create(epochs);
         let state = match size_hint {
             Some(size) => StreamSelectorState::with_capacity(
                 scheduler, retry, epochs, size
@@ -1800,8 +1804,8 @@ where
 impl<Epochs, Src, Resolve, Ctx> PushStream<Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -1945,8 +1949,8 @@ where
 impl<Epochs, Src, Resolve, Ctx> PushStreamReportError<DenseItemID<Epochs::Item>>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -1975,8 +1979,8 @@ where
 impl<Epochs, Src, Resolve, Ctx, Error> PushStreamReportError<Error>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2006,8 +2010,8 @@ where
 impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamAdd<Msg, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2066,8 +2070,8 @@ where
 impl<Epochs, Src, Resolve, Ctx> PushStreamPartyID
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2081,8 +2085,8 @@ where
 impl<Epochs, Src, Resolve, Ctx> PushStreamShared<Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2575,8 +2579,8 @@ where
 impl<Epochs, Src, Resolve, Ctx> PushStreamPrivate<Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -3056,8 +3060,8 @@ impl<ObjID, Epochs, Src, Resolve, Ctx> LargeObjStream<ObjID, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     ObjID: Into<usize>,
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -3194,8 +3198,8 @@ where
 impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -3500,8 +3504,8 @@ where
 impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamSharedSingle<Msg, Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    Epochs: Iterator,
-    Epochs::Item: Clone + Display + Eq,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
     Src::Reporter: Clone,
