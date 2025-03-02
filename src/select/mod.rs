@@ -80,8 +80,8 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReportBatchError;
+use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
@@ -2015,8 +2015,7 @@ impl<Epochs, Src, Resolve, Ctx, Error>
             Epochs::Item,
             <Src::Stream as PushStream<Ctx>>::BatchID
         >
-    >
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+    > for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,

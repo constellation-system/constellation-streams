@@ -34,10 +34,10 @@ use log::trace;
 
 use crate::error::BatchError;
 use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamReportBatchError;
-use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
+use crate::stream::PushStreamReportBatchError;
+use crate::stream::PushStreamReportError;
 
 /// Backlog entry for push threads.
 ///
@@ -726,11 +726,9 @@ where
 
         if let Some(msgs) = msgs {
             // Go through each group and try sending it
-            if let RetryResult::Retry(retry) = PushEntry::from_try_send(
-                &mut self.ctx,
-                &mut self.stream,
-                msgs
-            ) {
+            if let RetryResult::Retry(retry) =
+                PushEntry::from_try_send(&mut self.ctx, &mut self.stream, msgs)
+            {
                 // We got a retry somewhere along the process, store it.
                 self.pending.push(retry)
             }
