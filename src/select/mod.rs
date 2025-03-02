@@ -1107,7 +1107,7 @@ where
             Epochs::Config,
             String,
             EndpointConfig
-        >,
+        >
     ) -> Result<
         Self,
         StreamSelectorCreateError<Src::CreateError, Resolve::CreateError>

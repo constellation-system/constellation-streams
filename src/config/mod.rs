@@ -245,8 +245,7 @@ pub struct PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
 where
     Resolver: Default,
     Channels: Default,
-    Epochs: Default
-{
+    Epochs: Default {
     /// Scheduler configuration.
     #[serde(default)]
     scheduler: FarSchedulerConfig,
