@@ -44,9 +44,6 @@ use crate::config::BatchSlotsConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 
-pub mod pull;
-pub mod push;
-
 // This is a workaround for an OpenSSL implementation issue.
 
 pub trait ConcurrentStream {

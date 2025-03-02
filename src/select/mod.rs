@@ -80,6 +80,7 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
+use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
@@ -2004,6 +2005,42 @@ where
         } else {
             Ok(())
         }
+    }
+}
+
+impl<Epochs, Src, Resolve, Ctx, Error>
+    PushStreamReportBatchError<
+        Error,
+        StreamSelectorBatch<
+            Epochs::Item,
+            <Src::Stream as PushStream<Ctx>>::BatchID
+        >
+    > for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Src::Stream: Clone + PushStream<Ctx> + Send
+{
+    type ReportBatchError = StreamSelectorReportError<
+        ReportError<
+            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+        >
+    >;
+
+    fn report_error_with_batch(
+        &mut self,
+        batch: &StreamSelectorBatch<
+            Epochs::Item,
+            <Src::Stream as PushStream<Ctx>>::BatchID
+        >,
+        _error: &Error
+    ) -> Result<(), Self::ReportBatchError> {
+        self.report_error(&batch.stream)
     }
 }
 
