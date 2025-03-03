@@ -37,19 +37,71 @@ use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::net::PrivateMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::shutdown::ShutdownFlag;
+use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::info;
 use log::trace;
 use log::warn;
 
+use crate::error::BatchError;
 use crate::stream::ConcurrentStream;
 use crate::stream::PullStream;
 use crate::stream::PullStreamListener;
+use crate::stream::PushStream;
+use crate::stream::PushStreamAdd;
+use crate::stream::PushStreamPrivate;
+use crate::stream::PushStreamPrivateSingle;
+use crate::stream::PushStreamReporter;
+use crate::stream::PushStreamReportError;
+use crate::stream::PushStreamReportBatchError;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStream;
+use crate::threads::push::private::PushStreamPrivateThread;
+
+pub trait Dispatch<Msg, Prin, Ctx>
+where Msg: 'static + Clone + Send {
+    /// Type of top-level push-side streams to be returned from
+    /// dispatch.
+    type PushStream: 'static
+        + PushStreamReportBatchError<
+            <<Self::PushStream as PushStream<Ctx>>::FinishBatchError as BatchError>::Permanent,
+            <Self::PushStream as PushStream<Ctx>>::BatchID
+        >
+        + PushStreamReportError<
+            <<Self::PushStream as PushStreamPrivate<Ctx>>::StartBatchError as BatchError>::Permanent
+        >
+        + PushStreamReportBatchError<
+            <<Self::PushStream as PushStreamAdd<Msg, Ctx>>::AddError as BatchError>::Permanent,
+            <Self::PushStream as PushStream<Ctx>>::BatchID
+        >
+        + PushStreamPrivateSingle<Msg, Ctx>
+        + PushStreamPrivate<Ctx>
+        + Send;
+    /// Type of outbound message structures.
+    ///
+    /// This will be used by the created [PushStreamPrivateThread] to
+    /// obtain messages to be sent using the
+    /// [PushStream](Dispatch::PushStream) instance.
+    type Msgs: 'static + PrivateMsgs<Msg> + Send;
+    /// Type of authenticated message receivers.
+    ///
+    /// This will be used to deliver incoming messages.
+    type Recv: 'static + AuthNMsgRecv<Prin, Msg> + Send;
+    /// Type of errors that can occur during dispatch.
+    type DispatchError: Display;
+
+    /// Obtain the components of a new private session.
+    fn dispatch(
+        &mut self,
+    ) -> Result<
+        (Self::PushStream, Notify, Self::Msgs, Self::Recv),
+        Self::DispatchError
+    >;
+}
 
 struct RecvThreadEntry<Msg, Stream>
 where
@@ -117,6 +169,19 @@ where
     >
 }
 
+struct DispatchEntryInner<Msg, Wrapper, Addr, Stream, AuthN, Recv>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Addr: Clone + Eq + Hash {
+    msg: PhantomData<Msg>,
+    shutdown: ShutdownFlag,
+    authn: AuthN,
+    recv: Recv,
+    streams: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>
+}
+
 struct DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
@@ -124,38 +189,49 @@ where
     Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
     Reporter: StreamReporter,
     Addr: Clone + Eq + Hash {
-    msg: PhantomData<Msg>,
-    shutdown: ShutdownFlag,
+    inner: Arc<DispatchEntryInner<Msg, Wrapper, Addr, Stream, AuthN, Recv>>,
     reporter: Reporter,
-    authn: AuthN,
-    recv: Recv,
-    streams: Arc<
-        Mutex<
-            HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>
-        >
-    >
+    push_thread: JoinHandle<()>
 }
 
-pub struct PullStreamsDispatchThread<Msg, Wrapper, Listener,
-                                     AuthN, Recv, Reporter>
-where
+pub struct PullStreamsDispatchThread<
+    Msg,
+    Wrapper,
+    AuthN,
+    Dispatcher,
+    Listener,
+    Reporter,
+    Ctx
+> where
+    Msg: 'static + Clone + Send,
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
+    Dispatcher: Dispatch<Msg, AuthN::Prin, Ctx>,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
     Reporter: StreamReporter<
         Stream = ThreadedStream<Listener::Stream>,
         Prin = Listener::Prin,
         Src = Listener::Addr
     >,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    Ctx: Clone {
     msg: PhantomData<Msg>,
+    dispatcher: Dispatcher,
     listener: Listener,
     shutdown: ShutdownFlag,
     recvs: HashMap<
         Listener::Prin,
-        DispatchEntry<Msg, Wrapper, Listener::Addr, Listener::Stream,
-                      AuthN, Recv, Reporter>
-    >
+        DispatchEntry<
+            Msg,
+            Wrapper,
+            Listener::Addr,
+            Listener::Stream,
+            AuthN,
+            Dispatcher::Recv,
+            Reporter
+        >
+    >,
+    authn: AuthN,
+    ctx: Ctx
 }
 
 /// [StreamReporter] instance derived from a [PullStreams].
@@ -176,14 +252,14 @@ where
 ///
 /// This is typically created to serve much the same purpose as a
 /// [PullStreamsReporter], but for a single principal.
-struct DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+struct DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
     Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    Reporter: StreamReporter,
     Addr: Clone + Eq + Hash {
-    inner: Arc<DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>>
+    inner:
+        Arc<DispatchEntryInner<Msg, Wrapper, Addr, Stream, AuthN, Recv>>
 }
 
 /// Errors that can occur reporting a stream through
@@ -248,19 +324,36 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter> Clone
-    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv> Clone
+    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
     Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    Reporter: StreamReporter,
     Addr: Clone + Eq + Hash
 {
     #[inline]
     fn clone(&self) -> Self {
         DispatchEntryReporter {
             inner: self.inner.clone()
+        }
+    }
+}
+
+impl <Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+    DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash {
+    fn drop(&mut self) {
+        self.inner.shutdown.clone().set();
+
+        if let Err(_) = self.push_thread.join() {
+            error!(target: "pull-streams-dispatch-entry",
+                   "failed to join push thread")
         }
     }
 }
@@ -538,23 +631,69 @@ where
     }
 }
 
-impl<Msg, Wrapper, Listener, AuthN, Recv, Reporter>
-    PullStreamsDispatchThread<Msg, Wrapper, Listener, AuthN, Recv, Reporter>
+impl<Msg, Wrapper, AuthN, Dispatcher, Listener, Reporter, Ctx>
+    PullStreamsDispatchThread<
+        Msg,
+        Wrapper,
+        AuthN,
+        Dispatcher,
+        Listener,
+        Reporter,
+        Ctx
+    >
 where
-    Msg: 'static + Send,
+    Msg: 'static + Clone + Send,
     Wrapper: 'static + Send,
     Listener: 'static + PullStreamListener<Wrapper> + Send,
-    Listener::Addr: Send,
-    Listener::Prin: Send,
     Listener::Stream: ConcurrentStream + Credentials,
+    Listener::Addr: Send,
+    Listener::Prin: Clone + Eq + Hash + Send,
+    Dispatcher: 'static + Dispatch<Msg, AuthN::Prin, Ctx> + Send,
     AuthN: 'static + Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Listener::Prin: Clone + Eq + Hash,
-    Reporter: 'static + StreamReporter<
-        Stream = ThreadedStream<Listener::Stream>,
-        Prin = Listener::Prin,
-        Src = Listener::Addr
-    > + Send,
-    Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Send {
+    Reporter: 'static
+        + StreamReporter<
+            Stream = ThreadedStream<Listener::Stream>,
+            Prin = Listener::Prin,
+            Src = Listener::Addr
+        >
+        + Send,
+    Ctx: 'static + Clone + Send
+{
+    fn report(
+        ent: &mut DispatchEntry<
+            Msg,
+            Wrapper,
+            Listener::Addr,
+            Listener::Stream,
+            AuthN,
+            Dispatcher::Recv,
+            Reporter
+        >,
+        stream: Listener::Stream,
+        addr: Listener::Addr,
+        prin: Listener::Prin
+    ) {
+        let stream = ThreadedStream::new(ent.inner.shutdown.clone(), stream);
+
+        match ent.reporter.report(addr.clone(), prin, stream) {
+            Ok(None) => {
+                debug!(target: "pull-streams-dispatch-thread",
+                       "incoming stream registered for {}",
+                       addr);
+            }
+            Ok(Some(_)) => {
+                debug!(target: "pull-streams-dispatch-thread",
+                       "stream already exists for {}, aborting",
+                       addr);
+            }
+            Err(err) => {
+                error!(target: "pull-streams-dispatch-thread",
+                       "error reporting new stream: {}",
+                       err)
+            }
+        }
+    }
+
     fn handle(
         &mut self,
         stream: Listener::Stream,
@@ -564,34 +703,56 @@ where
         match self.recvs.entry(prin.clone()) {
             Entry::Occupied(mut ent) => {
                 let ent = ent.get_mut();
-                let stream =
-                    ThreadedStream::new(ent.shutdown.clone(),
-                                        stream);
 
-                match ent.reporter.report(addr.clone(), prin,
-                                          stream) {
-                    Ok(None) => {
-                        debug!(target: "pull-streams-dispatch-thread",
-                               "incoming stream registered for {}",
-                               addr);
-                    }
-                    Ok(Some(_)) => {
-                        debug!(target: "pull-streams-dispatch-thread",
-                               "stream already exists for {}, aborting",
-                               addr);
-                    }
-                    Err(err) => {
-                        error!(target: "pull-streams-dispatch-thread",
-                               "error reporting new stream: {}",
-                               err)
-                    }
-                }
-            },
+                Self::report(ent, stream, addr, prin)
+            }
             Entry::Vacant(ent) => {
                 debug!(target: "pull-streams-dispatch-thread",
                        "no dispatcher entry for {}",
                        prin);
-            },
+
+                match self.dispatcher.dispatch() {
+                    Ok((push_stream, notify, msgs, recv)) => {
+                        let shutdown = ShutdownFlag::new();
+                        // XXX need a size hint here.
+                        let streams = HashMap::new();
+                        let streams = Arc::new(Mutex::new(streams));
+                        let inner = DispatchEntryInner {
+                            msg: PhantomData,
+                            shutdown: shutdown.clone(),
+                            authn: self.authn.clone(),
+                            recv: recv,
+                            streams: streams
+                        };
+                        let inner = Arc::new(inner);
+                        let reporter = DispatchEntryReporter {
+                            inner: inner.clone()
+                        };
+                        let reporter = push_stream.reporter(reporter);
+                        // XXX need a size hint here.
+                        let push_thread = PushStreamPrivateThread::create(
+                            self.ctx.clone(),
+                            msgs,
+                            notify,
+                            push_stream,
+                            shutdown
+                        );
+                        let join = push_thread.start();
+                        let ent = ent.insert(DispatchEntry {
+                            inner: inner,
+                            reporter: reporter,
+                            push_thread: join
+                        });
+
+                        Self::report(ent, stream, addr, prin)
+                    }
+                    Err(err) => {
+                        error!(target: "pull-streams-dispatch-thread",
+                               "failed to create private session for {}: {}",
+                               prin, err);
+                    }
+                }
+            }
         }
     }
 
@@ -726,17 +887,17 @@ where
     }
 }
 
-impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter> StreamReporter
-    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv> StreamReporter
+    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv>
 where
     Msg: 'static + Send,
     Wrapper: 'static + Send,
-    Stream: 'static + ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    Stream:
+        'static + ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     AuthN: 'static + Clone + MsgAuthN<Msg, Wrapper> + Send,
     AuthN::SessionPrin: Send,
     Recv: 'static + Clone + AuthNMsgRecv<AuthN::Prin, Msg> + Send,
-    Addr: 'static + Clone + Display + Eq + Hash + Send,
-    Reporter: StreamReporter
+    Addr: 'static + Clone + Display + Eq + Hash + Send
 {
     type Prin = AuthN::SessionPrin;
     type ReportError = PullStreamsReportError;
@@ -748,8 +909,7 @@ where
         src: Self::Src,
         prin: Self::Prin,
         stream: ThreadedStream<Stream>
-    ) -> Result<Option<ThreadedStream<Stream>>, Self::ReportError>
-    {
+    ) -> Result<Option<ThreadedStream<Stream>>, Self::ReportError> {
         debug!(target: "dispatch-entry-reporter",
                "reporting stream for {} to pull side",
                src);
@@ -892,66 +1052,6 @@ where
             inner: Arc::new(self)
         }
     }
-}
-
-impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
-    DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
-where
-    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    Reporter: StreamReporter,
-    Addr: Clone + Eq + Hash {
-    fn create(
-        reporter: Reporter,
-        recv: Recv,
-        streams: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>,
-        authn: AuthN
-    ) -> Self {
-        let shutdown = ShutdownFlag::new();
-
-        DispatchEntry {
-            msg: PhantomData,
-            shutdown: shutdown,
-            reporter: reporter,
-            streams: streams,
-            authn: authn,
-            recv: recv,
-        }
-    }
-
-    pub fn new(
-        reporter: Reporter,
-        recv: Recv,
-        authn: AuthN
-    ) -> Self {
-        let streams = Arc::new(Mutex::new(HashMap::new()));
-
-        Self::create(reporter, recv, streams, authn)
-    }
-
-    pub fn with_capacity(
-        reporter: Reporter,
-        recv: Recv,
-        authn: AuthN,
-        size: usize
-    ) -> Self {
-        let streams = Arc::new(Mutex::new(HashMap::with_capacity(size)));
-
-        Self::create(reporter, recv, streams, authn)
-    }
-
-    /// Convert this into a [DispatchEntryReporter].
-    #[inline]
-    pub fn reporter(
-        self
-    ) -> DispatchEntryReporter<Msg, Wrapper, Addr, Stream,
-                               AuthN, Recv, Reporter> {
-        DispatchEntryReporter {
-            inner: Arc::new(self)
-        }
-    }
-
 }
 
 impl ScopedError for PullStreamsReportError {
