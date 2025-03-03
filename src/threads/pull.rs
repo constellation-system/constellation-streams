@@ -117,6 +117,47 @@ where
     >
 }
 
+struct DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash {
+    msg: PhantomData<Msg>,
+    shutdown: ShutdownFlag,
+    reporter: Reporter,
+    authn: AuthN,
+    recv: Recv,
+    streams: Arc<
+        Mutex<
+            HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>
+        >
+    >
+}
+
+pub struct PullStreamsDispatchThread<Msg, Wrapper, Listener,
+                                     AuthN, Recv, Reporter>
+where
+    Listener: PullStreamListener<Wrapper>,
+    Listener::Stream: ConcurrentStream + Credentials,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Reporter: StreamReporter<
+        Stream = ThreadedStream<Listener::Stream>,
+        Prin = Listener::Prin,
+        Src = Listener::Addr
+    >,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    msg: PhantomData<Msg>,
+    listener: Listener,
+    shutdown: ShutdownFlag,
+    recvs: HashMap<
+        Listener::Prin,
+        DispatchEntry<Msg, Wrapper, Listener::Addr, Listener::Stream,
+                      AuthN, Recv, Reporter>
+    >
+}
+
 /// [StreamReporter] instance derived from a [PullStreams].
 ///
 /// This is typically created once initialization is finished, and
@@ -128,6 +169,21 @@ where
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
     Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
     inner: Arc<PullStreams<Msg, Wrapper, Listener, AuthN, Recv>>
+}
+
+/// [StreamReporter] instance derived from an entry in a
+/// [PullStreamsDispatchThread].
+///
+/// This is typically created to serve much the same purpose as a
+/// [PullStreamsReporter], but for a single principal.
+struct DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash {
+    inner: Arc<DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>>
 }
 
 /// Errors that can occur reporting a stream through
@@ -184,8 +240,26 @@ where
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
     Recv: AuthNMsgRecv<AuthN::Prin, Msg>
 {
+    #[inline]
     fn clone(&self) -> Self {
         PullStreamsReporter {
+            inner: self.inner.clone()
+        }
+    }
+}
+
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter> Clone
+    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        DispatchEntryReporter {
             inner: self.inner.clone()
         }
     }
@@ -464,6 +538,116 @@ where
     }
 }
 
+impl<Msg, Wrapper, Listener, AuthN, Recv, Reporter>
+    PullStreamsDispatchThread<Msg, Wrapper, Listener, AuthN, Recv, Reporter>
+where
+    Msg: 'static + Send,
+    Wrapper: 'static + Send,
+    Listener: 'static + PullStreamListener<Wrapper> + Send,
+    Listener::Addr: Send,
+    Listener::Prin: Send,
+    Listener::Stream: ConcurrentStream + Credentials,
+    AuthN: 'static + Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Listener::Prin: Clone + Eq + Hash,
+    Reporter: 'static + StreamReporter<
+        Stream = ThreadedStream<Listener::Stream>,
+        Prin = Listener::Prin,
+        Src = Listener::Addr
+    > + Send,
+    Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Send {
+    fn handle(
+        &mut self,
+        stream: Listener::Stream,
+        addr: Listener::Addr,
+        prin: Listener::Prin
+    ) {
+        match self.recvs.entry(prin.clone()) {
+            Entry::Occupied(mut ent) => {
+                let ent = ent.get_mut();
+                let stream =
+                    ThreadedStream::new(ent.shutdown.clone(),
+                                        stream);
+
+                match ent.reporter.report(addr.clone(), prin,
+                                          stream) {
+                    Ok(None) => {
+                        debug!(target: "pull-streams-dispatch-thread",
+                               "incoming stream registered for {}",
+                               addr);
+                    }
+                    Ok(Some(_)) => {
+                        debug!(target: "pull-streams-dispatch-thread",
+                               "stream already exists for {}, aborting",
+                               addr);
+                    }
+                    Err(err) => {
+                        error!(target: "pull-streams-dispatch-thread",
+                               "error reporting new stream: {}",
+                               err)
+                    }
+                }
+            },
+            Entry::Vacant(ent) => {
+                debug!(target: "pull-streams-dispatch-thread",
+                       "no dispatcher entry for {}",
+                       prin);
+            },
+        }
+    }
+
+    fn run(&mut self) {
+        let mut valid = true;
+
+        debug!(target: "pull-streams-dispatch-thread",
+               "listen thread starting");
+
+        while self.shutdown.is_live() && valid {
+            trace!(target: "pull-streams-dispatch-thread",
+                   "listening for connection");
+
+            match self.listener.listen() {
+                Ok(RetryResult::Success((stream, addr, prin))) => {
+                    info!(target: "pull-streams-dispatch-thread",
+                          "received new incoming stream from {}",
+                          addr);
+
+                    self.handle(stream, addr, prin)
+                }
+                Ok(RetryResult::Retry(until)) => {
+                    let now = Instant::now();
+
+                    if now < until {
+                        let delay = until - now;
+
+                        debug!(
+                            "retrying listen in {}.{:03}s",
+                            delay.as_secs(),
+                            delay.subsec_millis()
+                        );
+
+                        sleep(delay)
+                    }
+                }
+                Err(err) => {
+                    error!(target: "pull-streams-dispatch-thread",
+                           "error listening for new sessions: {}",
+                           err);
+
+                    valid = false;
+                }
+            }
+        }
+
+        info!(target: "pull-streams-dispatch-thread",
+              "listener thread exiting");
+    }
+
+    #[inline]
+    pub fn start(mut self) -> JoinHandle<()> {
+        spawn(move || self.run())
+    }
+}
+
 impl<Msg, Wrapper, Listener, AuthN, Recv> StreamReporter
     for PullStreamsReporter<Msg, Wrapper, Listener, AuthN, Recv>
 where
@@ -542,6 +726,80 @@ where
     }
 }
 
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter> StreamReporter
+    for DispatchEntryReporter<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Msg: 'static + Send,
+    Wrapper: 'static + Send,
+    Stream: 'static + ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: 'static + Clone + MsgAuthN<Msg, Wrapper> + Send,
+    AuthN::SessionPrin: Send,
+    Recv: 'static + Clone + AuthNMsgRecv<AuthN::Prin, Msg> + Send,
+    Addr: 'static + Clone + Display + Eq + Hash + Send,
+    Reporter: StreamReporter
+{
+    type Prin = AuthN::SessionPrin;
+    type ReportError = PullStreamsReportError;
+    type Src = Addr;
+    type Stream = ThreadedStream<Stream>;
+
+    fn report(
+        &mut self,
+        src: Self::Src,
+        prin: Self::Prin,
+        stream: ThreadedStream<Stream>
+    ) -> Result<Option<ThreadedStream<Stream>>, Self::ReportError>
+    {
+        debug!(target: "dispatch-entry-reporter",
+               "reporting stream for {} to pull side",
+               src);
+
+        match self.inner.streams.lock() {
+            Ok(mut guard) => match guard.entry(src.clone()) {
+                // We've already got one.
+                Entry::Occupied(ent) => Ok(Some(ent.get().stream.clone())),
+                Entry::Vacant(ent) => {
+                    debug!(target: "dispatch-entry-reporter",
+                           "adding stream for {} to listeners",
+                           src);
+
+                    let mut thread = RecvThread {
+                        msg: PhantomData,
+                        authn: self.inner.authn.clone(),
+                        recv: self.inner.recv.clone(),
+                        shutdown: self.inner.shutdown.clone(),
+                        stream: stream.clone(),
+                        addr: src.clone(),
+                        session_prin: prin,
+                        recvs: self.inner.streams.clone()
+                    };
+
+                    debug!(target: "dispatch-entry-reporter",
+                           "launching receiver for {}",
+                           src);
+
+                    let join = spawn(move || thread.run());
+                    let entry = RecvThreadEntry {
+                        msg: PhantomData,
+                        join: join,
+                        stream: stream
+                    };
+
+                    ent.insert(entry);
+
+                    Ok(None)
+                }
+            },
+            Err(_) => {
+                error!(target: "dispatch-entry-reporter",
+                       "mutex poisoned");
+
+                Err(PullStreamsReportError::MutexPoison)
+            }
+        }
+    }
+}
+
 impl<Msg, Wrapper, Listener, AuthN, Recv>
     PullStreams<Msg, Wrapper, Listener, AuthN, Recv>
 where
@@ -574,10 +832,6 @@ where
             shutdown: shutdown.clone(),
             recvs: streams.clone()
         };
-
-        debug!(target: "pull-streams",
-               "launching listener thread");
-
         let streams = PullStreams {
             msg: PhantomData,
             authn: authn,
@@ -638,6 +892,66 @@ where
             inner: Arc::new(self)
         }
     }
+}
+
+impl<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+    DispatchEntry<Msg, Wrapper, Addr, Stream, AuthN, Recv, Reporter>
+where
+    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
+    AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash {
+    fn create(
+        reporter: Reporter,
+        recv: Recv,
+        streams: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>,
+        authn: AuthN
+    ) -> Self {
+        let shutdown = ShutdownFlag::new();
+
+        DispatchEntry {
+            msg: PhantomData,
+            shutdown: shutdown,
+            reporter: reporter,
+            streams: streams,
+            authn: authn,
+            recv: recv,
+        }
+    }
+
+    pub fn new(
+        reporter: Reporter,
+        recv: Recv,
+        authn: AuthN
+    ) -> Self {
+        let streams = Arc::new(Mutex::new(HashMap::new()));
+
+        Self::create(reporter, recv, streams, authn)
+    }
+
+    pub fn with_capacity(
+        reporter: Reporter,
+        recv: Recv,
+        authn: AuthN,
+        size: usize
+    ) -> Self {
+        let streams = Arc::new(Mutex::new(HashMap::with_capacity(size)));
+
+        Self::create(reporter, recv, streams, authn)
+    }
+
+    /// Convert this into a [DispatchEntryReporter].
+    #[inline]
+    pub fn reporter(
+        self
+    ) -> DispatchEntryReporter<Msg, Wrapper, Addr, Stream,
+                               AuthN, Recv, Reporter> {
+        DispatchEntryReporter {
+            inner: Arc::new(self)
+        }
+    }
+
 }
 
 impl ScopedError for PullStreamsReportError {
