@@ -195,9 +195,13 @@ pub struct StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     Epochs: IDGen + Iterator,
     Epochs::Item: Default,
-    Src: Channels<Ctx>,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Src::Stream: Clone + PushStream<Ctx> + Send {
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Src::Addr> {
     /// The set of connection options.
     ///
     /// This represents the sources of possible streams.
@@ -205,7 +209,8 @@ where
     /// Mutable state.
     state: Arc<RwLock<StreamSelectorState<Epochs, Src, Resolve, Ctx>>>,
     /// When to next refresh the set of possible streams.
-    refresh_when: Arc<RwLock<Option<Instant>>>
+    refresh_when: Arc<RwLock<Option<Instant>>>,
+    reporter: Src::Reporter
 }
 
 /// [StreamReporter] instance for allowing [StreamSelector] to receive
@@ -213,18 +218,18 @@ where
 ///
 /// This is primarily used to allow the pull side to install incoming
 /// sessions into a [StreamSelector].
-pub struct StreamSelectorReporter<Reporter, Epochs, Src, Resolve, Ctx>
+pub struct StreamSelectorReporter<Epochs, Src, Resolve, Ctx>
 where
-    Reporter: StreamReporter<
+    Epochs: Iterator,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
-    Epochs: Iterator,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Src: Channels<Ctx>,
     Src::Stream: Clone + PushStream<Ctx> + Send {
-    reporter: Reporter,
-    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Resolve, Ctx>>>
+    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Resolve, Ctx>>>,
+    reporter: Src::Reporter
 }
 
 /// Container for core mutable state.
@@ -565,6 +570,10 @@ where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
     Src::Config: Default,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
@@ -876,21 +885,18 @@ where {
             })
     }
 
-    fn report<Reporter>(
+    fn report(
         &mut self,
-        reporter: &mut Reporter,
+        reporter: &mut Src::Reporter,
         stream_id: StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        prin: Reporter::Prin,
+        prin: <Src::Reporter as StreamReporter>::Prin,
         stream: Src::Stream
     ) -> Result<
         Option<Src::Stream>,
-        StreamSelectorReportError<Reporter::ReportError>
-    >
-    where
-        Reporter: StreamReporter<
-            Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-            Stream = Src::Stream
-        > {
+        StreamSelectorReportError<
+            <Src::Reporter as StreamReporter>::ReportError
+        >
+    > {
         match self.stream_ids.get(&stream_id) {
             Some(idx) => match &self.streams[idx.0].stream {
                 Some(stream) => {
@@ -998,7 +1004,11 @@ impl<Epochs, Src, Resolve, Ctx> Clone
 where
     Epochs: IDGen + Iterator,
     Epochs::Item: Default,
-    Src: Channels<Ctx>,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+            Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+            Stream = Src::Stream
+        > + Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Src::Stream: Clone + PushStream<Ctx> + Send
 {
@@ -1006,35 +1016,38 @@ where
         StreamSelector {
             refresh_when: self.refresh_when.clone(),
             connections: self.connections.clone(),
+            reporter: self.reporter.clone(),
             state: self.state.clone()
         }
     }
 }
 
-impl<Reporter, Epochs, Src, Resolve, Ctx> StreamReporter
-    for StreamSelectorReporter<Reporter, Epochs, Src, Resolve, Ctx>
+impl<Epochs, Src, Resolve, Ctx> StreamReporter
+    for StreamSelectorReporter<Epochs, Src, Resolve, Ctx>
 where
-    Reporter: StreamReporter<
-        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        Stream = Src::Stream
-    >,
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
-    type Prin = Reporter::Prin;
-    type ReportError = StreamSelectorReportError<Reporter::ReportError>;
+    type Prin = <Src::Reporter as StreamReporter>::Prin;
+    type ReportError = StreamSelectorReportError<
+        <Src::Reporter as StreamReporter>::ReportError
+    >;
     type Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>;
     type Stream = Src::Stream;
 
     fn report(
         &mut self,
         src: StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        prin: Reporter::Prin,
+        prin: Self::Prin,
         stream: Self::Stream
     ) -> Result<Option<Self::Stream>, Self::ReportError> {
         debug!(target: "stream-selector",
@@ -1050,31 +1063,27 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Reporter, Ctx> PushStreamReporter<Reporter>
+impl<Epochs, Src, Resolve, Ctx> PushStreamReporter
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+            Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+            Stream = Src::Stream
+        > + Clone,
     Src::Config: Default,
-    Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Reporter: StreamReporter<
-        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        Stream = Src::Stream
-    >
+    Src::Stream: Clone + PushStream<Ctx> + Send
 {
-    type Reporter = StreamSelectorReporter<Reporter, Epochs, Src, Resolve, Ctx>;
+    type Reporter = StreamSelectorReporter<Epochs, Src, Resolve, Ctx>;
 
     #[inline]
-    fn reporter(
-        &self,
-        reporter: Reporter
-    ) -> StreamSelectorReporter<Reporter, Epochs, Src, Resolve, Ctx> {
+    fn reporter(&self) -> StreamSelectorReporter<Epochs, Src, Resolve, Ctx> {
         StreamSelectorReporter {
-            reporter: reporter,
+            reporter: self.reporter.clone(),
             state: self.state.clone()
         }
     }
@@ -1085,30 +1094,26 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
-    /// Create a new [StreamSelector] from a configuration and other
-    /// necessary objects.
-    ///
-    /// The `reporter` parameter is a [StreamReporter] instance that
-    /// will be used to report *both* newly-created streams as well as
-    /// incoming streams reported to *this* `StreamSelector` by a
-    /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
-    pub fn create<EndpointConfig>(
+    fn do_create<EndpointConfig>(
         ctx: &mut Ctx,
         shutdown: ShutdownFlag,
         reporter: Src::Reporter,
-        config: PartyConfig<
-            Resolve::Config,
-            Src::Config,
-            Epochs::Config,
-            String,
-            EndpointConfig
-        >
+        scheduler: FarSchedulerConfig,
+        resolver: Resolve::Config,
+        epochs: Epochs::Config,
+        retry: Retry,
+        size_hint: Option<usize>,
+        connections: Vec<ConnectionConfig<Src::Config, String, EndpointConfig>>
     ) -> Result<
         Self,
         StreamSelectorCreateError<Src::CreateError, Resolve::CreateError>
@@ -1116,8 +1121,6 @@ where
     where
         Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
         Resolve::Config: Clone + Default {
-        let (scheduler, resolver, epochs, retry, size_hint, connections) =
-            config.take();
         let epochs = Epochs::create(epochs);
         let state = match size_hint {
             Some(size) => StreamSelectorState::with_capacity(
@@ -1147,8 +1150,50 @@ where
         Ok(StreamSelector {
             state: Arc::new(RwLock::new(state)),
             connections: Arc::new(conns),
-            refresh_when: Arc::new(RwLock::new(Some(now)))
+            refresh_when: Arc::new(RwLock::new(Some(now))),
+            reporter: reporter
         })
+    }
+
+    /// Create a new [StreamSelector] from a configuration and other
+    /// necessary objects.
+    ///
+    /// The `reporter` parameter is a [StreamReporter] instance that
+    /// will be used to report *both* newly-created streams as well as
+    /// incoming streams reported to *this* `StreamSelector` by a
+    /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
+    pub fn create<EndpointConfig>(
+        ctx: &mut Ctx,
+        shutdown: ShutdownFlag,
+        reporter: Src::Reporter,
+        config: PartyConfig<
+            Resolve::Config,
+            Src::Config,
+            Epochs::Config,
+            String,
+            EndpointConfig
+        >
+    ) -> Result<
+        Self,
+        StreamSelectorCreateError<Src::CreateError, Resolve::CreateError>
+    >
+    where
+        Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
+        Resolve::Config: Clone + Default {
+        let (scheduler, resolver, epochs, retry, size_hint, connections) =
+            config.take();
+
+        Self::do_create(
+            ctx,
+            shutdown,
+            reporter,
+            scheduler,
+            resolver,
+            epochs,
+            retry,
+            size_hint,
+            connections
+        )
     }
 
     fn get_refreshes(
@@ -1808,11 +1853,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type BatchID = StreamSelectorBatch<
         Epochs::Item,
@@ -1953,11 +2002,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type ReportError = StreamSelectorReportError<
         ReportError<
@@ -1983,11 +2036,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
 {
     type ReportError = StreamSelectorReportError<
@@ -2020,11 +2077,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type ReportBatchError = StreamSelectorReportError<
         ReportError<
@@ -2050,11 +2111,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type AddError = SelectorBatchError<
         Epochs::Item,
@@ -2110,11 +2175,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type PartyID = <Src::Stream as PushStreamPartyID>::PartyID;
 }
@@ -2125,11 +2194,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -2619,11 +2692,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -3100,11 +3177,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + LargeObjStream<ObjID, Ctx> + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + LargeObjStream<ObjID, Ctx> + PushStream<Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type Frags = <Src::Stream as LargeObjStream<ObjID, Ctx>>::Frags;
     type PushFragError = SelectorBatchError<
@@ -3238,11 +3319,15 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
@@ -3544,12 +3629,16 @@ where
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream:
+        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
-    Src::Stream:
-        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,

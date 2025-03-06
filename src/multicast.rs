@@ -467,28 +467,24 @@ where
     }
 }
 
-impl<Reporter, Party, Idx, Msg, Stream, Ctx> PushStreamReporter<Reporter>
+impl<Party, Idx, Msg, Stream, Ctx> PushStreamReporter
     for StreamMulticaster<Party, Idx, Msg, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReporter<Reporter>,
-    Stream::Reporter: StreamReporter<Prin = Party>,
-    Reporter: Clone + StreamReporter
+    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReporter,
+    Stream::Reporter: StreamReporter<Prin = Party>
 {
     type Reporter = StreamMulticasterReporter<Idx, Stream::Reporter>;
 
     #[inline]
-    fn reporter(
-        &self,
-        reporter: Reporter
-    ) -> StreamMulticasterReporter<Idx, Stream::Reporter> {
+    fn reporter(&self) -> StreamMulticasterReporter<Idx, Stream::Reporter> {
         let fwd_map = self.fwd_map.clone();
         let rev_map = self
             .rev_map
             .iter()
-            .map(|party| party.stream.reporter(reporter.clone()))
+            .map(|party| party.stream.reporter())
             .collect();
 
         StreamMulticasterReporter {
