@@ -81,6 +81,7 @@ where
         >
         + PushStreamPrivateSingle<Msg, Ctx>
         + PushStreamPrivate<Ctx>
+        + PushStreamReporter
         + Credentials + ConcurrentStream + PullStream<Msg> + Send;
     /// Type of outbound message structures.
     ///
@@ -98,7 +99,15 @@ where
     /// Obtain the components of a new private session.
     fn dispatch(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
+        drop: DispatchDropHandle<
+            Msg,
+            Addr,
+            Stream,
+            AuthN,
+            Self::Recv,
+            <Self::PushStream as PushStreamReporter>::Reporter
+        >
     ) -> Result<
         (
             Self::PushStream,
@@ -135,32 +144,20 @@ where
     push_thread: JoinHandle<()>
 }
 
-pub struct DispatchDropHandle<Msg, AuthN, Dispatcher, Listener, Reporter, Ctx>
+pub struct DispatchDropHandle<Msg, Addr, Stream, AuthN, Recv, Reporter>
 where
-    Msg: 'static + Clone + Send,
-    Listener: PullStreamListener<Msg>,
-    Listener::Stream: ConcurrentStream + Credentials,
-    Dispatcher: Dispatch<Msg, Listener::Addr, Listener::Stream, AuthN, Ctx>,
+    Msg: Clone,
+    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Reporter: StreamReporter<
-        Stream = ThreadedStream<Listener::Stream>,
-        Prin = Listener::Prin,
-        Src = Listener::Addr
-    >,
-    Ctx: Clone {
-    prin: Listener::Prin,
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash {
+    prin: AuthN::SessionPrin,
     recvs: Arc<
         Mutex<
             HashMap<
-                Listener::Prin,
-                DispatchEntry<
-                    Msg,
-                    Listener::Addr,
-                    Listener::Stream,
-                    AuthN,
-                    Dispatcher::Recv,
-                    Reporter
-                >
+                AuthN::SessionPrin,
+                DispatchEntry<Msg, Addr, Stream, AuthN, Recv, Reporter>
             >
         >
     >
@@ -175,7 +172,10 @@ where
     Dispatcher: Dispatch<Msg, Listener::Addr, Listener::Stream, AuthN, Ctx>,
     Dispatcher::PushStream: PushStreamReporter,
     Dispatcher::Recv: Clone,
-    AuthN: 'static + Clone + MsgAuthN<Msg, Msg> + Send,
+    AuthN: 'static
+        + Clone
+        + MsgAuthN<Msg, Msg, SessionPrin = Listener::Prin>
+        + Send,
     AuthN::SessionPrin: Send,
     Ctx: Clone {
     msg: PhantomData<Msg>,
@@ -259,20 +259,15 @@ where
     }
 }
 
-impl<Msg, AuthN, Dispatcher, Listener, Reporter, Ctx> Drop
-    for DispatchDropHandle<Msg, AuthN, Dispatcher, Listener, Reporter, Ctx>
+impl<Msg, Addr, Stream, AuthN, Recv, Reporter> Drop
+    for DispatchDropHandle<Msg, Addr, Stream, AuthN, Recv, Reporter>
 where
-    Msg: 'static + Clone + Send,
-    Listener: PullStreamListener<Msg>,
-    Listener::Stream: ConcurrentStream + Credentials,
-    Dispatcher: Dispatch<Msg, Listener::Addr, Listener::Stream, AuthN, Ctx>,
+    Msg: Clone,
+    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Reporter: StreamReporter<
-        Stream = ThreadedStream<Listener::Stream>,
-        Prin = Listener::Prin,
-        Src = Listener::Addr
-    >,
-    Ctx: Clone
+    Reporter: StreamReporter,
+    Addr: Clone + Eq + Hash
 {
     fn drop(&mut self) {
         trace!(target: "dispatch-drop-handle",
@@ -435,7 +430,10 @@ where
     <Dispatcher::PushStream as PushStream<Ctx>>::StreamFlags: Send,
     <Dispatcher::PushStream as PushStream<Ctx>>::BatchID: Send,
     Dispatcher::Recv: Clone,
-    AuthN: 'static + Clone + MsgAuthN<Msg, Msg> + Send,
+    AuthN: 'static
+        + Clone
+        + MsgAuthN<Msg, Msg, SessionPrin = Listener::Prin>
+        + Send,
     AuthN::SessionPrin: Send,
     Ctx: 'static + Clone + Send + Sync
 {
@@ -479,6 +477,10 @@ where
         addr: Listener::Addr,
         prin: Listener::Prin
     ) -> Result<(), WithMutexPoison<Dispatcher::DispatchError>> {
+        let drop = DispatchDropHandle {
+            recvs: self.recvs.clone(),
+            prin: prin.clone()
+        };
         match self
             .recvs
             .lock()
@@ -498,7 +500,7 @@ where
                        prin);
                 let (push_stream, msgs, notify, dispatched) = self
                     .dispatcher
-                    .dispatch(&mut self.ctx)
+                    .dispatch(&mut self.ctx, drop)
                     .map_err(|err| WithMutexPoison::Inner { error: err })?;
                 let reporter = push_stream.reporter();
                 let push_thread = PushStreamPrivateThread::create(
