@@ -100,6 +100,7 @@ where
     fn dispatch(
         &mut self,
         ctx: &mut Ctx,
+        prin: AuthN::SessionPrin,
         drop: DispatchDropHandle<
             Msg,
             Addr,
@@ -500,7 +501,7 @@ where
                        prin);
                 let (push_stream, msgs, notify, dispatched) = self
                     .dispatcher
-                    .dispatch(&mut self.ctx, drop)
+                    .dispatch(&mut self.ctx, prin.clone(), drop)
                     .map_err(|err| WithMutexPoison::Inner { error: err })?;
                 let reporter = push_stream.reporter();
                 let push_thread = PushStreamPrivateThread::create(
