@@ -746,6 +746,9 @@ where
         self.sched.success_id(id)
     }
 
+    // XXX Need to clear out streams that have failed with an error
+    // indicating the stream is no longer viable.
+
     /// Report a success for a given stream.
     fn failure(
         &mut self,
