@@ -595,7 +595,7 @@ where
     /// will be used to report *both* newly-created streams as well as
     /// incoming streams reported to *this* `StreamSelector` by a
     /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
-    pub fn create<EndpointConfig>(
+    pub fn create(
         reporter: Reporter,
         config: DispatchConfig<Epochs::Config>
     ) -> Result<Self, RefreshError> {
@@ -710,6 +710,8 @@ where
         }
     }
 }
+
+// XXX Eliminate code duplication here
 
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStream<Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
@@ -910,8 +912,7 @@ where
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
-    Stream: Clone + PushStream<Ctx> + Send,
-    Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
+    Stream: Clone + PushStream<Ctx> + Send
 {
     type ReportBatchError = StreamSelectorReportError<ReportError<StreamID>>;
 

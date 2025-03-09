@@ -82,7 +82,7 @@ where
         + PushStreamPrivateSingle<Msg, Ctx>
         + PushStreamPrivate<Ctx>
         + PushStreamReporter
-        + Credentials + ConcurrentStream + PullStream<Msg> + Send;
+        + Send;
     /// Type of outbound message structures.
     ///
     /// This will be used by the created [PushStreamPrivateThread] to
