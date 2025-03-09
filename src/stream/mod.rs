@@ -388,7 +388,7 @@ pub trait PushStreamAdd<T, Ctx>: PushStream<Ctx> {
 }
 
 /// Trait for obtaining a reporter for new [PushStream]s.
-pub trait PushStreamReporter<Inner: StreamReporter> {
+pub trait PushStreamReporter {
     /// Type of [StreamReporter] instance provided by
     /// [reporter](PushStreamReporter::reporter).
     type Reporter: StreamReporter;
@@ -397,10 +397,7 @@ pub trait PushStreamReporter<Inner: StreamReporter> {
     ///
     /// The `inner` parameter is an inner reporter that will also be
     /// called when new streams are reported.
-    fn reporter(
-        &self,
-        inner: Inner
-    ) -> Self::Reporter;
+    fn reporter(&self) -> Self::Reporter;
 }
 
 pub trait PushStreamPartyID {

@@ -264,6 +264,25 @@ where
     size_hint: Option<usize>
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "dispatch-config")]
+pub struct DispatchConfig<Epochs>
+where
+    Epochs: Default {
+    /// Scheduler configuration.
+    #[serde(default)]
+    scheduler: FarSchedulerConfig,
+    /// Configuration for ID generator for epochs.
+    #[serde(default)]
+    epochs: Epochs,
+    /// Retry configuration.
+    #[serde(default)]
+    retry: Retry,
+    #[serde(default)]
+    size_hint: Option<usize>
+}
+
 impl BatchSlotsConfig {
     /// Get the minimum number of batch slots.
     #[inline]
@@ -590,6 +609,43 @@ where
             self.size_hint,
             self.connections
         )
+    }
+}
+
+impl<Epochs> DispatchConfig<Epochs>
+where
+    Epochs: Default
+{
+    /// Get the scheduler configuration.
+    #[inline]
+    pub fn scheduler(&self) -> &FarSchedulerConfig {
+        &self.scheduler
+    }
+
+    /// Get the retry configuration.
+    #[inline]
+    pub fn retry(&self) -> &Retry {
+        &self.retry
+    }
+
+    /// Get the epoch ID generator configuration.
+    #[inline]
+    pub fn epochs(&self) -> &Epochs {
+        &self.epochs
+    }
+
+    /// Get the size hint.
+    #[inline]
+    pub fn size_hint(&self) -> Option<usize> {
+        self.size_hint
+    }
+
+    /// Deconstruct this into the scheduler configuration, the
+    /// resolver configuration, the size hint, and the retry
+    /// configuration, the set of possible connections.
+    #[inline]
+    pub fn take(self) -> (FarSchedulerConfig, Epochs, Retry, Option<usize>) {
+        (self.scheduler, self.epochs, self.retry, self.size_hint)
     }
 }
 
