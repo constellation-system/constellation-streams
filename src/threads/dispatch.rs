@@ -438,6 +438,60 @@ where
     AuthN::SessionPrin: Send,
     Ctx: 'static + Clone + Send + Sync
 {
+    fn create(
+        dispatcher: Dispatcher,
+        listener: Listener,
+        shutdown: ShutdownFlag,
+        ctx: Ctx,
+        recvs: Arc<
+        Mutex<
+            HashMap<
+                Listener::Prin,
+                DispatchEntry<
+                    Msg,
+                    Listener::Addr,
+                    Listener::Stream,
+                    AuthN,
+                    Dispatcher::Recv,
+                    <Dispatcher::PushStream as PushStreamReporter>::Reporter
+                >
+            >
+        >
+    >
+    ) -> Self {
+        PullStreamsDispatchThread {
+            msg: PhantomData,
+            dispatcher: dispatcher,
+            listener: listener,
+            shutdown: shutdown,
+            recvs: recvs,
+            ctx: ctx
+        }
+    }
+
+    pub fn new(
+        dispatcher: Dispatcher,
+        listener: Listener,
+        shutdown: ShutdownFlag,
+        ctx: Ctx
+    ) -> Self {
+        let recvs = Arc::new(Mutex::new(HashMap::new()));
+
+        Self::create(dispatcher, listener, shutdown, ctx, recvs)
+    }
+
+    pub fn with_capacity(
+        dispatcher: Dispatcher,
+        listener: Listener,
+        shutdown: ShutdownFlag,
+        ctx: Ctx,
+        size: usize
+    ) -> Self {
+        let recvs = Arc::new(Mutex::new(HashMap::with_capacity(size)));
+
+        Self::create(dispatcher, listener, shutdown, ctx, recvs)
+    }
+
     fn report(
         ent: &mut DispatchEntry<
             Msg,
