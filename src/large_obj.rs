@@ -56,6 +56,7 @@ pub type LargeObjFragHeaderPERCodec =
 pub type LargeObjMetadataPERCodec =
     PERCodec<LargeObjMetadata, LARGE_OBJ_METADATA_BITS>;
 
+#[derive(Clone)]
 pub struct LargeObjMsgCodec {
     frag_header: LargeObjFragHeaderPERCodec,
     metadata: LargeObjMetadataPERCodec

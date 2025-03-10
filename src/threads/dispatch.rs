@@ -101,14 +101,6 @@ where
         &mut self,
         ctx: &mut Ctx,
         prin: AuthN::SessionPrin,
-        drop: DispatchDropHandle<
-            Msg,
-            Addr,
-            Stream,
-            AuthN,
-            Self::Recv,
-            <Self::PushStream as PushStreamReporter>::Reporter
-        >
     ) -> Result<
         (
             Self::PushStream,
@@ -143,25 +135,6 @@ where
     inner: Dispatched<Msg, Addr, Stream, AuthN, Recv>,
     reporter: Reporter,
     push_thread: JoinHandle<()>
-}
-
-pub struct DispatchDropHandle<Msg, Addr, Stream, AuthN, Recv, Reporter>
-where
-    Msg: Clone,
-    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Reporter: StreamReporter,
-    Addr: Clone + Eq + Hash {
-    prin: AuthN::SessionPrin,
-    recvs: Arc<
-        Mutex<
-            HashMap<
-                AuthN::SessionPrin,
-                DispatchEntry<Msg, Addr, Stream, AuthN, Recv, Reporter>
-            >
-        >
-    >
 }
 
 pub struct PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Ctx>
@@ -256,45 +229,6 @@ where
     fn clone(&self) -> Self {
         DispatchEntryReporter {
             inner: self.inner.clone()
-        }
-    }
-}
-
-impl<Msg, Addr, Stream, AuthN, Recv, Reporter> Drop
-    for DispatchDropHandle<Msg, Addr, Stream, AuthN, Recv, Reporter>
-where
-    Msg: Clone,
-    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
-    AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Reporter: StreamReporter,
-    Addr: Clone + Eq + Hash
-{
-    fn drop(&mut self) {
-        trace!(target: "dispatch-drop-handle",
-               "deleting dispatch entry for principal {}",
-               self.prin);
-
-        if let Ok(mut guard) = self.recvs.lock() {
-            if let Some(ent) = guard.remove(&self.prin) {
-                debug!(target: "dispatch-drop-handle",
-                       "shutting down push thread for principal {}",
-                       self.prin);
-
-                ent.inner.shutdown.clone().set();
-
-                if ent.push_thread.join().is_err() {
-                    error!(target: "pull-streams-dispatch-entry",
-                           "failed to join push thread")
-                }
-            } else {
-                debug!(target: "dispatch-drop-handle",
-                       "dispatch entry was not present for principal {}",
-                       self.prin);
-            }
-        } else {
-            error!(target: "dispatch-drop-handle",
-                   "mutex poisoned")
         }
     }
 }
@@ -532,10 +466,6 @@ where
         addr: Listener::Addr,
         prin: Listener::Prin
     ) -> Result<(), WithMutexPoison<Dispatcher::DispatchError>> {
-        let drop = DispatchDropHandle {
-            recvs: self.recvs.clone(),
-            prin: prin.clone()
-        };
         match self
             .recvs
             .lock()
@@ -553,9 +483,10 @@ where
                 debug!(target: "pull-streams-dispatch-thread",
                        "no dispatcher entry for {}",
                        prin);
+
                 let (push_stream, msgs, notify, dispatched) = self
                     .dispatcher
-                    .dispatch(&mut self.ctx, prin.clone(), drop)
+                    .dispatch(&mut self.ctx, prin.clone())
                     .map_err(|err| WithMutexPoison::Inner { error: err })?;
                 let reporter = push_stream.reporter();
                 let push_thread = PushStreamPrivateThread::create(
