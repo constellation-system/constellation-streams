@@ -264,7 +264,9 @@ where
     size_hint: Option<usize>
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "dispatch-config")]
 pub struct DispatchConfig<Epochs>

@@ -88,6 +88,7 @@ pub mod codec;
 pub mod config;
 pub mod error;
 pub mod frags;
+pub mod large_obj;
 pub mod multicast;
 pub mod select;
 pub mod state_machine;
@@ -98,4 +99,3 @@ pub mod xciap;
 #[allow(clippy::all)]
 #[rustfmt::skip]
 mod generated;
-mod large_obj;
