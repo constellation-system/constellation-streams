@@ -100,7 +100,7 @@ where
     fn dispatch(
         &mut self,
         ctx: &mut Ctx,
-        prin: AuthN::SessionPrin,
+        prin: AuthN::SessionPrin
     ) -> Result<
         (
             Self::PushStream,
