@@ -34,6 +34,7 @@ use std::vec::IntoIter;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use log::debug;
@@ -1088,13 +1089,14 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Ctx>
-    StreamMulticaster<Party, Idx, LargeObjMsg, Stream, Ctx>
+impl<Party, Idx, H, Stream, Ctx>
+    StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg, Ctx>,
-    Stream::BatchID: Clone
+    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Stream::BatchID: Clone,
+    H: HashID,
 {
     fn decide_push_frag_result<ObjID>(
         &mut self,
@@ -2664,13 +2666,14 @@ where
     }
 }
 
-impl<ObjID, Party, Idx, Stream, Ctx> LargeObjStream<ObjID, Ctx>
-    for StreamMulticaster<Party, Idx, LargeObjMsg, Stream, Ctx>
+impl<ObjID, Party, Idx, H, Stream, Ctx> LargeObjStream<ObjID, Ctx>
+    for StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
 where
     ObjID: Clone + Into<usize>,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg, Ctx>
+    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    H: HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
     type Frags = Vec<Stream::Frags>;

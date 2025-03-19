@@ -16,10 +16,6 @@ LargeObjFragReq ::= CHOICE {
     Ack LargeObjFragRef
 }
 
-LargeObjFinished ::= SEQUENCE {
-    id INTEGER
-}
-
 LargeObjFinish ::= SEQUENCE {
     id INTEGER
 }
@@ -58,8 +54,7 @@ LargeObjMetadata ::= CHOICE {
     ReqObj LargeObjReqObj,
     Frags LargeObjFrags,
     Req LargeObjReq,
-    Finish LargeObjFinish,
-    Finished LargeObjFinished
+    Finish LargeObjFinish
 }
 
 END

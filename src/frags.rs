@@ -26,6 +26,7 @@ use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 
 use crate::error::ErrorReportInfo;
+use crate::generated::large_obj::LargeObjFragReq;
 
 #[derive(Debug)]
 struct Frag {
@@ -44,7 +45,6 @@ struct Frags {
 pub struct InboundFrags {
     frags: Frags,
     curr: usize,
-    retry: Retry,
     data: Vec<u8>
 }
 
@@ -86,27 +86,23 @@ pub enum OutboundDataError {
 impl InboundFrags {
     #[inline]
     pub fn new(
-        retry: Retry,
         len: usize
     ) -> Self {
         InboundFrags {
             frags: Frags::full(len),
             curr: 0,
-            retry: retry,
             data: vec![0; len]
         }
     }
 
     #[inline]
     pub fn with_capacity(
-        retry: Retry,
         len: usize,
         hint: usize
     ) -> Self {
         InboundFrags {
             frags: Frags::full_with_capacity(len, hint),
             curr: 0,
-            retry: retry,
             data: vec![0; len]
         }
     }
@@ -149,7 +145,8 @@ impl InboundFrags {
     /// Attempt to generate requests and acknowledgements for fragments.
     pub fn reqs_acks(
         &mut self,
-        buf: &mut [(bool, usize, usize)]
+        buf: &mut [(bool, usize, usize)],
+        retry: &Retry
     ) -> RetryResult<usize> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
@@ -168,7 +165,7 @@ impl InboundFrags {
             self.curr
         };
 
-        for frag in self.frags.frags_iter(self.retry.clone(), self.curr) {
+        for frag in self.frags.frags_iter(retry.clone(), self.curr) {
             if curr < buf.len() {
                 match frag {
                     (RetryResult::Success(()), offset, len) => {
@@ -286,6 +283,20 @@ impl OutboundFrags {
         }
     }
 
+    pub fn recv_req(
+        &mut self,
+        req: &LargeObjFragReq
+    ) -> Result<(), OutboundRecvError> {
+        match req {
+            LargeObjFragReq::Ack(req) => {
+                self.recv_ack(req.offset as usize, req.len as usize)
+            }
+            LargeObjFragReq::Need(req) => {
+                self.recv_need(req.offset as usize, req.len as usize)
+            }
+        }
+    }
+
     /// Receive fragment data acknowledgements.
     pub fn recv_ack(
         &mut self,
@@ -304,7 +315,7 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data requests.
-    pub fn recv_req(
+    pub fn recv_need(
         &mut self,
         offset: usize,
         len: usize
@@ -7101,7 +7112,7 @@ fn test_data_frags_ack_req_wrap() {
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
-    frags.recv_req(8, 4).expect("Expected success");
+    frags.recv_need(8, 4).expect("Expected success");
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
@@ -7111,10 +7122,11 @@ fn test_data_frags_ack_req_wrap() {
 
 #[test]
 fn test_reqs_exact() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
     assert_eq!(first, RetryResult::Success(1));
     assert_eq!(&buf[0], &(true, 0, 16));
@@ -7122,12 +7134,13 @@ fn test_reqs_exact() {
 
 #[test]
 fn test_reqs_exact_recv_first() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
 
     frags.recv(0, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
     assert_eq!(first, RetryResult::Success(2));
     assert_eq!(&buf[0], &(false, 0, 8));
@@ -7136,12 +7149,13 @@ fn test_reqs_exact_recv_first() {
 
 #[test]
 fn test_reqs_exact_recv_second() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
 
     frags.recv(8, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
     assert_eq!(first, RetryResult::Success(2));
     assert_eq!(&buf[0], &(true, 0, 8));
@@ -7150,17 +7164,18 @@ fn test_reqs_exact_recv_second() {
 
 #[test]
 fn test_reqs_exact_recv_cont() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];
 
     frags.recv(8, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
     assert_eq!(first, RetryResult::Success(1));
     assert_eq!(&buf[0], &(true, 0, 8));
 
-    let second = frags.reqs_acks(&mut buf);
+    let second = frags.reqs_acks(&mut buf, &retry);
 
     assert_eq!(second, RetryResult::Success(1));
     assert_eq!(&buf[0], &(false, 8, 8));

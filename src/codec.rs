@@ -39,6 +39,7 @@ use constellation_common::codec::DatagramCodec;
 use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashAlgo;
 use constellation_common::retry::RetryResult;
 use log::error;
 
@@ -1112,9 +1113,10 @@ where
     }
 }
 
-impl<Ctx, ObjID, Stream> LargeObjStream<ObjID, Ctx>
-    for DatagramCodecStream<LargeObjMsg, Stream, LargeObjMsgCodec>
+impl<Ctx, ObjID, H, Stream> LargeObjStream<ObjID, Ctx>
+    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
 where
+    H: Default + HashAlgo + Send,
     ObjID: Into<usize>,
     Stream: Write
 {
