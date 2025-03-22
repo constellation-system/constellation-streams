@@ -44,6 +44,7 @@ struct Frags {
 
 pub struct InboundFrags {
     frags: Frags,
+    when: Option<Instant>,
     curr: usize,
     data: Vec<u8>
 }
@@ -90,6 +91,7 @@ impl InboundFrags {
     ) -> Self {
         InboundFrags {
             frags: Frags::full(len),
+            when: None,
             curr: 0,
             data: vec![0; len]
         }
@@ -102,9 +104,15 @@ impl InboundFrags {
     ) -> Self {
         InboundFrags {
             frags: Frags::full_with_capacity(len, hint),
+            when: None,
             curr: 0,
             data: vec![0; len]
         }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 
     /// Check if the transfer is complete.
@@ -122,6 +130,11 @@ impl InboundFrags {
         } else {
             Err(self)
         }
+    }
+
+    #[inline]
+    pub fn when(&self) -> Option<Instant> {
+        self.when
     }
 
     /// Receive fragment data.
@@ -147,9 +160,8 @@ impl InboundFrags {
         &mut self,
         buf: &mut [(bool, usize, usize)],
         retry: &Retry
-    ) -> RetryResult<usize> {
+    ) -> RetryResult<(usize, Option<Instant>)> {
         let mut curr = 0;
-        let mut when: Option<Instant> = None;
 
         // In case we left off past the last fragment.
         self.curr = if self.frags.is_beyond_last(self.curr) &&
@@ -168,7 +180,7 @@ impl InboundFrags {
         for frag in self.frags.frags_iter(retry.clone(), self.curr) {
             if curr < buf.len() {
                 match frag {
-                    (RetryResult::Success(()), offset, len) => {
+                    (RetryResult::Success(retry), offset, len) => {
                         if self.curr < offset {
                             let gap = offset - self.curr;
 
@@ -181,14 +193,18 @@ impl InboundFrags {
                             }
                         }
 
+                        self.when = Some(
+                            self.when.map_or(retry, |when| when.max(retry))
+                        );
+
                         buf[curr] = (true, offset, len);
                         self.curr = offset + len;
                         curr += 1;
                     }
                     (RetryResult::Retry(retry), offset, len) => {
-                        let retry = when.map_or(retry, |when| when.min(retry));
-
-                        when = Some(retry);
+                        self.when = Some(
+                            self.when.map_or(retry, |when| when.max(retry))
+                        );
 
                         if self.curr < offset {
                             let gap = offset - self.curr;
@@ -219,11 +235,11 @@ impl InboundFrags {
         };
 
         if curr != 0 {
-            RetryResult::Success(curr)
+            RetryResult::Success((curr, self.when))
         } else {
-            match when {
+            match self.when {
                 Some(when) => RetryResult::Retry(when),
-                None => RetryResult::Success(0)
+                None => RetryResult::Success((0, self.when))
             }
         }
     }
@@ -815,10 +831,10 @@ impl Frags {
 }
 
 impl Iterator for FragsIter<'_> {
-    type Item = (RetryResult<()>, usize, usize);
+    type Item = (RetryResult<Instant>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
+    fn next(&mut self) -> Option<(RetryResult<Instant>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() {
@@ -837,7 +853,7 @@ impl Iterator for FragsIter<'_> {
 
                 self.frags.frags[idx].when = when;
 
-                Some((RetryResult::Success(()), offset, len))
+                Some((RetryResult::Success(when), offset, len))
             } else {
                 Some((
                     RetryResult::Retry(self.frags.frags[idx].when),

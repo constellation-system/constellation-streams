@@ -16,7 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-//! User-facing types for the large-object transfer protocol.
+//! Large-object transfer protocol.
 
 use std::array::TryFromSliceError;
 use std::collections::HashMap;
@@ -40,6 +40,7 @@ use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
+use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 use log::debug;
@@ -121,10 +122,24 @@ where ID: HashID {
     }
 }
 
+struct ReqState {
+    when: Instant,
+    nretries: usize
+}
+
+enum InboundFragsState {
+    Active {
+        frags: InboundFrags,
+        req: Option<ReqState>
+    },
+    Finished {
+        size: usize,
+        accept: bool
+    }
+}
+
 struct RecvEntry<H> {
-    frags: Option<InboundFrags>,
-    when: Option<Instant>,
-    req: bool,
+    frags: InboundFragsState,
     hash: H,
 }
 
@@ -145,11 +160,19 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     inbound_hashes: HashMap<(Auth::SessionPrin, H), u64>,
     outbound_objs: HashMap<H, SendEntry>,
     outbound_hashes: HashMap<u64, H>,
+    finished: Vec<(Auth::SessionPrin, u64)>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
     auth: Auth,
     ids: IDs
+}
+
+pub enum LargeObjSendError<H> {
+    NoObj {
+        hash: H,
+        id: u64
+    }
 }
 
 pub enum LargeObjRecvError<H, Auth, Decode, Upstream> {
@@ -240,6 +263,37 @@ impl LargeObjFrag {
     }
 }
 
+impl InboundFragsState {
+    fn size(&self) -> usize {
+        match self {
+            InboundFragsState::Active { frags, .. } => frags.len(),
+            InboundFragsState::Finished { size, .. } => *size
+        }
+    }
+
+    fn needs_req(&self) -> bool {
+        match self {
+            InboundFragsState::Active { req, .. } => req.is_some(),
+            InboundFragsState::Finished { accept, .. } => *accept
+        }
+    }
+}
+
+impl<H> RecvEntry<H> {
+    fn when(&self) -> Option<Instant> {
+        match &self.frags {
+            InboundFragsState::Active {
+                req: Some(ReqState { when, .. }),
+                frags
+            } => Some(
+                frags.when().map_or(*when, |frags_when| frags_when.min(*when))
+            ),
+            InboundFragsState::Active { frags, .. } => frags.when(),
+            InboundFragsState::Finished { .. } => Some(Instant::now())
+        }
+    }
+}
+
 impl<ID> LargeObjMsg<ID>
 where ID: HashID {
     /// Maximum number of bytes that can be sent with a datagram.
@@ -271,7 +325,7 @@ where ID: HashID {
     pub fn accept(
         hash: ID,
         size: usize,
-        id: usize
+        id: u64
     ) -> Self {
         LargeObjMsg::Accept {
             hash: hash,
@@ -284,12 +338,12 @@ where ID: HashID {
     pub fn req_obj(
         hash: ID,
         size: usize,
-        id: usize
+        id: u64
     ) -> Self {
         LargeObjMsg::ReqObj {
             hash: hash,
             size: size as u64,
-            id: id as u64
+            id: id
         }
     }
 
@@ -325,7 +379,7 @@ where ID: HashID {
 
     #[inline]
     pub fn reqs<I>(
-        id: usize,
+        id: u64,
         reqs: I
     ) -> Self
     where
@@ -347,14 +401,128 @@ where ID: HashID {
             .collect();
 
         LargeObjMsg::Req {
-            id: id as u64,
+            id: id,
             reqs: reqs
         }
     }
 
     #[inline]
-    pub fn finish(id: usize) -> Self {
-        LargeObjMsg::Finish { id: id as u64 }
+    pub fn finish(id: u64) -> Self {
+        LargeObjMsg::Finish { id: id }
+    }
+}
+
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+    SharedMsgs<Auth::SessionPrin, LargeObjMsg<H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+      IDs: IDGen + Iterator<Item = u64>,
+      Auth: MsgAuthN<Msg, Wrapper>,
+      Codec: DatagramCodec<Wrapper>,
+      H: Clone + Display + Hash + HashID + Eq {
+    type MsgsError = LargeObjSendError<H>;
+
+    fn msgs(
+        &mut self
+    ) -> Result<
+        (Option<Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<H>>)>>,
+         Option<Instant>),
+        Self::MsgsError
+    > {
+        debug!(target: "large-obj-proto",
+               "collecting outbound messages");
+
+        let size = self.finished.len() + self.inbound_hashes.len();
+        let now = Instant::now();
+        let mut msgs = Vec::with_capacity(size);
+        let mut deletes = Vec::with_capacity(size);
+        let mut next = None;
+
+        // Generate the finished messages.
+        if !self.finished.is_empty() {
+            for (prin, id) in self.finished.drain(..) {
+                let msg = LargeObjMsg::finish(id);
+
+                msgs.push((vec![prin], vec![msg]));
+            }
+        }
+
+        // Scan the inbound objects for protocol replies that need to
+        // be sent out.
+        for ((prin, hash), id) in self.inbound_hashes.iter() {
+            let ent = self.inbound_objs.get_mut(&id)
+                .ok_or(LargeObjSendError::NoObj {
+                    hash: hash.clone(), id: *id
+                })?;
+
+            match &mut ent.frags {
+                // Still sending accepts.
+                InboundFragsState::Active {
+                    req: Some(ReqState { nretries, when }),
+                    frags
+                } => {
+                    let size = frags.len();
+                    let delay = self.retry.retry_delay(*nretries);
+                    let retry = now + delay;
+                    let msg = LargeObjMsg::req_obj(hash.clone(), size, *id);
+
+                    *nretries += 1;
+                    *when = retry;
+                    next = Some(
+                        next.map_or(retry, |next: Instant| next.min(retry))
+                    );
+                    msgs.push((vec![prin.clone()], vec![msg]));
+                }
+                InboundFragsState::Active { frags, .. } => {
+                    let mut buf = [(false, 0, 0); 16];
+
+                    match frags.reqs_acks(&mut buf[..], &self.retry) {
+                        RetryResult::Success((n, retry)) => {
+                            let iter = buf[..n].iter().cloned();
+                            let msg = LargeObjMsg::reqs(*id, iter);
+
+                            msgs.push((vec![prin.clone()], vec![msg]));
+                            next = next.map_or(
+                                retry, |next| retry.map(|retry| next.min(retry))
+                            );
+                        }
+                        RetryResult::Retry(retry) => {
+                            next = Some(
+                                next.map_or(retry, |next| next.min(retry))
+                            );
+                        }
+                    }
+                }
+                InboundFragsState::Finished { size, accept } => {
+                    let msg = if *accept {
+                        LargeObjMsg::accept(ent.hash.clone(), *size, *id)
+                    } else {
+                        LargeObjMsg::finish(*id)
+                    };
+
+                    msgs.push((vec![prin.clone()], vec![msg]));
+                    // XXX keep these around for a configurable amount
+                    // of time as "tombstones".
+                    deletes.push((prin.clone(), hash.clone()));
+                }
+            }
+        }
+
+        // Get rid of all the finished entries.
+        for key in deletes {
+            if self.inbound_hashes.remove(&key).is_none() {
+                error!(target: "large-obj-proto",
+                       "remove should not return None")
+            }
+        }
+
+        let msgs = if !msgs.is_empty() {
+            Some(msgs)
+        } else {
+            None
+        };
+
+        Ok((msgs, next))
     }
 }
 
@@ -635,14 +803,16 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                 Entry::Occupied(ent) => {
                     // ID already exists, get the entry.
                     let id = *ent.get();
-                    let RecvEntry { frags, hash, when, .. } =
+                    let RecvEntry { frags, hash, .. } =
                         self.inbound_objs.get_mut(&id)
                         .ok_or(LargeObjRecvError::NotFound {
                             hash: hash,
                             id: id
                         })?;
                     // Check if we're still receiving fragments.
-                    let finished = if let Some(frags) = frags {
+                    let closeout = if let InboundFragsState::Active {
+                        frags, ..
+                    } = frags {
                         // Receive the fragment.
                         frags.recv(frag.offset() as usize, frag.data())
                             .map_err(|err| LargeObjRecvError::InboundRecv {
@@ -664,16 +834,19 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
                     // Check if the entry is finished and
                     // report if it is.
-                    if finished {
+                    if closeout {
                         debug!(target: "large-obj-proto",
                                "finished transfer for ID {:x}",
                                id);
 
-                        // Send a finished message immediately.
-                        *when = Some(Instant::now());
-
-                        let data = match frags.take() {
-                            Some(frags) => match frags.finish() {
+                        let finished = InboundFragsState::Finished {
+                            size: frags.size(),
+                            accept: false
+                        };
+                        let data = match std::mem::replace(frags, finished) {
+                            InboundFragsState::Active {
+                                frags, ..
+                            } => match frags.finish() {
                                 Ok(data) => Some(data),
                                 Err(_) => {
                                     error!(target: "large-obj-proto",
@@ -683,9 +856,10 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                                     None
                                 }
                             },
-                            None => {
+                            InboundFragsState::Finished { .. } => {
                                 error!(target: "large-obj-proto",
-                                       "frags for ID {:x} should not be None",
+                                       concat!("frags for ID {:x} should ",
+                                               "not be finished"),
                                        id);
 
                                 None
@@ -716,20 +890,27 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                         // Complete the message and report it upstream.
 
                         RecvEntry {
-                            when: Some(Instant::now()),
-                            frags: None,
+                            frags: InboundFragsState::Finished {
+                                accept: true,
+                                size: size
+                            },
                             hash: hash,
-                            req: true
                         }
                     } else {
                         trace!(target: "large-obj-proto",
                                "offer message provides partial object");
 
+                        let frags = InboundFrags::new(size);
+
                         RecvEntry {
-                            frags: Some(InboundFrags::new(size)),
-                            when: Some(Instant::now()),
+                            frags: InboundFragsState::Active {
+                                req: Some(ReqState {
+                                    when: Instant::now(),
+                                    nretries: 0
+                                }),
+                                frags: frags
+                            },
                             hash: hash,
-                            req: true,
                         }
                     };
 
@@ -743,15 +924,17 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
             }
             LargeObjMsg::Frags { id, frags: recv } => match self.inbound_objs
                 .get_mut(&id) {
-                Some(RecvEntry { frags, req, hash, when }) => {
-                    let finished = if let Some(frags) = frags {
+                Some(RecvEntry { frags, hash, .. }) => {
+                    let closeout = if let InboundFragsState::Active {
+                        frags, req
+                    } = frags {
                         debug!(target: "large-obj-proto",
                                "received finished acknowledgement for ID {:x}",
                                id);
 
                         // If we get a frags message, that means our req
                         // has been acknowledged.
-                        *req = false;
+                        *req = None;
 
                         // Receive all of the fragments
                         for frag in recv {
@@ -773,16 +956,19 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                     };
 
                     // Check if the entry is finished and report if it is.
-                    if finished {
+                    if closeout {
                         debug!(target: "large-obj-proto",
                                "finished transfer for ID {:x}",
                                id);
 
-                        // Send a finished message immediately.
-                        *when = Some(Instant::now());
-
-                        let data = match frags.take() {
-                            Some(frags) => match frags.finish() {
+                        let finished = InboundFragsState::Finished {
+                            size: frags.size(),
+                            accept: false
+                        };
+                        let data = match std::mem::replace(frags, finished) {
+                            InboundFragsState::Active {
+                                frags, ..
+                            } => match frags.finish() {
                                 Ok(data) => Some(data),
                                 Err(_) => {
                                     error!(target: "large-obj-proto",
@@ -792,9 +978,10 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                                     None
                                 }
                             },
-                            None => {
+                            InboundFragsState::Finished { .. } => {
                                 error!(target: "large-obj-proto",
-                                       "frags for ID {:x} should not be None",
+                                       concat!("frags for ID {:x} should ",
+                                               "not be finished"),
                                        id);
 
                                 None
@@ -990,6 +1177,16 @@ where
     }
 }
 
+impl<H> ScopedError for LargeObjSendError<H>
+where
+    H: Clone + Display + Hash + HashID + Eq {
+    fn scope(&self) -> ErrorScope {
+        match self {
+            LargeObjSendError::NoObj { .. } => ErrorScope::Unrecoverable
+        }
+    }
+}
+
 impl<H> Default for LargeObjMsgCodec<H>
 where H: HashAlgo + Default {
     #[inline]
@@ -1077,6 +1274,21 @@ impl Display for LargeObjMsgDecodeError {
             LargeObjMsgDecodeError::TooShort => {
                 write!(f, "input buffer is too short")
             }
+        }
+    }
+}
+
+impl<H> Display for LargeObjSendError<H>
+where
+    H: Clone + Display + Hash + HashID + Eq {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            LargeObjSendError::NoObj { hash, id } =>
+                write!(f, "ID {:x} exists for {}, but no object entry found",
+                       id, hash),
         }
     }
 }
@@ -1366,10 +1578,6 @@ fn test_encode_decode_msg_frags_16_frags() {
     let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
         id: 0x1234567890abcdef,
         frags: vec![
-            LargeObjFrag {
-                offset: 0x1111111111111111,
-                data: vec![0x5a; 64]
-            },
             LargeObjFrag {
                 offset: 0x1111111111111111,
                 data: vec![0x5a; 64]
