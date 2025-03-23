@@ -160,7 +160,6 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     inbound_hashes: HashMap<(Auth::SessionPrin, H), u64>,
     outbound_objs: HashMap<H, SendEntry>,
     outbound_hashes: HashMap<u64, H>,
-    finished: Vec<(Auth::SessionPrin, u64)>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
@@ -432,20 +431,11 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
-        let size = self.finished.len() + self.inbound_hashes.len();
+        let size = self.inbound_hashes.len();
         let now = Instant::now();
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = None;
-
-        // Generate the finished messages.
-        if !self.finished.is_empty() {
-            for (prin, id) in self.finished.drain(..) {
-                let msg = LargeObjMsg::finish(id);
-
-                msgs.push((vec![prin], vec![msg]));
-            }
-        }
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.

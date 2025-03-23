@@ -7144,7 +7144,7 @@ fn test_reqs_exact() {
 
     let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(true, 0, 16));
 }
 
@@ -7158,7 +7158,7 @@ fn test_reqs_exact_recv_first() {
 
     let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success((2, _))]);
     assert_eq!(&buf[0], &(false, 0, 8));
     assert_eq!(&buf[1], &(true, 8, 8));
 }
@@ -7173,7 +7173,7 @@ fn test_reqs_exact_recv_second() {
 
     let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success((2, _))]);
     assert_eq!(&buf[0], &(true, 0, 8));
     assert_eq!(&buf[1], &(false, 8, 8));
 }
@@ -7188,11 +7188,11 @@ fn test_reqs_exact_recv_cont() {
 
     let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(true, 0, 8));
 
     let second = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(second, RetryResult::Success(1));
+    assert!(matches![second, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(false, 8, 8));
 }
