@@ -27,6 +27,8 @@ use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
@@ -148,6 +150,16 @@ struct SendEntry {
     when: Option<Instant>,
 }
 
+struct LargeObjInbound<H, Prin> {
+    objs: HashMap<u64, RecvEntry<H>>,
+    hashes: HashMap<(Prin, H), u64>,
+}
+
+struct LargeObjOutbound<H> {
+    objs: HashMap<H, SendEntry>,
+    hashes: HashMap<u64, H>,
+}
+
 pub struct LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
 where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
       IDs: IDGen + Iterator<Item = u64>,
@@ -156,10 +168,8 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
       H: Clone + Display + Hash + HashID + Eq {
     wrapper: PhantomData<Wrapper>,
     msg: PhantomData<Msg>,
-    inbound_objs: HashMap<u64, RecvEntry<H>>,
-    inbound_hashes: HashMap<(Auth::SessionPrin, H), u64>,
-    outbound_objs: HashMap<H, SendEntry>,
-    outbound_hashes: HashMap<u64, H>,
+    inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
+    outbound: Arc<Mutex<LargeObjOutbound<H>>>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
@@ -171,7 +181,8 @@ pub enum LargeObjSendError<H> {
     NoObj {
         hash: H,
         id: u64
-    }
+    },
+    MutexPoison
 }
 
 pub enum LargeObjRecvError<H, Auth, Decode, Upstream> {
@@ -212,7 +223,8 @@ pub enum LargeObjRecvError<H, Auth, Decode, Upstream> {
     },
     Collision,
     AuthNFail,
-    NoID
+    NoID,
+    MutexPoison
 }
 
 #[derive(Debug)]
@@ -431,18 +443,24 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
-        let size = self.inbound_hashes.len();
+        let mut inbound = self.inbound.lock()
+            .map_err(|_| LargeObjSendError::MutexPoison)?;
+        let size = inbound.hashes.len();
         let now = Instant::now();
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = None;
+        let hashes: Vec<((Auth::SessionPrin, H), u64)> =
+            inbound.hashes.iter()
+            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()), *id))
+            .collect();
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
-        for ((prin, hash), id) in self.inbound_hashes.iter() {
-            let ent = self.inbound_objs.get_mut(&id)
+        for ((prin, hash), id) in hashes {
+            let ent = inbound.objs.get_mut(&id)
                 .ok_or(LargeObjSendError::NoObj {
-                    hash: hash.clone(), id: *id
+                    hash: hash.clone(), id: id
                 })?;
 
             match &mut ent.frags {
@@ -454,7 +472,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                     let size = frags.len();
                     let delay = self.retry.retry_delay(*nretries);
                     let retry = now + delay;
-                    let msg = LargeObjMsg::req_obj(hash.clone(), size, *id);
+                    let msg = LargeObjMsg::req_obj(hash, size, id);
 
                     *nretries += 1;
                     *when = retry;
@@ -469,7 +487,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                     match frags.reqs_acks(&mut buf[..], &self.retry) {
                         RetryResult::Success((n, retry)) => {
                             let iter = buf[..n].iter().cloned();
-                            let msg = LargeObjMsg::reqs(*id, iter);
+                            let msg = LargeObjMsg::reqs(id, iter);
 
                             msgs.push((vec![prin.clone()], vec![msg]));
                             next = next.map_or(
@@ -485,9 +503,9 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                 }
                 InboundFragsState::Finished { size, accept } => {
                     let msg = if *accept {
-                        LargeObjMsg::accept(ent.hash.clone(), *size, *id)
+                        LargeObjMsg::accept(ent.hash.clone(), *size, id)
                     } else {
-                        LargeObjMsg::finish(*id)
+                        LargeObjMsg::finish(id)
                     };
 
                     msgs.push((vec![prin.clone()], vec![msg]));
@@ -500,7 +518,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
         // Get rid of all the finished entries.
         for key in deletes {
-            if self.inbound_hashes.remove(&key).is_none() {
+            if inbound.hashes.remove(&key).is_none() {
                 error!(target: "large-obj-proto",
                        "remove should not return None")
             }
@@ -764,6 +782,419 @@ where H: HashAlgo + Default {
     }
 }
 
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+    LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+      IDs: IDGen + Iterator<Item = u64>,
+      Auth: MsgAuthN<Msg, Wrapper>,
+      Codec: DatagramCodec<Wrapper>,
+      H: Clone + Display + Hash + HashID + Eq {
+    fn recv_offer_msg(
+        &mut self,
+        prin: &Auth::SessionPrin,
+        hash: H,
+        size: u64,
+        frag: LargeObjFrag
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut inbound = self.inbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        match inbound.hashes.entry((prin.clone(), hash.clone())) {
+            Entry::Occupied(ent) => {
+                // ID already exists, get the entry.
+                let id = *ent.get();
+                let RecvEntry { frags, hash, .. } = inbound.objs.get_mut(&id)
+                    .ok_or(LargeObjRecvError::NotFound {
+                        hash: hash,
+                        id: id
+                    })?;
+                // Check if we're still receiving fragments.
+                let closeout = if let InboundFragsState::Active {
+                    frags, ..
+                } = frags {
+                    // Receive the fragment.
+                    frags.recv(frag.offset() as usize, frag.data())
+                        .map_err(|err| LargeObjRecvError::InboundRecv {
+                            hash: hash.clone(),
+                            id: id,
+                            err: err
+                        })?;
+
+                    frags.is_finished()
+                } else {
+                    // This is ok, it can happen due to delayed
+                    // messages.
+                    trace!(target: "large-obj-proto",
+                           "redundant offer message for ID {:x} ({})",
+                           id, hash);
+
+                    false
+                };
+
+                // Check if the entry is finished and
+                // report if it is.
+                if closeout {
+                    debug!(target: "large-obj-proto",
+                           "finished transfer for ID {:x}",
+                           id);
+
+                    let finished = InboundFragsState::Finished {
+                        size: frags.size(),
+                        accept: false
+                    };
+                    let data = match std::mem::replace(frags, finished) {
+                        InboundFragsState::Active {
+                            frags, ..
+                        } => match frags.finish() {
+                            Ok(data) => Some(data),
+                            Err(_) => {
+                                error!(target: "large-obj-proto",
+                                       "finish for ID {:x} should not fail",
+                                       id);
+
+                                None
+                            }
+                        },
+                        InboundFragsState::Finished { .. } => {
+                            error!(target: "large-obj-proto",
+                                   concat!("frags for ID {:x} should ",
+                                           "not be finished"),
+                                   id);
+
+                            None
+                        }
+                    };
+
+                    Ok(data)
+                } else {
+                    Ok(None)
+                }
+            },
+            Entry::Vacant(ent) => {
+                // No entry for this hash exists, set one up.
+                let id = self.ids.next().ok_or(LargeObjRecvError::NoID)?;
+                let size = size as usize;
+
+                ent.insert(id);
+
+                debug!(target: "large-obj-proto",
+                       "creating new transfer for {} with ID {:x}",
+                       hash, id);
+
+                // See if the offer provides all the data.
+                let ent = if frag.offset() == 0 && frag.len() == size {
+                    trace!(target: "large-obj-proto",
+                           "offer message provides entire object");
+
+                    // Complete the message and report it upstream.
+
+                    RecvEntry {
+                        frags: InboundFragsState::Finished {
+                            accept: true,
+                            size: size
+                        },
+                        hash: hash,
+                    }
+                } else {
+                    trace!(target: "large-obj-proto",
+                           "offer message provides partial object");
+
+                    let frags = InboundFrags::new(size);
+
+                    RecvEntry {
+                        frags: InboundFragsState::Active {
+                            req: Some(ReqState {
+                                when: Instant::now(),
+                                nretries: 0
+                            }),
+                            frags: frags
+                        },
+                        hash: hash,
+                    }
+                };
+
+                // Error if an entry already exists under this ID.
+                if inbound.objs.insert(id, ent).is_none() {
+                    Ok(None)
+                } else {
+                    Err(LargeObjRecvError::Collision)
+                }
+            }
+        }
+    }
+
+    fn recv_frags_msg(
+        &mut self,
+        id: u64,
+        recv: Vec<LargeObjFrag>
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut inbound = self.inbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        match inbound.objs
+            .get_mut(&id) {
+            Some(RecvEntry { frags, hash, .. }) => {
+                let closeout = if let InboundFragsState::Active {
+                    frags, req
+                } = frags {
+                    debug!(target: "large-obj-proto",
+                           "received finished acknowledgement for ID {:x}",
+                           id);
+
+                    // If we get a frags message, that means our req
+                    // has been acknowledged.
+                    *req = None;
+
+                    // Receive all of the fragments
+                    for frag in recv {
+                        frags.recv(frag.offset() as usize, frag.data())
+                            .map_err(|err| LargeObjRecvError::InboundRecv {
+                                hash: hash.clone(),
+                                id: id,
+                                err: err
+                            })?;
+                    }
+
+                    frags.is_finished()
+                } else {
+                    trace!(target: "large-obj-proto",
+                           "redundant fragments message for ID {:x} ({})",
+                           id, hash);
+
+                    false
+                };
+
+                // Check if the entry is finished and report if it is.
+                if closeout {
+                    debug!(target: "large-obj-proto",
+                           "finished transfer for ID {:x}",
+                           id);
+
+                    let finished = InboundFragsState::Finished {
+                        size: frags.size(),
+                        accept: false
+                    };
+                    let data = match std::mem::replace(frags, finished) {
+                        InboundFragsState::Active {
+                            frags, ..
+                        } => match frags.finish() {
+                            Ok(data) => Some(data),
+                            Err(_) => {
+                                error!(target: "large-obj-proto",
+                                       "finish for ID {:x} should not fail",
+                                       id);
+
+                                None
+                            }
+                        },
+                        InboundFragsState::Finished { .. } => {
+                            error!(target: "large-obj-proto",
+                                   concat!("frags for ID {:x} should ",
+                                           "not be finished"),
+                                   id);
+
+                            None
+                        }
+                    };
+
+                    Ok(data)
+                } else {
+                    Ok(None)
+                }
+            }
+            None => {
+                trace!(target: "large-obj-proto",
+                       "fragments message for non-existent ID {:x}",
+                       id);
+
+                Ok(None)
+            }
+        }
+    }
+
+    fn recv_accept_msg(
+        &mut self,
+        hash: H,
+        id: u64,
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut outbound = self.outbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        if outbound.objs.remove(&hash).is_some() {
+            debug!(target: "large-obj-proto",
+                   "received acceptance for {} (ID {:x})",
+                   hash, id);
+
+            if outbound.hashes.insert(id, hash).is_none() {
+                Ok(None)
+            } else {
+                Err(LargeObjRecvError::Collision)
+            }
+        } else {
+            trace!(target: "large-obj-proto",
+                   "redundant accept for {}",
+                   hash);
+
+            Ok(None)
+        }
+    }
+
+    fn recv_req_obj_msg(
+        &mut self,
+        hash: H,
+        id: u64,
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut outbound = self.outbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        if outbound.objs.get(&hash).is_none() {
+            match outbound.hashes.entry(id) {
+                Entry::Occupied(_) => {
+                    trace!(target: "large-obj-proto",
+                           "redundant object request for {}",
+                           hash);
+
+                    Ok(None)
+                }
+                Entry::Vacant(ent) => {
+                    debug!(target: "large-obj-proto",
+                           "received object request for {} (ID {:x})",
+                           hash, id);
+
+                    ent.insert(hash);
+
+                    Ok(None)
+                }
+            }
+        } else {
+            trace!(target: "large-obj-proto",
+                   "stray object request for {}",
+                   hash);
+
+            Ok(None)
+        }
+    }
+
+    fn recv_reqs_msg(
+        &mut self,
+        id: u64,
+        reqs: Vec<LargeObjFragReq>
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut outbound = self.outbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        match outbound.hashes.get(&id).cloned() {
+            Some(hash) => match outbound.objs.get_mut(&hash) {
+                Some(ent) => {
+                    debug!(target: "large-obj-proto",
+                           "received fragments for {} (ID {:x})",
+                           hash, id);
+
+                    for req in reqs {
+                        ent.frags.recv_req(&req)
+                            .map_err(|err| LargeObjRecvError::OutboundRecv {
+                                hash: hash.clone(),
+                                id: id,
+                                err: err
+                            })?;
+                    }
+
+                    Ok(None)
+                }
+                None => return Err(LargeObjRecvError::NoObj {
+                    hash: hash,
+                    id: id
+                })
+            }
+            None => {
+                trace!(target: "large-obj-proto",
+                       "stray frags for {:0x}",
+                       id);
+
+                Ok(None)
+            }
+        }
+    }
+
+    fn recv_finish_msg(
+        &mut self,
+        id: u64,
+    ) -> Result<
+        Option<Vec<u8>>,
+        LargeObjRecvError<
+            H,
+            Auth::Error,
+            Codec::DecodeError,
+            Recv::RecvError
+        >
+    > {
+        let mut outbound = self.outbound.lock()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        match outbound.hashes.remove(&id) {
+            Some(hash) => match outbound.objs.remove(&hash) {
+                Some(SendEntry { .. }) => {
+                    trace!(target: "large-obj-proto",
+                           "removed transfer entries for {:x} ({})",
+                           id, hash);
+
+                    Ok(None)
+                },
+                None => return Err(LargeObjRecvError::NotFound {
+                    hash: hash,
+                    id: id
+                })
+            },
+            None => {
+                trace!(target: "large-obj-proto",
+                       "redundant finish for ID {:x}",
+                       id);
+
+                Ok(None)
+            }
+        }
+    }
+}
 
 impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
     AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
@@ -787,313 +1218,17 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     ) -> Result<(), Self::RecvError> {
         let data = match msg {
             // Inbound messages.
-            LargeObjMsg::Offer {
-                hash, size, frag
-            } => match self.inbound_hashes.entry((prin.clone(), hash.clone())) {
-                Entry::Occupied(ent) => {
-                    // ID already exists, get the entry.
-                    let id = *ent.get();
-                    let RecvEntry { frags, hash, .. } =
-                        self.inbound_objs.get_mut(&id)
-                        .ok_or(LargeObjRecvError::NotFound {
-                            hash: hash,
-                            id: id
-                        })?;
-                    // Check if we're still receiving fragments.
-                    let closeout = if let InboundFragsState::Active {
-                        frags, ..
-                    } = frags {
-                        // Receive the fragment.
-                        frags.recv(frag.offset() as usize, frag.data())
-                            .map_err(|err| LargeObjRecvError::InboundRecv {
-                                hash: hash.clone(),
-                                id: id,
-                                err: err
-                            })?;
-
-                        frags.is_finished()
-                    } else {
-                        // This is ok, it can happen due to delayed
-                        // messages.
-                        trace!(target: "large-obj-proto",
-                               "redundant offer message for ID {:x} ({})",
-                               id, hash);
-
-                        false
-                    };
-
-                    // Check if the entry is finished and
-                    // report if it is.
-                    if closeout {
-                        debug!(target: "large-obj-proto",
-                               "finished transfer for ID {:x}",
-                               id);
-
-                        let finished = InboundFragsState::Finished {
-                            size: frags.size(),
-                            accept: false
-                        };
-                        let data = match std::mem::replace(frags, finished) {
-                            InboundFragsState::Active {
-                                frags, ..
-                            } => match frags.finish() {
-                                Ok(data) => Some(data),
-                                Err(_) => {
-                                    error!(target: "large-obj-proto",
-                                           "finish for ID {:x} should not fail",
-                                           id);
-
-                                    None
-                                }
-                            },
-                            InboundFragsState::Finished { .. } => {
-                                error!(target: "large-obj-proto",
-                                       concat!("frags for ID {:x} should ",
-                                               "not be finished"),
-                                       id);
-
-                                None
-                            }
-                        };
-
-                        Ok(data)
-                    } else {
-                        Ok(None)
-                    }
-                },
-                Entry::Vacant(ent) => {
-                    // No entry for this hash exists, set one up.
-                    let id = self.ids.next().ok_or(LargeObjRecvError::NoID)?;
-                    let size = size as usize;
-
-                    ent.insert(id);
-
-                    debug!(target: "large-obj-proto",
-                           "creating new transfer for {} with ID {:x}",
-                           hash, id);
-
-                    // See if the offer provides all the data.
-                    let ent = if frag.offset() == 0 && frag.len() == size {
-                        trace!(target: "large-obj-proto",
-                               "offer message provides entire object");
-
-                        // Complete the message and report it upstream.
-
-                        RecvEntry {
-                            frags: InboundFragsState::Finished {
-                                accept: true,
-                                size: size
-                            },
-                            hash: hash,
-                        }
-                    } else {
-                        trace!(target: "large-obj-proto",
-                               "offer message provides partial object");
-
-                        let frags = InboundFrags::new(size);
-
-                        RecvEntry {
-                            frags: InboundFragsState::Active {
-                                req: Some(ReqState {
-                                    when: Instant::now(),
-                                    nretries: 0
-                                }),
-                                frags: frags
-                            },
-                            hash: hash,
-                        }
-                    };
-
-                    // Error if an entry already exists under this ID.
-                    if self.inbound_objs.insert(id, ent).is_none() {
-                        Ok(None)
-                    } else {
-                        Err(LargeObjRecvError::Collision)
-                    }
-                }
-            }
-            LargeObjMsg::Frags { id, frags: recv } => match self.inbound_objs
-                .get_mut(&id) {
-                Some(RecvEntry { frags, hash, .. }) => {
-                    let closeout = if let InboundFragsState::Active {
-                        frags, req
-                    } = frags {
-                        debug!(target: "large-obj-proto",
-                               "received finished acknowledgement for ID {:x}",
-                               id);
-
-                        // If we get a frags message, that means our req
-                        // has been acknowledged.
-                        *req = None;
-
-                        // Receive all of the fragments
-                        for frag in recv {
-                            frags.recv(frag.offset() as usize, frag.data())
-                                .map_err(|err| LargeObjRecvError::InboundRecv {
-                                    hash: hash.clone(),
-                                    id: id,
-                                    err: err
-                                })?;
-                        }
-
-                        frags.is_finished()
-                    } else {
-                        trace!(target: "large-obj-proto",
-                               "redundant fragments message for ID {:x} ({})",
-                               id, hash);
-
-                        false
-                    };
-
-                    // Check if the entry is finished and report if it is.
-                    if closeout {
-                        debug!(target: "large-obj-proto",
-                               "finished transfer for ID {:x}",
-                               id);
-
-                        let finished = InboundFragsState::Finished {
-                            size: frags.size(),
-                            accept: false
-                        };
-                        let data = match std::mem::replace(frags, finished) {
-                            InboundFragsState::Active {
-                                frags, ..
-                            } => match frags.finish() {
-                                Ok(data) => Some(data),
-                                Err(_) => {
-                                    error!(target: "large-obj-proto",
-                                           "finish for ID {:x} should not fail",
-                                           id);
-
-                                    None
-                                }
-                            },
-                            InboundFragsState::Finished { .. } => {
-                                error!(target: "large-obj-proto",
-                                       concat!("frags for ID {:x} should ",
-                                               "not be finished"),
-                                       id);
-
-                                None
-                            }
-                        };
-
-                        Ok(data)
-                    } else {
-                        Ok(None)
-                    }
-                }
-                None => {
-                    trace!(target: "large-obj-proto",
-                           "fragments message for non-existent ID {:x}",
-                           id);
-
-                    Ok(None)
-                }
-            }
+            LargeObjMsg::Offer { hash, size, frag } =>
+                self.recv_offer_msg(prin, hash, size, frag),
+            LargeObjMsg::Frags { id, frags } =>
+                self.recv_frags_msg(id, frags),
             // Outbound messages.
-            LargeObjMsg::Accept { hash, id, .. } => if self
-                .outbound_objs
-                .remove(&hash).is_some() {
-                debug!(target: "large-obj-proto",
-                       "received acceptance for {} (ID {:x})",
-                       hash, id);
-
-                if self.outbound_hashes.insert(id, hash).is_none() {
-                    Ok(None)
-                } else {
-                    Err(LargeObjRecvError::Collision)
-                }
-            } else {
-                trace!(target: "large-obj-proto",
-                       "redundant accept for {}",
-                       hash);
-
-                Ok(None)
-            },
-            LargeObjMsg::ReqObj { hash, id, .. } => if self
-                .outbound_objs
-                .get(&hash).is_none() {
-                match self.outbound_hashes.entry(id) {
-                    Entry::Occupied(_) => {
-                        trace!(target: "large-obj-proto",
-                               "redundant object request for {}",
-                               hash);
-
-                        Ok(None)
-                    }
-                    Entry::Vacant(ent) => {
-                        debug!(target: "large-obj-proto",
-                               "received object request for {} (ID {:x})",
-                               hash, id);
-
-                        ent.insert(hash);
-
-                        Ok(None)
-                    }
-                }
-            } else {
-                trace!(target: "large-obj-proto",
-                       "stray object request for {}",
-                       hash);
-
-                Ok(None)
-            },
-            LargeObjMsg::Req { id, reqs } => match self.outbound_hashes
-                .get(&id) {
-                Some(hash) => match self.outbound_objs.get_mut(&hash) {
-                    Some(ent) => {
-                        debug!(target: "large-obj-proto",
-                               "received fragments for {} (ID {:x})",
-                               hash, id);
-
-                        for req in reqs {
-                            ent.frags.recv_req(&req)
-                                .map_err(|err| LargeObjRecvError::OutboundRecv {
-                                    hash: hash.clone(),
-                                    id: id,
-                                    err: err
-                                })?;
-                        }
-
-                        Ok(None)
-                    }
-                    None => return Err(LargeObjRecvError::NoObj {
-                        hash: hash.clone(),
-                        id: id
-                    })
-                }
-                None => {
-                    trace!(target: "large-obj-proto",
-                           "stray frags for {:0x}",
-                           id);
-
-                    Ok(None)
-                }
-            },
-            LargeObjMsg::Finish { id } => match self
-                .outbound_hashes.remove(&id) {
-                Some(hash) => match self.outbound_objs.remove(&hash) {
-                    Some(SendEntry { .. }) => {
-                        trace!(target: "large-obj-proto",
-                               "removed transfer entries for {:x} ({})",
-                               id, hash);
-
-                        Ok(None)
-                    },
-                    None => return Err(LargeObjRecvError::NotFound {
-                        hash: hash,
-                        id: id
-                    })
-                },
-                None => {
-                    trace!(target: "large-obj-proto",
-                           "redundant finish for ID {:x}",
-                           id);
-
-                    Ok(None)
-                }
-            }
+            LargeObjMsg::Accept { hash, id, .. } =>
+                self.recv_accept_msg(hash, id),
+            LargeObjMsg::ReqObj { hash, id, .. } =>
+                self.recv_req_obj_msg(hash, id),
+            LargeObjMsg::Req { id, reqs } => self.recv_reqs_msg(id, reqs),
+            LargeObjMsg::Finish { id } => self.recv_finish_msg(id)
         }?;
 
         // Complete the message and send it upstream.
@@ -1155,6 +1290,7 @@ where
             LargeObjRecvError::NoHash { .. } |
             LargeObjRecvError::NoObj { .. } |
             LargeObjRecvError::Collision |
+            LargeObjRecvError::MutexPoison |
             LargeObjRecvError::NoID => ErrorScope::Unrecoverable,
             LargeObjRecvError::FinishedPending { .. } |
             LargeObjRecvError::OutboundRecv { .. } |
@@ -1172,7 +1308,8 @@ where
     H: Clone + Display + Hash + HashID + Eq {
     fn scope(&self) -> ErrorScope {
         match self {
-            LargeObjSendError::NoObj { .. } => ErrorScope::Unrecoverable
+            LargeObjSendError::NoObj { .. } |
+            LargeObjSendError::MutexPoison => ErrorScope::Unrecoverable
         }
     }
 }
@@ -1279,6 +1416,7 @@ where
             LargeObjSendError::NoObj { hash, id } =>
                 write!(f, "ID {:x} exists for {}, but no object entry found",
                        id, hash),
+            LargeObjSendError::MutexPoison => write!(f, "mutex poisoned")
         }
     }
 }
@@ -1321,7 +1459,8 @@ where
                 write!(f, "id generator produced collision"),
             LargeObjRecvError::NoID => write!(f, "id generator exhausted"),
             LargeObjRecvError::AuthNFail =>
-                write!(f, "message authentication failed")
+                write!(f, "message authentication failed"),
+            LargeObjRecvError::MutexPoison => write!(f, "mutex poisoned")
         }
     }
 }
