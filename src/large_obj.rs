@@ -42,6 +42,7 @@ use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
+use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
@@ -281,28 +282,6 @@ impl InboundFragsState {
             InboundFragsState::Finished { size, .. } => *size
         }
     }
-
-    fn needs_req(&self) -> bool {
-        match self {
-            InboundFragsState::Active { req, .. } => req.is_some(),
-            InboundFragsState::Finished { accept, .. } => *accept
-        }
-    }
-}
-
-impl<H> RecvEntry<H> {
-    fn when(&self) -> Option<Instant> {
-        match &self.frags {
-            InboundFragsState::Active {
-                req: Some(ReqState { when, .. }),
-                frags
-            } => Some(
-                frags.when().map_or(*when, |frags_when| frags_when.min(*when))
-            ),
-            InboundFragsState::Active { frags, .. } => frags.when(),
-            InboundFragsState::Finished { .. } => Some(Instant::now())
-        }
-    }
 }
 
 impl<ID> LargeObjMsg<ID>
@@ -509,6 +488,116 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                     };
 
                     msgs.push((vec![prin.clone()], vec![msg]));
+                    // XXX keep these around for a configurable amount
+                    // of time as "tombstones".
+                    deletes.push((prin.clone(), hash.clone()));
+                }
+            }
+        }
+
+        // Get rid of all the finished entries.
+        for key in deletes {
+            if inbound.hashes.remove(&key).is_none() {
+                error!(target: "large-obj-proto",
+                       "remove should not return None")
+            }
+        }
+
+        let msgs = if !msgs.is_empty() {
+            Some(msgs)
+        } else {
+            None
+        };
+
+        Ok((msgs, next))
+    }
+}
+
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+    PrivateMsgs<LargeObjMsg<H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
+where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+      IDs: IDGen + Iterator<Item = u64>,
+      Auth: MsgAuthN<Msg, Wrapper>,
+      Codec: DatagramCodec<Wrapper>,
+      H: Clone + Display + Hash + HashID + Eq {
+    type MsgsError = LargeObjSendError<H>;
+
+    fn msgs(
+        &mut self
+    ) -> Result<
+        (Option<Vec<LargeObjMsg<H>>>, Option<Instant>),
+        Self::MsgsError
+    > {
+        debug!(target: "large-obj-proto",
+               "collecting outbound messages");
+
+        let mut inbound = self.inbound.lock()
+            .map_err(|_| LargeObjSendError::MutexPoison)?;
+        let size = inbound.hashes.len();
+        let now = Instant::now();
+        let mut msgs = Vec::with_capacity(size);
+        let mut deletes = Vec::with_capacity(size);
+        let mut next = None;
+        let hashes: Vec<((Auth::SessionPrin, H), u64)> =
+            inbound.hashes.iter()
+            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()), *id))
+            .collect();
+
+        // Scan the inbound objects for protocol replies that need to
+        // be sent out.
+        for ((prin, hash), id) in hashes {
+            let ent = inbound.objs.get_mut(&id)
+                .ok_or(LargeObjSendError::NoObj {
+                    hash: hash.clone(), id: id
+                })?;
+
+            match &mut ent.frags {
+                // Still sending accepts.
+                InboundFragsState::Active {
+                    req: Some(ReqState { nretries, when }),
+                    frags
+                } => {
+                    let size = frags.len();
+                    let delay = self.retry.retry_delay(*nretries);
+                    let retry = now + delay;
+                    let msg = LargeObjMsg::req_obj(hash, size, id);
+
+                    *nretries += 1;
+                    *when = retry;
+                    next = Some(
+                        next.map_or(retry, |next: Instant| next.min(retry))
+                    );
+                    msgs.push(msg);
+                }
+                InboundFragsState::Active { frags, .. } => {
+                    let mut buf = [(false, 0, 0); 16];
+
+                    match frags.reqs_acks(&mut buf[..], &self.retry) {
+                        RetryResult::Success((n, retry)) => {
+                            let iter = buf[..n].iter().cloned();
+                            let msg = LargeObjMsg::reqs(id, iter);
+
+                            msgs.push(msg);
+                            next = next.map_or(
+                                retry, |next| retry.map(|retry| next.min(retry))
+                            );
+                        }
+                        RetryResult::Retry(retry) => {
+                            next = Some(
+                                next.map_or(retry, |next| next.min(retry))
+                            );
+                        }
+                    }
+                }
+                InboundFragsState::Finished { size, accept } => {
+                    let msg = if *accept {
+                        LargeObjMsg::accept(ent.hash.clone(), *size, id)
+                    } else {
+                        LargeObjMsg::finish(id)
+                    };
+
+                    msgs.push(msg);
                     // XXX keep these around for a configurable amount
                     // of time as "tombstones".
                     deletes.push((prin.clone(), hash.clone()));
@@ -789,6 +878,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
       Auth: MsgAuthN<Msg, Wrapper>,
       Codec: DatagramCodec<Wrapper>,
       H: Clone + Display + Hash + HashID + Eq {
+
     fn recv_offer_msg(
         &mut self,
         prin: &Auth::SessionPrin,

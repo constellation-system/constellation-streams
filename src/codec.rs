@@ -1125,7 +1125,7 @@ where
         DatagramCodecFragError<CodecStreamError<LargeObjMsgEncodeError, Error>>;
     type PushFragRetry = Instant;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -1142,24 +1142,24 @@ where
             })
     }
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        self.push_frag(ctx, id, frags)
+        self.push_frags(ctx, id, frags)
     }
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        self.push_frag(ctx, id, frags)
+        self.push_frags(ctx, id, frags)
     }
 }
 

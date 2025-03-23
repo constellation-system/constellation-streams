@@ -861,14 +861,14 @@ where
     /// Type of outbound fragment structures.
     type Frags;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -876,7 +876,7 @@ where
         retry: Self::PushFragRetry
     ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2293,7 +2293,7 @@ where
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
     type PushFragRetry = Inner::PushFragRetry;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2305,11 +2305,11 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .push_frag(ctx, id, frags)
+            .push_frags(ctx, id, frags)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2322,11 +2322,11 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .retry_push_frag(ctx, id, frags, retry)
+            .retry_push_frags(ctx, id, frags, retry)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2339,7 +2339,7 @@ where
             .map_err(|_| ThreadedStreamError::MutexPoison)?;
 
         guard
-            .complete_push_frag(ctx, id, frags, err)
+            .complete_push_frags(ctx, id, frags, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }

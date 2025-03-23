@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::convert::Infallible;
 use std::thread::spawn;
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -32,12 +33,15 @@ use log::error;
 use log::info;
 use log::trace;
 
+use crate::config::PrivateSmallObjModeConfig;
 use crate::error::BatchError;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
-use crate::stream::PushStreamPrivateSingle;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
+use crate::threads::push::PushMode;
+use crate::threads::push::PushModeCreate;
+use crate::threads::push::PushModeRetry;
 
 /// Backlog entry for push threads.
 ///
@@ -82,7 +86,7 @@ where
     }
 }
 
-pub struct PushStreamPrivateThread<Msg, Msgs, Stream, Ctx>
+pub struct PrivateSmallObjPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -92,23 +96,19 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamPrivateSingle<Msg, Ctx>
+        > + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>
         + Send,
-    Stream::StartBatchStreamBatches: Send,
-    Stream::StartBatchRetry: Send,
-    Stream::AbortBatchRetry: Send,
-    Stream::AddRetry: Send,
-    Stream::FinishBatchRetry: Send,
-    Stream::CancelBatchRetry: Send,
-    Stream::StreamFlags: Send,
-    Stream::BatchID: Send,
-    Msgs: PrivateMsgs<Msg>,
-    Msg: Clone + Send,
-    Ctx: Send + Sync {
-    ctx: Ctx,
+    Msg: Clone + Send {
     /// Buffer for sends in progress.
-    pending: Vec<PushEntry<Msg, Stream, Ctx>>,
+    pending: Vec<PushEntry<Msg, Stream, Ctx>>
+}
+
+pub struct PushStreamPrivateThread<Msgs, Stream, Mode, Ctx>
+where
+    Mode: PushMode<Stream, Msgs, Ctx> {
+    ctx: Ctx,
+    mode: Mode,
     /// Source of outbound messages.
     msgs: Msgs,
     /// `Notify` instance used to indicate that new messages are
@@ -176,33 +176,31 @@ where
                "attempting to recover from error while cancelling message");
 
         match err.split() {
-            (Some(completable), None) => {
-                match stream.complete_cancel_batch(
-                    ctx,
-                    &mut flags,
-                    &batch_id,
-                    completable
-                ) {
-                    // It succeeded.
-                    Ok(RetryResult::Success(_)) => {
-                        trace!(target: "push-entry",
-                           "successfully completed cancellation");
+            (Some(completable), None) => match stream.complete_cancel_batch(
+                ctx,
+                &mut flags,
+                &batch_id,
+                completable
+            ) {
+                // It succeeded.
+                Ok(RetryResult::Success(_)) => {
+                    trace!(target: "push-entry",
+                       "successfully completed cancellation");
 
-                        RetryResult::Success(())
-                    }
-                    // We got a retry.
-                    Ok(RetryResult::Retry(retry)) => {
-                        RetryResult::Retry(PushEntry::Cancel {
-                            batch: batch_id,
-                            retry: retry,
-                            flags: flags
-                        })
-                    }
-                    // More errors; recurse again.
-                    Err(err) => Self::complete_cancel_batch(
-                        ctx, stream, flags, batch_id, err
-                    )
+                    RetryResult::Success(())
                 }
+                // We got a retry.
+                Ok(RetryResult::Retry(retry)) => {
+                    RetryResult::Retry(PushEntry::Cancel {
+                        batch: batch_id,
+                        retry: retry,
+                        flags: flags
+                    })
+                }
+                // More errors; recurse again.
+                Err(err) => Self::complete_cancel_batch(
+                    ctx, stream, flags, batch_id, err
+                )
             }
             // Unrecoverable errors occurred canceling the batch.
             (_, Some(permanent)) => {
@@ -256,31 +254,29 @@ where
                "attempting to recover from error while finishing batch");
 
         match err.split() {
-            (Some(completable), None) => {
-                match stream.complete_finish_batch(
-                    ctx,
-                    flags,
-                    &batch_id,
-                    completable
-                ) {
-                    // It succeeded.
-                    Ok(RetryResult::Success(())) => {
-                        trace!(target: "push-entry",
-                           "successfully finished batch");
+            (Some(completable), None) => match stream.complete_finish_batch(
+                ctx,
+                flags,
+                &batch_id,
+                completable
+            ) {
+                // It succeeded.
+                Ok(RetryResult::Success(())) => {
+                    trace!(target: "push-entry",
+                       "successfully finished batch");
 
-                        RetryResult::Success(())
-                    }
-                    // We got a retry.
-                    Ok(RetryResult::Retry(retry)) => {
-                        RetryResult::Retry(PushEntry::Finish {
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    // More errors; recurse again.
-                    Err(err) => {
-                        Self::complete_finish(ctx, stream, flags, batch_id, err)
-                    }
+                    RetryResult::Success(())
+                }
+                // We got a retry.
+                Ok(RetryResult::Retry(retry)) => {
+                    RetryResult::Retry(PushEntry::Finish {
+                        batch: batch_id,
+                        retry: retry
+                    })
+                }
+                // More errors; recurse again.
+                Err(err) => {
+                    Self::complete_finish(ctx, stream, flags, batch_id, err)
                 }
             }
             // Permanent errors always kill the batch.
@@ -643,105 +639,61 @@ where
     }
 }
 
-impl<Msg, Msgs, Stream, Ctx> PushStreamPrivateThread<Msg, Msgs, Stream, Ctx>
+impl<Msg, Stream, Ctx> PushModeCreate
+    for PrivateSmallObjPushMode<Msg, Stream, Ctx>
 where
-    Stream: 'static
-        + PushStreamReportBatchError<
+    Stream: 'static + PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
             Stream::BatchID
-        >
-        + PushStreamReportError<
+        > + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        >
-        + PushStreamReportBatchError<
+        > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        >
-        + PushStreamPrivateSingle<Msg, Ctx>
+        > + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>
         + Send,
-    Stream::StartBatchStreamBatches: Send,
-    Stream::StartBatchRetry: Send,
-    Stream::AbortBatchRetry: Send,
-    Stream::AddRetry: Send,
-    Stream::FinishBatchRetry: Send,
-    Stream::CancelBatchRetry: Send,
-    Stream::StreamFlags: Send,
-    Stream::BatchID: Send,
-    Msgs: 'static + PrivateMsgs<Msg> + Send,
-    Msg: 'static + Clone + Send,
-    Ctx: 'static + Send + Sync
-{
-    #[inline]
-    pub fn create(
-        ctx: Ctx,
-        msgs: Msgs,
-        notify: Notify,
-        stream: Stream,
-        shutdown: ShutdownFlag
-    ) -> Self {
-        PushStreamPrivateThread {
-            pending: Vec::new(),
-            msgs: msgs,
-            notify: notify,
-            shutdown: shutdown,
-            stream: stream,
-            ctx: ctx
-        }
-    }
+    Msg: 'static + Clone + Send {
+    type Config = PrivateSmallObjModeConfig;
 
-    #[inline]
-    pub fn with_capacity(
-        ctx: Ctx,
-        msgs: Msgs,
-        notify: Notify,
-        stream: Stream,
-        shutdown: ShutdownFlag,
-        size: usize
-    ) -> Self {
-        PushStreamPrivateThread {
-            pending: Vec::with_capacity(size),
-            msgs: msgs,
-            notify: notify,
-            shutdown: shutdown,
-            stream: stream,
-            ctx: ctx
-        }
-    }
+    fn create(config: Self::Config) -> Self {
+        let retries_hint = config.take();
 
-    /// Get the `Notify` used to signal availability of new messages
-    /// to this thread.
-    #[inline]
-    pub fn notify(&self) -> Notify {
-        self.notify.clone()
-    }
-
-    fn update_from_outbound(
-        &mut self
-    ) -> Result<Option<Instant>, Msgs::MsgsError> {
-        debug!(target: "push-stream-private-thread",
-               "fetching new outbound messages");
-
-        let (msgs, next) = self.msgs.msgs()?;
-
-        if let Some(msgs) = msgs {
-            // Go through each group and try sending it
-            if let RetryResult::Retry(retry) =
-                PushEntry::from_try_send(&mut self.ctx, &mut self.stream, msgs)
-            {
-                // We got a retry somewhere along the process, store it.
-                self.pending.push(retry)
+        match retries_hint {
+            Some(hint) => PrivateSmallObjPushMode {
+                pending: Vec::with_capacity(hint),
+            },
+            None => PrivateSmallObjPushMode {
+                pending: Vec::new(),
             }
         }
-
-        Ok(next)
     }
+}
+
+impl<Msg, Stream, Ctx> PushModeRetry<Stream, Ctx>
+    for PrivateSmallObjPushMode<Msg, Stream, Ctx>
+where
+    Stream: 'static + PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        > + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamAdd<Msg, Ctx>
+        + PushStreamPrivate<Ctx>
+        + Send,
+    Msg: 'static + Clone + Send {
+    type RetryError = Infallible;
 
     fn retry_pending(
         &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Stream,
         now: Instant
-    ) -> Option<Instant> {
-        debug!(target: "push-stream-private-thread",
+    ) -> Result<Option<Instant>, Self::RetryError> {
+        debug!(target: "private-small-obj-push-mode",
                "retrying pending operations");
 
         let mut curr = Vec::with_capacity(self.pending.len());
@@ -756,14 +708,19 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.pending.last().is_none_or(|ent| ent.when() <= now) {
+        while !self.pending.last().is_none_or(|ent| now <= ent.when()) {
+            debug!(target: "private-small-obj-push-mode",
+                   "retrying pending operation");
+
             match self.pending.pop() {
                 Some(ent) => {
                     curr.push(ent);
                 }
                 None => {
-                    error!(target: "push-stream-private-thread",
+                    error!(target: "private-small-obj-push-mode",
                            "pop should not be empty");
+
+                    break;
                 }
             }
         }
@@ -774,14 +731,93 @@ where
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
             if let RetryResult::Retry(retry) =
-                ent.exec(&mut self.ctx, &mut self.stream)
+                ent.exec(ctx, stream)
             {
                 // We got a retry somewhere along the process, store it.
                 self.pending.push(retry)
             }
         }
 
-        out
+        Ok(out)
+    }
+}
+
+impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
+    for PrivateSmallObjPushMode<Msg, Stream, Ctx>
+where
+    Stream: 'static + PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        > + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamAdd<Msg, Ctx>
+        + PushStreamPrivate<Ctx>
+        + Send,
+    Msgs: 'static + PrivateMsgs<Msg> + Send,
+    Msg: 'static + Clone + Send {
+    type SendError = Msgs::MsgsError;
+
+    fn send_from_outbound(
+        &mut self,
+        ctx: &mut Ctx,
+        msgs: &mut Msgs,
+        stream: &mut Stream,
+    ) -> Result<Option<Instant>, Self::SendError> {
+        debug!(target: "private-small-obj-push-mode",
+               "fetching new outbound messages");
+
+        let (msgs, next) = msgs.msgs()?;
+
+        if let Some(msgs) = msgs {
+            // Go through each group and try sending it
+            if let RetryResult::Retry(retry) =
+                PushEntry::from_try_send(ctx, stream, msgs)
+            {
+                // We got a retry somewhere along the process, store it.
+                self.pending.push(retry)
+            }
+        }
+
+        Ok(next)
+    }
+}
+
+impl<Msgs, Stream, Mode, Ctx> PushStreamPrivateThread<Msgs, Stream, Mode, Ctx>
+where
+    Mode: 'static + PushMode<Stream, Msgs, Ctx>,
+    Stream: 'static + Send,
+    Mode: Send,
+    Msgs: 'static + Send,
+    Ctx: 'static + Send,
+{
+    pub fn create(
+        mode: Mode::Config,
+        ctx: Ctx,
+        msgs: Msgs,
+        notify: Notify,
+        stream: Stream,
+        shutdown: ShutdownFlag
+    ) -> Self {
+        let mode = Mode::create(mode);
+
+        PushStreamPrivateThread {
+            mode: mode,
+            msgs: msgs,
+            notify: notify,
+            shutdown: shutdown,
+            stream: stream,
+            ctx: ctx
+        }
+    }
+
+    /// Get the `Notify` used to signal availability of new messages
+    /// to this thread.
+    #[inline]
+    pub fn notify(&self) -> Notify {
+        self.notify.clone()
     }
 
     fn run(mut self) {
@@ -799,7 +835,7 @@ where
             if let Some(when) = next_outbound &&
                 when <= now
             {
-                match self.update_from_outbound() {
+                match self.mode.send_from_outbound(&mut self.ctx, &mut self.msgs, &mut self.stream) {
                     Ok(next) => next_outbound = next,
                     Err(err) => {
                         error!(target: "push-stream-private-thread",
@@ -816,7 +852,17 @@ where
             if let Some(next) = next_pending &&
                 next <= now
             {
-                next_pending = self.retry_pending(now)
+                match self.mode
+                    .retry_pending(&mut self.ctx, &mut self.stream, now) {
+                    Ok(next) => {
+                        next_pending = next;
+                    }
+                    Err(err) => {
+                        error!(target: "push-stream-private-thread",
+                               "error retrying pending: {}",
+                               err);
+                    }
+                }
             }
 
             match next_pending.map_or(next_outbound, |next| {

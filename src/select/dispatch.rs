@@ -1975,7 +1975,7 @@ where
         Epochs::Item
     >;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -1995,7 +1995,7 @@ where
             })
             .flat_map_ok(|(mut stream, selected)| {
                 Ok(stream
-                    .push_frag(ctx, id, frags)
+                    .push_frags(ctx, id, frags)
                     .map_err(|err| SelectorBatchError::Batch {
                         batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
@@ -2009,7 +2009,7 @@ where
             })
     }
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2019,7 +2019,7 @@ where
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
-                self.push_frag(ctx, id, frags)
+                self.push_frags(ctx, id, frags)
             }
             // We got a retry once the stream was selected.
             SelectorBatchSelectError::Stream {
@@ -2031,7 +2031,7 @@ where
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
                 Ok(stream
-                    .retry_push_frag(ctx, id, frags, retry)
+                    .retry_push_frags(ctx, id, frags, retry)
                     .map_err(|err| SelectorBatchError::Batch {
                         batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),
@@ -2046,7 +2046,7 @@ where
         }
     }
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2064,7 +2064,7 @@ where
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
                 Ok(stream
-                    .complete_push_frag(ctx, id, frags, err)
+                    .complete_push_frags(ctx, id, frags, err)
                     .map_err(|err| SelectorBatchError::Batch {
                         batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),

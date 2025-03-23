@@ -264,6 +264,15 @@ where
     size_hint: Option<usize>
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct PrivateSmallObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    retries_hint: Option<usize>
+}
+
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -283,6 +292,25 @@ where
     retry: Retry,
     #[serde(default)]
     size_hint: Option<usize>
+}
+
+impl PrivateSmallObjModeConfig {
+    #[inline]
+    pub fn new(retries_hint: Option<usize>) -> Self {
+        PrivateSmallObjModeConfig {
+            retries_hint: retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn retries_hint(&self) -> Option<usize> {
+        self.retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> Option<usize> {
+        self.retries_hint
+    }
 }
 
 impl BatchSlotsConfig {

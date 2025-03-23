@@ -2684,7 +2684,7 @@ where
     >;
     type PushFragRetry = Vec<RetryResult<(), Stream::PushFragRetry>>;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2696,7 +2696,7 @@ where
 
         // Go through each sub-stream and try to push the fragment.
         for (i, frag) in frags.iter_mut().enumerate() {
-            match self.rev_map[i].stream.push_frag(ctx, id.clone(), frag) {
+            match self.rev_map[i].stream.push_frags(ctx, id.clone(), frag) {
                 // We're good; add this to the output.
                 Ok(id) => results.push((Idx::from(i), id)),
                 // An error happened; record the fact that we still
@@ -2717,7 +2717,7 @@ where
         self.decide_push_frag_result(results, errs)
     }
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2737,7 +2737,7 @@ where
                 // Actually do retries.
                 RetryResult::Retry(retry) => match self.rev_map[i]
                     .stream
-                    .retry_push_frag(ctx, id.clone(), &mut frags[i], retry)
+                    .retry_push_frags(ctx, id.clone(), &mut frags[i], retry)
                 {
                     // We're good; add this to the output.
                     Ok(id) => results.push((Idx::from(i), id)),
@@ -2762,7 +2762,7 @@ where
         self.decide_push_frag_result(results, errs)
     }
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: ObjID,
@@ -2777,7 +2777,7 @@ where
         for (idx, err) in retries {
             let i: usize = idx.into();
 
-            match self.rev_map[i].stream.complete_push_frag(
+            match self.rev_map[i].stream.complete_push_frags(
                 ctx,
                 id.clone(),
                 &mut frags[i],
