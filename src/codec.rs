@@ -1114,10 +1114,10 @@ where
 }
 
 impl<Ctx, ObjID, H, Stream> LargeObjStream<ObjID, Ctx>
-    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
+    for DatagramCodecStream<LargeObjMsg<ObjID, H::HashID>, Stream, LargeObjMsgCodec<H>>
 where
     H: Default + HashAlgo + Send,
-    ObjID: Into<usize>,
+    ObjID: Clone + From<u64> + Into<u64> + Into<usize>,
     Stream: Write
 {
     type Frags = OutboundFrags;

@@ -19,8 +19,8 @@
 //! Large-object transfer protocol.
 
 use std::array::TryFromSliceError;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -46,17 +46,18 @@ use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
+use constellation_common::retry::RetryWhen;
 use log::debug;
 use log::error;
 use log::trace;
 
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
+use crate::frags::Frags;
 use crate::frags::InboundFrags;
 use crate::frags::InboundRecvError;
 use crate::frags::OutboundDataError;
 use crate::frags::OutboundFrags;
-use crate::frags::OutboundRecvError;
 use crate::generated::large_obj::LargeObjAccept;
 use crate::generated::large_obj::LargeObjFinish;
 use crate::generated::large_obj::LargeObjFragHeader;
@@ -67,6 +68,8 @@ use crate::generated::large_obj::LargeObjMetadata;
 use crate::generated::large_obj::LargeObjOffer;
 use crate::generated::large_obj::LargeObjReq;
 use crate::generated::large_obj::LargeObjReqObj;
+use crate::stream::LargeObjStream;
+use crate::stream::PushStreamReportError;
 
 const LARGE_OBJ_METADATA_SIZE: usize = 1171;
 const LARGE_OBJ_METADATA_BITS: usize = LARGE_OBJ_METADATA_SIZE * 8;
@@ -82,7 +85,8 @@ pub type LargeObjMetadataPERCodec =
 
 #[derive(Clone)]
 pub struct LargeObjMsgCodec<H>
-where H: HashAlgo {
+where
+    H: HashAlgo {
     frag_header: LargeObjFragHeaderPERCodec,
     metadata: LargeObjMetadataPERCodec,
     hash: H
@@ -95,33 +99,35 @@ pub struct LargeObjFrag {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq)]
-pub enum LargeObjMsg<ID>
-where ID: HashID {
+pub enum LargeObjMsg<ID, H>
+where
+    ID: Into<u64>,
+    H: HashID {
     Offer {
-        hash: ID,
+        hash: H,
         size: u64,
         frag: LargeObjFrag
     },
     Accept {
-        hash: ID,
+        hash: H,
         size: u64,
-        id: u64
+        id: ID
     },
     ReqObj {
-        hash: ID,
+        hash: H,
         size: u64,
-        id: u64
+        id: ID
     },
     Frags {
-        id: u64,
+        id: ID,
         frags: Vec<LargeObjFrag>
     },
     Req {
-        id: u64,
+        id: ID,
         reqs: Vec<LargeObjFragReq>
     },
     Finish {
-        id: u64
+        id: ID
     }
 }
 
@@ -143,34 +149,41 @@ enum InboundFragsState {
 
 struct RecvEntry<H> {
     frags: InboundFragsState,
-    hash: H,
+    hash: H
 }
 
-struct SendEntry {
-    frags: OutboundFrags,
-    when: Option<Instant>,
+struct SendEntry<F>
+where F: Frags {
+    frags: F,
+    when: Option<Instant>
 }
 
-struct LargeObjInbound<H, Prin> {
-    objs: HashMap<u64, RecvEntry<H>>,
-    hashes: HashMap<(Prin, H), u64>,
+struct LargeObjInbound<ObjID, H, Prin>
+where ObjID: Clone + Eq + Hash {
+    objs: HashMap<ObjID, RecvEntry<H>>,
+    hashes: HashMap<(Prin, H), ObjID>
 }
 
-struct LargeObjOutbound<H> {
-    objs: HashMap<H, SendEntry>,
-    hashes: HashMap<u64, H>,
+struct LargeObjOutbound<ObjID, H, F>
+where ObjID: Clone + Eq + Hash,
+      F: Frags {
+    objs: HashMap<H, SendEntry<F>>,
+    hashes: HashMap<ObjID, H>
 }
 
-pub struct LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-      IDs: IDGen + Iterator<Item = u64>,
-      Auth: MsgAuthN<Msg, Wrapper>,
-      Codec: DatagramCodec<Wrapper>,
-      H: Clone + Display + Hash + HashID + Eq {
+pub struct LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator,
+    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    Codec: DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags {
     wrapper: PhantomData<Wrapper>,
     msg: PhantomData<Msg>,
-    inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
-    outbound: Arc<Mutex<LargeObjOutbound<H>>>,
+    inbound: Arc<Mutex<LargeObjInbound<IDs::Item, H, Auth::SessionPrin>>>,
+    outbound: Arc<Mutex<LargeObjOutbound<IDs::Item, H, F>>>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
@@ -178,49 +191,57 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     ids: IDs
 }
 
-pub enum LargeObjSendError<H> {
-    NoObj {
-        hash: H,
-        id: u64
-    },
+pub struct LargeObjPushFragsRetry<Retry, ID> {
+    retry: Retry,
+    id: ID,
+}
+
+pub enum LargeObjPushFragsError<ID, H, Frags> {
+    PushFrags { err: Frags },
+    NoObj { hash: H, id: ID },
     MutexPoison
 }
 
-pub enum LargeObjRecvError<H, Auth, Decode, Upstream> {
+pub enum LargeObjSendError<ID, H> {
+    NoObj { hash: H, id: ID },
+    MutexPoison
+}
+
+pub enum LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags> {
     Upstream {
-        err: Upstream,
+        err: Upstream
     },
     Decode {
-        err: Decode,
+        err: Decode
     },
     Auth {
-        err: Auth,
+        err: Auth
     },
     OutboundRecv {
         hash: H,
-        id: u64,
-        err: OutboundRecvError
+        id: ID,
+        err: Frags
     },
     InboundRecv {
         hash: H,
-        id: u64,
+        id: ID,
         err: InboundRecvError
     },
     FinishedPending {
         hash: H,
-        id: u64
+        id: ID
     },
     NotFound {
         hash: H,
-        id: u64
+        id: ID
     },
     NoHash {
         hash: H,
-        id: u64
+        id: ID
     },
     NoObj {
         hash: H,
-        id: u64
+        id: ID
     },
     Collision,
     AuthNFail,
@@ -258,6 +279,21 @@ pub enum LargeObjDataError {
     OutOfBounds
 }
 
+impl<Retry, ID> LargeObjPushFragsRetry<Retry, ID> {
+    #[inline]
+    pub(crate) fn take(self) -> (Retry, ID) {
+        (self.retry, self.id)
+    }
+}
+
+impl<Retry, ID> RetryWhen for LargeObjPushFragsRetry<Retry, ID>
+where Retry: RetryWhen {
+    #[inline]
+    fn when(&self) -> Instant {
+        self.retry.when()
+    }
+}
+
 impl LargeObjFrag {
     #[inline]
     pub fn offset(&self) -> u64 {
@@ -284,15 +320,18 @@ impl InboundFragsState {
     }
 }
 
-impl<ID> LargeObjMsg<ID>
-where ID: HashID {
+impl<ID, H> LargeObjMsg<ID, H>
+where
+    ID: Into<u64>,
+    H: HashID
+{
     /// Maximum number of bytes that can be sent with a datagram.
     pub const LARGE_OBJ_DATAGRAM_MAX_DATA: usize = 1024;
 
     #[inline]
     pub fn offer(
         frags: &mut OutboundFrags,
-        hash: ID,
+        hash: H,
         max_bytes: usize
     ) -> Result<RetryResult<Self>, LargeObjDataError> {
         frags
@@ -313,22 +352,22 @@ where ID: HashID {
 
     #[inline]
     pub fn accept(
-        hash: ID,
+        hash: H,
         size: usize,
-        id: u64
+        id: ID
     ) -> Self {
         LargeObjMsg::Accept {
             hash: hash,
             size: size as u64,
-            id: id as u64
+            id: id
         }
     }
 
     #[inline]
     pub fn req_obj(
-        hash: ID,
+        hash: H,
         size: usize,
-        id: u64
+        id: ID
     ) -> Self {
         LargeObjMsg::ReqObj {
             hash: hash,
@@ -339,7 +378,7 @@ where ID: HashID {
 
     pub fn frags(
         frags: &mut OutboundFrags,
-        id: usize,
+        id: ID,
         max_bytes: usize
     ) -> Result<RetryResult<Self>, LargeObjDataError> {
         let mut buf = [(0, 0); 16];
@@ -361,7 +400,7 @@ where ID: HashID {
                 }
 
                 Ok(LargeObjMsg::Frags {
-                    id: id as u64,
+                    id: id,
                     frags: fragbuf
                 })
             })
@@ -369,7 +408,7 @@ where ID: HashID {
 
     #[inline]
     pub fn reqs<I>(
-        id: u64,
+        id: ID,
         reqs: I
     ) -> Self
     where
@@ -390,56 +429,64 @@ where ID: HashID {
             })
             .collect();
 
-        LargeObjMsg::Req {
-            id: id,
-            reqs: reqs
-        }
+        LargeObjMsg::Req { id: id, reqs: reqs }
     }
 
     #[inline]
-    pub fn finish(id: u64) -> Self {
+    pub fn finish(id: ID) -> Self {
         LargeObjMsg::Finish { id: id }
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-    SharedMsgs<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-      IDs: IDGen + Iterator<Item = u64>,
-      Auth: MsgAuthN<Msg, Wrapper>,
-      Codec: DatagramCodec<Wrapper>,
-      H: Clone + Display + Hash + HashID + Eq {
-    type MsgsError = LargeObjSendError<H>;
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+    SharedMsgs<Auth::SessionPrin, LargeObjMsg<IDs::Item, H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator,
+    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    Codec: DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags
+{
+    type MsgsError = LargeObjSendError<IDs::Item, H>;
 
     fn msgs(
         &mut self
     ) -> Result<
-        (Option<Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<H>>)>>,
-         Option<Instant>),
+        (
+            Option<Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<IDs::Item, H>>)>>,
+            Option<Instant>
+        ),
         Self::MsgsError
     > {
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
-        let mut inbound = self.inbound.lock()
+        let mut inbound = self
+            .inbound
+            .lock()
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
         let now = Instant::now();
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = None;
-        let hashes: Vec<((Auth::SessionPrin, H), u64)> =
-            inbound.hashes.iter()
-            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()), *id))
+        let hashes: Vec<((Auth::SessionPrin, H), IDs::Item)> = inbound
+            .hashes
+            .iter()
+            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()),
+                                       id.clone()))
             .collect();
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
         for ((prin, hash), id) in hashes {
-            let ent = inbound.objs.get_mut(&id)
-                .ok_or(LargeObjSendError::NoObj {
-                    hash: hash.clone(), id: id
+            let ent =
+                inbound.objs.get_mut(&id).ok_or(LargeObjSendError::NoObj {
+                    hash: hash.clone(),
+                    id: id.clone()
                 })?;
 
             match &mut ent.frags {
@@ -469,9 +516,9 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                             let msg = LargeObjMsg::reqs(id, iter);
 
                             msgs.push((vec![prin.clone()], vec![msg]));
-                            next = next.map_or(
-                                retry, |next| retry.map(|retry| next.min(retry))
-                            );
+                            next = next.map_or(retry, |next| {
+                                retry.map(|retry| next.min(retry))
+                            });
                         }
                         RetryResult::Retry(retry) => {
                             next = Some(
@@ -503,53 +550,56 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
             }
         }
 
-        let msgs = if !msgs.is_empty() {
-            Some(msgs)
-        } else {
-            None
-        };
+        let msgs = if !msgs.is_empty() { Some(msgs) } else { None };
 
         Ok((msgs, next))
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-    PrivateMsgs<LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-      IDs: IDGen + Iterator<Item = u64>,
-      Auth: MsgAuthN<Msg, Wrapper>,
-      Codec: DatagramCodec<Wrapper>,
-      H: Clone + Display + Hash + HashID + Eq {
-    type MsgsError = LargeObjSendError<H>;
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+    PrivateMsgs<LargeObjMsg<IDs::Item, H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator,
+    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    Codec: DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags
+{
+    type MsgsError = LargeObjSendError<IDs::Item, H>;
 
     fn msgs(
         &mut self
-    ) -> Result<
-        (Option<Vec<LargeObjMsg<H>>>, Option<Instant>),
-        Self::MsgsError
-    > {
+    ) -> Result<(Option<Vec<LargeObjMsg<IDs::Item, H>>>, Option<Instant>), Self::MsgsError>
+    {
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
-        let mut inbound = self.inbound.lock()
+        let mut inbound = self
+            .inbound
+            .lock()
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
         let now = Instant::now();
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = None;
-        let hashes: Vec<((Auth::SessionPrin, H), u64)> =
-            inbound.hashes.iter()
-            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()), *id))
+        let hashes: Vec<((Auth::SessionPrin, H), IDs::Item)> = inbound
+            .hashes
+            .iter()
+            .map(|((prin, hash), id)| ((prin.clone(), hash.clone()),
+                                       id.clone()))
             .collect();
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
         for ((prin, hash), id) in hashes {
-            let ent = inbound.objs.get_mut(&id)
-                .ok_or(LargeObjSendError::NoObj {
-                    hash: hash.clone(), id: id
+            let ent =
+                inbound.objs.get_mut(&id).ok_or(LargeObjSendError::NoObj {
+                    hash: hash.clone(),
+                    id: id.clone()
                 })?;
 
             match &mut ent.frags {
@@ -579,9 +629,9 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                             let msg = LargeObjMsg::reqs(id, iter);
 
                             msgs.push(msg);
-                            next = next.map_or(
-                                retry, |next| retry.map(|retry| next.min(retry))
-                            );
+                            next = next.map_or(retry, |next| {
+                                retry.map(|retry| next.min(retry))
+                            });
                         }
                         RetryResult::Retry(retry) => {
                             next = Some(
@@ -613,18 +663,17 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
             }
         }
 
-        let msgs = if !msgs.is_empty() {
-            Some(msgs)
-        } else {
-            None
-        };
+        let msgs = if !msgs.is_empty() { Some(msgs) } else { None };
 
         Ok((msgs, next))
     }
 }
 
-impl<H> Codec<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
-where H: HashAlgo + Default {
+impl<ID, H> Codec<LargeObjMsg<ID, H::HashID>> for LargeObjMsgCodec<H>
+where
+    H: HashAlgo + Default,
+    ID: Clone + From<u64> + Into<u64>,
+{
     type CreateError = Infallible;
     type DecodeError = LargeObjMsgDecodeError;
     type EncodeError = LargeObjMsgEncodeError;
@@ -649,7 +698,7 @@ where H: HashAlgo + Default {
 
     fn encode(
         &mut self,
-        val: &LargeObjMsg<H::HashID>,
+        val: &LargeObjMsg<ID, H::HashID>,
         buf: &mut [u8]
     ) -> Result<usize, Self::EncodeError> {
         match val {
@@ -683,7 +732,7 @@ where H: HashAlgo + Default {
                 let msg = LargeObjMetadata::Accept(LargeObjAccept {
                     hash: hash.bytes().to_vec(),
                     size: *size,
-                    id: *id
+                    id: id.clone().into()
                 });
 
                 self.metadata.encode(&msg, buf).map_err(|err| {
@@ -694,7 +743,7 @@ where H: HashAlgo + Default {
                 let msg = LargeObjMetadata::ReqObj(LargeObjReqObj {
                     hash: hash.bytes().to_vec(),
                     size: *size,
-                    id: *id
+                    id: id.clone().into()
                 });
 
                 self.metadata.encode(&msg, buf).map_err(|err| {
@@ -703,7 +752,7 @@ where H: HashAlgo + Default {
             }
             LargeObjMsg::Frags { id, frags } => {
                 let metadata = LargeObjMetadata::Frags(LargeObjFrags {
-                    id: *id,
+                    id: id.clone().into(),
                     nfrags: frags.len() as u8
                 });
                 let mut curr =
@@ -738,7 +787,7 @@ where H: HashAlgo + Default {
             }
             LargeObjMsg::Req { id, reqs } => {
                 let msg = LargeObjMetadata::Req(LargeObjReq {
-                    id: *id,
+                    id: id.clone().into(),
                     reqs: reqs.clone()
                 });
 
@@ -747,7 +796,9 @@ where H: HashAlgo + Default {
                 })
             }
             LargeObjMsg::Finish { id } => {
-                let msg = LargeObjMetadata::Finish(LargeObjFinish { id: *id });
+                let msg = LargeObjMetadata::Finish(LargeObjFinish {
+                    id: id.clone().into(),
+                });
 
                 self.metadata.encode(&msg, buf).map_err(|err| {
                     LargeObjMsgEncodeError::Metadata { err: err }
@@ -759,7 +810,7 @@ where H: HashAlgo + Default {
     fn decode(
         &mut self,
         buf: &[u8]
-    ) -> Result<(LargeObjMsg<H::HashID>, usize), Self::DecodeError> {
+    ) -> Result<(LargeObjMsg<ID, H::HashID>, usize), Self::DecodeError> {
         let (metadata, mut curr) = self
             .metadata
             .decode(buf)
@@ -769,10 +820,10 @@ where H: HashAlgo + Default {
             LargeObjMetadata::Offer(LargeObjOffer { hash, size, frag }) => {
                 let datalen = frag.len as usize;
                 let mut data = vec![0; datalen];
-                let hash = self.hash.wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash {
-                        err: err
-                    })?;
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
 
                 curr += if curr + datalen <= buf.len() {
                     data.copy_from_slice(&buf[curr..curr + datalen]);
@@ -795,14 +846,14 @@ where H: HashAlgo + Default {
                 ))
             }
             LargeObjMetadata::ReqObj(LargeObjReqObj { hash, size, id }) => {
-                let hash = self.hash.wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash {
-                        err: err
-                    })?;
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
 
                 Ok((
                     LargeObjMsg::ReqObj {
-                        id: id,
+                        id: id.clone().into(),
                         hash: hash,
                         size: size
                     },
@@ -810,14 +861,14 @@ where H: HashAlgo + Default {
                 ))
             }
             LargeObjMetadata::Accept(LargeObjAccept { hash, size, id }) => {
-                let hash = self.hash.wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash {
-                        err: err
-                    })?;
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
 
                 Ok((
                     LargeObjMsg::Accept {
-                        id: id,
+                        id: id.clone().into(),
                         hash: hash,
                         size: size
                     },
@@ -855,29 +906,246 @@ where H: HashAlgo + Default {
 
                 Ok((
                     LargeObjMsg::Frags {
-                        id: id,
+                        id: id.clone().into(),
                         frags: frags
                     },
                     curr
                 ))
             }
             LargeObjMetadata::Req(LargeObjReq { id, reqs }) => {
-                Ok((LargeObjMsg::Req { id: id, reqs: reqs }, curr))
+                Ok((LargeObjMsg::Req {
+                    id: id.clone().into(),
+                    reqs: reqs
+                }, curr))
             }
             LargeObjMetadata::Finish(LargeObjFinish { id }) => {
-                Ok((LargeObjMsg::Finish { id: id }, curr))
+                Ok((LargeObjMsg::Finish {
+                    id: id.clone().into(),
+                }, curr))
             }
         }
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-    LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-      IDs: IDGen + Iterator<Item = u64>,
-      Auth: MsgAuthN<Msg, Wrapper>,
-      Codec: DatagramCodec<Wrapper>,
-      H: Clone + Display + Hash + HashID + Eq {
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+    LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator,
+    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    Codec: DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags
+{
+    pub(crate) fn try_push_frags<Stream, Ctx>(
+        &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Stream,
+    ) -> Result<
+        RetryResult<
+            Option<Instant>,
+            LargeObjPushFragsRetry<
+                Stream::PushFragRetry,
+                IDs::Item
+            >
+        >,
+        LargeObjPushFragsError<
+            IDs::Item,
+            H,
+            <Stream::PushFragError as BatchError>::Permanent
+        >
+    >
+    where Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+          + PushStreamReportError<
+              <Stream::PushFragError as BatchError>::Permanent
+          >,
+          IDs::Item: Into<usize>
+    {
+        let res = {
+            let mut outbound = self
+                .outbound
+                .lock()
+                .map_err(|_| LargeObjPushFragsError::MutexPoison)?;
+
+            match outbound
+                .hashes.get(&id).cloned() {
+                Some(hash) => match outbound.objs.get_mut(&hash) {
+                    Some(ent) => stream.push_frags(
+                        ctx,
+                        id.clone(),
+                        &mut ent.frags
+                    ),
+                    None => {
+                        return Err(LargeObjPushFragsError::NoObj {
+                            hash: hash,
+                            id: id.clone()
+                        })
+                    }
+                },
+                None => {
+                    trace!(target: "large-obj-proto",
+                           "stray frags for {}",
+                           id);
+
+                    Ok(RetryResult::Success(()))
+                }
+            }
+        };
+
+        match res {
+            // It succeeded.
+            Ok(out) => Ok(out),
+            Err(err) => {
+                self.complete_push_frags(ctx, stream, id, err)
+            }
+        }
+    }
+
+    pub(crate) fn retry_push_frags<Stream, Ctx>(
+        &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Stream,
+        id: IDs::Item,
+        retry: Stream::PushFragRetry
+    ) -> Result<
+        RetryResult<(), Stream::PushFragRetry>,
+        LargeObjPushFragsError<
+            IDs::Item,
+            H,
+            <Stream::PushFragError as BatchError>::Permanent
+        >
+    >
+    where Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+          + PushStreamReportError<
+              <Stream::PushFragError as BatchError>::Permanent
+          >,
+          IDs::Item: Into<usize>
+    {
+        let res = {
+            let mut outbound = self
+                .outbound
+                .lock()
+                .map_err(|_| LargeObjPushFragsError::MutexPoison)?;
+
+            match outbound
+                .hashes.get(&id).cloned() {
+                Some(hash) => match outbound.objs.get_mut(&hash) {
+                    Some(ent) => stream.retry_push_frags(
+                        ctx,
+                        id.clone(),
+                        &mut ent.frags,
+                        retry
+                    ),
+                    None => {
+                        return Err(LargeObjPushFragsError::NoObj {
+                            hash: hash,
+                            id: id.clone()
+                        })
+                    }
+                },
+                None => {
+                    trace!(target: "large-obj-proto",
+                           "stray frags for {}",
+                           id);
+
+                    Ok(RetryResult::Success(()))
+                }
+            }
+        };
+
+        match res {
+            // It succeeded.
+            Ok(out) => Ok(out),
+            Err(err) => {
+                self.complete_push_frags(ctx, stream, id, err)
+            }
+        }
+    }
+
+    pub(crate) fn complete_push_frags<Stream, Ctx>(
+        &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Stream,
+        id: IDs::Item,
+        err: Stream::PushFragError
+    ) -> Result<
+        RetryResult<(), Stream::PushFragRetry>,
+        LargeObjPushFragsError<
+            IDs::Item,
+            H,
+            <Stream::PushFragError as BatchError>::Permanent
+        >
+    >
+    where Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+          + PushStreamReportError<
+              <Stream::PushFragError as BatchError>::Permanent
+          >,
+          IDs::Item: Into<usize>
+    {
+        let res = match err.split() {
+            (Some(completable), None) => {
+                let mut outbound = self
+                    .outbound
+                    .lock()
+                    .map_err(|_| LargeObjPushFragsError::MutexPoison)?;
+
+                match outbound
+                    .hashes.get(&id).cloned() {
+                    Some(hash) => match outbound.objs.get_mut(&hash) {
+                        Some(ent) => stream.complete_push_frags(
+                            ctx,
+                            id.clone(),
+                            &mut ent.frags,
+                            completable
+                        ),
+                        None => {
+                            return Err(LargeObjPushFragsError::NoObj {
+                                hash: hash,
+                                id: id.clone()
+                            })
+                        }
+                    },
+                    None => {
+                        trace!(target: "large-obj-proto",
+                               "stray frags for {}",
+                               id);
+
+                        Ok(RetryResult::Success(()))
+                    }
+                }
+            }
+            (_, Some(permanent)) => {
+                // Unrecoverable errors occurred.
+                error!(target: "large-obj-entry",
+                       "unrecoverable error pushing fragments: {}",
+                       permanent);
+
+                // Report the failure
+                if let Err(err) = stream.report_error(&permanent) {
+                    error!(target: "large-obj-entry",
+                           "failed to report errors to stream: {}",
+                           err);
+                }
+
+                Ok(RetryResult::Success(()))
+            }
+            (None, None) => {
+                error!(target: "large-obj-entry",
+                       "neither completable nor permanent errors reported");
+
+                Ok(RetryResult::Success(()))
+            }
+        };
+
+        match res {
+            // It succeeded.
+            Ok(out) => Ok(out),
+            Err(err) => {
+                self.complete_push_frags(ctx, stream, id, err)
+            }
+        }
+    }
 
     fn recv_offer_msg(
         &mut self,
@@ -887,53 +1155,52 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         frag: LargeObjFrag
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut inbound = self.inbound.lock()
+        let mut inbound = self
+            .inbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         match inbound.hashes.entry((prin.clone(), hash.clone())) {
             Entry::Occupied(ent) => {
                 // ID already exists, get the entry.
-                let id = *ent.get();
-                let RecvEntry { frags, hash, .. } = inbound.objs.get_mut(&id)
-                    .ok_or(LargeObjRecvError::NotFound {
-                        hash: hash,
-                        id: id
-                    })?;
+                let id = ent.get().clone();
+                let RecvEntry { frags, hash, .. } =
+                    inbound.objs.get_mut(&id).ok_or(
+                        LargeObjRecvError::NotFound {
+                            hash: hash,
+                            id: id.clone()
+                        }
+                    )?;
                 // Check if we're still receiving fragments.
-                let closeout = if let InboundFragsState::Active {
-                    frags, ..
-                } = frags {
-                    // Receive the fragment.
-                    frags.recv(frag.offset() as usize, frag.data())
-                        .map_err(|err| LargeObjRecvError::InboundRecv {
-                            hash: hash.clone(),
-                            id: id,
-                            err: err
-                        })?;
+                let closeout =
+                    if let InboundFragsState::Active { frags, .. } = frags {
+                        // Receive the fragment.
+                        frags
+                            .recv(frag.offset() as usize, frag.data())
+                            .map_err(|err| LargeObjRecvError::InboundRecv {
+                                hash: hash.clone(),
+                                id: id.clone(),
+                                err: err
+                            })?;
 
-                    frags.is_finished()
-                } else {
-                    // This is ok, it can happen due to delayed
-                    // messages.
-                    trace!(target: "large-obj-proto",
-                           "redundant offer message for ID {:x} ({})",
+                        frags.is_finished()
+                    } else {
+                        // This is ok, it can happen due to delayed
+                        // messages.
+                        trace!(target: "large-obj-proto",
+                           "redundant offer message for ID {} ({})",
                            id, hash);
 
-                    false
-                };
+                        false
+                    };
 
                 // Check if the entry is finished and
                 // report if it is.
                 if closeout {
                     debug!(target: "large-obj-proto",
-                           "finished transfer for ID {:x}",
+                           "finished transfer for ID {}",
                            id);
 
                     let finished = InboundFragsState::Finished {
@@ -941,21 +1208,21 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                         accept: false
                     };
                     let data = match std::mem::replace(frags, finished) {
-                        InboundFragsState::Active {
-                            frags, ..
-                        } => match frags.finish() {
-                            Ok(data) => Some(data),
-                            Err(_) => {
-                                error!(target: "large-obj-proto",
-                                       "finish for ID {:x} should not fail",
+                        InboundFragsState::Active { frags, .. } => {
+                            match frags.finish() {
+                                Ok(data) => Some(data),
+                                Err(_) => {
+                                    error!(target: "large-obj-proto",
+                                       "finish for ID {} should not fail",
                                        id);
 
-                                None
+                                    None
+                                }
                             }
-                        },
+                        }
                         InboundFragsState::Finished { .. } => {
                             error!(target: "large-obj-proto",
-                                   concat!("frags for ID {:x} should ",
+                                   concat!("frags for ID {} should ",
                                            "not be finished"),
                                    id);
 
@@ -967,16 +1234,16 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                 } else {
                     Ok(None)
                 }
-            },
+            }
             Entry::Vacant(ent) => {
                 // No entry for this hash exists, set one up.
                 let id = self.ids.next().ok_or(LargeObjRecvError::NoID)?;
                 let size = size as usize;
 
-                ent.insert(id);
+                ent.insert(id.clone());
 
                 debug!(target: "large-obj-proto",
-                       "creating new transfer for {} with ID {:x}",
+                       "creating new transfer for {} with ID {}",
                        hash, id);
 
                 // See if the offer provides all the data.
@@ -991,7 +1258,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                             accept: true,
                             size: size
                         },
-                        hash: hash,
+                        hash: hash
                     }
                 } else {
                     trace!(target: "large-obj-proto",
@@ -1007,7 +1274,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                             }),
                             frags: frags
                         },
-                        hash: hash,
+                        hash: hash
                     }
                 };
 
@@ -1023,28 +1290,24 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
     fn recv_frags_msg(
         &mut self,
-        id: u64,
+        id: IDs::Item,
         recv: Vec<LargeObjFrag>
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut inbound = self.inbound.lock()
+        let mut inbound = self
+            .inbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
-        match inbound.objs
-            .get_mut(&id) {
+        match inbound.objs.get_mut(&id) {
             Some(RecvEntry { frags, hash, .. }) => {
-                let closeout = if let InboundFragsState::Active {
-                    frags, req
-                } = frags {
+                let closeout = if let InboundFragsState::Active { frags, req } =
+                    frags
+                {
                     debug!(target: "large-obj-proto",
-                           "received finished acknowledgement for ID {:x}",
+                           "received finished acknowledgement for ID {}",
                            id);
 
                     // If we get a frags message, that means our req
@@ -1053,10 +1316,11 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
                     // Receive all of the fragments
                     for frag in recv {
-                        frags.recv(frag.offset() as usize, frag.data())
+                        frags
+                            .recv(frag.offset() as usize, frag.data())
                             .map_err(|err| LargeObjRecvError::InboundRecv {
                                 hash: hash.clone(),
-                                id: id,
+                                id: id.clone(),
                                 err: err
                             })?;
                     }
@@ -1064,7 +1328,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                     frags.is_finished()
                 } else {
                     trace!(target: "large-obj-proto",
-                           "redundant fragments message for ID {:x} ({})",
+                           "redundant fragments message for ID {} ({})",
                            id, hash);
 
                     false
@@ -1073,7 +1337,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                 // Check if the entry is finished and report if it is.
                 if closeout {
                     debug!(target: "large-obj-proto",
-                           "finished transfer for ID {:x}",
+                           "finished transfer for ID {}",
                            id);
 
                     let finished = InboundFragsState::Finished {
@@ -1081,21 +1345,21 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                         accept: false
                     };
                     let data = match std::mem::replace(frags, finished) {
-                        InboundFragsState::Active {
-                            frags, ..
-                        } => match frags.finish() {
-                            Ok(data) => Some(data),
-                            Err(_) => {
-                                error!(target: "large-obj-proto",
-                                       "finish for ID {:x} should not fail",
+                        InboundFragsState::Active { frags, .. } => {
+                            match frags.finish() {
+                                Ok(data) => Some(data),
+                                Err(_) => {
+                                    error!(target: "large-obj-proto",
+                                       "finish for ID {} should not fail",
                                        id);
 
-                                None
+                                    None
+                                }
                             }
-                        },
+                        }
                         InboundFragsState::Finished { .. } => {
                             error!(target: "large-obj-proto",
-                                   concat!("frags for ID {:x} should ",
+                                   concat!("frags for ID {} should ",
                                            "not be finished"),
                                    id);
 
@@ -1110,7 +1374,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
             }
             None => {
                 trace!(target: "large-obj-proto",
-                       "fragments message for non-existent ID {:x}",
+                       "fragments message for non-existent ID {}",
                        id);
 
                 Ok(None)
@@ -1121,22 +1385,19 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     fn recv_accept_msg(
         &mut self,
         hash: H,
-        id: u64,
+        id: IDs::Item,
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut outbound = self.outbound.lock()
+        let mut outbound = self
+            .outbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         if outbound.objs.remove(&hash).is_some() {
             debug!(target: "large-obj-proto",
-                   "received acceptance for {} (ID {:x})",
+                   "received acceptance for {} (ID {})",
                    hash, id);
 
             if outbound.hashes.insert(id, hash).is_none() {
@@ -1156,21 +1417,18 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     fn recv_req_obj_msg(
         &mut self,
         hash: H,
-        id: u64,
+        id: IDs::Item
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut outbound = self.outbound.lock()
+        let mut outbound = self
+            .outbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         if outbound.objs.get(&hash).is_none() {
-            match outbound.hashes.entry(id) {
+            match outbound.hashes.entry(id.clone()) {
                 Entry::Occupied(_) => {
                     trace!(target: "large-obj-proto",
                            "redundant object request for {}",
@@ -1180,7 +1438,7 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                 }
                 Entry::Vacant(ent) => {
                     debug!(target: "large-obj-proto",
-                           "received object request for {} (ID {:x})",
+                           "received object request for {} (ID {})",
                            hash, id);
 
                     ent.insert(hash);
@@ -1199,46 +1457,46 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
     fn recv_reqs_msg(
         &mut self,
-        id: u64,
+        id: IDs::Item,
         reqs: Vec<LargeObjFragReq>
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut outbound = self.outbound.lock()
+        let mut outbound = self
+            .outbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         match outbound.hashes.get(&id).cloned() {
             Some(hash) => match outbound.objs.get_mut(&hash) {
                 Some(ent) => {
                     debug!(target: "large-obj-proto",
-                           "received fragments for {} (ID {:x})",
+                           "received fragments for {} (ID {})",
                            hash, id);
 
                     for req in reqs {
-                        ent.frags.recv_req(&req)
-                            .map_err(|err| LargeObjRecvError::OutboundRecv {
+                        ent.frags.recv_req(&req).map_err(|err| {
+                            LargeObjRecvError::OutboundRecv {
                                 hash: hash.clone(),
-                                id: id,
+                                id: id.clone(),
                                 err: err
-                            })?;
+                            }
+                        })?;
                     }
 
                     Ok(None)
                 }
-                None => return Err(LargeObjRecvError::NoObj {
-                    hash: hash,
-                    id: id
-                })
-            }
+                None => {
+                    return Err(LargeObjRecvError::NoObj {
+                        hash: hash,
+                        id: id.clone()
+                    })
+                }
+            },
             None => {
                 trace!(target: "large-obj-proto",
-                       "stray frags for {:0x}",
+                       "stray frags for {}",
                        id);
 
                 Ok(None)
@@ -1248,36 +1506,35 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
 
     fn recv_finish_msg(
         &mut self,
-        id: u64,
+        id: IDs::Item
     ) -> Result<
         Option<Vec<u8>>,
-        LargeObjRecvError<
-            H,
-            Auth::Error,
-            Codec::DecodeError,
-            Recv::RecvError
-        >
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>
     > {
-        let mut outbound = self.outbound.lock()
+        let mut outbound = self
+            .outbound
+            .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         match outbound.hashes.remove(&id) {
             Some(hash) => match outbound.objs.remove(&hash) {
                 Some(SendEntry { .. }) => {
                     trace!(target: "large-obj-proto",
-                           "removed transfer entries for {:x} ({})",
+                           "removed transfer entries for {} ({})",
                            id, hash);
 
                     Ok(None)
-                },
-                None => return Err(LargeObjRecvError::NotFound {
-                    hash: hash,
-                    id: id
-                })
+                }
+                None => {
+                    return Err(LargeObjRecvError::NotFound {
+                        hash: hash,
+                        id: id
+                    })
+                }
             },
             None => {
                 trace!(target: "large-obj-proto",
-                       "redundant finish for ID {:x}",
+                       "redundant finish for ID {}",
                        id);
 
                 Ok(None)
@@ -1286,37 +1543,39 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-    AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv>
-where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-      IDs: IDGen + Iterator<Item = u64>,
-      Auth: MsgAuthN<Msg, Wrapper>,
-      Codec: DatagramCodec<Wrapper>,
-      H: Clone + Display + Hash + HashID + Eq {
-    type RecvError = LargeObjRecvError<
-        H,
-        Auth::Error,
-        Codec::DecodeError,
-        Recv::RecvError
-    >;
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+    AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<IDs::Item, H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator,
+    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    Codec: DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags
+{
+    type RecvError =
+        LargeObjRecvError<IDs::Item, H, Auth::Error, Codec::DecodeError, Recv::RecvError, F::RecvReqError>;
 
     fn recv_auth_msg(
         &mut self,
         prin: &Auth::SessionPrin,
-        msg: LargeObjMsg<H>
+        msg: LargeObjMsg<IDs::Item, H>
     ) -> Result<(), Self::RecvError> {
         let data = match msg {
             // Inbound messages.
-            LargeObjMsg::Offer { hash, size, frag } =>
-                self.recv_offer_msg(prin, hash, size, frag),
-            LargeObjMsg::Frags { id, frags } =>
-                self.recv_frags_msg(id, frags),
+            LargeObjMsg::Offer { hash, size, frag } => {
+                self.recv_offer_msg(prin, hash, size, frag)
+            }
+            LargeObjMsg::Frags { id, frags } => self.recv_frags_msg(id, frags),
             // Outbound messages.
-            LargeObjMsg::Accept { hash, id, .. } =>
-                self.recv_accept_msg(hash, id),
-            LargeObjMsg::ReqObj { hash, id, .. } =>
-                self.recv_req_obj_msg(hash, id),
+            LargeObjMsg::Accept { hash, id, .. } => {
+                self.recv_accept_msg(hash, id)
+            }
+            LargeObjMsg::ReqObj { hash, id, .. } => {
+                self.recv_req_obj_msg(hash, id)
+            }
             LargeObjMsg::Req { id, reqs } => self.recv_reqs_msg(id, reqs),
             LargeObjMsg::Finish { id } => self.recv_finish_msg(id)
         }?;
@@ -1327,26 +1586,24 @@ where Recv: AuthNMsgRecv<Auth::Prin, Msg>,
                    "processsing complete message");
 
             // Decode the complete message.
-            let (wrapper, _) = self.codec.decode(&data)
-                .map_err(|err| LargeObjRecvError::Decode {
-                    err: err
-                })?;
+            let (wrapper, _) = self
+                .codec
+                .decode(&data)
+                .map_err(|err| LargeObjRecvError::Decode { err: err })?;
 
             // Authenticate the complete message.
-            match self.auth.msg_authn(prin, wrapper)
-                .map_err(|err| LargeObjRecvError::Auth {
-                    err: err
-                })? {
+            match self
+                .auth
+                .msg_authn(prin, wrapper)
+                .map_err(|err| LargeObjRecvError::Auth { err: err })?
+            {
                 AuthNResult::Accept((prin, msg)) => {
                     // Send it upstream.
-                    self.upstream.recv_auth_msg(&prin, msg)
-                        .map_err(|err| LargeObjRecvError::Upstream {
-                            err: err
-                        })?;
-                },
-                AuthNResult::Reject => {
-                    return Err(LargeObjRecvError::AuthNFail)
+                    self.upstream.recv_auth_msg(&prin, msg).map_err(|err| {
+                        LargeObjRecvError::Upstream { err: err }
+                    })?;
                 }
+                AuthNResult::Reject => return Err(LargeObjRecvError::AuthNFail)
             }
         }
 
@@ -1369,11 +1626,13 @@ where H: Default + HashAlgo {
     const MAX_BYTES: usize = 1286;
 }
 
-impl<H, Auth, Decode, Upstream> ScopedError
-    for LargeObjRecvError<H, Auth, Decode, Upstream>
+impl<ID, H, Auth, Decode, Upstream, Frags> ScopedError
+    for LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
-    Upstream: ScopedError {
+    Upstream: ScopedError,
+    Frags: ScopedError
+{
     fn scope(&self) -> ErrorScope {
         match self {
             LargeObjRecvError::NotFound { .. } |
@@ -1383,19 +1642,34 @@ where
             LargeObjRecvError::MutexPoison |
             LargeObjRecvError::NoID => ErrorScope::Unrecoverable,
             LargeObjRecvError::FinishedPending { .. } |
-            LargeObjRecvError::OutboundRecv { .. } |
             LargeObjRecvError::InboundRecv { .. } |
             LargeObjRecvError::Decode { .. } |
             LargeObjRecvError::Auth { .. } |
             LargeObjRecvError::AuthNFail => ErrorScope::Msg,
-            LargeObjRecvError::Upstream { err } => err.scope(),
+            LargeObjRecvError::OutboundRecv { err, .. } => err.scope(),
+            LargeObjRecvError::Upstream { err } => err.scope()
         }
     }
 }
 
-impl<H> ScopedError for LargeObjSendError<H>
+impl<ID, H, Frags> ScopedError for LargeObjPushFragsError<ID, H, Frags>
 where
-    H: Clone + Display + Hash + HashID + Eq {
+    H: Clone + Display + Hash + HashID + Eq,
+    Frags: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            LargeObjPushFragsError::PushFrags { err } => err.scope(),
+            LargeObjPushFragsError::NoObj { .. } |
+            LargeObjPushFragsError::MutexPoison => ErrorScope::Unrecoverable
+        }
+    }
+}
+
+impl<ID, H> ScopedError for LargeObjSendError<ID, H>
+where
+    H: Clone + Display + Hash + HashID + Eq
+{
     fn scope(&self) -> ErrorScope {
         match self {
             LargeObjSendError::NoObj { .. } |
@@ -1405,7 +1679,9 @@ where
 }
 
 impl<H> Default for LargeObjMsgCodec<H>
-where H: HashAlgo + Default {
+where
+    H: HashAlgo + Default
+{
     #[inline]
     fn default() -> Self {
         LargeObjMsgCodec {
@@ -1495,29 +1771,58 @@ impl Display for LargeObjMsgDecodeError {
     }
 }
 
-impl<H> Display for LargeObjSendError<H>
+impl<ID, H, Frags> Display for LargeObjPushFragsError<ID, H, Frags>
 where
-    H: Clone + Display + Hash + HashID + Eq {
+    H: Clone + Display + Hash + HashID + Eq,
+    Frags: Display,
+    ID: Display
+{
     fn fmt(
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjSendError::NoObj { hash, id } =>
-                write!(f, "ID {:x} exists for {}, but no object entry found",
-                       id, hash),
+            LargeObjPushFragsError::PushFrags { err } => err.fmt(f),
+            LargeObjPushFragsError::NoObj { hash, id } => write!(
+                f,
+                "ID {} exists for {}, but no object entry found",
+                id, hash
+            ),
+            LargeObjPushFragsError::MutexPoison => write!(f, "mutex poisoned")
+        }
+    }
+}
+
+impl<ID, H> Display for LargeObjSendError<ID, H>
+where
+    H: Clone + Display + Hash + HashID + Eq,
+    ID: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            LargeObjSendError::NoObj { hash, id } => write!(
+                f,
+                "ID {} exists for {}, but no object entry found",
+                id, hash
+            ),
             LargeObjSendError::MutexPoison => write!(f, "mutex poisoned")
         }
     }
 }
 
-impl<H, Auth, Decode, Upstream> Display
-    for LargeObjRecvError<H, Auth, Decode, Upstream>
+impl<ID, H, Auth, Decode, Upstream, Frags> Display
+    for LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
     Upstream: Display,
     Decode: Display,
-    Auth: Display {
+    Frags: Display,
+    Auth: Display,
+    ID: Display
+{
     fn fmt(
         &self,
         f: &mut Formatter<'_>
@@ -1526,39 +1831,51 @@ where
             LargeObjRecvError::Upstream { err } => err.fmt(f),
             LargeObjRecvError::Decode { err } => err.fmt(f),
             LargeObjRecvError::Auth { err } => err.fmt(f),
-            LargeObjRecvError::FinishedPending { hash, id } =>
-                write!(f, concat!("received finished for ID {:x} ({}), ",
-                                  "but transfer is still pending"),
-                       id, hash),
-            LargeObjRecvError::OutboundRecv { hash, id, err } =>
-                write!(f, "error receiving for ID {:x} ({}): {}",
-                       id, hash, err),
-            LargeObjRecvError::InboundRecv { hash, id, err } =>
-                write!(f, "error receiving for ID {:x} ({}): {}",
-                       id, hash, err),
-            LargeObjRecvError::NotFound { hash, id } =>
-                write!(f, "ID {:x} exists for {}, but no object entry found",
-                       id, hash),
-            LargeObjRecvError::NoHash { hash, id } =>
-                write!(f, "ID {:x} exists for {}, but no hash entry found",
-                       id, hash),
-            LargeObjRecvError::NoObj { id, hash } =>
-                write!(f, "ID {:x} exists for {}, but no object entry found",
-                       id, hash),
-            LargeObjRecvError::Collision =>
-                write!(f, "id generator produced collision"),
+            LargeObjRecvError::FinishedPending { hash, id } => write!(
+                f,
+                concat!(
+                    "received finished for ID {} ({}), ",
+                    "but transfer is still pending"
+                ),
+                id, hash
+            ),
+            LargeObjRecvError::OutboundRecv { hash, id, err } => {
+                write!(f, "error receiving for ID {} ({}): {}", id, hash, err)
+            }
+            LargeObjRecvError::InboundRecv { hash, id, err } => {
+                write!(f, "error receiving for ID {} ({}): {}", id, hash, err)
+            }
+            LargeObjRecvError::NotFound { hash, id } => write!(
+                f,
+                "ID {} exists for {}, but no object entry found",
+                id, hash
+            ),
+            LargeObjRecvError::NoHash { hash, id } => write!(
+                f,
+                "ID {} exists for {}, but no hash entry found",
+                id, hash
+            ),
+            LargeObjRecvError::NoObj { id, hash } => write!(
+                f,
+                "ID {} exists for {}, but no object entry found",
+                id, hash
+            ),
+            LargeObjRecvError::Collision => {
+                write!(f, "id generator produced collision")
+            }
             LargeObjRecvError::NoID => write!(f, "id generator exhausted"),
-            LargeObjRecvError::AuthNFail =>
-                write!(f, "message authentication failed"),
+            LargeObjRecvError::AuthNFail => {
+                write!(f, "message authentication failed")
+            }
             LargeObjRecvError::MutexPoison => write!(f, "mutex poisoned")
         }
     }
 }
 
 #[cfg(test)]
-use constellation_common::hashid::SHA3ID;
-#[cfg(test)]
 use constellation_common::hashid::SHA3Algo;
+#[cfg(test)]
+use constellation_common::hashid::SHA3ID;
 
 #[test]
 fn test_encode_decode_metadata_offer() {
@@ -1686,7 +2003,7 @@ fn test_encode_decode_frag_header() {
 #[test]
 fn test_encode_decode_msg_offer_frag() {
     let algo = SHA3Algo::default();
-    let msg = LargeObjMsg::Offer {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Offer {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
         frag: LargeObjFrag {
@@ -1695,7 +2012,7 @@ fn test_encode_decode_msg_offer_frag() {
         }
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1707,13 +2024,13 @@ fn test_encode_decode_msg_offer_frag() {
 #[test]
 fn test_encode_decode_msg_req_obj() {
     let algo = SHA3Algo::default();
-    let msg = LargeObjMsg::ReqObj {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::ReqObj {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
         id: 0x1234567890abcdef
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1725,13 +2042,13 @@ fn test_encode_decode_msg_req_obj() {
 #[test]
 fn test_encode_decode_msg_accopt() {
     let algo = SHA3Algo::default();
-    let msg = LargeObjMsg::Accept {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Accept {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
         id: 0x1234567890abcdef
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1742,7 +2059,7 @@ fn test_encode_decode_msg_accopt() {
 
 #[test]
 fn test_encode_decode_msg_frags_1_frag() {
-    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
         id: 0x1234567890abcdef,
         frags: vec![LargeObjFrag {
             offset: 0x1111111111111111,
@@ -1750,7 +2067,7 @@ fn test_encode_decode_msg_frags_1_frag() {
         }]
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1761,7 +2078,7 @@ fn test_encode_decode_msg_frags_1_frag() {
 
 #[test]
 fn test_encode_decode_msg_frags_4_frags() {
-    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
         id: 0x1234567890abcdef,
         frags: vec![
             LargeObjFrag {
@@ -1783,7 +2100,7 @@ fn test_encode_decode_msg_frags_4_frags() {
         ]
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1794,7 +2111,7 @@ fn test_encode_decode_msg_frags_4_frags() {
 
 #[test]
 fn test_encode_decode_msg_frags_16_frags() {
-    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
         id: 0x1234567890abcdef,
         frags: vec![
             LargeObjFrag {
@@ -1864,7 +2181,7 @@ fn test_encode_decode_msg_frags_16_frags() {
         ]
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1875,7 +2192,7 @@ fn test_encode_decode_msg_frags_16_frags() {
 
 #[test]
 fn test_encode_decode_msg_req() {
-    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Req {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Req {
         id: 0x1337feeddeadbeef,
         reqs: vec![
             LargeObjFragReq::Need(LargeObjFragRef {
@@ -1886,7 +2203,7 @@ fn test_encode_decode_msg_req() {
         ]
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 
@@ -1897,11 +2214,11 @@ fn test_encode_decode_msg_req() {
 
 #[test]
 fn test_encode_decode_msg_finish() {
-    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Finish {
+    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Finish {
         id: 0x1234567890abcdef
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
-    let mut buf = [0; LargeObjMsgCodec::<SHA3Algo>::MAX_BYTES];
+    let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<LargeObjMsg<u64, SHA3ID>>>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
 

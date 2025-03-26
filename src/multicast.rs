@@ -46,6 +46,8 @@ use crate::error::BatchError;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
 use crate::error::SelectionsError;
+use crate::frags::Frags;
+use crate::generated::large_obj::LargeObjFragReq;
 use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
@@ -112,6 +114,14 @@ pub struct StreamMulticaster<
     rev_map: Vec<StreamMulticasterParty<Msg, Party, Stream, Ctx>>,
     /// Currently-live batches.
     batches: CompoundBatches<StreamMulticasterBatch<Stream::BatchID>>
+}
+
+pub struct StreamMulticasterFrags<Idx, F>
+where Idx: Clone + Display + From<usize> + Into<usize>,
+      F: Frags
+{
+    idx: PhantomData<Idx>,
+    frags: Vec<F>
 }
 
 /// [StreamReporter] instance for [StreamMulticaster].
@@ -1089,16 +1099,17 @@ where
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx>
-    StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
+impl<Party, Idx, ObjID, H, Stream, Ctx>
+    StreamMulticaster<Party, Idx, LargeObjMsg<ObjID, H>, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg<ObjID, H>, Ctx>,
     Stream::BatchID: Clone,
-    H: HashID,
+    ObjID: Clone + Into<u64> + Into<usize>,
+    H: HashID
 {
-    fn decide_push_frag_result<ObjID>(
+    fn decide_push_frag_result(
         &mut self,
         mut elems: Vec<(
             Idx,
@@ -1115,7 +1126,6 @@ where
         <Self as LargeObjStream<ObjID, Ctx>>::PushFragError
     >
     where
-        ObjID: Clone + Into<usize>,
         Stream: LargeObjStream<ObjID, Ctx> {
         match errs {
             // There were errors.
@@ -2666,17 +2676,67 @@ where
     }
 }
 
+impl<Idx, F> Frags for StreamMulticasterFrags<Idx, F>
+where Idx: Clone + Display + From<usize> + Into<usize>,
+      F: Frags
+{
+    type RecvReqError = ErrorSet<Idx, (), F::RecvReqError>;
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.frags.iter().all(|val| val.is_empty())
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.frags[0].len()
+    }
+
+    fn recv_req(
+        &mut self,
+        req: &LargeObjFragReq
+    ) -> Result<(), Self::RecvReqError> {
+        let len = self.frags.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs: Option<Vec<(Idx, F::RecvReqError)>> = None;
+
+        // Go through each sub-stream and try to receive.
+        for (i, frags) in self.frags.iter_mut().enumerate() {
+            match frags.recv_req(req) {
+                Ok(()) => results.push((Idx::from(i), ())),
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((Idx::from(i), err)),
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((Idx::from(i), err));
+
+                        errs = Some(vec)
+                    }
+                }
+            }
+        }
+
+        match errs {
+            // There were errors.
+            Some(errs) => Err(ErrorSet::create(results, errs)),
+            // No errors, check for retries.
+            None => Ok(())
+        }
+    }
+}
+
 impl<ObjID, Party, Idx, H, Stream, Ctx> LargeObjStream<ObjID, Ctx>
-    for StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
+    for StreamMulticaster<Party, Idx, LargeObjMsg<ObjID, H>, Stream, Ctx>
 where
-    ObjID: Clone + Into<usize>,
+    ObjID: Clone + Into<u64> + Into<usize>,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Stream: LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg<ObjID, H>, Ctx>,
     H: HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
-    type Frags = Vec<Stream::Frags>;
+    type Frags = StreamMulticasterFrags<Idx, Stream::Frags>;
     type PushFragError = ErrorSet<
         Idx,
         RetryResult<(), Stream::PushFragRetry>,
@@ -2695,7 +2755,7 @@ where
         let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
 
         // Go through each sub-stream and try to push the fragment.
-        for (i, frag) in frags.iter_mut().enumerate() {
+        for (i, frag) in frags.frags.iter_mut().enumerate() {
             match self.rev_map[i].stream.push_frags(ctx, id.clone(), frag) {
                 // We're good; add this to the output.
                 Ok(id) => results.push((Idx::from(i), id)),
@@ -2737,7 +2797,7 @@ where
                 // Actually do retries.
                 RetryResult::Retry(retry) => match self.rev_map[i]
                     .stream
-                    .retry_push_frags(ctx, id.clone(), &mut frags[i], retry)
+                    .retry_push_frags(ctx, id.clone(), &mut frags.frags[i], retry)
                 {
                     // We're good; add this to the output.
                     Ok(id) => results.push((Idx::from(i), id)),
@@ -2780,7 +2840,7 @@ where
             match self.rev_map[i].stream.complete_push_frags(
                 ctx,
                 id.clone(),
-                &mut frags[i],
+                &mut frags.frags[i],
                 err
             ) {
                 // We're good; add this to the output.

@@ -43,6 +43,7 @@ use log::warn;
 use crate::config::BatchSlotsConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
+use crate::frags::Frags;
 
 // This is a workaround for an OpenSSL implementation issue.
 
@@ -859,7 +860,7 @@ where
     /// single message.
     type PushFragRetry: RetryWhen + Clone;
     /// Type of outbound fragment structures.
-    type Frags;
+    type Frags: Frags;
 
     fn push_frags(
         &mut self,

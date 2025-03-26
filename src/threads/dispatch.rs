@@ -42,21 +42,14 @@ use log::error;
 use log::info;
 use log::trace;
 
-use crate::error::BatchError;
 use crate::stream::ConcurrentStream;
 use crate::stream::PullStream;
 use crate::stream::PullStreamListener;
-use crate::stream::PushStream;
-use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamPrivate;
-use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportBatchError;
-use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStream;
+use crate::threads::push::PushStreamThread;
 use crate::threads::push::PushMode;
-use crate::threads::push::private::PushStreamPrivateThread;
 use crate::threads::RecvThread;
 use crate::threads::RecvThreadEntry;
 
@@ -123,8 +116,14 @@ where
     push_thread: JoinHandle<()>
 }
 
-pub struct PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
-where
+pub struct PullStreamsDispatchThread<
+    Msg,
+    AuthN,
+    Dispatcher,
+    Listener,
+    Mode,
+    Ctx
+> where
     Msg: 'static + Clone + Send,
     Mode: PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx> + Send,
     Listener: PullStreamListener<Msg>,
@@ -330,7 +329,9 @@ impl<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
     PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
 where
     Msg: 'static + Clone + Send,
-    Mode: 'static + PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx> + Send,
+    Mode: 'static
+        + PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx>
+        + Send,
     Mode::Config: Send,
     Listener: 'static + PullStreamListener<Msg> + Send,
     Listener::Stream: ConcurrentStream + Credentials,
@@ -474,15 +475,15 @@ where
                     .dispatch(&mut self.ctx, prin.clone())
                     .map_err(|err| WithMutexPoison::Inner { error: err })?;
                 let reporter = push_stream.reporter();
-                let push_thread: PushStreamPrivateThread<_, _, Mode, _> =
-                    PushStreamPrivateThread::create(
-                    self.mode.clone(),
-                    self.ctx.clone(),
-                    msgs,
-                    notify,
-                    push_stream,
-                    dispatched.shutdown.clone()
-                );
+                let push_thread: PushStreamThread<_, _, Mode, _> =
+                    PushStreamThread::create(
+                        self.mode.clone(),
+                        self.ctx.clone(),
+                        msgs,
+                        notify,
+                        push_stream,
+                        dispatched.shutdown.clone()
+                    );
                 let join = push_thread.start();
                 let ent = ent.insert(DispatchEntry {
                     inner: dispatched,

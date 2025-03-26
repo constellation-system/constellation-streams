@@ -264,10 +264,36 @@ where
     size_hint: Option<usize>
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
 pub struct PrivateSmallObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct PrivateLargeObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    msg_retries_hint: Option<usize>,
+    #[serde(default)]
+    frag_retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct SharedSmallObjModeConfig {
     /// Size hint for the pending retries.
     #[serde(default)]
     retries_hint: Option<usize>
@@ -298,6 +324,53 @@ impl PrivateSmallObjModeConfig {
     #[inline]
     pub fn new(retries_hint: Option<usize>) -> Self {
         PrivateSmallObjModeConfig {
+            retries_hint: retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn retries_hint(&self) -> Option<usize> {
+        self.retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> Option<usize> {
+        self.retries_hint
+    }
+}
+
+impl PrivateLargeObjModeConfig {
+    #[inline]
+    pub fn new(
+        msg_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>,
+    ) -> Self {
+        PrivateLargeObjModeConfig {
+            frag_retries_hint: frag_retries_hint,
+            msg_retries_hint: msg_retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn frag_retries_hint(&self) -> Option<usize> {
+        self.frag_retries_hint
+    }
+
+    #[inline]
+    pub fn msg_retries_hint(&self) -> Option<usize> {
+        self.msg_retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> (Option<usize>, Option<usize>) {
+        (self.msg_retries_hint, self.frag_retries_hint)
+    }
+}
+
+impl SharedSmallObjModeConfig {
+    #[inline]
+    pub fn new(retries_hint: Option<usize>) -> Self {
+        SharedSmallObjModeConfig {
             retries_hint: retries_hint
         }
     }
