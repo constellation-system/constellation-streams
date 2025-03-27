@@ -280,6 +280,19 @@ pub struct PrivateSmallObjModeConfig {
 )]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
+pub struct SharedLargeObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    msg_retries_hint: Option<usize>,
+    #[serde(default)]
+    frag_retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
 pub struct PrivateLargeObjModeConfig {
     /// Size hint for the pending retries.
     #[serde(default)]
@@ -383,6 +396,34 @@ impl SharedSmallObjModeConfig {
     #[inline]
     pub fn take(self) -> Option<usize> {
         self.retries_hint
+    }
+}
+
+impl SharedLargeObjModeConfig {
+    #[inline]
+    pub fn new(
+        msg_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>,
+    ) -> Self {
+        SharedLargeObjModeConfig {
+            frag_retries_hint: frag_retries_hint,
+            msg_retries_hint: msg_retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn frag_retries_hint(&self) -> Option<usize> {
+        self.frag_retries_hint
+    }
+
+    #[inline]
+    pub fn msg_retries_hint(&self) -> Option<usize> {
+        self.msg_retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> (Option<usize>, Option<usize>) {
+        (self.msg_retries_hint, self.frag_retries_hint)
     }
 }
 
