@@ -137,12 +137,8 @@ where
 
 #[derive(Debug)]
 pub enum PrivateLargeObjPushModeSendError<Frags, Msgs> {
-    Frags {
-        err: Frags
-    },
-    Msgs {
-        err: Msgs
-    }
+    Frags { err: Frags },
+    Msgs { err: Msgs }
 }
 
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
@@ -770,7 +766,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending.last().is_none_or(|ent| now <= ent.when()) {
+        while self.pending.last().is_some_and(|ent| now > ent.when()) {
             debug!(target: "private-small-obj-push-mode",
                    "retrying pending operation");
 
@@ -818,7 +814,8 @@ where
         + LargeObjStream<ObjID, Ctx>
         + Send,
     H: Clone + HashID + Send,
-    ObjID: Clone + Into<usize> + Into<u64> + Send {
+    ObjID: Clone + Into<usize> + Into<u64> + Send
+{
     type Config = PrivateLargeObjModeConfig;
 
     fn create(config: Self::Config) -> Self {
@@ -846,26 +843,38 @@ impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
         Ctx
     > for PrivateLargeObjPushMode<IDs::Item, H, Stream, Ctx>
 where
-    Stream: 'static + PushStreamReportBatchError<
+    Stream: 'static
+        + PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportError<
-            <Stream::PushFragError as BatchError>::Permanent
-        > + PushStreamReportError<
+        >
+        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
+        >
+        + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamAdd<LargeObjMsg<IDs::Item, H>, Ctx>
+        >
+        + PushStreamAdd<LargeObjMsg<IDs::Item, H>, Ctx>
         + PushStreamPrivate<Ctx>
         + LargeObjStream<IDs::Item, Ctx>
         + Send,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator,
-    IDs::Item: 'static + Clone + Default + Display + Eq + Hash + Into<usize> + Into<u64> + Send,
+    IDs::Item: 'static
+        + Clone
+        + Default
+        + Display
+        + Eq
+        + Hash
+        + Into<usize>
+        + Into<u64>
+        + Send,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
-    H: 'static + Clone + Display + Hash + HashID + Eq + Send {
+    H: 'static + Clone + Display + Hash + HashID + Eq + Send
+{
     type RetryError = Infallible;
     type SendError = PrivateLargeObjPushModeSendError<
         LargeObjPushFragsError<
@@ -879,17 +888,25 @@ where
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         stream: &mut Stream
     ) -> Result<Option<Instant>, Self::SendError> {
         debug!(target: "private-large-obj-push-mode",
                "fetching new outbound protocol messages");
 
         // Send the protocol messages.
-        let (msgs, msgs_next) = proto.msgs()
-            .map_err(|err| PrivateLargeObjPushModeSendError::Msgs {
-                err: err
-            })?;
+        let (msgs, msgs_next) = proto.msgs().map_err(|err| {
+            PrivateLargeObjPushModeSendError::Msgs { err: err }
+        })?;
 
         if let Some(msgs) = msgs {
             if let RetryResult::Retry(retry) =
@@ -914,10 +931,8 @@ where
                 None
             }
         };
-        let next = msgs_next.map_or(
-            frags_next,
-            |msgs| frags_next.map(|frags| msgs.min(frags))
-        );
+        let next = msgs_next
+            .map_or(frags_next, |msgs| frags_next.map(|frags| msgs.min(frags)));
 
         Ok(next)
     }
@@ -925,7 +940,16 @@ where
     fn retry_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         stream: &mut Stream,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
@@ -944,7 +968,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending_msgs.last().is_none_or(|ent| now <= ent.when()) {
+        while self.pending_msgs.last().is_some_and(|ent| now > ent.when()) {
             debug!(target: "private-large-obj-push-mode",
                    "retrying pending operation");
 
@@ -983,7 +1007,11 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending_frags.last().is_none_or(|ent| now <= ent.when()) {
+        while self
+            .pending_frags
+            .last()
+            .is_some_and(|ent| now > ent.when())
+        {
             debug!(target: "private-large-obj-push-mode",
                    "retrying pending fragment");
 
@@ -1001,31 +1029,45 @@ where
         }
 
         // The last entry should now be the first time past the present.
-        let frags_next = self.pending_frags.last().map(|ent| ent.when());
+        let mut frags_next = self.pending_frags.last().map(|ent| ent.when());
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
-            if let RetryResult::Retry(retry) = ent.exec(ctx, stream, proto) {
-                // We got a retry somewhere along the process, store it.
-                self.pending_frags.push(retry)
+            match ent.exec(ctx, stream, proto) {
+                Ok(RetryResult::Success(retry)) => {
+                    frags_next = frags_next.map_or(retry, |next| {
+                        retry.map(|retry| retry.min(next))
+                    });
+                }
+                Ok(RetryResult::Retry(retry)) => {
+                    frags_next =
+                        Some(frags_next.map_or(retry.when(), |next| {
+                            next.min(retry.when())
+                        }));
+
+                    self.pending_frags.push(retry)
+                }
+                Err(err) => {
+                    error!(target: "private-large-obj-push-mode",
+                           "unrecoverable error retrying push frags: {}",
+                           err);
+                }
             }
         }
 
-        let out = msgs_next
-            .map_or(frags_next,
-                    |msgs| Some(frags_next
-                                .map_or(msgs, |frags| frags.min(msgs))
-                    )
-            );
+        let out = msgs_next.map_or(frags_next, |msgs| {
+            Some(frags_next.map_or(msgs, |frags| frags.min(msgs)))
+        });
 
         Ok(out)
     }
 }
 
-impl<Frags, Msgs> ScopedError
-    for PrivateLargeObjPushModeSendError<Frags, Msgs>
-where Frags: ScopedError,
-      Msgs: ScopedError {
+impl<Frags, Msgs> ScopedError for PrivateLargeObjPushModeSendError<Frags, Msgs>
+where
+    Frags: ScopedError,
+    Msgs: ScopedError
+{
     fn scope(&self) -> ErrorScope {
         match self {
             PrivateLargeObjPushModeSendError::Frags { err } => err.scope(),
@@ -1035,8 +1077,10 @@ where Frags: ScopedError,
 }
 
 impl<Frags, Msgs> Display for PrivateLargeObjPushModeSendError<Frags, Msgs>
-where Frags: Display,
-      Msgs: Display {
+where
+    Frags: Display,
+    Msgs: Display
+{
     fn fmt(
         &self,
         f: &mut Formatter<'_>

@@ -367,7 +367,7 @@ impl OutboundFrags {
     pub fn offer_frag(
         &mut self,
         max_bytes: usize
-    ) -> Result<RetryResult<(usize, usize)>, OutboundDataError> {
+    ) -> Result<RetryResult<(usize, usize, Instant)>, OutboundDataError> {
         let mut when: Option<Instant> = None;
 
         // Reset the current offset if needed.
@@ -382,10 +382,11 @@ impl OutboundFrags {
                 .bytes_iter(self.retry.clone(), self.curr, max_bytes)
         {
             match frag {
-                (RetryResult::Success(()), offset, len) => {
+                (RetryResult::Success(retry), offset, len) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
                     self.curr = offset + len;
 
-                    return Ok(RetryResult::Success((offset, len)));
+                    return Ok(RetryResult::Success((offset, len, retry)));
                 }
                 (RetryResult::Retry(retry), offset, len) => {
                     let retry = when.map_or(retry, |when| when.min(retry));
@@ -407,7 +408,7 @@ impl OutboundFrags {
         &mut self,
         buf: &mut [(usize, usize)],
         max_bytes: usize
-    ) -> Result<RetryResult<usize>, OutboundDataError> {
+    ) -> Result<RetryResult<Option<(usize, Instant)>>, OutboundDataError> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
@@ -423,7 +424,10 @@ impl OutboundFrags {
                 .bytes_iter(self.retry.clone(), self.curr, max_bytes)
         {
             match frag {
-                (RetryResult::Success(()), offset, len) => {
+                (RetryResult::Success(retry), offset, len) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
+                    when = Some(retry);
+
                     if curr < buf.len() {
                         buf[curr] = (offset, len);
                         self.curr = offset + len;
@@ -441,13 +445,9 @@ impl OutboundFrags {
             }
         }
 
-        if curr != 0 {
-            Ok(RetryResult::Success(curr))
-        } else {
-            match when {
-                Some(when) => Ok(RetryResult::Retry(when)),
-                None => Err(OutboundDataError::Empty)
-            }
+        match when {
+            Some(when) => Ok(RetryResult::Success(Some((curr, when)))),
+            None => Ok(RetryResult::Success(None))
         }
     }
 }
@@ -551,7 +551,7 @@ impl InnerFrags {
         retry: &Retry,
         idx: usize,
         len: usize
-    ) -> (usize, usize) {
+    ) -> (usize, usize, Instant) {
         let nretries = self.frags[idx].nretries;
         let delay = retry.retry_delay(nretries);
         let when = Instant::now() + delay;
@@ -561,7 +561,7 @@ impl InnerFrags {
             self.frags[idx].nretries += 1;
             self.frags[idx].when = when;
 
-            (offset, self.frags[idx].len)
+            (offset, self.frags[idx].len, when)
         } else {
             self.frags[idx].offset += len;
             self.frags[idx].len -= len;
@@ -576,7 +576,7 @@ impl InnerFrags {
                 }
             );
 
-            (offset, len)
+            (offset, len, when)
         }
     }
 
@@ -894,15 +894,15 @@ impl Iterator for FragsIter<'_> {
 impl FusedIterator for FragsIter<'_> {}
 
 impl Iterator for FragsBytesIter<'_> {
-    type Item = (RetryResult<()>, usize, usize);
+    type Item = (RetryResult<Instant>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
+    fn next(&mut self) -> Option<(RetryResult<Instant>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() && self.nbytes != 0 {
             if self.frags.frags[idx].when < Instant::now() {
-                let (offset, len) =
+                let (offset, len, when) =
                     self.frags.split(&self.retry, idx, self.nbytes);
 
                 self.idx += 1;
@@ -913,7 +913,7 @@ impl Iterator for FragsBytesIter<'_> {
                     self.nbytes = 0;
                 }
 
-                Some((RetryResult::Success(()), offset, len))
+                Some((RetryResult::Success(when), offset, len))
             } else {
                 Some((
                     RetryResult::Retry(self.frags.frags[idx].when),

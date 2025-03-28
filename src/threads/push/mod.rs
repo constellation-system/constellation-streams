@@ -105,7 +105,7 @@ where
 impl<ObjID, Stream, Ctx> RetryWhen for LargeObjEntry<ObjID, Stream, Ctx>
 where
     Stream: LargeObjStream<ObjID, Ctx>,
-    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>,
+    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>
 {
     fn when(&self) -> Instant {
         match self {
@@ -118,80 +118,22 @@ impl<ObjID, Stream, Ctx> LargeObjEntry<ObjID, Stream, Ctx>
 where
     Stream: LargeObjStream<ObjID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>,
-    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>,
+    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>
 {
-    fn complete_push_frags<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
-        id: ObjID,
-        err: Stream::PushFragError
-    ) -> RetryResult<(), Self>
-    where
-        Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = ObjID>,
-        Auth: MsgAuthN<Msg, Wrapper>,
-        Codec: DatagramCodec<Wrapper>,
-        H: Clone + Display + Hash + HashID + Eq {
-        trace!(target: "large-obj-entry",
-               "attempting to recover from error while pushing fragments");
-
-        match proto.complete_push_frags(ctx, stream, id.clone(), err) {
-            Ok(out) => out.map_retry(|retry| LargeObjEntry::PushFrags {
-                retry: retry,
-                id: id.clone()
-            }),
-            // More errors; recurse again.
-            Err(err) => {
-                error!(target: "large-obj-entry",
-                       "unrecoverable error pushing fragments: {}",
-                       err);
-
-                RetryResult::Success(())
-            }
-        }
-    }
-
     pub(crate) fn exec<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>
-    ) -> RetryResult<(), Self>
-    where
-        Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = ObjID>,
-        Auth: MsgAuthN<Msg, Wrapper>,
-        Codec: DatagramCodec<Wrapper>,
-        H: Clone + Display + Hash + HashID + Eq {
-        match self {
-            LargeObjEntry::PushFrags { id, retry } => {
-                match proto.retry_push_frags(ctx, stream, id.clone(), retry) {
-                    // It succeeded.
-                    Ok(RetryResult::Success(())) => RetryResult::Success(()),
-                    // We got a retry.
-                    Ok(RetryResult::Retry(retry)) => {
-                        RetryResult::Retry(LargeObjEntry::PushFrags {
-                            retry: retry,
-                            id: id
-                        })
-                    }
-                    Err(err) => {
-                        error!(target: "large-obj-entry",
-                               "error running deferred push frags: {}",
-                               err);
-
-                        RetryResult::Success(())
-                    }
-                }
-            }
-        }
-    }
-
-    pub(crate) fn from_try_send<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushFragsError<
@@ -206,15 +148,53 @@ where
         Auth: MsgAuthN<Msg, Wrapper>,
         Codec: DatagramCodec<Wrapper>,
         H: Clone + Display + Hash + HashID + Eq {
-        Ok(proto.try_push_frags(ctx, stream)?
-           .map_retry(|retry| {
-               let (retry, id) = retry.take();
+        match self {
+            LargeObjEntry::PushFrags { id, retry } => proto
+                .retry_push_frags(ctx, stream, id.clone(), retry)
+                .map(|out| {
+                    out.map_retry(|retry| LargeObjEntry::PushFrags {
+                        retry: retry,
+                        id: id.clone()
+                    })
+                })
+        }
+    }
 
-               LargeObjEntry::PushFrags {
-                   retry: retry,
-                   id: id
-               }
-           }))
+    pub(crate) fn from_try_send<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
+        ctx: &mut Ctx,
+        stream: &mut Stream,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >
+    ) -> Result<
+        RetryResult<Option<Instant>, Self>,
+        LargeObjPushFragsError<
+            IDs::Item,
+            H,
+            <Stream::PushFragError as BatchError>::Permanent
+        >
+    >
+    where
+        Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+        IDs: IDGen + Iterator<Item = ObjID>,
+        Auth: MsgAuthN<Msg, Wrapper>,
+        Codec: DatagramCodec<Wrapper>,
+        H: Clone + Display + Hash + HashID + Eq {
+        Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {
+            let (retry, id) = retry.take();
+
+            LargeObjEntry::PushFrags {
+                retry: retry,
+                id: id
+            }
+        }))
     }
 }
 
@@ -361,7 +341,6 @@ where
         spawn(move || self.run())
     }
 }
-
 
 impl<Msgs, Stream, Mode, Ctx> PushStreamThread<Msgs, Stream, Mode, Ctx>
 where

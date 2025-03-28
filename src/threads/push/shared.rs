@@ -26,11 +26,11 @@ use std::time::Instant;
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::MsgAuthN;
 use constellation_common::codec::DatagramCodec;
-use constellation_common::net::SharedMsgs;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
+use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use log::debug;
@@ -105,9 +105,8 @@ where
             Stream::BatchID
         > + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportError<
-            <Stream::PushFragError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
+        > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
         > + PushStreamSharedSingle<LargeObjMsg<ObjID, H>, Ctx>
@@ -143,12 +142,8 @@ where
 
 #[derive(Debug)]
 pub enum SharedLargeObjPushModeSendError<Frags, Msgs> {
-    Frags {
-        err: Frags
-    },
-    Msgs {
-        err: Msgs
-    }
+    Frags { err: Frags },
+    Msgs { err: Msgs }
 }
 
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
@@ -745,8 +740,8 @@ where
     Msgs: 'static + SharedMsgs<Stream::PartyID, Msg> + Send,
     Msg: 'static + Clone + Send
 {
-    type SendError = Msgs::MsgsError;
     type RetryError = Infallible;
+    type SendError = Msgs::MsgsError;
 
     fn send_from_outbound(
         &mut self,
@@ -762,12 +757,9 @@ where
         if let Some(groups) = groups {
             // Go through each group and try sending it
             for (parties, msgs) in groups {
-                if let RetryResult::Retry(retry) = PushEntry::from_try_send(
-                    ctx,
-                    stream,
-                    parties,
-                    msgs
-                ) {
+                if let RetryResult::Retry(retry) =
+                    PushEntry::from_try_send(ctx, stream, parties, msgs)
+                {
                     // We got a retry somewhere along the process, store it.
                     self.pending.push(retry)
                 }
@@ -799,7 +791,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending.last().is_none_or(|ent| now <= ent.when()) {
+        while self.pending.last().is_some_and(|ent| now > ent.when()) {
             debug!(target: "shared-small-obj-push-mode",
                    "retrying pending operation");
 
@@ -839,9 +831,8 @@ where
             Stream::BatchID
         > + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportError<
-            <Stream::PushFragError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
+        > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
         > + PushStreamSharedSingle<LargeObjMsg<ObjID, H>, Ctx>
@@ -850,7 +841,8 @@ where
         + PushStreamParties
         + Send,
     H: Clone + HashID + Send,
-    ObjID: Clone + Into<usize> + Into<u64> + Send {
+    ObjID: Clone + Into<usize> + Into<u64> + Send
+{
     type Config = SharedLargeObjModeConfig;
 
     fn create(config: Self::Config) -> Self {
@@ -878,16 +870,20 @@ impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
         Ctx
     > for SharedLargeObjPushMode<IDs::Item, H, Stream, Ctx>
 where
-    Stream: 'static + PushStreamReportBatchError<
+    Stream: 'static
+        + PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportError<
+        >
+        + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
+        >
+        + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent
-        > + PushStreamSharedSingle<LargeObjMsg<IDs::Item, H>, Ctx>
+        >
+        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamSharedSingle<LargeObjMsg<IDs::Item, H>, Ctx>
         + LargeObjStream<IDs::Item, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
@@ -895,10 +891,19 @@ where
     Stream::PartyID: From<usize>,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator,
-    IDs::Item: 'static + Clone + Default + Display + Eq + Hash + Into<usize> + Into<u64> + Send,
+    IDs::Item: 'static
+        + Clone
+        + Default
+        + Display
+        + Eq
+        + Hash
+        + Into<usize>
+        + Into<u64>
+        + Send,
     Auth: MsgAuthN<Msg, Wrapper, SessionPrin = Stream::PartyID>,
     Codec: DatagramCodec<Wrapper>,
-    H: 'static + Clone + Display + Hash + HashID + Eq + Send {
+    H: 'static + Clone + Display + Hash + HashID + Eq + Send
+{
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
         LargeObjPushFragsError<
@@ -912,26 +917,31 @@ where
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         stream: &mut Stream
     ) -> Result<Option<Instant>, Self::SendError> {
         debug!(target: "shared-small-obj-push-mode",
                "fetching new outbound messages");
 
-        let (groups, msgs_next) = proto.msgs()
-            .map_err(|err| SharedLargeObjPushModeSendError::Msgs {
-                err: err
-            })?;
+        let (groups, msgs_next) = proto.msgs().map_err(|err| {
+            SharedLargeObjPushModeSendError::Msgs { err: err }
+        })?;
 
         if let Some(groups) = groups {
             // Go through each group and try sending it
             for (parties, msgs) in groups {
-                if let RetryResult::Retry(retry) = PushEntry::from_try_send(
-                    ctx,
-                    stream,
-                    parties,
-                    msgs
-                ) {
+                if let RetryResult::Retry(retry) =
+                    PushEntry::from_try_send(ctx, stream, parties, msgs)
+                {
                     // We got a retry somewhere along the process, store it.
                     self.pending_msgs.push(retry)
                 }
@@ -952,10 +962,8 @@ where
                 None
             }
         };
-        let next = msgs_next.map_or(
-            frags_next,
-            |msgs| frags_next.map(|frags| msgs.min(frags))
-        );
+        let next = msgs_next
+            .map_or(frags_next, |msgs| frags_next.map(|frags| msgs.min(frags)));
 
         Ok(next)
     }
@@ -963,7 +971,16 @@ where
     fn retry_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         stream: &mut Stream,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
@@ -982,7 +999,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending_msgs.last().is_none_or(|ent| now <= ent.when()) {
+        while self.pending_msgs.last().is_some_and(|ent| now > ent.when()) {
             debug!(target: "private-large-obj-push-mode",
                    "retrying pending operation");
 
@@ -1021,7 +1038,11 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while !self.pending_frags.last().is_none_or(|ent| now <= ent.when()) {
+        while self
+            .pending_frags
+            .last()
+            .is_some_and(|ent| now > ent.when())
+        {
             debug!(target: "private-large-obj-push-mode",
                    "retrying pending fragment");
 
@@ -1039,31 +1060,45 @@ where
         }
 
         // The last entry should now be the first time past the present.
-        let frags_next = self.pending_frags.last().map(|ent| ent.when());
+        let mut frags_next = self.pending_frags.last().map(|ent| ent.when());
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
-            if let RetryResult::Retry(retry) = ent.exec(ctx, stream, proto) {
-                // We got a retry somewhere along the process, store it.
-                self.pending_frags.push(retry)
+            match ent.exec(ctx, stream, proto) {
+                Ok(RetryResult::Success(retry)) => {
+                    frags_next = frags_next.map_or(retry, |next| {
+                        retry.map(|retry| retry.min(next))
+                    });
+                }
+                Ok(RetryResult::Retry(retry)) => {
+                    frags_next =
+                        Some(frags_next.map_or(retry.when(), |next| {
+                            next.min(retry.when())
+                        }));
+
+                    self.pending_frags.push(retry)
+                }
+                Err(err) => {
+                    error!(target: "shared-large-obj-push-mode",
+                           "unrecoverable error retrying push frags: {}",
+                           err);
+                }
             }
         }
 
-        let out = msgs_next
-            .map_or(frags_next,
-                    |msgs| Some(frags_next
-                                .map_or(msgs, |frags| frags.min(msgs))
-                    )
-            );
+        let out = msgs_next.map_or(frags_next, |msgs| {
+            Some(frags_next.map_or(msgs, |frags| frags.min(msgs)))
+        });
 
         Ok(out)
     }
 }
 
-impl<Frags, Msgs> ScopedError
-    for SharedLargeObjPushModeSendError<Frags, Msgs>
-where Frags: ScopedError,
-      Msgs: ScopedError {
+impl<Frags, Msgs> ScopedError for SharedLargeObjPushModeSendError<Frags, Msgs>
+where
+    Frags: ScopedError,
+    Msgs: ScopedError
+{
     fn scope(&self) -> ErrorScope {
         match self {
             SharedLargeObjPushModeSendError::Frags { err } => err.scope(),
@@ -1073,8 +1108,10 @@ where Frags: ScopedError,
 }
 
 impl<Frags, Msgs> Display for SharedLargeObjPushModeSendError<Frags, Msgs>
-where Frags: Display,
-      Msgs: Display {
+where
+    Frags: Display,
+    Msgs: Display
+{
     fn fmt(
         &self,
         f: &mut Formatter<'_>

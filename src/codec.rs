@@ -1114,7 +1114,11 @@ where
 }
 
 impl<Ctx, ObjID, H, Stream> LargeObjStream<ObjID, Ctx>
-    for DatagramCodecStream<LargeObjMsg<ObjID, H::HashID>, Stream, LargeObjMsgCodec<H>>
+    for DatagramCodecStream<
+        LargeObjMsg<ObjID, H::HashID>,
+        Stream,
+        LargeObjMsgCodec<H>
+    >
 where
     H: Default + HashAlgo + Send,
     ObjID: Clone + From<u64> + Into<u64> + Into<usize>,
@@ -1130,15 +1134,21 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        LargeObjMsg::frags(frags, id.into(), 1024)
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
+        LargeObjMsg::frags(frags, id, 1024)
             .map_err(|err| DatagramCodecFragError::Frag { err: err })?
-            .map_ok(|msg| {
-                self.push(ctx, &msg).map_err(|err| {
-                    DatagramCodecFragError::Stream { err: err }
-                })?;
+            .map_ok(|res| match res {
+                Some((msg, when)) => {
+                    self.push(ctx, &msg).map_err(|err| {
+                        DatagramCodecFragError::Stream { err: err }
+                    })?;
 
-                Ok(())
+                    Ok(Some(when))
+                }
+                None => Ok(None)
             })
     }
 
@@ -1148,7 +1158,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         self.push_frags(ctx, id, frags)
     }
 
@@ -1158,7 +1171,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         self.push_frags(ctx, id, frags)
     }
 }

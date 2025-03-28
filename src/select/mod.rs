@@ -3187,7 +3187,10 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         // Try to select a stream.
         self.select_stream(ctx)
             .map_err(|err| SelectorBatchError::Batch {
@@ -3222,7 +3225,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -3259,7 +3265,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         match err {
             // We got a retry once the stream was selected.
             SelectorBatchSelectError::Stream {

@@ -356,7 +356,7 @@ impl PrivateLargeObjModeConfig {
     #[inline]
     pub fn new(
         msg_retries_hint: Option<usize>,
-        frag_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>
     ) -> Self {
         PrivateLargeObjModeConfig {
             frag_retries_hint: frag_retries_hint,
@@ -403,7 +403,7 @@ impl SharedLargeObjModeConfig {
     #[inline]
     pub fn new(
         msg_retries_hint: Option<usize>,
-        frag_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>
     ) -> Self {
         SharedLargeObjModeConfig {
             frag_retries_hint: frag_retries_hint,

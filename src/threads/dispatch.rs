@@ -48,8 +48,8 @@ use crate::stream::PullStreamListener;
 use crate::stream::PushStreamReporter;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStream;
-use crate::threads::push::PushStreamThread;
 use crate::threads::push::PushMode;
+use crate::threads::push::PushStreamThread;
 use crate::threads::RecvThread;
 use crate::threads::RecvThreadEntry;
 

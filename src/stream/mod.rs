@@ -867,7 +867,10 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
 
     fn retry_push_frags(
         &mut self,
@@ -875,7 +878,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
 
     fn complete_push_frags(
         &mut self,
@@ -883,7 +889,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
 }
 
 /// Helper trait for sending single messages on shared streams.
@@ -2299,7 +2308,10 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         let mut guard = self
             .inner
             .lock()
@@ -2316,7 +2328,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         let mut guard = self
             .inner
             .lock()
@@ -2333,7 +2348,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         let mut guard = self
             .inner
             .lock()

@@ -1932,22 +1932,24 @@ where
 }
 
 impl<Shared, Private> Frags for SharedPrivateStreamFrags<Private, Shared>
-where Private: Frags,
-      Shared: Frags {
+where
+    Private: Frags,
+    Shared: Frags
+{
     type RecvReqError =
         SharedPrivateStreamError<Private::RecvReqError, Shared::RecvReqError>;
 
     fn is_empty(&self) -> bool {
         match self {
             SharedPrivateStreamFrags::Private { frags } => frags.is_empty(),
-            SharedPrivateStreamFrags::Shared { frags } => frags.is_empty(),
+            SharedPrivateStreamFrags::Shared { frags } => frags.is_empty()
         }
     }
 
     fn len(&self) -> usize {
         match self {
             SharedPrivateStreamFrags::Private { frags } => frags.len(),
-            SharedPrivateStreamFrags::Shared { frags } => frags.len(),
+            SharedPrivateStreamFrags::Shared { frags } => frags.len()
         }
     }
 
@@ -1956,17 +1958,14 @@ where Private: Frags,
         req: &LargeObjFragReq
     ) -> Result<(), Self::RecvReqError> {
         match self {
-            SharedPrivateStreamFrags::Private { frags } => frags.recv_req(req)
-                .map_err(|err| SharedPrivateStreamError::Private {
-                    err: err
-                }),
-            SharedPrivateStreamFrags::Shared { frags } => frags.recv_req(req)
-                .map_err(|err| SharedPrivateStreamError::Shared {
-                    err: err
-                }),
+            SharedPrivateStreamFrags::Private { frags } => frags
+                .recv_req(req)
+                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+            SharedPrivateStreamFrags::Shared { frags } => frags
+                .recv_req(req)
+                .map_err(|err| SharedPrivateStreamError::Shared { err: err })
         }
     }
-
 }
 
 impl<Shared, Private, ObjID, Ctx> LargeObjStream<ObjID, Ctx>
@@ -1987,17 +1986,24 @@ where
         ctx: &mut Ctx,
         id: ObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         match (self, frags) {
-            (SharedPrivateChannelStream::Private { stream },
-             SharedPrivateStreamFrags::Private { frags }) => Ok(stream
+            (
+                SharedPrivateChannelStream::Private { stream },
+                SharedPrivateStreamFrags::Private { frags }
+            ) => Ok(stream
                 .push_frags(ctx, id, frags)
                 .map_err(|err| SharedPrivateStreamError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
-            (SharedPrivateChannelStream::Shared { stream, .. },
-             SharedPrivateStreamFrags::Shared { frags }) => Ok(stream
+            (
+                SharedPrivateChannelStream::Shared { stream, .. },
+                SharedPrivateStreamFrags::Shared { frags }
+            ) => Ok(stream
                 .push_frags(ctx, id, frags)
                 .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
@@ -2013,7 +2019,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         match (self, frags, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -2045,7 +2054,10 @@ where
         id: ObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
         match (self, frags, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
