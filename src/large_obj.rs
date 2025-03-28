@@ -943,12 +943,9 @@ where
                 },
                 curr
             )),
-            LargeObjMetadata::Finish(LargeObjFinish { id }) => Ok((
-                LargeObjMsg::Finish {
-                    id: id.into()
-                },
-                curr
-            ))
+            LargeObjMetadata::Finish(LargeObjFinish { id }) => {
+                Ok((LargeObjMsg::Finish { id: id.into() }, curr))
+            }
         }
     }
 }
@@ -991,28 +988,45 @@ where
                 .lock()
                 .map_err(|_| LargeObjPushFragsError::MutexPoison)?;
 
-            // XXX use a better data structure here.
-            let mut ents: Vec<&mut SendEntry<IDs::Item, F>> =
-                outbound.objs.values_mut().collect();
+            if !outbound.objs.is_empty() {
+                // XXX use a better data structure here.
+                let mut ents: Vec<&mut SendEntry<IDs::Item, F>> =
+                    outbound.objs.values_mut().collect();
 
-            ents.sort_unstable_by(|a, b| match (a.when, b.when) {
-                (Some(a), Some(b)) => a.cmp(&b),
-                (None, None) => Ordering::Equal,
-                (None, _) => Ordering::Greater,
-                (_, None) => Ordering::Less
-            });
+                ents.sort_unstable_by(|a, b| match (a.when, b.when) {
+                    (Some(a), Some(b)) => a.cmp(&b),
+                    (None, None) => Ordering::Equal,
+                    (None, _) => Ordering::Greater,
+                    (_, None) => Ordering::Less
+                });
 
-            let id = ents[0].id.clone();
+                let id = ents[0].id.clone();
 
-            stream
-                .push_frags(ctx, id.clone(), &mut ents[0].frags)
-                .map(|res| {
-                    res.map_retry(|retry| LargeObjPushFragsRetry {
-                        retry: retry,
-                        id: id.clone()
-                    })
-                })
-                .map_err(|err| (id, err))
+                match stream.push_frags(ctx, id.clone(), &mut ents[0].frags) {
+                    Ok(RetryResult::Success(retry)) => {
+                        ents[0].when = retry;
+
+                        if ents.len() < 2 {
+                            Ok(RetryResult::Success(retry))
+                        } else {
+                            let when = ents[1].when.map_or(retry, |when| {
+                                retry.map(|retry| when.min(retry))
+                            });
+
+                            Ok(RetryResult::Success(when))
+                        }
+                    }
+                    Ok(RetryResult::Retry(retry)) => {
+                        Ok(RetryResult::Retry(LargeObjPushFragsRetry {
+                            retry: retry,
+                            id: id.clone()
+                        }))
+                    }
+                    Err(err) => Err((id, err))
+                }
+            } else {
+                Ok(RetryResult::Success(None))
+            }
         };
 
         match res {
@@ -1586,10 +1600,7 @@ where
 
                     Ok(None)
                 }
-                None => Err(LargeObjRecvError::NotFound {
-                    hash: hash,
-                    id: id
-                })
+                None => Err(LargeObjRecvError::NotFound { hash: hash, id: id })
             },
             None => {
                 trace!(target: "large-obj-proto",
