@@ -41,6 +41,7 @@ use log::info;
 use log::trace;
 
 use crate::error::BatchError;
+use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjPushFragsError;
 use crate::stream::LargeObjStream;
@@ -76,12 +77,11 @@ pub trait PushMode<Stream, Msgs, Ctx>: PushModeCreate {
     ) -> Result<Option<Instant>, Self::RetryError>;
 }
 
-pub(crate) enum LargeObjEntry<ID, Stream, Ctx>
+pub(crate) enum LargeObjEntry<Stream, Ctx>
 where
-    Stream: LargeObjStream<ID, Ctx>,
-    ID: Clone + Into<usize> {
+    Stream: LargeObjStream<LargeObjID, Ctx> {
     PushFrags {
-        id: ID,
+        id: LargeObjID,
         retry: Stream::PushFragRetry
     }
 }
@@ -102,10 +102,9 @@ where
     stream: Stream
 }
 
-impl<ObjID, Stream, Ctx> RetryWhen for LargeObjEntry<ObjID, Stream, Ctx>
+impl<Stream, Ctx> RetryWhen for LargeObjEntry<Stream, Ctx>
 where
-    Stream: LargeObjStream<ObjID, Ctx>,
-    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>
+    Stream: LargeObjStream<LargeObjID, Ctx>
 {
     fn when(&self) -> Instant {
         match self {
@@ -114,11 +113,10 @@ where
     }
 }
 
-impl<ObjID, Stream, Ctx> LargeObjEntry<ObjID, Stream, Ctx>
+impl<Stream, Ctx> LargeObjEntry<Stream, Ctx>
 where
-    Stream: LargeObjStream<ObjID, Ctx>
-        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>,
-    ObjID: Clone + Default + Display + Eq + Hash + Into<u64> + Into<usize>
+    Stream: LargeObjStream<LargeObjID, Ctx>
+        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
 {
     pub(crate) fn exec<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
         self,
@@ -137,14 +135,13 @@ where
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = ObjID>,
+        IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         Codec: DatagramCodec<Wrapper>,
         H: Clone + Display + Hash + HashID + Eq {
@@ -176,14 +173,13 @@ where
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = ObjID>,
+        IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         Codec: DatagramCodec<Wrapper>,
         H: Clone + Display + Hash + HashID + Eq {

@@ -40,6 +40,7 @@ use log::trace;
 use crate::config::SharedLargeObjModeConfig;
 use crate::config::SharedSmallObjModeConfig;
 use crate::error::BatchError;
+use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjPushFragsError;
@@ -98,7 +99,7 @@ where
     }
 }
 
-pub struct SharedLargeObjPushMode<ObjID, H, Stream, Ctx>
+pub struct SharedLargeObjPushMode<H, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -109,16 +110,15 @@ where
         + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamSharedSingle<LargeObjMsg<ObjID, H>, Ctx>
-        + LargeObjStream<ObjID, Ctx>
+        > + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
+        + LargeObjStream<LargeObjID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    H: Clone + HashID + Send,
-    ObjID: Clone + Into<usize> + Into<u64> + Send {
+    H: Clone + HashID + Send {
     /// Buffer for sends in progress.
-    pending_msgs: Vec<PushEntry<LargeObjMsg<ObjID, H>, Stream, Ctx>>,
-    pending_frags: Vec<LargeObjEntry<ObjID, Stream, Ctx>>
+    pending_msgs: Vec<PushEntry<LargeObjMsg<H>, Stream, Ctx>>,
+    pending_frags: Vec<LargeObjEntry<Stream, Ctx>>
 }
 
 pub struct SharedSmallObjPushMode<Msg, Stream, Ctx>
@@ -823,8 +823,7 @@ where
     }
 }
 
-impl<ObjID, H, Stream, Ctx> PushModeCreate
-    for SharedLargeObjPushMode<ObjID, H, Stream, Ctx>
+impl<H, Stream, Ctx> PushModeCreate for SharedLargeObjPushMode<H, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -835,13 +834,12 @@ where
         + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamSharedSingle<LargeObjMsg<ObjID, H>, Ctx>
-        + LargeObjStream<ObjID, Ctx>
+        > + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
+        + LargeObjStream<LargeObjID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    H: Clone + HashID + Send,
-    ObjID: Clone + Into<usize> + Into<u64> + Send
+    H: Clone + HashID + Send
 {
     type Config = SharedLargeObjModeConfig;
 
@@ -868,7 +866,7 @@ impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
         Stream,
         LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
         Ctx
-    > for SharedLargeObjPushMode<IDs::Item, H, Stream, Ctx>
+    > for SharedLargeObjPushMode<H, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -883,23 +881,14 @@ where
             Stream::BatchID
         >
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
-        + PushStreamSharedSingle<LargeObjMsg<IDs::Item, H>, Ctx>
-        + LargeObjStream<IDs::Item, Ctx>
+        + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
+        + LargeObjStream<LargeObjID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
     Stream::PartyID: From<usize>,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
-    IDs::Item: 'static
-        + Clone
-        + Default
-        + Display
-        + Eq
-        + Hash
-        + Into<usize>
-        + Into<u64>
-        + Send,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper, SessionPrin = Stream::PartyID>,
     Codec: DatagramCodec<Wrapper>,
     H: 'static + Clone + Display + Hash + HashID + Eq + Send
@@ -907,11 +896,10 @@ where
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >,
-        LargeObjSendError<<IDs as Iterator>::Item, H>
+        LargeObjSendError<H>
     >;
 
     fn send_from_outbound(

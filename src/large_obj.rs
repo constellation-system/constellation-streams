@@ -84,6 +84,9 @@ pub type LargeObjFragHeaderPERCodec =
 pub type LargeObjMetadataPERCodec =
     PERCodec<LargeObjMetadata, LARGE_OBJ_METADATA_BITS>;
 
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct LargeObjID(u64);
+
 #[derive(Clone)]
 pub struct LargeObjMsgCodec<H>
 where
@@ -100,9 +103,8 @@ pub struct LargeObjFrag {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq)]
-pub enum LargeObjMsg<ID, H>
+pub enum LargeObjMsg<H>
 where
-    ID: Into<u64>,
     H: HashID {
     Offer {
         hash: H,
@@ -112,23 +114,23 @@ where
     Accept {
         hash: H,
         size: u64,
-        id: ID
+        id: LargeObjID
     },
     ReqObj {
         hash: H,
         size: u64,
-        id: ID
+        id: LargeObjID
     },
     Frags {
-        id: ID,
+        id: LargeObjID,
         frags: Vec<LargeObjFrag>
     },
     Req {
-        id: ID,
+        id: LargeObjID,
         reqs: Vec<LargeObjFragReq>
     },
     Finish {
-        id: ID
+        id: LargeObjID
     }
 }
 
@@ -153,42 +155,38 @@ struct RecvEntry<H> {
     hash: H
 }
 
-struct SendEntry<ObjID, F>
+struct SendEntry<F>
 where
     F: Frags {
-    id: ObjID,
+    id: LargeObjID,
     frags: F,
     when: Option<Instant>
 }
 
-struct LargeObjInbound<ObjID, H, Prin>
-where
-    ObjID: Clone + Eq + Hash {
-    objs: HashMap<ObjID, RecvEntry<H>>,
-    hashes: HashMap<(Prin, H), ObjID>
+struct LargeObjInbound<H, Prin> {
+    objs: HashMap<LargeObjID, RecvEntry<H>>,
+    hashes: HashMap<(Prin, H), LargeObjID>
 }
 
-struct LargeObjOutbound<ObjID, H, F>
+struct LargeObjOutbound<H, F>
 where
-    ObjID: Clone + Eq + Hash,
     F: Frags {
-    objs: HashMap<H, SendEntry<ObjID, F>>,
-    hashes: HashMap<ObjID, H>
+    objs: HashMap<H, SendEntry<F>>,
+    hashes: HashMap<LargeObjID, H>
 }
 
 pub struct LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
-    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     F: Frags {
     wrapper: PhantomData<Wrapper>,
     msg: PhantomData<Msg>,
-    inbound: Arc<Mutex<LargeObjInbound<IDs::Item, H, Auth::SessionPrin>>>,
-    outbound: Arc<Mutex<LargeObjOutbound<IDs::Item, H, F>>>,
+    inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
+    outbound: Arc<Mutex<LargeObjOutbound<H, F>>>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
@@ -196,23 +194,23 @@ where
     ids: IDs
 }
 
-pub struct LargeObjPushFragsRetry<Retry, ID> {
+pub struct LargeObjPushFragsRetry<Retry> {
     retry: Retry,
-    id: ID
+    id: LargeObjID
 }
 
-pub enum LargeObjPushFragsError<ID, H, Frags> {
+pub enum LargeObjPushFragsError<H, Frags> {
     PushFrags { err: Frags },
-    NoObj { hash: H, id: ID },
+    NoObj { hash: H, id: LargeObjID },
     MutexPoison
 }
 
-pub enum LargeObjSendError<ID, H> {
-    NoObj { hash: H, id: ID },
+pub enum LargeObjSendError<H> {
+    NoObj { hash: H, id: LargeObjID },
     MutexPoison
 }
 
-pub enum LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags> {
+pub enum LargeObjRecvError<H, Auth, Decode, Upstream, Frags> {
     Upstream {
         err: Upstream
     },
@@ -224,29 +222,29 @@ pub enum LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags> {
     },
     OutboundRecv {
         hash: H,
-        id: ID,
+        id: LargeObjID,
         err: Frags
     },
     InboundRecv {
         hash: H,
-        id: ID,
+        id: LargeObjID,
         err: InboundRecvError
     },
     FinishedPending {
         hash: H,
-        id: ID
+        id: LargeObjID
     },
     NotFound {
         hash: H,
-        id: ID
+        id: LargeObjID
     },
     NoHash {
         hash: H,
-        id: ID
+        id: LargeObjID
     },
     NoObj {
         hash: H,
-        id: ID
+        id: LargeObjID
     },
     Collision,
     AuthNFail,
@@ -284,14 +282,56 @@ pub enum LargeObjDataError {
     OutOfBounds
 }
 
-impl<Retry, ID> LargeObjPushFragsRetry<Retry, ID> {
+impl From<usize> for LargeObjID {
     #[inline]
-    pub(crate) fn take(self) -> (Retry, ID) {
+    fn from(val: usize) -> LargeObjID {
+        LargeObjID(val as u64)
+    }
+}
+
+impl From<u64> for LargeObjID {
+    #[inline]
+    fn from(val: u64) -> LargeObjID {
+        LargeObjID(val)
+    }
+}
+
+impl From<LargeObjID> for usize {
+    #[inline]
+    fn from(val: LargeObjID) -> usize {
+        val.0 as usize
+    }
+}
+
+impl From<LargeObjID> for u64 {
+    #[inline]
+    fn from(val: LargeObjID) -> u64 {
+        val.0
+    }
+}
+
+impl From<&'_ LargeObjID> for usize {
+    #[inline]
+    fn from(val: &LargeObjID) -> usize {
+        val.0 as usize
+    }
+}
+
+impl From<&'_ LargeObjID> for u64 {
+    #[inline]
+    fn from(val: &LargeObjID) -> u64 {
+        val.0
+    }
+}
+
+impl<Retry> LargeObjPushFragsRetry<Retry> {
+    #[inline]
+    pub(crate) fn take(self) -> (Retry, LargeObjID) {
         (self.retry, self.id)
     }
 }
 
-impl<Retry, ID> RetryWhen for LargeObjPushFragsRetry<Retry, ID>
+impl<Retry> RetryWhen for LargeObjPushFragsRetry<Retry>
 where
     Retry: RetryWhen
 {
@@ -327,9 +367,8 @@ impl InboundFragsState {
     }
 }
 
-impl<ID, H> LargeObjMsg<ID, H>
+impl<H> LargeObjMsg<H>
 where
-    ID: Into<u64>,
     H: HashID
 {
     /// Maximum number of bytes that can be sent with a datagram.
@@ -364,7 +403,7 @@ where
     pub fn accept(
         hash: H,
         size: usize,
-        id: ID
+        id: LargeObjID
     ) -> Self {
         LargeObjMsg::Accept {
             hash: hash,
@@ -377,7 +416,7 @@ where
     pub fn req_obj(
         hash: H,
         size: usize,
-        id: ID
+        id: LargeObjID
     ) -> Self {
         LargeObjMsg::ReqObj {
             hash: hash,
@@ -388,7 +427,7 @@ where
 
     pub fn frags(
         frags: &mut OutboundFrags,
-        id: ID,
+        id: LargeObjID,
         max_bytes: usize
     ) -> Result<RetryResult<Option<(Self, Instant)>>, LargeObjDataError> {
         let mut buf = [(0, 0); 16];
@@ -426,7 +465,7 @@ where
 
     #[inline]
     pub fn reqs<I>(
-        id: ID,
+        id: LargeObjID,
         reqs: I
     ) -> Self
     where
@@ -451,32 +490,29 @@ where
     }
 
     #[inline]
-    pub fn finish(id: ID) -> Self {
+    pub fn finish(id: LargeObjID) -> Self {
         LargeObjMsg::Finish { id: id }
     }
 }
 
 impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
-    SharedMsgs<Auth::SessionPrin, LargeObjMsg<IDs::Item, H>>
+    SharedMsgs<Auth::SessionPrin, LargeObjMsg<H>>
     for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
-    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     F: Frags
 {
-    type MsgsError = LargeObjSendError<IDs::Item, H>;
+    type MsgsError = LargeObjSendError<H>;
 
     fn msgs(
         &mut self
     ) -> Result<
         (
-            Option<
-                Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<IDs::Item, H>>)>
-            >,
+            Option<Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<H>>)>>,
             Option<Instant>
         ),
         Self::MsgsError
@@ -577,26 +613,23 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
-    PrivateMsgs<LargeObjMsg<IDs::Item, H>>
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F> PrivateMsgs<LargeObjMsg<H>>
     for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     F: Frags
 {
-    type MsgsError = LargeObjSendError<IDs::Item, H>;
+    type MsgsError = LargeObjSendError<H>;
 
     fn msgs(
         &mut self
-    ) -> Result<
-        (Option<Vec<LargeObjMsg<IDs::Item, H>>>, Option<Instant>),
-        Self::MsgsError
-    > {
+    ) -> Result<(Option<Vec<LargeObjMsg<H>>>, Option<Instant>), Self::MsgsError>
+    {
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
@@ -693,10 +726,9 @@ where
     }
 }
 
-impl<ID, H> Codec<LargeObjMsg<ID, H::HashID>> for LargeObjMsgCodec<H>
+impl<H> Codec<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
 where
-    H: HashAlgo + Default,
-    ID: Clone + From<u64> + Into<u64>
+    H: HashAlgo + Default
 {
     type CreateError = Infallible;
     type DecodeError = LargeObjMsgDecodeError;
@@ -722,7 +754,7 @@ where
 
     fn encode(
         &mut self,
-        val: &LargeObjMsg<ID, H::HashID>,
+        val: &LargeObjMsg<H::HashID>,
         buf: &mut [u8]
     ) -> Result<usize, Self::EncodeError> {
         match val {
@@ -834,7 +866,7 @@ where
     fn decode(
         &mut self,
         buf: &[u8]
-    ) -> Result<(LargeObjMsg<ID, H::HashID>, usize), Self::DecodeError> {
+    ) -> Result<(LargeObjMsg<H::HashID>, usize), Self::DecodeError> {
         let (metadata, mut curr) = self
             .metadata
             .decode(buf)
@@ -954,7 +986,7 @@ impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
     LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
@@ -968,20 +1000,18 @@ where
     ) -> Result<
         RetryResult<
             Option<Instant>,
-            LargeObjPushFragsRetry<Stream::PushFragRetry, IDs::Item>
+            LargeObjPushFragsRetry<Stream::PushFragRetry>
         >,
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+        Stream: LargeObjStream<LargeObjID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
-            >,
-        IDs::Item: Into<usize> {
+            > {
         let res = {
             let mut outbound = self
                 .outbound
@@ -990,7 +1020,7 @@ where
 
             if !outbound.objs.is_empty() {
                 // XXX use a better data structure here.
-                let mut ents: Vec<&mut SendEntry<IDs::Item, F>> =
+                let mut ents: Vec<&mut SendEntry<F>> =
                     outbound.objs.values_mut().collect();
 
                 ents.sort_unstable_by(|a, b| match (a.when, b.when) {
@@ -1052,13 +1082,12 @@ where
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+        Stream: LargeObjStream<LargeObjID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
             >,
@@ -1110,13 +1139,12 @@ where
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushFragsError<
-            IDs::Item,
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjStream<IDs::Item, Ctx, Frags = F>
+        Stream: LargeObjStream<LargeObjID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
             >,
@@ -1191,7 +1219,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1337,7 +1364,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1438,7 +1464,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1477,7 +1502,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1525,7 +1549,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1578,7 +1601,6 @@ where
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            IDs::Item,
             H,
             Auth::Error,
             Codec::DecodeError,
@@ -1614,11 +1636,11 @@ where
 }
 
 impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
-    AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<IDs::Item, H>>
+    AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
     for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
@@ -1626,7 +1648,6 @@ where
     F: Frags
 {
     type RecvError = LargeObjRecvError<
-        IDs::Item,
         H,
         Auth::Error,
         Codec::DecodeError,
@@ -1637,7 +1658,7 @@ where
     fn recv_auth_msg(
         &mut self,
         prin: &Auth::SessionPrin,
-        msg: LargeObjMsg<IDs::Item, H>
+        msg: LargeObjMsg<H>
     ) -> Result<(), Self::RecvError> {
         let data = match msg {
             // Inbound messages.
@@ -1702,8 +1723,8 @@ where H: Default + HashAlgo {
     const MAX_BYTES: usize = 1286;
 }
 
-impl<ID, H, Auth, Decode, Upstream, Frags> ScopedError
-    for LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags>
+impl<H, Auth, Decode, Upstream, Frags> ScopedError
+    for LargeObjRecvError<H, Auth, Decode, Upstream, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
     Upstream: ScopedError,
@@ -1728,7 +1749,7 @@ where
     }
 }
 
-impl<ID, H, Frags> ScopedError for LargeObjPushFragsError<ID, H, Frags>
+impl<H, Frags> ScopedError for LargeObjPushFragsError<H, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
     Frags: ScopedError
@@ -1742,7 +1763,7 @@ where
     }
 }
 
-impl<ID, H> ScopedError for LargeObjSendError<ID, H>
+impl<H> ScopedError for LargeObjSendError<H>
 where
     H: Clone + Display + Hash + HashID + Eq
 {
@@ -1802,6 +1823,15 @@ impl ScopedError for LargeObjMsgDecodeError {
     }
 }
 
+impl Display for LargeObjID {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "obj #{:x}", self.0)
+    }
+}
+
 impl Display for LargeObjDataError {
     fn fmt(
         &self,
@@ -1847,11 +1877,10 @@ impl Display for LargeObjMsgDecodeError {
     }
 }
 
-impl<ID, H, Frags> Display for LargeObjPushFragsError<ID, H, Frags>
+impl<H, Frags> Display for LargeObjPushFragsError<H, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
-    Frags: Display,
-    ID: Display
+    Frags: Display
 {
     fn fmt(
         &self,
@@ -1869,10 +1898,9 @@ where
     }
 }
 
-impl<ID, H> Display for LargeObjSendError<ID, H>
+impl<H> Display for LargeObjSendError<H>
 where
-    H: Clone + Display + Hash + HashID + Eq,
-    ID: Display
+    H: Clone + Display + Hash + HashID + Eq
 {
     fn fmt(
         &self,
@@ -1889,15 +1917,14 @@ where
     }
 }
 
-impl<ID, H, Auth, Decode, Upstream, Frags> Display
-    for LargeObjRecvError<ID, H, Auth, Decode, Upstream, Frags>
+impl<H, Auth, Decode, Upstream, Frags> Display
+    for LargeObjRecvError<H, Auth, Decode, Upstream, Frags>
 where
     H: Clone + Display + Hash + HashID + Eq,
     Upstream: Display,
     Decode: Display,
     Frags: Display,
-    Auth: Display,
-    ID: Display
+    Auth: Display
 {
     fn fmt(
         &self,
@@ -2079,7 +2106,7 @@ fn test_encode_decode_frag_header() {
 #[test]
 fn test_encode_decode_msg_offer_frag() {
     let algo = SHA3Algo::default();
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Offer {
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Offer {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
         frag: LargeObjFrag {
@@ -2089,7 +2116,7 @@ fn test_encode_decode_msg_offer_frag() {
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2102,14 +2129,14 @@ fn test_encode_decode_msg_offer_frag() {
 #[test]
 fn test_encode_decode_msg_req_obj() {
     let algo = SHA3Algo::default();
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::ReqObj {
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::ReqObj {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
-        id: 0x1234567890abcdef
+        id: LargeObjID(0x1234567890abcdef)
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2122,14 +2149,14 @@ fn test_encode_decode_msg_req_obj() {
 #[test]
 fn test_encode_decode_msg_accopt() {
     let algo = SHA3Algo::default();
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Accept {
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Accept {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         size: 0x31337,
-        id: 0x1234567890abcdef
+        id: LargeObjID(0x1234567890abcdef)
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2141,8 +2168,8 @@ fn test_encode_decode_msg_accopt() {
 
 #[test]
 fn test_encode_decode_msg_frags_1_frag() {
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
-        id: 0x1234567890abcdef,
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+        id: LargeObjID(0x1234567890abcdef),
         frags: vec![LargeObjFrag {
             offset: 0x1111111111111111,
             data: vec![0x5a; 1024]
@@ -2150,7 +2177,7 @@ fn test_encode_decode_msg_frags_1_frag() {
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2162,8 +2189,8 @@ fn test_encode_decode_msg_frags_1_frag() {
 
 #[test]
 fn test_encode_decode_msg_frags_4_frags() {
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
-        id: 0x1234567890abcdef,
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+        id: LargeObjID(0x1234567890abcdef),
         frags: vec![
             LargeObjFrag {
                 offset: 0x1111111111111111,
@@ -2185,7 +2212,7 @@ fn test_encode_decode_msg_frags_4_frags() {
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2197,8 +2224,8 @@ fn test_encode_decode_msg_frags_4_frags() {
 
 #[test]
 fn test_encode_decode_msg_frags_16_frags() {
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Frags {
-        id: 0x1234567890abcdef,
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Frags {
+        id: LargeObjID(0x1234567890abcdef),
         frags: vec![
             LargeObjFrag {
                 offset: 0x1111111111111111,
@@ -2268,7 +2295,7 @@ fn test_encode_decode_msg_frags_16_frags() {
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2280,8 +2307,8 @@ fn test_encode_decode_msg_frags_16_frags() {
 
 #[test]
 fn test_encode_decode_msg_req() {
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Req {
-        id: 0x1337feeddeadbeef,
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Req {
+        id: LargeObjID(0x1337feeddeadbeef),
         reqs: vec![
             LargeObjFragReq::Need(LargeObjFragRef {
                 offset: 0x1337feeddeadbeef,
@@ -2292,7 +2319,7 @@ fn test_encode_decode_msg_req() {
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");
@@ -2304,12 +2331,12 @@ fn test_encode_decode_msg_req() {
 
 #[test]
 fn test_encode_decode_msg_finish() {
-    let msg: LargeObjMsg<u64, SHA3ID> = LargeObjMsg::Finish {
-        id: 0x1234567890abcdef
+    let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Finish {
+        id: LargeObjID(0x1234567890abcdef)
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();
     let mut buf = [0; <LargeObjMsgCodec<SHA3Algo> as DatagramCodec<
-        LargeObjMsg<u64, SHA3ID>
+        LargeObjMsg<SHA3ID>
     >>::MAX_BYTES];
 
     let _ = codec.encode(&msg, &mut buf).expect("Expected success");

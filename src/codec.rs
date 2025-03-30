@@ -47,6 +47,7 @@ use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::OutboundFrags;
 use crate::large_obj::LargeObjDataError;
+use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgCodec;
 use crate::large_obj::LargeObjMsgEncodeError;
@@ -1113,15 +1114,10 @@ where
     }
 }
 
-impl<Ctx, ObjID, H, Stream> LargeObjStream<ObjID, Ctx>
-    for DatagramCodecStream<
-        LargeObjMsg<ObjID, H::HashID>,
-        Stream,
-        LargeObjMsgCodec<H>
-    >
+impl<Ctx, H, Stream> LargeObjStream<LargeObjID, Ctx>
+    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
 where
     H: Default + HashAlgo + Send,
-    ObjID: Clone + From<u64> + Into<u64> + Into<usize>,
     Stream: Write
 {
     type Frags = OutboundFrags;
@@ -1132,7 +1128,7 @@ where
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
@@ -1155,7 +1151,7 @@ where
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
     ) -> Result<
@@ -1168,7 +1164,7 @@ where
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<

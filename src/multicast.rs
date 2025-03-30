@@ -48,6 +48,7 @@ use crate::error::ErrorSet;
 use crate::error::SelectionsError;
 use crate::frags::Frags;
 use crate::generated::large_obj::LargeObjFragReq;
+use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
@@ -1099,14 +1100,13 @@ where
     }
 }
 
-impl<Party, Idx, ObjID, H, Stream, Ctx>
-    StreamMulticaster<Party, Idx, LargeObjMsg<ObjID, H>, Stream, Ctx>
+impl<Party, Idx, H, Stream, Ctx>
+    StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg<ObjID, H>, Ctx>,
+    Stream: PushStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     Stream::BatchID: Clone,
-    ObjID: Clone + Into<u64> + Into<usize>,
     H: HashID
 {
     fn decide_push_frag_result(
@@ -1115,21 +1115,24 @@ where
             Idx,
             RetryResult<
                 Option<Instant>,
-                <Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry
+                <Stream as LargeObjStream<LargeObjID, Ctx>>::PushFragRetry
             >
         )>,
         errs: Option<
-            Vec<(Idx, <Stream as LargeObjStream<ObjID, Ctx>>::PushFragError)>
+            Vec<(
+                Idx,
+                <Stream as LargeObjStream<LargeObjID, Ctx>>::PushFragError
+            )>
         >
     ) -> Result<
         RetryResult<
             Option<Instant>,
-            <Self as LargeObjStream<ObjID, Ctx>>::PushFragRetry
+            <Self as LargeObjStream<LargeObjID, Ctx>>::PushFragRetry
         >,
-        <Self as LargeObjStream<ObjID, Ctx>>::PushFragError
+        <Self as LargeObjStream<LargeObjID, Ctx>>::PushFragError
     >
     where
-        Stream: LargeObjStream<ObjID, Ctx> {
+        Stream: LargeObjStream<LargeObjID, Ctx> {
         match errs {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(elems, errs)),
@@ -2736,14 +2739,13 @@ where
     }
 }
 
-impl<ObjID, Party, Idx, H, Stream, Ctx> LargeObjStream<ObjID, Ctx>
-    for StreamMulticaster<Party, Idx, LargeObjMsg<ObjID, H>, Stream, Ctx>
+impl<Party, Idx, H, Stream, Ctx> LargeObjStream<LargeObjID, Ctx>
+    for StreamMulticaster<Party, Idx, LargeObjMsg<H>, Stream, Ctx>
 where
-    ObjID: Clone + Into<u64> + Into<usize>,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
     Stream:
-        LargeObjStream<ObjID, Ctx> + PushStreamAdd<LargeObjMsg<ObjID, H>, Ctx>,
+        LargeObjStream<LargeObjID, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     H: HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
@@ -2759,7 +2761,7 @@ where
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
@@ -2795,7 +2797,7 @@ where
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retries: Self::PushFragRetry
     ) -> Result<
@@ -2847,7 +2849,7 @@ where
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retries: <Self::PushFragError as BatchError>::Completable
     ) -> Result<
