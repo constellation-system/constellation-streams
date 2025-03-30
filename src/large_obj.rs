@@ -194,6 +194,31 @@ where
     ids: IDs
 }
 
+impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F> Clone
+    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+where
+    Recv: Clone + AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: Clone + IDGen + Iterator<Item = LargeObjID>,
+    Auth: Clone + MsgAuthN<Msg, Wrapper>,
+    Codec: Clone + DatagramCodec<Wrapper>,
+    H: Clone + Display + Hash + HashID + Eq,
+    F: Frags
+{
+    fn clone(&self) -> Self {
+        LargeObjProto {
+            wrapper: self.wrapper,
+            msg: self.msg,
+            inbound: self.inbound.clone(),
+            outbound: self.outbound.clone(),
+            upstream: self.upstream.clone(),
+            retry: self.retry.clone(),
+            codec: self.codec.clone(),
+            auth: self.auth.clone(),
+            ids: self.ids.clone()
+        }
+    }
+}
+
 pub struct LargeObjPushFragsRetry<Retry> {
     retry: Retry,
     id: LargeObjID
