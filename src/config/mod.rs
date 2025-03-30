@@ -269,7 +269,7 @@ where
 )]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct PrivateSmallObjModeConfig {
+pub struct PrivateDatagramModeConfig {
     /// Size hint for the pending retries.
     #[serde(default)]
     retries_hint: Option<usize>
@@ -306,7 +306,7 @@ pub struct PrivateLargeObjModeConfig {
 )]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct SharedSmallObjModeConfig {
+pub struct SharedDatagramModeConfig {
     /// Size hint for the pending retries.
     #[serde(default)]
     retries_hint: Option<usize>
@@ -333,10 +333,10 @@ where
     size_hint: Option<usize>
 }
 
-impl PrivateSmallObjModeConfig {
+impl PrivateDatagramModeConfig {
     #[inline]
     pub fn new(retries_hint: Option<usize>) -> Self {
-        PrivateSmallObjModeConfig {
+        PrivateDatagramModeConfig {
             retries_hint: retries_hint
         }
     }
@@ -380,10 +380,10 @@ impl PrivateLargeObjModeConfig {
     }
 }
 
-impl SharedSmallObjModeConfig {
+impl SharedDatagramModeConfig {
     #[inline]
     pub fn new(retries_hint: Option<usize>) -> Self {
-        SharedSmallObjModeConfig {
+        SharedDatagramModeConfig {
             retries_hint: retries_hint
         }
     }

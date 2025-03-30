@@ -37,8 +37,8 @@ use log::debug;
 use log::error;
 use log::trace;
 
+use crate::config::PrivateDatagramModeConfig;
 use crate::config::PrivateLargeObjModeConfig;
-use crate::config::PrivateSmallObjModeConfig;
 use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
@@ -97,7 +97,7 @@ where
     }
 }
 
-pub struct PrivateSmallObjPushMode<Msg, Stream, Ctx>
+pub struct PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -134,6 +134,9 @@ where
     pending_msgs: Vec<PushEntry<LargeObjMsg<H>, Stream, Ctx>>,
     pending_frags: Vec<LargeObjEntry<Stream, Ctx>>
 }
+
+#[derive(Clone)]
+pub struct PrivatePrin;
 
 #[derive(Debug)]
 pub enum PrivateLargeObjPushModeSendError<Frags, Msgs> {
@@ -661,7 +664,7 @@ where
 }
 
 impl<Msg, Stream, Ctx> PushModeCreate
-    for PrivateSmallObjPushMode<Msg, Stream, Ctx>
+    for PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -680,16 +683,16 @@ where
         + Send,
     Msg: 'static + Clone + Send
 {
-    type Config = PrivateSmallObjModeConfig;
+    type Config = PrivateDatagramModeConfig;
 
     fn create(config: Self::Config) -> Self {
         let retries_hint = config.take();
 
         match retries_hint {
-            Some(hint) => PrivateSmallObjPushMode {
+            Some(hint) => PrivateDatagramPushMode {
                 pending: Vec::with_capacity(hint)
             },
-            None => PrivateSmallObjPushMode {
+            None => PrivateDatagramPushMode {
                 pending: Vec::new()
             }
         }
@@ -697,7 +700,7 @@ where
 }
 
 impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
-    for PrivateSmallObjPushMode<Msg, Stream, Ctx>
+    for PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -837,7 +840,17 @@ where
 impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
     PushMode<
         Stream,
-        LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            (),
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         Ctx
     > for PrivateLargeObjPushMode<H, Stream, Ctx>
 where
@@ -870,7 +883,7 @@ where
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >,
-        LargeObjSendError<H>
+        LargeObjSendError<H, Auth::SessionPrin>
     >;
 
     fn send_from_outbound(
@@ -881,6 +894,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            (),
             Codec,
             IDs,
             Recv,
@@ -933,6 +947,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            (),
             Codec,
             IDs,
             Recv,
@@ -1077,5 +1092,14 @@ where
             PrivateLargeObjPushModeSendError::Frags { err } => err.fmt(f),
             PrivateLargeObjPushModeSendError::Msgs { err } => err.fmt(f)
         }
+    }
+}
+
+impl Display for PrivatePrin {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "private recipient")
     }
 }

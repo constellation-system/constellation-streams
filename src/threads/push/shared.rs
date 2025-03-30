@@ -37,8 +37,8 @@ use log::debug;
 use log::error;
 use log::trace;
 
+use crate::config::SharedDatagramModeConfig;
 use crate::config::SharedLargeObjModeConfig;
-use crate::config::SharedSmallObjModeConfig;
 use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
@@ -121,7 +121,7 @@ where
     pending_frags: Vec<LargeObjEntry<Stream, Ctx>>
 }
 
-pub struct SharedSmallObjPushMode<Msg, Stream, Ctx>
+pub struct SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -673,7 +673,7 @@ where
 }
 
 impl<Msg, Stream, Ctx> PushModeCreate
-    for SharedSmallObjPushMode<Msg, Stream, Ctx>
+    for SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -693,16 +693,16 @@ where
         + Send,
     Msg: 'static + Clone + Send
 {
-    type Config = SharedSmallObjModeConfig;
+    type Config = SharedDatagramModeConfig;
 
     fn create(config: Self::Config) -> Self {
         let retries_hint = config.take();
 
         match retries_hint {
-            Some(hint) => SharedSmallObjPushMode {
+            Some(hint) => SharedDatagramPushMode {
                 pending: Vec::with_capacity(hint)
             },
-            None => SharedSmallObjPushMode {
+            None => SharedDatagramPushMode {
                 pending: Vec::new()
             }
         }
@@ -710,7 +710,7 @@ where
 }
 
 impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
-    for SharedSmallObjPushMode<Msg, Stream, Ctx>
+    for SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -864,7 +864,17 @@ where
 impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
     PushMode<
         Stream,
-        LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream::Frags>,
+        LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Stream::PartyID,
+            Codec,
+            IDs,
+            Recv,
+            Stream::Frags
+        >,
         Ctx
     > for SharedLargeObjPushMode<H, Stream, Ctx>
 where
@@ -886,10 +896,10 @@ where
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    Stream::PartyID: From<usize>,
+    Stream::PartyID: Display + From<usize>,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
-    Auth: MsgAuthN<Msg, Wrapper, SessionPrin = Stream::PartyID>,
+    Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: 'static + Clone + Display + Hash + HashID + Eq + Send
 {
@@ -899,7 +909,7 @@ where
             H,
             <Stream::PushFragError as BatchError>::Permanent
         >,
-        LargeObjSendError<H>
+        LargeObjSendError<H, Auth::SessionPrin>
     >;
 
     fn send_from_outbound(
@@ -910,6 +920,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            Stream::PartyID,
             Codec,
             IDs,
             Recv,
@@ -964,6 +975,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            Stream::PartyID,
             Codec,
             IDs,
             Recv,

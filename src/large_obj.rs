@@ -30,6 +30,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
@@ -159,8 +160,8 @@ struct SendEntry<F>
 where
     F: Frags {
     id: LargeObjID,
-    frags: F,
-    when: Option<Instant>
+    when: Option<Instant>,
+    frags: F
 }
 
 struct LargeObjInbound<H, Prin> {
@@ -175,18 +176,20 @@ where
     hashes: HashMap<LargeObjID, H>
 }
 
-pub struct LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+pub struct LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags {
     wrapper: PhantomData<Wrapper>,
     msg: PhantomData<Msg>,
     inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
     outbound: Arc<Mutex<LargeObjOutbound<H, F>>>,
+    parties: Arc<RwLock<HashMap<Auth::SessionPrin, PartyID>>>,
     upstream: Recv,
     retry: Retry,
     codec: Codec,
@@ -194,14 +197,15 @@ where
     ids: IDs
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F> Clone
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F> Clone
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: Clone + AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: Clone + IDGen + Iterator<Item = LargeObjID>,
     Auth: Clone + MsgAuthN<Msg, Wrapper>,
     Codec: Clone + DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags
 {
     fn clone(&self) -> Self {
@@ -211,6 +215,7 @@ where
             inbound: self.inbound.clone(),
             outbound: self.outbound.clone(),
             upstream: self.upstream.clone(),
+            parties: self.parties.clone(),
             retry: self.retry.clone(),
             codec: self.codec.clone(),
             auth: self.auth.clone(),
@@ -230,8 +235,9 @@ pub enum LargeObjPushFragsError<H, Frags> {
     MutexPoison
 }
 
-pub enum LargeObjSendError<H> {
+pub enum LargeObjSendError<H, Prin> {
     NoObj { hash: H, id: LargeObjID },
+    NoPrin { prin: Prin },
     MutexPoison
 }
 
@@ -520,24 +526,25 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
-    SharedMsgs<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    SharedMsgs<PartyID, LargeObjMsg<H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags
 {
-    type MsgsError = LargeObjSendError<H>;
+    type MsgsError = LargeObjSendError<H, Auth::SessionPrin>;
 
     fn msgs(
         &mut self
     ) -> Result<
         (
-            Option<Vec<(Vec<Auth::SessionPrin>, Vec<LargeObjMsg<H>>)>>,
+            Option<Vec<(Vec<PartyID>, Vec<LargeObjMsg<H>>)>>,
             Option<Instant>
         ),
         Self::MsgsError
@@ -565,6 +572,13 @@ where
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
         for ((prin, hash), id) in hashes {
+            let party_id = self
+                .parties
+                .read()
+                .map_err(|_| LargeObjSendError::MutexPoison)?
+                .get(&prin)
+                .ok_or(LargeObjSendError::NoPrin { prin: prin.clone() })?
+                .clone();
             let ent =
                 inbound.objs.get_mut(&id).ok_or(LargeObjSendError::NoObj {
                     hash: hash.clone(),
@@ -587,7 +601,7 @@ where
                     next = Some(
                         next.map_or(retry, |next: Instant| next.min(retry))
                     );
-                    msgs.push((vec![prin.clone()], vec![msg]));
+                    msgs.push((vec![party_id], vec![msg]));
                 }
                 InboundFragsState::Active { frags, .. } => {
                     let mut buf = [(false, 0, 0); 16];
@@ -597,7 +611,7 @@ where
                             let iter = buf[..n].iter().cloned();
                             let msg = LargeObjMsg::reqs(id, iter);
 
-                            msgs.push((vec![prin.clone()], vec![msg]));
+                            msgs.push((vec![party_id], vec![msg]));
                             next = next.map_or(retry, |next| {
                                 retry.map(|retry| next.min(retry))
                             });
@@ -616,7 +630,7 @@ where
                         LargeObjMsg::finish(id)
                     };
 
-                    msgs.push((vec![prin.clone()], vec![msg]));
+                    msgs.push((vec![party_id], vec![msg]));
                     // XXX keep these around for a configurable amount
                     // of time as "tombstones".
                     deletes.push((prin.clone(), hash.clone()));
@@ -638,8 +652,9 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F> PrivateMsgs<LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    PrivateMsgs<LargeObjMsg<H>>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
@@ -647,9 +662,10 @@ where
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags
 {
-    type MsgsError = LargeObjSendError<H>;
+    type MsgsError = LargeObjSendError<H, Auth::SessionPrin>;
 
     fn msgs(
         &mut self
@@ -1007,8 +1023,8 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
-    LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
@@ -1016,6 +1032,7 @@ where
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags
 {
     pub(crate) fn try_push_frags<Stream, Ctx>(
@@ -1660,9 +1677,9 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
     AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, Codec, IDs, Recv, F>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
@@ -1670,6 +1687,7 @@ where
     Auth: MsgAuthN<Msg, Wrapper>,
     Codec: DatagramCodec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
+    PartyID: Clone,
     F: Frags
 {
     type RecvError = LargeObjRecvError<
@@ -1788,13 +1806,14 @@ where
     }
 }
 
-impl<H> ScopedError for LargeObjSendError<H>
+impl<H, Prin> ScopedError for LargeObjSendError<H, Prin>
 where
     H: Clone + Display + Hash + HashID + Eq
 {
     fn scope(&self) -> ErrorScope {
         match self {
             LargeObjSendError::NoObj { .. } |
+            LargeObjSendError::NoPrin { .. } |
             LargeObjSendError::MutexPoison => ErrorScope::Unrecoverable
         }
     }
@@ -1923,9 +1942,10 @@ where
     }
 }
 
-impl<H> Display for LargeObjSendError<H>
+impl<H, Prin> Display for LargeObjSendError<H, Prin>
 where
-    H: Clone + Display + Hash + HashID + Eq
+    H: Clone + Display + Hash + HashID + Eq,
+    Prin: Display
 {
     fn fmt(
         &self,
@@ -1937,6 +1957,9 @@ where
                 "ID {} exists for {}, but no object entry found",
                 id, hash
             ),
+            LargeObjSendError::NoPrin { prin } => {
+                write!(f, "no party ID for principal {}", prin)
+            }
             LargeObjSendError::MutexPoison => write!(f, "mutex poisoned")
         }
     }

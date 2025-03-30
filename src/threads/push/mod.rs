@@ -118,7 +118,7 @@ where
     Stream: LargeObjStream<LargeObjID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
 {
-    pub(crate) fn exec<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
+    pub(crate) fn exec<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv>(
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
@@ -127,6 +127,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            PartyID,
             Codec,
             IDs,
             Recv,
@@ -144,7 +145,8 @@ where
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         Codec: DatagramCodec<Wrapper>,
-        H: Clone + Display + Hash + HashID + Eq {
+        H: Clone + Display + Hash + HashID + Eq,
+        PartyID: Clone {
         match self {
             LargeObjEntry::PushFrags { id, retry } => proto
                 .retry_push_frags(ctx, stream, id.clone(), retry)
@@ -157,7 +159,16 @@ where
         }
     }
 
-    pub(crate) fn from_try_send<H, Msg, Wrapper, Auth, Codec, IDs, Recv>(
+    pub(crate) fn from_try_send<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        Codec,
+        IDs,
+        Recv
+    >(
         ctx: &mut Ctx,
         stream: &mut Stream,
         proto: &mut LargeObjProto<
@@ -165,6 +176,7 @@ where
             Msg,
             Wrapper,
             Auth,
+            PartyID,
             Codec,
             IDs,
             Recv,
@@ -182,7 +194,8 @@ where
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         Codec: DatagramCodec<Wrapper>,
-        H: Clone + Display + Hash + HashID + Eq {
+        H: Clone + Display + Hash + HashID + Eq,
+        PartyID: Clone {
         Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {
             let (retry, id) = retry.take();
 
