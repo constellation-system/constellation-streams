@@ -84,12 +84,8 @@ pub struct BytestreamCodecStream<Msg, IO, Codec: BytestreamCodec<Msg> + Send> {
 
 /// Errors that can occur when sending an object fragment.
 pub enum DatagramCodecFragError<Codec> {
-    Frag {
-        err: LargeObjDataError
-    },
-    Stream {
-        err: Codec
-    }
+    Frag { err: LargeObjDataError },
+    Stream { err: Codec }
 }
 
 impl<Codec, T> ErrorReportInfo<T> for DatagramCodecFragError<Codec>
@@ -118,7 +114,8 @@ where
 }
 
 impl<Codec> ScopedError for DatagramCodecFragError<Codec>
-where Codec: ScopedError
+where
+    Codec: ScopedError
 {
     #[inline]
     fn scope(&self) -> ErrorScope {
@@ -1122,9 +1119,8 @@ where
     Stream: Write
 {
     type Frags = OutboundFrags;
-    type PushFragError = DatagramCodecFragError<
-        CodecStreamError<LargeObjMsgEncodeError, Error>
-    >;
+    type PushFragError =
+        DatagramCodecFragError<CodecStreamError<LargeObjMsgEncodeError, Error>>;
     type PushFragRetry = Instant;
 
     fn push_frag(
@@ -1167,7 +1163,7 @@ where
 
 impl<Encode> Display for DatagramCodecFragError<Encode>
 where
-    Encode: Display,
+    Encode: Display
 {
     fn fmt(
         &self,

@@ -496,8 +496,7 @@ impl Codec<LargeObjMsg> for LargeObjMsgCodec {
     }
 }
 
-impl BatchError for LargeObjMsgEncodeError
-{
+impl BatchError for LargeObjMsgEncodeError {
     type Completable = Infallible;
     type Permanent = Self;
 
