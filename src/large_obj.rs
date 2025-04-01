@@ -24,11 +24,13 @@ use std::fmt::Error;
 use std::fmt::Formatter;
 
 use constellation_common::codec::per::PERCodec;
+use constellation_common::codec::Codec;
 use constellation_common::codec::DatagramCodec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 
+use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::OutboundDataError;
 use crate::frags::OutboundFrags;
@@ -104,10 +106,10 @@ pub enum LargeObjMsg {
 #[derive(Debug)]
 pub enum LargeObjMsgEncodeError {
     Metadata {
-        err: <LargeObjMetadataPERCodec as DatagramCodec<LargeObjMetadata>>::EncodeError
+        err: <LargeObjMetadataPERCodec as Codec<LargeObjMetadata>>::EncodeError
     },
     FragHeader {
-        err: <LargeObjFragHeaderPERCodec as DatagramCodec<LargeObjFragHeader>>::EncodeError
+        err: <LargeObjFragHeaderPERCodec as Codec<LargeObjFragHeader>>::EncodeError
     },
     TooShort
 }
@@ -115,10 +117,10 @@ pub enum LargeObjMsgEncodeError {
 #[derive(Debug)]
 pub enum LargeObjMsgDecodeError {
     Metadata {
-        err: <LargeObjMetadataPERCodec as DatagramCodec<LargeObjMetadata>>::EncodeError
+        err: <LargeObjMetadataPERCodec as Codec<LargeObjMetadata>>::EncodeError
     },
     FragHeader {
-        err: <LargeObjFragHeaderPERCodec as DatagramCodec<LargeObjFragHeader>>::EncodeError
+        err: <LargeObjFragHeaderPERCodec as Codec<LargeObjFragHeader>>::EncodeError
     },
     TooShort
 }
@@ -250,13 +252,11 @@ impl LargeObjMsg {
     }
 }
 
-impl DatagramCodec<LargeObjMsg> for LargeObjMsgCodec {
+impl Codec<LargeObjMsg> for LargeObjMsgCodec {
     type CreateError = Infallible;
     type DecodeError = LargeObjMsgDecodeError;
     type EncodeError = LargeObjMsgEncodeError;
     type Param = ();
-
-    const MAX_BYTES: usize = 1286;
 
     #[inline]
     fn create(_param: ()) -> Result<Self, Infallible> {
@@ -264,6 +264,17 @@ impl DatagramCodec<LargeObjMsg> for LargeObjMsgCodec {
     }
 
     #[inline]
+    fn encode_to_vec(
+        &mut self,
+        val: &LargeObjMsg
+    ) -> Result<Vec<u8>, Self::EncodeError> {
+        let mut buf = vec![0; Self::MAX_BYTES];
+
+        self.encode(val, &mut buf)?;
+
+        Ok(buf)
+    }
+
     fn encode(
         &mut self,
         val: &LargeObjMsg,
@@ -483,6 +494,21 @@ impl DatagramCodec<LargeObjMsg> for LargeObjMsgCodec {
             }
         }
     }
+}
+
+impl BatchError for LargeObjMsgEncodeError
+{
+    type Completable = Infallible;
+    type Permanent = Self;
+
+    #[inline]
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        (None, Some(self))
+    }
+}
+
+impl DatagramCodec<LargeObjMsg> for LargeObjMsgCodec {
+    const MAX_BYTES: usize = 1286;
 }
 
 impl Default for LargeObjMsgCodec {

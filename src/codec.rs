@@ -83,16 +83,16 @@ pub struct BytestreamCodecStream<Msg, IO, Codec: BytestreamCodec<Msg> + Send> {
 }
 
 /// Errors that can occur when sending an object fragment.
-pub enum DatagramCodecFragError<Codec, IO> {
+pub enum DatagramCodecFragError<Codec> {
     Frag {
         err: LargeObjDataError
     },
     Stream {
-        err: DatagramCodecStreamError<Codec, IO>
+        err: Codec
     }
 }
 
-impl<Codec, IO, T> ErrorReportInfo<T> for DatagramCodecFragError<Codec, IO>
+impl<Codec, T> ErrorReportInfo<T> for DatagramCodecFragError<Codec>
 where
     Codec: ErrorReportInfo<T>
 {
@@ -117,9 +117,8 @@ where
     }
 }
 
-impl<Codec, IO> ScopedError for DatagramCodecFragError<Codec, IO>
-where
-    IO: ScopedError
+impl<Codec> ScopedError for DatagramCodecFragError<Codec>
+where Codec: ScopedError
 {
     #[inline]
     fn scope(&self) -> ErrorScope {
@@ -166,13 +165,12 @@ where
     }
 }
 
-impl<Frag, Stream> BatchError for DatagramCodecFragError<Frag, Stream>
+impl<Stream> BatchError for DatagramCodecFragError<Stream>
 where
-    Frag: Display,
     Stream: BatchError
 {
-    type Completable = DatagramCodecFragError<Infallible, Stream::Completable>;
-    type Permanent = DatagramCodecFragError<Frag, Stream::Permanent>;
+    type Completable = DatagramCodecFragError<Stream::Completable>;
+    type Permanent = DatagramCodecFragError<Stream::Permanent>;
 
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
@@ -1124,7 +1122,9 @@ where
     Stream: Write
 {
     type Frags = OutboundFrags;
-    type PushFragError = DatagramCodecFragError<LargeObjMsgEncodeError, Error>;
+    type PushFragError = DatagramCodecFragError<
+        CodecStreamError<LargeObjMsgEncodeError, Error>
+    >;
     type PushFragRetry = Instant;
 
     fn push_frag(
@@ -1165,10 +1165,9 @@ where
     }
 }
 
-impl<Encode, Write> Display for DatagramCodecFragError<Encode, Write>
+impl<Encode> Display for DatagramCodecFragError<Encode>
 where
     Encode: Display,
-    Write: Display
 {
     fn fmt(
         &self,
