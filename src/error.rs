@@ -22,6 +22,7 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io::ErrorKind;
 
+use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 
@@ -117,6 +118,46 @@ pub enum SelectionsError<Inner, Info> {
     NoSelections {
         /// Information about selections.
         info: Info
+    }
+}
+
+impl<Encode, Write> BatchError for CodecStreamError<Encode, Write>
+where
+    Encode: Display,
+    Write: BatchError
+{
+    type Completable = CodecStreamError<Infallible, Write::Completable>;
+    type Permanent = CodecStreamError<Encode, Write::Permanent>;
+
+    #[inline]
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            CodecStreamError::Codec { err } => {
+                (None, Some(CodecStreamError::Codec { err }))
+            }
+            CodecStreamError::IO { err } => {
+                let (completable, permanent) = err.split();
+
+                (
+                    completable.map(|res| CodecStreamError::IO { err: res }),
+                    permanent.map(|res| CodecStreamError::IO { err: res })
+                )
+            }
+        }
+    }
+}
+
+impl<Codec, IO, T> ErrorReportInfo<T> for CodecStreamError<Codec, IO>
+where
+    Codec: ErrorReportInfo<T>
+{
+    #[inline]
+    fn report_info(&self) -> Option<T> {
+        if let CodecStreamError::Codec { err } = self {
+            err.report_info()
+        } else {
+            None
+        }
     }
 }
 
