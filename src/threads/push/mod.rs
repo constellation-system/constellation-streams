@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::MsgAuthN;
-use constellation_common::codec::DatagramCodec;
+use constellation_common::codec::Codec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
@@ -118,7 +118,7 @@ where
     Stream: LargeObjStream<LargeObjID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
 {
-    pub(crate) fn exec<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv>(
+    pub(crate) fn exec<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv>(
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
@@ -128,7 +128,7 @@ where
             Wrapper,
             Auth,
             PartyID,
-            Codec,
+            WrapperCodec,
             IDs,
             Recv,
             Stream::Frags
@@ -144,7 +144,7 @@ where
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
-        Codec: DatagramCodec<Wrapper>,
+        WrapperCodec: Codec<Wrapper>,
         H: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         match self {
@@ -165,7 +165,7 @@ where
         Wrapper,
         Auth,
         PartyID,
-        Codec,
+        WrapperCodec,
         IDs,
         Recv
     >(
@@ -177,7 +177,7 @@ where
             Wrapper,
             Auth,
             PartyID,
-            Codec,
+            WrapperCodec,
             IDs,
             Recv,
             Stream::Frags
@@ -193,7 +193,7 @@ where
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
-        Codec: DatagramCodec<Wrapper>,
+        WrapperCodec: Codec<Wrapper>,
         H: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {

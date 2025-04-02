@@ -176,12 +176,12 @@ where
     hashes: HashMap<LargeObjID, H>
 }
 
-pub struct LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+pub struct LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags {
@@ -192,18 +192,18 @@ where
     parties: Arc<RwLock<HashMap<Auth::SessionPrin, PartyID>>>,
     upstream: Recv,
     retry: Retry,
-    codec: Codec,
+    codec: WrapperCodec,
     auth: Auth,
     ids: IDs
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F> Clone
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F> Clone
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: Clone + AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: Clone + IDGen + Iterator<Item = LargeObjID>,
     Auth: Clone + MsgAuthN<Msg, Wrapper>,
-    Codec: Clone + DatagramCodec<Wrapper>,
+    WrapperCodec: Clone + Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -526,14 +526,14 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     SharedMsgs<PartyID, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -652,15 +652,15 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     PrivateMsgs<LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -1023,14 +1023,14 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
-    LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
+    LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -1263,7 +1263,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1408,7 +1408,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1508,7 +1508,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1546,7 +1546,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1593,7 +1593,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1645,7 +1645,7 @@ where
         LargeObjRecvError<
             H,
             Auth::Error,
-            Codec::DecodeError,
+            WrapperCodec::DecodeError,
             Recv::RecvError,
             F::RecvReqError
         >
@@ -1677,15 +1677,15 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, Codec, IDs, Recv, F>
+    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -1693,7 +1693,7 @@ where
     type RecvError = LargeObjRecvError<
         H,
         Auth::Error,
-        Codec::DecodeError,
+        WrapperCodec::DecodeError,
         Recv::RecvError,
         F::RecvReqError
     >;

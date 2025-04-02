@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::MsgAuthN;
-use constellation_common::codec::DatagramCodec;
+use constellation_common::codec::Codec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
@@ -861,7 +861,7 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
+impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Recv, Stream, Ctx>
     PushMode<
         Stream,
         LargeObjProto<
@@ -870,7 +870,7 @@ impl<H, Msg, Wrapper, Auth, Codec, IDs, Recv, Stream, Ctx>
             Wrapper,
             Auth,
             Stream::PartyID,
-            Codec,
+            WrapperCodec,
             IDs,
             Recv,
             Stream::Frags
@@ -900,7 +900,7 @@ where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    Codec: DatagramCodec<Wrapper>,
+    WrapperCodec: Codec<Wrapper>,
     H: 'static + Clone + Display + Hash + HashID + Eq + Send
 {
     type RetryError = Infallible;
@@ -921,7 +921,7 @@ where
             Wrapper,
             Auth,
             Stream::PartyID,
-            Codec,
+            WrapperCodec,
             IDs,
             Recv,
             Stream::Frags
@@ -976,7 +976,7 @@ where
             Wrapper,
             Auth,
             Stream::PartyID,
-            Codec,
+            WrapperCodec,
             IDs,
             Recv,
             Stream::Frags
