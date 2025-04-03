@@ -320,6 +320,13 @@ impl From<usize> for LargeObjID {
     }
 }
 
+impl From<u128> for LargeObjID {
+    #[inline]
+    fn from(val: u128) -> LargeObjID {
+        LargeObjID(val as u64)
+    }
+}
+
 impl From<u64> for LargeObjID {
     #[inline]
     fn from(val: u64) -> LargeObjID {
