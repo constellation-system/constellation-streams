@@ -79,12 +79,14 @@ pub trait LargeObjMsgs<H, Wrapper>: Sized
 where
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq {
-    type AddMsgsError<ID, Encode>: Display + ScopedError;
+    type AddMsgsError<ID, Encode>: Display + ScopedError
+    where ID: Display,
+          Encode: Display + ScopedError;
 
     /// Use `sender` to add outbound large object messages.
     fn add_msgs<WrapperCodec, IDs, F>(
         &mut self,
-        proto: &mut LargeObjSender<H, Wrapper, WrapperCodec, IDs, F>
+        sender: &mut LargeObjSender<H, Wrapper, WrapperCodec, IDs, F>
     ) -> Result<
         Option<Instant>,
         Self::AddMsgsError<IDs::Item, WrapperCodec::EncodeError>
