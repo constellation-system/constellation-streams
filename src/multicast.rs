@@ -2693,7 +2693,25 @@ where
     Idx: Clone + Display + From<usize> + Into<usize>,
     F: Frags
 {
+    type Param = Vec<F::Param>;
     type RecvReqError = ErrorSet<Idx, (), F::RecvReqError>;
+
+    #[inline]
+    fn from_data(
+        params: Vec<F::Param>,
+        data: Vec<u8>
+    ) -> Self {
+        // XXX this requires cloning the data for each frags instance.
+        let frags = params
+            .into_iter()
+            .map(|param| F::from_data(param, data.clone()))
+            .collect();
+
+        StreamMulticasterFrags {
+            idx: PhantomData,
+            frags: frags
+        }
+    }
 
     #[inline]
     fn is_empty(&self) -> bool {

@@ -118,7 +118,16 @@ where
     Stream: LargeObjStream<LargeObjID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
 {
-    pub(crate) fn exec<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv>(
+    pub(crate) fn exec<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        WrapperCodec,
+        IDs,
+        Recv
+    >(
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
@@ -145,6 +154,7 @@ where
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         WrapperCodec: Codec<Wrapper>,
+        WrapperCodec::Param: Default,
         H: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         match self {
@@ -194,6 +204,7 @@ where
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
         WrapperCodec: Codec<Wrapper>,
+        WrapperCodec::Param: Default,
         H: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {

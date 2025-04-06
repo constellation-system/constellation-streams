@@ -875,6 +875,7 @@ where
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
     WrapperCodec: Codec<Wrapper>,
+    WrapperCodec::Param: Default,
     H: 'static + Clone + Display + Hash + HashID + Eq + Send
 {
     type RetryError = Infallible;

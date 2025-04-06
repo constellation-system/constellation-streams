@@ -2312,12 +2312,9 @@ where
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
-        let mut guard = self
-            .inner
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
-
-        guard
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
             .push_frags(ctx, id, frags)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
@@ -2332,12 +2329,9 @@ where
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
-        let mut guard = self
-            .inner
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
-
-        guard
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
             .retry_push_frags(ctx, id, frags, retry)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
@@ -2352,12 +2346,9 @@ where
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
-        let mut guard = self
-            .inner
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
-
-        guard
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
             .complete_push_frags(ctx, id, frags, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }

@@ -31,7 +31,13 @@ use crate::error::ErrorReportInfo;
 use crate::generated::large_obj::LargeObjFragReq;
 
 pub trait Frags {
+    type Param: Clone + Default;
     type RecvReqError: Display + ScopedError;
+
+    fn from_data(
+        param: Self::Param,
+        data: Vec<u8>
+    ) -> Self;
 
     fn is_empty(&self) -> bool;
 
@@ -259,7 +265,24 @@ impl InboundFrags {
 }
 
 impl Frags for OutboundFrags {
+    type Param = Retry;
     type RecvReqError = OutboundRecvError;
+
+    #[inline]
+    fn from_data(
+        param: Retry,
+        data: Vec<u8>
+    ) -> Self {
+        // XXX Use a size hint here, get it from len / frag len.
+        let frags = InnerFrags::full(data.len());
+
+        OutboundFrags {
+            frags: frags,
+            retry: param,
+            data: data,
+            curr: 0
+        }
+    }
 
     #[inline]
     fn is_empty(&self) -> bool {

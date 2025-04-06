@@ -40,6 +40,7 @@ use constellation_common::codec::per::PERCodec;
 use constellation_common::codec::Codec;
 use constellation_common::codec::DatagramCodec;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::MutexPoison;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
@@ -53,6 +54,7 @@ use log::debug;
 use log::error;
 use log::trace;
 
+use crate::config::LargeObjProtoConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
@@ -134,6 +136,13 @@ where
         id: LargeObjID
     }
 }
+#[derive(Debug)]
+pub enum LargeObjProtoAddOutboundError<ID, H> {
+    HashCollision { hash: H },
+    IDCollision { id: ID },
+    NoIDs,
+    MutexPoison
+}
 
 struct ReqState {
     when: Instant,
@@ -176,8 +185,17 @@ where
     hashes: HashMap<LargeObjID, H>
 }
 
-pub struct LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
-where
+pub struct LargeObjProto<
+    H,
+    Msg,
+    Wrapper,
+    Auth,
+    PartyID,
+    WrapperCodec,
+    IDs,
+    Recv,
+    F
+> where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
@@ -187,18 +205,29 @@ where
     F: Frags {
     wrapper: PhantomData<Wrapper>,
     msg: PhantomData<Msg>,
-    inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
     outbound: Arc<Mutex<LargeObjOutbound<H, F>>>,
     parties: Arc<RwLock<HashMap<Auth::SessionPrin, PartyID>>>,
+    inbound: Arc<Mutex<LargeObjInbound<H, Auth::SessionPrin>>>,
+    param: Arc<RwLock<F::Param>>,
+    ids: Arc<Mutex<IDs>>,
     upstream: Recv,
     retry: Retry,
     codec: WrapperCodec,
-    auth: Auth,
-    ids: IDs
+    auth: Auth
 }
 
 impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F> Clone
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
+    for LargeObjProto<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        WrapperCodec,
+        IDs,
+        Recv,
+        F
+    >
 where
     Recv: Clone + AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: Clone + IDGen + Iterator<Item = LargeObjID>,
@@ -206,7 +235,8 @@ where
     WrapperCodec: Clone + Codec<Wrapper>,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
-    F: Frags
+    F: Frags,
+    F::Param: Clone
 {
     fn clone(&self) -> Self {
         LargeObjProto {
@@ -216,6 +246,7 @@ where
             outbound: self.outbound.clone(),
             upstream: self.upstream.clone(),
             parties: self.parties.clone(),
+            param: self.param.clone(),
             retry: self.retry.clone(),
             codec: self.codec.clone(),
             auth: self.auth.clone(),
@@ -281,6 +312,11 @@ pub enum LargeObjRecvError<H, Auth, Decode, Upstream, Frags> {
     AuthNFail,
     NoID,
     MutexPoison
+}
+
+#[derive(Debug)]
+pub enum LargeObjProtoCreateError<Codec> {
+    Codec { err: Codec }
 }
 
 #[derive(Debug)]
@@ -535,7 +571,17 @@ where
 
 impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     SharedMsgs<PartyID, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
+    for LargeObjProto<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        WrapperCodec,
+        IDs,
+        Recv,
+        F
+    >
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
@@ -661,7 +707,17 @@ where
 
 impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     PrivateMsgs<LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
+    for LargeObjProto<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        WrapperCodec,
+        IDs,
+        Recv,
+        F
+    >
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
@@ -1030,6 +1086,45 @@ where
     }
 }
 
+impl<H, Prin> LargeObjInbound<H, Prin> {
+    #[inline]
+    fn new() -> Self {
+        LargeObjInbound {
+            hashes: HashMap::new(),
+            objs: HashMap::new()
+        }
+    }
+
+    #[inline]
+    fn with_capacity(size: usize) -> Self {
+        LargeObjInbound {
+            hashes: HashMap::with_capacity(size),
+            objs: HashMap::with_capacity(size)
+        }
+    }
+}
+
+impl<H, F> LargeObjOutbound<H, F>
+where
+    F: Frags
+{
+    #[inline]
+    fn new() -> Self {
+        LargeObjOutbound {
+            hashes: HashMap::new(),
+            objs: HashMap::new()
+        }
+    }
+
+    #[inline]
+    fn with_capacity(size: usize) -> Self {
+        LargeObjOutbound {
+            hashes: HashMap::with_capacity(size),
+            objs: HashMap::with_capacity(size)
+        }
+    }
+}
+
 impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
 where
@@ -1038,10 +1133,109 @@ where
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
     WrapperCodec: Codec<Wrapper>,
+    WrapperCodec::Param: Default,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
 {
+    /// Create a protocol instance.
+    pub fn create(
+        config: LargeObjProtoConfig<WrapperCodec::Param, IDs::Config>,
+        upstream: Recv,
+        auth: Auth
+    ) -> Result<Self, LargeObjProtoCreateError<WrapperCodec::CreateError>> {
+        let (retry, codec, ids, inbound_size, outbound_size) = config.take();
+        let inbound = match inbound_size {
+            Some(size) => LargeObjInbound::with_capacity(size),
+            None => LargeObjInbound::new()
+        };
+        let inbound = Arc::new(Mutex::new(inbound));
+        let outbound = match outbound_size {
+            Some(size) => LargeObjOutbound::with_capacity(size),
+            None => LargeObjOutbound::new()
+        };
+        let outbound = Arc::new(Mutex::new(outbound));
+        let parties = Arc::new(RwLock::new(HashMap::new()));
+        let codec = WrapperCodec::create(codec)
+            .map_err(|err| LargeObjProtoCreateError::Codec { err })?;
+        let ids = IDs::create(ids);
+        let ids = Arc::new(Mutex::new(ids));
+        let param = Arc::new(RwLock::new(F::Param::default()));
+
+        Ok(LargeObjProto {
+            wrapper: PhantomData,
+            msg: PhantomData,
+            inbound: inbound,
+            outbound: outbound,
+            parties: parties,
+            upstream: upstream,
+            param: param,
+            retry: retry,
+            codec: codec,
+            auth: auth,
+            ids: ids
+        })
+    }
+
+    /// Set the allowed parties for this protocol instance.
+    pub fn set_parties<I>(
+        &mut self,
+        param: F::Param,
+        parties: I
+    ) -> Result<(), MutexPoison>
+    where
+        I: Iterator<Item = (Auth::SessionPrin, PartyID)> {
+        let mut guard = self.parties.write().map_err(|_| MutexPoison)?;
+
+        *guard = parties.collect();
+
+        let mut guard = self.param.write().map_err(|_| MutexPoison)?;
+
+        *guard = param;
+
+        Ok(())
+    }
+
+    pub fn add_outbound(
+        &mut self,
+        hash: H,
+        data: Vec<u8>
+    ) -> Result<(), LargeObjProtoAddOutboundError<IDs::Item, H>> {
+        let id = self
+            .ids
+            .lock()
+            .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?
+            .next()
+            .ok_or(LargeObjProtoAddOutboundError::NoIDs)?;
+        let param = self
+            .param
+            .read()
+            .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?
+            .clone();
+        let mut guard = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?;
+        let frags = F::from_data(param, data);
+        let ent = SendEntry {
+            frags: frags,
+            id: id.clone(),
+            when: Some(Instant::now())
+        };
+
+        if guard.hashes.insert(id.clone(), hash.clone()).is_none() {
+            return Err(LargeObjProtoAddOutboundError::IDCollision { id: id });
+        }
+
+        if guard.objs.insert(hash.clone(), ent).is_none() {
+            return Err(LargeObjProtoAddOutboundError::HashCollision {
+                hash: hash
+            });
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn try_push_frags<Stream, Ctx>(
         &mut self,
         ctx: &mut Ctx,
@@ -1355,7 +1549,12 @@ where
             }
             Entry::Vacant(ent) => {
                 // No entry for this hash exists, set one up.
-                let id = self.ids.next().ok_or(LargeObjRecvError::NoID)?;
+                let id = self
+                    .ids
+                    .lock()
+                    .map_err(|_| LargeObjRecvError::MutexPoison)?
+                    .next()
+                    .ok_or(LargeObjRecvError::NoID)?;
                 let size = size as usize;
 
                 ent.insert(id.clone());
@@ -1686,13 +1885,24 @@ where
 
 impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
     AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H>>
-    for LargeObjProto<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Recv, F>
+    for LargeObjProto<
+        H,
+        Msg,
+        Wrapper,
+        Auth,
+        PartyID,
+        WrapperCodec,
+        IDs,
+        Recv,
+        F
+    >
 where
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
     Auth: MsgAuthN<Msg, Wrapper>,
     WrapperCodec: Codec<Wrapper>,
+    WrapperCodec::Param: Default,
     H: Clone + Display + Hash + HashID + Eq,
     PartyID: Clone,
     F: Frags
@@ -1769,7 +1979,9 @@ impl BatchError for LargeObjMsgEncodeError {
 }
 
 impl<H> DatagramCodec<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
-where H: Default + HashAlgo {
+where
+    H: Default + HashAlgo
+{
     const MAX_BYTES: usize = 1286;
 }
 
@@ -1893,6 +2105,20 @@ impl Display for LargeObjDataError {
             LargeObjDataError::OutOfBounds => {
                 write!(f, "offered data is outside available data range")
             }
+        }
+    }
+}
+
+impl<Codec> Display for LargeObjProtoCreateError<Codec>
+where
+    Codec: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            LargeObjProtoCreateError::Codec { err } => err.fmt(f)
         }
     }
 }
@@ -2026,6 +2252,30 @@ where
                 write!(f, "message authentication failed")
             }
             LargeObjRecvError::MutexPoison => write!(f, "mutex poisoned")
+        }
+    }
+}
+
+impl<ID, H> Display for LargeObjProtoAddOutboundError<ID, H>
+where
+    ID: Display,
+    H: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            LargeObjProtoAddOutboundError::HashCollision { hash } => {
+                write!(f, "object for hash {} already exists", hash)
+            }
+            LargeObjProtoAddOutboundError::IDCollision { id } => {
+                write!(f, "hash for ID {} already exists", id)
+            }
+            LargeObjProtoAddOutboundError::NoIDs => write!(f, "IDs exhausted"),
+            LargeObjProtoAddOutboundError::MutexPoison => {
+                write!(f, "mutex poisoned")
+            }
         }
     }
 }

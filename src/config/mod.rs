@@ -214,6 +214,26 @@ pub struct FarSchedulerConfig {
     retry_max_count: usize
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "far-scheduler-config")]
+#[serde(default)]
+pub struct LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default {
+    #[serde(default)]
+    retry: Retry,
+    #[serde(default)]
+    codec: Codec,
+    #[serde(default)]
+    ids: IDs,
+    #[serde(default)]
+    inbound_size_hint: Option<usize>,
+    #[serde(default)]
+    outbound_size_hint: Option<usize>
+}
+
 /// Configuration of a counterparty for a
 /// [StreamSelector](crate::select::StreamSelector).
 ///
@@ -683,6 +703,65 @@ where
     #[inline]
     pub fn take(self) -> (Channels, Vec<Channel>, Vec<Endpoint>) {
         (self.channels, self.channel_names, self.endpoints)
+    }
+}
+
+impl<Codec, IDs> LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default
+{
+    #[inline]
+    pub fn new(
+        retry: Retry,
+        codec: Codec,
+        ids: IDs,
+        inbound_size_hint: Option<usize>,
+        outbound_size_hint: Option<usize>
+    ) -> Self {
+        LargeObjProtoConfig {
+            inbound_size_hint: inbound_size_hint,
+            outbound_size_hint: outbound_size_hint,
+            retry: retry,
+            codec: codec,
+            ids: ids
+        }
+    }
+
+    #[inline]
+    pub fn inbound_size_hint(&self) -> &Option<usize> {
+        &self.inbound_size_hint
+    }
+
+    #[inline]
+    pub fn outbound_size_hint(&self) -> &Option<usize> {
+        &self.outbound_size_hint
+    }
+
+    #[inline]
+    pub fn retry(&self) -> &Retry {
+        &self.retry
+    }
+
+    #[inline]
+    pub fn codec(&self) -> &Codec {
+        &self.codec
+    }
+
+    #[inline]
+    pub fn ids(&self) -> &IDs {
+        &self.ids
+    }
+
+    #[inline]
+    pub fn take(self) -> (Retry, Codec, IDs, Option<usize>, Option<usize>) {
+        (
+            self.retry,
+            self.codec,
+            self.ids,
+            self.inbound_size_hint,
+            self.outbound_size_hint
+        )
     }
 }
 
