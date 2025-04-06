@@ -29,6 +29,7 @@ use constellation_auth::authn::MsgAuthN;
 use constellation_common::codec::Codec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
 use constellation_common::retry::RetryResult;
@@ -42,6 +43,7 @@ use log::trace;
 
 use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
+use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjPushFragsError;
 use crate::stream::LargeObjStream;
@@ -126,6 +128,7 @@ where
         PartyID,
         WrapperCodec,
         IDs,
+        Msgs,
         Recv
     >(
         self,
@@ -139,23 +142,26 @@ where
             PartyID,
             WrapperCodec,
             IDs,
+            Msgs,
             Recv,
             Stream::Frags
         >
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushFragsError<
-            H,
+            H::HashID,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
+        Msgs: LargeObjMsgs<H, Wrapper>,
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
-        WrapperCodec: Codec<Wrapper>,
+        WrapperCodec: Clone + Codec<Wrapper>,
         WrapperCodec::Param: Default,
-        H: Clone + Display + Hash + HashID + Eq,
+        H: Clone + HashAlgo,
+        H::HashID: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         match self {
             LargeObjEntry::PushFrags { id, retry } => proto
@@ -177,6 +183,7 @@ where
         PartyID,
         WrapperCodec,
         IDs,
+        Msgs,
         Recv
     >(
         ctx: &mut Ctx,
@@ -189,23 +196,26 @@ where
             PartyID,
             WrapperCodec,
             IDs,
+            Msgs,
             Recv,
             Stream::Frags
         >
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushFragsError<
-            H,
+            H::HashID,
             <Stream::PushFragError as BatchError>::Permanent
         >
     >
     where
+        Msgs: LargeObjMsgs<H, Wrapper>,
         Recv: AuthNMsgRecv<Auth::Prin, Msg>,
         IDs: IDGen + Iterator<Item = LargeObjID>,
         Auth: MsgAuthN<Msg, Wrapper>,
-        WrapperCodec: Codec<Wrapper>,
+        WrapperCodec: Clone + Codec<Wrapper>,
         WrapperCodec::Param: Default,
-        H: Clone + Display + Hash + HashID + Eq,
+        H: Clone + HashAlgo,
+        H::HashID: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
         Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {
             let (retry, id) = retry.take();

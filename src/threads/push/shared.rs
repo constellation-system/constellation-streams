@@ -28,6 +28,7 @@ use constellation_auth::authn::MsgAuthN;
 use constellation_common::codec::Codec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
 use constellation_common::net::SharedMsgs;
@@ -42,6 +43,7 @@ use crate::config::SharedLargeObjModeConfig;
 use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
+use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjPushFragsError;
 use crate::large_obj::LargeObjSendError;
@@ -861,7 +863,7 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Recv, Stream, Ctx>
+impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
     PushMode<
         Stream,
         LargeObjProto<
@@ -872,11 +874,12 @@ impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Recv, Stream, Ctx>
             Stream::PartyID,
             WrapperCodec,
             IDs,
+            Msgs,
             Recv,
             Stream::Frags
         >,
         Ctx
-    > for SharedLargeObjPushMode<H, Stream, Ctx>
+    > for SharedLargeObjPushMode<H::HashID, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -891,26 +894,32 @@ where
             Stream::BatchID
         >
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
-        + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
+        + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
         + LargeObjStream<LargeObjID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
     Stream::PartyID: Display + From<usize>,
+    Msgs: LargeObjMsgs<H, Wrapper>,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
     IDs: IDGen + Iterator<Item = LargeObjID>,
     Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Codec<Wrapper>,
+    WrapperCodec: Clone + Codec<Wrapper>,
     WrapperCodec::Param: Default,
-    H: 'static + Clone + Display + Hash + HashID + Eq + Send
+    H: Clone + HashAlgo,
+    H::HashID: 'static + Clone + Display + Hash + HashID + Eq + Send
 {
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
         LargeObjPushFragsError<
-            H,
+            H::HashID,
             <Stream::PushFragError as BatchError>::Permanent
         >,
-        LargeObjSendError<H, Auth::SessionPrin>
+        LargeObjSendError<
+            H::HashID,
+            Auth::SessionPrin,
+            Msgs::AddMsgsError<IDs::Item, WrapperCodec::EncodeError>
+        >
     >;
 
     fn send_from_outbound(
@@ -924,6 +933,7 @@ where
             Stream::PartyID,
             WrapperCodec,
             IDs,
+            Msgs,
             Recv,
             Stream::Frags
         >,
@@ -979,6 +989,7 @@ where
             Stream::PartyID,
             WrapperCodec,
             IDs,
+            Msgs,
             Recv,
             Stream::Frags
         >,
