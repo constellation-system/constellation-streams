@@ -52,6 +52,7 @@ use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgCodec;
 use crate::large_obj::LargeObjMsgEncodeError;
 use crate::stream::ConcurrentStream;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
@@ -1114,7 +1115,7 @@ where
     }
 }
 
-impl<Ctx, H, Stream> LargeObjStream<LargeObjID, Ctx>
+impl<Ctx, H, Stream> LargeObjStream<Ctx>
     for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
 where
     H: Default + HashAlgo + Send,
@@ -1172,6 +1173,63 @@ where
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
+    }
+}
+
+impl<Ctx, H, Stream> LargeObjOfferStream<H::HashID, Ctx>
+    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
+where
+    H: Default + HashAlgo + Send,
+    Stream: Write
+{
+    type PushOfferError =
+        DatagramCodecFragError<CodecStreamError<LargeObjMsgEncodeError, Error>>;
+    type PushOfferRetry = Instant;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H::HashID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        LargeObjMsg::offer(frags, hash, 1024)
+            .map_err(|err| DatagramCodecFragError::Frag { err: err })?
+            .map_ok(|(msg, when)| {
+                self.push(ctx, &msg).map_err(|err| {
+                    DatagramCodecFragError::Stream { err: err }
+                })?;
+
+                Ok(Some(when))
+            })
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H::HashID,
+        frags: &mut Self::Frags,
+        _retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.push_offer(ctx, hash, frags)
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H::HashID,
+        frags: &mut Self::Frags,
+        _err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.push_offer(ctx, hash, frags)
     }
 }
 

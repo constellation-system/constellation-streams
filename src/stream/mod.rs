@@ -32,6 +32,7 @@ use bitvec::bitvec;
 use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -44,6 +45,7 @@ use crate::config::BatchSlotsConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
+use crate::large_obj::LargeObjID;
 
 // This is a workaround for an OpenSSL implementation issue.
 
@@ -851,9 +853,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
-pub trait LargeObjStream<ObjID, Ctx>
-where
-    ObjID: Into<usize> {
+pub trait LargeObjStream<Ctx> {
     /// Type of errors that can occur when sending a fragment.
     type PushFragError: BatchError;
     /// Type of information given by a [RetryResult] for sending a
@@ -865,7 +865,7 @@ where
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
@@ -875,7 +875,7 @@ where
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
@@ -886,12 +886,54 @@ where
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
+    >;
+}
+
+pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
+where
+    H: HashID {
+    /// Type of errors that can occur when sending an offer.
+    type PushOfferError: BatchError;
+    /// Type of information given by a [RetryResult] for sending an
+    /// offer.
+    type PushOfferRetry: RetryWhen + Clone;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    >;
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    >;
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
     >;
 }
 
@@ -2294,10 +2336,9 @@ where
     }
 }
 
-impl<Ctx, ObjID, Inner> LargeObjStream<ObjID, Ctx> for ThreadedStream<Inner>
+impl<Ctx, Inner> LargeObjStream<Ctx> for ThreadedStream<Inner>
 where
-    ObjID: Into<usize>,
-    Inner: LargeObjStream<ObjID, Ctx>
+    Inner: LargeObjStream<Ctx>
 {
     type Frags = Inner::Frags;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
@@ -2306,7 +2347,7 @@ where
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
@@ -2322,7 +2363,7 @@ where
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
@@ -2339,7 +2380,7 @@ where
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<
@@ -2350,6 +2391,65 @@ where
             .lock()
             .map_err(|_| ThreadedStreamError::MutexPoison)?
             .complete_push_frags(ctx, id, frags, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+}
+
+impl<Ctx, H, Inner> LargeObjOfferStream<H, Ctx> for ThreadedStream<Inner>
+where
+    Inner: LargeObjOfferStream<H, Ctx>,
+    H: HashID
+{
+    type PushOfferError = ThreadedStreamError<Inner::PushOfferError>;
+    type PushOfferRetry = Inner::PushOfferRetry;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .push_offer(ctx, hash, frags)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .retry_push_offer(ctx, hash, frags, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .complete_push_offer(ctx, hash, frags, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }

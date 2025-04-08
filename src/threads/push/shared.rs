@@ -45,9 +45,9 @@ use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
-use crate::large_obj::LargeObjPushFragsError;
+use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
-use crate::stream::LargeObjStream;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamReportBatchError;
@@ -109,18 +109,20 @@ where
         > + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
         > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
         + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        > + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    H: Clone + HashID + Send {
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send {
     /// Buffer for sends in progress.
-    pending_msgs: Vec<PushEntry<LargeObjMsg<H>, Stream, Ctx>>,
-    pending_frags: Vec<LargeObjEntry<Stream, Ctx>>
+    pending_msgs: Vec<PushEntry<LargeObjMsg<H::HashID>, Stream, Ctx>>,
+    pending_frags: Vec<LargeObjEntry<Stream, H, Ctx>>
 }
 
 pub struct SharedDatagramPushMode<Msg, Stream, Ctx>
@@ -833,15 +835,17 @@ where
         > + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
         > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
         + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamSharedSingle<LargeObjMsg<H>, Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        > + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    H: Clone + HashID + Send
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send
 {
     type Config = SharedLargeObjModeConfig;
 
@@ -879,7 +883,7 @@ impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
             Stream::Frags
         >,
         Ctx
-    > for SharedLargeObjPushMode<H::HashID, Stream, Ctx>
+    > for SharedLargeObjPushMode<H, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -894,8 +898,9 @@ where
             Stream::BatchID
         >
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
         + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
@@ -911,14 +916,15 @@ where
 {
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
-        LargeObjPushFragsError<
+        LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent
+            <Stream::PushFragError as BatchError>::Permanent,
+            <Stream::PushOfferError as BatchError>::Permanent
         >,
         LargeObjSendError<
             H::HashID,
             Auth::SessionPrin,
-            Msgs::AddMsgsError<IDs::Item, WrapperCodec::EncodeError>
+            Msgs::AddMsgsError<WrapperCodec::EncodeError>
         >
     >;
 

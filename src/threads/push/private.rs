@@ -45,9 +45,9 @@ use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
-use crate::large_obj::LargeObjPushFragsError;
+use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
-use crate::stream::LargeObjStream;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
@@ -127,14 +127,15 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamAdd<LargeObjMsg<H>, Ctx>
+        > + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
         + PushStreamPrivate<Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + Send,
-    H: Clone + HashID + Send {
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send {
     /// Buffer for sends in progress.
-    pending_msgs: Vec<PushEntry<LargeObjMsg<H>, Stream, Ctx>>,
-    pending_frags: Vec<LargeObjEntry<Stream, Ctx>>
+    pending_msgs: Vec<PushEntry<LargeObjMsg<H::HashID>, Stream, Ctx>>,
+    pending_frags: Vec<LargeObjEntry<Stream, H, Ctx>>
 }
 
 #[derive(Clone)]
@@ -813,11 +814,12 @@ where
         > + PushStreamReportBatchError<
             <Stream::AddError as BatchError>::Permanent,
             Stream::BatchID
-        > + PushStreamAdd<LargeObjMsg<H>, Ctx>
+        > + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
         + PushStreamPrivate<Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + Send,
-    H: Clone + HashID + Send
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send
 {
     type Config = PrivateLargeObjModeConfig;
 
@@ -855,7 +857,7 @@ impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
             Stream::Frags
         >,
         Ctx
-    > for PrivateLargeObjPushMode<H::HashID, Stream, Ctx>
+    > for PrivateLargeObjPushMode<H, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -863,6 +865,7 @@ where
             Stream::BatchID
         >
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
         + PushStreamReportError<
             <Stream::StartBatchError as BatchError>::Permanent
         >
@@ -872,7 +875,7 @@ where
         >
         + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
         + PushStreamPrivate<Ctx>
-        + LargeObjStream<LargeObjID, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
         + Send,
     Msgs: LargeObjMsgs<H, Wrapper>,
     Recv: AuthNMsgRecv<Auth::Prin, Msg>,
@@ -885,14 +888,15 @@ where
 {
     type RetryError = Infallible;
     type SendError = PrivateLargeObjPushModeSendError<
-        LargeObjPushFragsError<
+        LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent
+            <Stream::PushFragError as BatchError>::Permanent,
+            <Stream::PushOfferError as BatchError>::Permanent
         >,
         LargeObjSendError<
             H::HashID,
             Auth::SessionPrin,
-            Msgs::AddMsgsError<IDs::Item, WrapperCodec::EncodeError>
+            Msgs::AddMsgsError<WrapperCodec::EncodeError>
         >
     >;
 

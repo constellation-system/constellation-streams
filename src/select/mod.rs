@@ -43,6 +43,7 @@ use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
 use constellation_common::ids::IDGen;
 use constellation_common::net::IPEndpointAddr;
 use constellation_common::retry::Retry;
@@ -73,8 +74,10 @@ use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::error::PartiesBatchError;
 use crate::error::SelectionsError;
+use crate::large_obj::LargeObjID;
 use crate::select::sched::FarHistory;
 use crate::select::sched::FarHistoryConfig;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
@@ -3144,10 +3147,9 @@ where
     }
 }
 
-impl<ObjID, Epochs, Src, Resolve, Ctx> LargeObjStream<ObjID, Ctx>
+impl<Epochs, Src, Resolve, Ctx> LargeObjStream<Ctx>
     for StreamSelector<Epochs, Src, Resolve, Ctx>
 where
-    ObjID: Into<usize>,
     Epochs: IDGen + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
@@ -3155,13 +3157,13 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
-    Src::Stream: Clone + LargeObjStream<ObjID, Ctx> + PushStream<Ctx> + Send,
+    Src::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
-    type Frags = <Src::Stream as LargeObjStream<ObjID, Ctx>>::Frags;
+    type Frags = <Src::Stream as LargeObjStream<Ctx>>::Frags;
     type PushFragError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
@@ -3171,21 +3173,21 @@ where
                 StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
             >,
             (),
-            <Src::Stream as LargeObjStream<ObjID, Ctx>>::PushFragError,
+            <Src::Stream as LargeObjStream<Ctx>>::PushFragError,
             Epochs::Item
         >
     >;
     type PushFragRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as LargeObjStream<ObjID, Ctx>>::PushFragRetry,
+        <Src::Stream as LargeObjStream<Ctx>>::PushFragRetry,
         Epochs::Item
     >;
 
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
@@ -3222,7 +3224,7 @@ where
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
@@ -3262,7 +3264,7 @@ where
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
     ) -> Result<
@@ -3281,6 +3283,157 @@ where
 
                 Ok(stream
                     .complete_push_frags(ctx, id, frags, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            }
+        }
+    }
+}
+
+impl<H, Epochs, Src, Resolve, Ctx> LargeObjOfferStream<H, Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    H: HashID,
+    Epochs: IDGen + Iterator,
+    Epochs::Item: Clone + Default + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::Reporter: StreamReporter<
+        Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
+        Stream = Src::Stream
+    >,
+    Src::Stream: Clone + LargeObjOfferStream<H, Ctx> + PushStream<Ctx> + Send,
+    Src::Config: Default,
+    Src::Reporter: Clone,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+{
+    type PushOfferError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            StreamSelectorSelectError<
+                Resolve::AddrsError,
+                Src::ParamError,
+                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            >,
+            (),
+            <Src::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError,
+            Epochs::Item
+        >
+    >;
+    type PushOfferRetry = SelectorBatchSelectError<
+        Instant,
+        (),
+        <Src::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferRetry,
+        Epochs::Item
+    >;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        // Try to select a stream.
+        self.select_stream(ctx)
+            .map_err(|err| SelectorBatchError::Batch {
+                batch: SelectorBatchSelectError::Select {
+                    select: err,
+                    parties: ()
+                }
+            })?
+            .map_retry(|retry| SelectorBatchSelectError::Select {
+                select: retry,
+                parties: ()
+            })
+            .flat_map_ok(|(mut stream, selected)| {
+                Ok(stream
+                    .push_offer(ctx, hash, frags)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            })
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        match retry {
+            // We got a retry in the select phase; just restart the whole thing.
+            SelectorBatchSelectError::Select { .. } => {
+                self.push_offer(ctx, hash, frags)
+            }
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: retry
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                Ok(stream
+                    .retry_push_offer(ctx, hash, frags, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
+            }
+        }
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        match err {
+            // We got a retry once the stream was selected.
+            SelectorBatchSelectError::Stream {
+                selected,
+                stream: err
+            } => {
+                let mut stream = self
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?;
+
+                Ok(stream
+                    .complete_push_offer(ctx, hash, frags, err)
                     .map_err(|err| SelectorBatchError::Batch {
                         batch: SelectorBatchSelectError::Stream {
                             selected: selected.clone(),

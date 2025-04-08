@@ -45,8 +45,9 @@ use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
-use crate::large_obj::LargeObjPushFragsError;
-use crate::stream::LargeObjStream;
+use crate::large_obj::LargeObjPushError;
+use crate::large_obj::LargeObjPushRetry;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamReportError;
 
@@ -79,12 +80,17 @@ pub trait PushMode<Stream, Msgs, Ctx>: PushModeCreate {
     ) -> Result<Option<Instant>, Self::RetryError>;
 }
 
-pub(crate) enum LargeObjEntry<Stream, Ctx>
+pub(crate) enum LargeObjEntry<Stream, H, Ctx>
 where
-    Stream: LargeObjStream<LargeObjID, Ctx> {
+    Stream: LargeObjOfferStream<H::HashID, Ctx>,
+    H: Clone + HashAlgo {
     PushFrags {
         id: LargeObjID,
         retry: Stream::PushFragRetry
+    },
+    PushOffer {
+        hash: H::HashID,
+        retry: Stream::PushOfferRetry
     }
 }
 
@@ -104,24 +110,27 @@ where
     stream: Stream
 }
 
-impl<Stream, Ctx> RetryWhen for LargeObjEntry<Stream, Ctx>
+impl<Stream, H, Ctx> RetryWhen for LargeObjEntry<Stream, H, Ctx>
 where
-    Stream: LargeObjStream<LargeObjID, Ctx>
+    Stream: LargeObjOfferStream<H::HashID, Ctx>,
+    H: Clone + HashAlgo
 {
     fn when(&self) -> Instant {
         match self {
-            LargeObjEntry::PushFrags { retry, .. } => retry.when()
+            LargeObjEntry::PushFrags { retry, .. } => retry.when(),
+            LargeObjEntry::PushOffer { retry, .. } => retry.when()
         }
     }
 }
 
-impl<Stream, Ctx> LargeObjEntry<Stream, Ctx>
+impl<Stream, H, Ctx> LargeObjEntry<Stream, H, Ctx>
 where
-    Stream: LargeObjStream<LargeObjID, Ctx>
+    Stream: LargeObjOfferStream<H::HashID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>,
+    H: Clone + HashAlgo
 {
     pub(crate) fn exec<
-        H,
         Msg,
         Wrapper,
         Auth,
@@ -148,9 +157,10 @@ where
         >
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
-        LargeObjPushFragsError<
+        LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent
+            <Stream::PushFragError as BatchError>::Permanent,
+            <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
@@ -171,12 +181,19 @@ where
                         retry: retry,
                         id: id.clone()
                     })
+                }),
+            LargeObjEntry::PushOffer { hash, retry } => proto
+                .retry_push_offer(ctx, stream, hash.clone(), retry)
+                .map(|out| {
+                    out.map_retry(|retry| LargeObjEntry::PushOffer {
+                        retry: retry,
+                        hash: hash.clone()
+                    })
                 })
         }
     }
 
     pub(crate) fn from_try_send<
-        H,
         Msg,
         Wrapper,
         Auth,
@@ -202,9 +219,10 @@ where
         >
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
-        LargeObjPushFragsError<
+        LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent
+            <Stream::PushFragError as BatchError>::Permanent,
+            <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
@@ -217,12 +235,18 @@ where
         H: Clone + HashAlgo,
         H::HashID: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
-        Ok(proto.try_push_frags(ctx, stream)?.map_retry(|retry| {
-            let (retry, id) = retry.take();
-
-            LargeObjEntry::PushFrags {
-                retry: retry,
-                id: id
+        Ok(proto.try_push(ctx, stream)?.map_retry(|retry| match retry {
+            LargeObjPushRetry::Frags { retry, id } => {
+                LargeObjEntry::PushFrags {
+                    retry: retry,
+                    id: id
+                }
+            }
+            LargeObjPushRetry::Offer { retry, hash } => {
+                LargeObjEntry::PushOffer {
+                    retry: retry,
+                    hash: hash
+                }
             }
         }))
     }

@@ -214,7 +214,9 @@ pub struct FarSchedulerConfig {
     retry_max_count: usize
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
 #[serde(default)]
