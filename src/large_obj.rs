@@ -31,6 +31,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
+use std::time::Duration;
 use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
@@ -152,6 +153,7 @@ where
         reqs: Vec<LargeObjFragReq>
     },
     Finish {
+        hash: H,
         id: LargeObjID
     }
 }
@@ -174,6 +176,7 @@ enum InboundFragsState {
         req: Option<ReqState>
     },
     Finished {
+        expire: Option<Instant>,
         size: usize,
         accept: bool
     }
@@ -247,6 +250,7 @@ pub struct LargeObjProto<
     inbound: Arc<Mutex<LargeObjInbound<H::HashID, Auth::SessionPrin>>>,
     param: Arc<RwLock<F::Param>>,
     ids: Arc<Mutex<IDs>>,
+    tombstone_duration: Duration,
     upstream: Recv,
     msgs: Msgs,
     retry: Retry,
@@ -283,8 +287,7 @@ where
 {
     fn clone(&self) -> Self {
         LargeObjProto {
-            wrapper: self.wrapper,
-            msg: self.msg,
+            tombstone_duration: self.tombstone_duration,
             inbound: self.inbound.clone(),
             outbound: self.outbound.clone(),
             upstream: self.upstream.clone(),
@@ -295,7 +298,9 @@ where
             auth: self.auth.clone(),
             hash: self.hash.clone(),
             msgs: self.msgs.clone(),
-            ids: self.ids.clone()
+            ids: self.ids.clone(),
+            wrapper: self.wrapper,
+            msg: self.msg
         }
     }
 }
@@ -618,8 +623,11 @@ where
     }
 
     #[inline]
-    pub fn finish(id: LargeObjID) -> Self {
-        LargeObjMsg::Finish { id: id }
+    pub fn finish(
+        hash: H,
+        id: LargeObjID
+    ) -> Self {
+        LargeObjMsg::Finish { hash: hash, id: id }
     }
 }
 
@@ -673,6 +681,7 @@ where
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
         let now = Instant::now();
+        let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = self
@@ -741,17 +750,33 @@ where
                         }
                     }
                 }
-                InboundFragsState::Finished { size, accept } => {
-                    let msg = if *accept {
-                        LargeObjMsg::accept(ent.hash.clone(), *size, id)
-                    } else {
-                        LargeObjMsg::finish(id)
-                    };
+                InboundFragsState::Finished {
+                    size,
+                    accept,
+                    expire
+                } => {
+                    if let Some(expire) = expire {
+                        if *expire <= now {
+                            trace!(target: "large-obj-proto",
+                                   "expiring tombstone for {} ({})",
+                                   id, hash);
 
-                    msgs.push((vec![party_id], vec![msg]));
-                    // XXX keep these around for a configurable amount
-                    // of time as "tombstones".
-                    deletes.push((prin.clone(), hash.clone()));
+                            deletes.push((prin.clone(), hash.clone()));
+                        }
+                    } else {
+                        trace!(target: "large-obj-proto",
+                               "setting expiration for tombstone for {} ({}) in {:?}",
+                               id, hash, self.tombstone_duration);
+
+                        let msg = if *accept {
+                            LargeObjMsg::accept(ent.hash.clone(), *size, id)
+                        } else {
+                            LargeObjMsg::finish(ent.hash.clone(), id)
+                        };
+
+                        msgs.push((vec![party_id], vec![msg]));
+                        *expire = Some(when);
+                    }
                 }
             }
         }
@@ -818,6 +843,7 @@ where
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
         let now = Instant::now();
+        let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
         let mut next = self
@@ -879,17 +905,33 @@ where
                         }
                     }
                 }
-                InboundFragsState::Finished { size, accept } => {
-                    let msg = if *accept {
-                        LargeObjMsg::accept(ent.hash.clone(), *size, id)
-                    } else {
-                        LargeObjMsg::finish(id)
-                    };
+                InboundFragsState::Finished {
+                    size,
+                    accept,
+                    expire
+                } => {
+                    if let Some(expire) = expire {
+                        if *expire <= now {
+                            trace!(target: "large-obj-proto",
+                                   "expiring tombstone for {} ({})",
+                                   id, hash);
 
-                    msgs.push(msg);
-                    // XXX keep these around for a configurable amount
-                    // of time as "tombstones".
-                    deletes.push((prin.clone(), hash.clone()));
+                            deletes.push((prin.clone(), hash.clone()));
+                        }
+                    } else {
+                        trace!(target: "large-obj-proto",
+                               "setting expiration for tombstone for {} ({}) in {:?}",
+                               id, hash, self.tombstone_duration);
+
+                        let msg = if *accept {
+                            LargeObjMsg::accept(ent.hash.clone(), *size, id)
+                        } else {
+                            LargeObjMsg::finish(ent.hash.clone(), id)
+                        };
+
+                        msgs.push(msg);
+                        *expire = Some(when);
+                    }
                 }
             }
         }
@@ -1033,8 +1075,9 @@ where
                     LargeObjMsgEncodeError::Metadata { err: err }
                 })
             }
-            LargeObjMsg::Finish { id } => {
+            LargeObjMsg::Finish { id, hash } => {
                 let msg = LargeObjMetadata::Finish(LargeObjFinish {
+                    hash: hash.bytes().to_vec(),
                     id: id.clone().into()
                 });
 
@@ -1157,8 +1200,19 @@ where
                 },
                 curr
             )),
-            LargeObjMetadata::Finish(LargeObjFinish { id }) => {
-                Ok((LargeObjMsg::Finish { id: id.into() }, curr))
+            LargeObjMetadata::Finish(LargeObjFinish { id, hash }) => {
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
+
+                Ok((
+                    LargeObjMsg::Finish {
+                        hash: hash,
+                        id: id.into()
+                    },
+                    curr
+                ))
             }
         }
     }
@@ -1360,7 +1414,14 @@ where
         auth: Auth,
         hash: H
     ) -> Result<Self, LargeObjProtoCreateError<WrapperCodec::CreateError>> {
-        let (retry, codec, ids, inbound_size, outbound_size) = config.take();
+        let (
+            retry,
+            codec,
+            ids,
+            tombstone_duration,
+            inbound_size,
+            outbound_size
+        ) = config.take();
         let inbound = match inbound_size {
             Some(size) => LargeObjInbound::with_capacity(size),
             None => LargeObjInbound::new()
@@ -1381,6 +1442,7 @@ where
         Ok(LargeObjProto {
             wrapper: PhantomData,
             msg: PhantomData,
+            tombstone_duration: tombstone_duration,
             inbound: inbound,
             outbound: outbound,
             parties: parties,
@@ -1905,7 +1967,8 @@ where
 
                     let finished = InboundFragsState::Finished {
                         size: frags.size(),
-                        accept: false
+                        accept: false,
+                        expire: None
                     };
                     let data = match std::mem::replace(frags, finished) {
                         InboundFragsState::Active { frags, .. } => {
@@ -1968,7 +2031,8 @@ where
                         RecvEntry {
                             frags: InboundFragsState::Finished {
                                 accept: true,
-                                size: size
+                                size: size,
+                                expire: None
                             },
                             hash: hash
                         },
@@ -2073,7 +2137,8 @@ where
 
                     let finished = InboundFragsState::Finished {
                         size: frags.size(),
-                        accept: false
+                        accept: false,
+                        expire: None
                     };
                     let data = match std::mem::replace(frags, finished) {
                         InboundFragsState::Active { frags, .. } => {
@@ -2274,9 +2339,10 @@ where
 
     fn recv_finish_msg(
         &mut self,
+        hash: H::HashID,
         id: IDs::Item
     ) -> Result<
-        Option<Vec<u8>>,
+        (),
         LargeObjRecvError<
             H::HashID,
             Auth::Error,
@@ -2286,33 +2352,27 @@ where
         >
     > {
         trace!(target: "large-obj-proto",
-               "received finish for ID {}",
-               id);
+               "received finish for ID {} ({})",
+               id, hash);
 
         let mut outbound = self
             .outbound
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
-        match outbound.hashes.remove(&id) {
-            Some(hash) => match outbound.objs.remove(&hash) {
-                Some(SendEntry { .. }) => {
-                    trace!(target: "large-obj-proto",
-                           "removed transfer entries for {} ({})",
-                           id, hash);
-
-                    Ok(None)
-                }
-                None => Err(LargeObjRecvError::NotFound { hash: hash, id: id })
-            },
-            None => {
-                trace!(target: "large-obj-proto",
-                       "redundant finish for ID {}",
-                       id);
-
-                Ok(None)
-            }
+        if outbound.hashes.remove(&id).is_none() {
+            trace!(target: "large-obj-proto",
+                   "redundant finish for ID {}",
+                   id);
         }
+
+        if outbound.objs.remove(&hash).is_none() {
+            trace!(target: "large-obj-proto",
+                   "redundant finish for ID {}",
+                   id);
+        }
+
+        Ok(())
     }
 }
 
@@ -2370,7 +2430,11 @@ where
                 self.recv_req_obj_msg(hash, id)
             }
             LargeObjMsg::Req { id, reqs } => self.recv_reqs_msg(id, reqs),
-            LargeObjMsg::Finish { id } => self.recv_finish_msg(id)
+            LargeObjMsg::Finish { id, hash } => {
+                self.recv_finish_msg(hash, id)?;
+
+                Ok(None)
+            }
         }?;
 
         // Complete the message and send it upstream.
@@ -2852,6 +2916,7 @@ fn test_encode_decode_metadata_req() {
 #[test]
 fn test_encode_decode_metadata_finish() {
     let msg = LargeObjMetadata::Finish(LargeObjFinish {
+        hash: vec![0xaa; 64],
         id: 0x1337feeddeadbeef
     });
     let mut codec = LargeObjMetadataPERCodec::default();
@@ -2924,7 +2989,7 @@ fn test_encode_decode_msg_req_obj() {
 }
 
 #[test]
-fn test_encode_decode_msg_accopt() {
+fn test_encode_decode_msg_accept() {
     let algo = SHA3Algo::default();
     let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Accept {
         hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
@@ -3108,7 +3173,9 @@ fn test_encode_decode_msg_req() {
 
 #[test]
 fn test_encode_decode_msg_finish() {
+    let algo = SHA3Algo::default();
     let msg: LargeObjMsg<SHA3ID> = LargeObjMsg::Finish {
+        hash: algo.wrap_hashed_bytes(&[0xaa; 64]).unwrap(),
         id: LargeObjID(0x1234567890abcdef)
     };
     let mut codec = LargeObjMsgCodec::<SHA3Algo>::default();

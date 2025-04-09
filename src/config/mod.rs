@@ -214,9 +214,7 @@ pub struct FarSchedulerConfig {
     retry_max_count: usize
 }
 
-#[derive(
-    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
-)]
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
 #[serde(default)]
@@ -224,12 +222,17 @@ pub struct LargeObjProtoConfig<Codec, IDs>
 where
     Codec: Default,
     IDs: Default {
-    #[serde(default)]
+    /// Retry for sending fragments.
+    #[serde(default = "LargeObjProtoConfig::<Codec, IDs>::default_retry")]
     retry: Retry,
     #[serde(default)]
     codec: Codec,
     #[serde(default)]
     ids: IDs,
+    #[serde(
+        default = "LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration"
+    )]
+    tombstone_duration: Duration,
     #[serde(default)]
     inbound_size_hint: Option<usize>,
     #[serde(default)]
@@ -708,6 +711,25 @@ where
     }
 }
 
+impl<Codec, IDs> Default for LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default
+{
+    #[inline]
+    fn default() -> Self {
+        LargeObjProtoConfig {
+            inbound_size_hint: None,
+            outbound_size_hint: None,
+            tombstone_duration:
+                LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration(),
+            retry: LargeObjProtoConfig::<Codec, IDs>::default_retry(),
+            codec: Codec::default(),
+            ids: IDs::default()
+        }
+    }
+}
+
 impl<Codec, IDs> LargeObjProtoConfig<Codec, IDs>
 where
     Codec: Default,
@@ -718,12 +740,14 @@ where
         retry: Retry,
         codec: Codec,
         ids: IDs,
+        tombstone_duration: Duration,
         inbound_size_hint: Option<usize>,
         outbound_size_hint: Option<usize>
     ) -> Self {
         LargeObjProtoConfig {
             inbound_size_hint: inbound_size_hint,
             outbound_size_hint: outbound_size_hint,
+            tombstone_duration: tombstone_duration,
             retry: retry,
             codec: codec,
             ids: ids
@@ -738,6 +762,11 @@ where
     #[inline]
     pub fn outbound_size_hint(&self) -> &Option<usize> {
         &self.outbound_size_hint
+    }
+
+    #[inline]
+    pub fn tombstone_duration(&self) -> Duration {
+        self.tombstone_duration
     }
 
     #[inline]
@@ -756,14 +785,25 @@ where
     }
 
     #[inline]
-    pub fn take(self) -> (Retry, Codec, IDs, Option<usize>, Option<usize>) {
+    pub fn take(
+        self
+    ) -> (Retry, Codec, IDs, Duration, Option<usize>, Option<usize>) {
         (
             self.retry,
             self.codec,
             self.ids,
+            self.tombstone_duration,
             self.inbound_size_hint,
             self.outbound_size_hint
         )
+    }
+
+    fn default_retry() -> Retry {
+        Retry::TERRESTRIAL_NETWORK_DEFAULT
+    }
+
+    fn default_tombstone_duration() -> Duration {
+        Duration::from_secs(10)
     }
 }
 

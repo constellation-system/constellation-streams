@@ -17,6 +17,7 @@ LargeObjFragReq ::= CHOICE {
 }
 
 LargeObjFinish ::= SEQUENCE {
+    hash OCTET STRING SIZE (64),
     id INTEGER
 }
 

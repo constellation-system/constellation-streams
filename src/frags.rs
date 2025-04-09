@@ -7029,7 +7029,7 @@ fn test_offer_frag_exact() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 16)));
+    assert!(matches![first, RetryResult::Success((0, 16, _))]);
 }
 
 #[test]
@@ -7038,7 +7038,7 @@ fn test_offer_frag_short() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 8)));
+    assert!(matches![first, RetryResult::Success((0, 8, _))]);
 }
 
 #[test]
@@ -7047,15 +7047,15 @@ fn test_offer_frag_multi() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 16)));
+    assert!(matches![first, RetryResult::Success((0, 16, _))]);
 
     let second = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success((16, 16)));
+    assert!(matches![second, RetryResult::Success((16, 16, _))]);
 
     let third = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(third, RetryResult::Success((32, 8)));
+    assert!(matches![third, RetryResult::Success((32, 8, _))]);
 }
 
 #[test]
@@ -7065,7 +7065,7 @@ fn test_data_frags_exact() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 16));
 }
 
@@ -7076,7 +7076,7 @@ fn test_data_frags_short() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 8));
 }
 
@@ -7089,7 +7089,7 @@ fn test_data_frags_ack() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 8));
 }
 
@@ -7102,7 +7102,7 @@ fn test_data_frags_ack_exact() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7116,7 +7116,7 @@ fn test_data_frags_ack_long() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7130,13 +7130,13 @@ fn test_data_frags_ack_exact_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(2));
+    assert!(matches![second, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7150,7 +7150,7 @@ fn test_data_frags_ack_gap_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
@@ -7158,7 +7158,7 @@ fn test_data_frags_ack_gap_wrap() {
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(2));
+    assert!(matches![second, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7172,7 +7172,7 @@ fn test_data_frags_ack_req_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
@@ -7180,7 +7180,7 @@ fn test_data_frags_ack_req_wrap() {
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(1));
+    assert!(matches![second, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 16));
 }
 
