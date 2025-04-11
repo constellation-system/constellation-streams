@@ -1475,10 +1475,10 @@ where
         parties: I
     ) -> Result<(), MutexPoison>
     where
-        I: Iterator<Item = (Auth::SessionPrin, PartyID)> {
+        I: Iterator<Item = (PartyID, Auth::SessionPrin)> {
         let mut guard = self.parties.write().map_err(|_| MutexPoison)?;
 
-        *guard = parties.collect();
+        *guard = parties.map(|(a, b)| (b, a)).collect();
 
         let mut guard = self.param.write().map_err(|_| MutexPoison)?;
 
