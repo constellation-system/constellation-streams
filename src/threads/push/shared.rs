@@ -978,8 +978,9 @@ where
                 None
             }
         };
-        let next = msgs_next
-            .map_or(frags_next, |msgs| frags_next.map(|frags| msgs.min(frags)));
+        let next = msgs_next.map_or(frags_next, |msgs| {
+            Some(frags_next.map_or(msgs, |frags| msgs.min(frags)))
+        });
 
         Ok(next)
     }

@@ -51,6 +51,7 @@ use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::trace;
@@ -178,7 +179,8 @@ enum InboundFragsState {
     Finished {
         expire: Option<Instant>,
         size: usize,
-        accept: bool
+        accept: bool,
+        send: bool
     }
 }
 
@@ -251,6 +253,7 @@ pub struct LargeObjProto<
     param: Arc<RwLock<F::Param>>,
     ids: Arc<Mutex<IDs>>,
     tombstone_duration: Duration,
+    notify: Notify,
     upstream: Recv,
     msgs: Msgs,
     retry: Retry,
@@ -292,6 +295,7 @@ where
             outbound: self.outbound.clone(),
             upstream: self.upstream.clone(),
             parties: self.parties.clone(),
+            notify: self.notify.clone(),
             param: self.param.clone(),
             retry: self.retry.clone(),
             codec: self.codec.clone(),
@@ -751,12 +755,20 @@ where
                     }
                 }
                 InboundFragsState::Finished {
-                    size,
+                    expire,
                     accept,
-                    expire
+                    size,
+                    send
                 } => {
                     if let Some(expire) = expire {
-                        if *expire <= now {
+                        if *send {
+                            trace!(target: "large-obj-proto",
+                                   concat!("extendxing expiration for ",
+                                           "tombstone for {} ({}) to {:?}"),
+                                   id, hash, self.tombstone_duration);
+
+                            *expire = when;
+                        } else if *expire <= now {
                             trace!(target: "large-obj-proto",
                                    "expiring tombstone for {} ({})",
                                    id, hash);
@@ -765,18 +777,32 @@ where
                         }
                     } else {
                         trace!(target: "large-obj-proto",
-                               "setting expiration for tombstone for {} ({}) in {:?}",
+                               concat!("setting expiration for tombstone for ",
+                                       "{} ({}) in {:?}"),
                                id, hash, self.tombstone_duration);
 
+                        *expire = Some(when);
+                    }
+
+                    if *send {
                         let msg = if *accept {
+                            trace!(target: "large-obj-proto",
+                                   "pushing accept for {}",
+                                   hash);
+
                             LargeObjMsg::accept(ent.hash.clone(), *size, id)
                         } else {
+                            trace!(target: "large-obj-proto",
+                                   "pushing finish for ID {} ({})",
+                                   id, hash);
+
                             LargeObjMsg::finish(ent.hash.clone(), id)
                         };
 
                         msgs.push((vec![party_id], vec![msg]));
-                        *expire = Some(when);
                     }
+
+                    *send = false;
                 }
             }
         }
@@ -906,12 +932,20 @@ where
                     }
                 }
                 InboundFragsState::Finished {
-                    size,
                     accept,
-                    expire
+                    expire,
+                    size,
+                    send
                 } => {
                     if let Some(expire) = expire {
-                        if *expire <= now {
+                        if *send {
+                            trace!(target: "large-obj-proto",
+                                   concat!("extendxing expiration for ",
+                                           "tombstone for {} ({}) to {:?}"),
+                                   id, hash, self.tombstone_duration);
+
+                            *expire = when;
+                        } else if *expire <= now {
                             trace!(target: "large-obj-proto",
                                    "expiring tombstone for {} ({})",
                                    id, hash);
@@ -920,18 +954,32 @@ where
                         }
                     } else {
                         trace!(target: "large-obj-proto",
-                               "setting expiration for tombstone for {} ({}) in {:?}",
+                               concat!("setting expiration for tombstone for ",
+                                       "{} ({}) in {:?}"),
                                id, hash, self.tombstone_duration);
 
+                        *expire = Some(when);
+                    }
+
+                    if *send {
                         let msg = if *accept {
+                            trace!(target: "large-obj-proto",
+                                   "pushing accept for {}",
+                                   hash);
+
                             LargeObjMsg::accept(ent.hash.clone(), *size, id)
                         } else {
+                            trace!(target: "large-obj-proto",
+                                   "pushing finish for ID {} ({})",
+                                   id, hash);
+
                             LargeObjMsg::finish(ent.hash.clone(), id)
                         };
 
                         msgs.push(msg);
-                        *expire = Some(when);
                     }
+
+                    *send = false;
                 }
             }
         }
@@ -1409,6 +1457,7 @@ where
     /// Create a protocol instance.
     pub fn create(
         config: LargeObjProtoConfig<WrapperCodec::Param, IDs::Config>,
+        notify: Notify,
         upstream: Recv,
         msgs: Msgs,
         auth: Auth,
@@ -1447,6 +1496,7 @@ where
             outbound: outbound,
             parties: parties,
             upstream: upstream,
+            notify: notify,
             param: param,
             retry: retry,
             codec: codec,
@@ -1918,8 +1968,7 @@ where
             .inbound
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
-
-        match inbound.hashes.entry((prin.clone(), hash.clone())) {
+        let out = match inbound.hashes.entry((prin.clone(), hash.clone())) {
             Entry::Occupied(ent) => {
                 // ID already exists, get the entry.
                 let id = ent.get().clone();
@@ -1936,8 +1985,8 @@ where
                         }
                     )?;
                 // Check if we're still receiving fragments.
-                let closeout =
-                    if let InboundFragsState::Active { frags, .. } = frags {
+                let closeout = match frags {
+                    InboundFragsState::Active { frags, .. } => {
                         // Receive the fragment.
                         frags
                             .recv(frag.offset() as usize, frag.data())
@@ -1948,18 +1997,21 @@ where
                             })?;
 
                         frags.is_finished()
-                    } else {
+                    }
+                    InboundFragsState::Finished { send, .. } => {
                         // This is ok, it can happen due to delayed
                         // messages.
                         trace!(target: "large-obj-proto",
-                           "redundant offer message for ID {} ({})",
-                           id, hash);
+                               "redundant offer message for ID {} ({})",
+                               id, hash);
+
+                        *send = true;
 
                         false
-                    };
+                    }
+                };
 
-                // Check if the entry is finished and
-                // report if it is.
+                // Check if the entry is finished and report if it is.
                 if closeout {
                     debug!(target: "large-obj-proto",
                            "finished transfer for ID {}",
@@ -1968,7 +2020,8 @@ where
                     let finished = InboundFragsState::Finished {
                         size: frags.size(),
                         accept: false,
-                        expire: None
+                        expire: None,
+                        send: true
                     };
                     let data = match std::mem::replace(frags, finished) {
                         InboundFragsState::Active { frags, .. } => {
@@ -2019,7 +2072,6 @@ where
                        hash, id);
 
                 let (offset, data) = frag.take();
-
                 // See if the offer provides all the data.
                 let (ent, data) = if offset == 0 && data.len() == size {
                     trace!(target: "large-obj-proto",
@@ -2032,7 +2084,8 @@ where
                             frags: InboundFragsState::Finished {
                                 accept: true,
                                 size: size,
-                                expire: None
+                                expire: None,
+                                send: true
                             },
                             hash: hash
                         },
@@ -2074,7 +2127,14 @@ where
                     Err(LargeObjRecvError::Collision)
                 }
             }
-        }
+        }?;
+
+        // Notify, as all cases generate messages.
+        self.notify
+            .notify()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+        Ok(out)
     }
 
     fn recv_frags_msg(
@@ -2100,8 +2160,10 @@ where
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
+        // Look up the entry.
         match inbound.objs.get_mut(&id) {
             Some(RecvEntry { frags, hash, .. }) => {
+                // Receive the fragments and see if it completes the message.
                 let closeout = if let InboundFragsState::Active { frags, req } =
                     frags
                 {
@@ -2138,7 +2200,8 @@ where
                     let finished = InboundFragsState::Finished {
                         size: frags.size(),
                         accept: false,
-                        expire: None
+                        expire: None,
+                        send: true
                     };
                     let data = match std::mem::replace(frags, finished) {
                         InboundFragsState::Active { frags, .. } => {
@@ -2162,6 +2225,11 @@ where
                             None
                         }
                     };
+
+                    // Notify, as this will generate a finished message.
+                    self.notify
+                        .notify()
+                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
                     Ok(data)
                 } else {
@@ -2201,6 +2269,9 @@ where
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
+        // Remove the entry; we're done.
+        //
+        // We don't need to notify, as no more messages are required.
         if outbound.objs.remove(&hash).is_some() {
             debug!(target: "large-obj-proto",
                    "received acceptance for {} (ID {})",
@@ -2243,6 +2314,7 @@ where
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
+        // Look up the object entry and add the ID.
         let valid = match outbound.objs.get_mut(&hash) {
             Some(ent) => {
                 ent.id = Some(id.clone());
@@ -2253,13 +2325,12 @@ where
         };
 
         if valid {
+            // If the entry exists, add an entry to the hash-id map.
             match outbound.hashes.entry(id.clone()) {
                 Entry::Occupied(_) => {
                     trace!(target: "large-obj-proto",
                            "redundant object request for {}",
                            hash);
-
-                    Ok(None)
                 }
                 Entry::Vacant(ent) => {
                     debug!(target: "large-obj-proto",
@@ -2267,10 +2338,16 @@ where
                            hash, id);
 
                     ent.insert(hash);
-
-                    Ok(None)
                 }
             }
+
+            // Notify, as this could potentially generate new
+            // messages.
+            self.notify
+                .notify()
+                .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
+            Ok(None)
         } else {
             trace!(target: "large-obj-proto",
                    "stray object request for {}",
@@ -2303,9 +2380,11 @@ where
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
+        // Look up the entries.
         match outbound.hashes.get(&id).cloned() {
             Some(hash) => match outbound.objs.get_mut(&hash) {
                 Some(ent) => {
+                    // Update the outbound fragment structure.
                     debug!(target: "large-obj-proto",
                            "received fragments for {} (ID {})",
                            hash, id);
@@ -2320,6 +2399,12 @@ where
                         })?;
                     }
 
+                    // Notify, as this could potentially generate new
+                    // messages.
+                    self.notify
+                        .notify()
+                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
                     Ok(None)
                 }
                 None => Err(LargeObjRecvError::NoObj {
@@ -2329,7 +2414,7 @@ where
             },
             None => {
                 trace!(target: "large-obj-proto",
-                       "stray frags for {}",
+                       "stray frags message for {}",
                        id);
 
                 Ok(None)
@@ -2355,6 +2440,7 @@ where
                "received finish for ID {} ({})",
                id, hash);
 
+        // The transfer is finished; remove the entry.
         let mut outbound = self
             .outbound
             .lock()
@@ -2371,6 +2457,8 @@ where
                    "redundant finish for ID {}",
                    id);
         }
+
+        // We don't need to notify, as no more messages are required.
 
         Ok(())
     }
@@ -2440,7 +2528,7 @@ where
         // Complete the message and send it upstream.
         if let Some(data) = data {
             debug!(target: "large-obj-proto",
-                   "processsing complete message");
+                   "processing complete message");
 
             trace!(target: "large-obj-proto",
                    "decoding message of length {}",

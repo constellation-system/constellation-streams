@@ -349,8 +349,8 @@ where
                     if now < when {
                         let duration = when - now;
 
-                        trace!(target: "push-stream-shared-thread",
-                               "next activity at {}.{:03}",
+                        trace!(target: "push-stream-thread",
+                               "waiting, next activity at {}.{:03}",
                                duration.as_secs(), duration.subsec_millis());
 
                         match self.notify.wait_timeout(duration) {
@@ -370,7 +370,7 @@ where
                     }
                 }
                 None => {
-                    trace!(target: "push-stream-shared-thread",
+                    trace!(target: "push-stream-thread",
                            "waiting for notification indefinitely");
 
                     match self.notify.wait() {
