@@ -16,29 +16,47 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::thread::spawn;
-use std::thread::JoinHandle;
+use std::convert::Infallible;
+use std::fmt::Display;
+use std::fmt::Error;
+use std::fmt::Formatter;
+use std::hash::Hash;
 use std::time::Instant;
 
+use constellation_auth::authn::AuthNMsgRecv;
+use constellation_auth::authn::MsgAuthN;
+use constellation_common::codec::Codec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashAlgo;
+use constellation_common::hashid::HashID;
+use constellation_common::ids::IDGen;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
-use constellation_common::shutdown::ShutdownFlag;
-use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
-use log::info;
 use log::trace;
 
+use crate::config::SharedDatagramModeConfig;
+use crate::config::SharedLargeObjModeConfig;
 use crate::error::BatchError;
+use crate::large_obj::LargeObjID;
+use crate::large_obj::LargeObjMsg;
+use crate::large_obj::LargeObjMsgs;
+use crate::large_obj::LargeObjProto;
+use crate::large_obj::LargeObjPushError;
+use crate::large_obj::LargeObjSendError;
+use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
+use crate::threads::push::LargeObjEntry;
+use crate::threads::push::PushMode;
+use crate::threads::push::PushModeCreate;
 
 /// Backlog entry for push threads.
 ///
@@ -83,7 +101,31 @@ where
     }
 }
 
-pub struct PushStreamSharedThread<Msg, Msgs, Stream, Ctx>
+pub struct SharedLargeObjPushMode<H, Stream, Ctx>
+where
+    Stream: PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
+        + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
+        + PushStreamShared<Ctx>
+        + PushStreamParties
+        + Send,
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send {
+    /// Buffer for sends in progress.
+    pending_msgs: Vec<PushEntry<LargeObjMsg<H::HashID>, Stream, Ctx>>,
+    pending_frags: Vec<LargeObjEntry<Stream, H, Ctx>>
+}
+
+pub struct SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as BatchError>::Permanent,
@@ -97,30 +139,15 @@ where
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
-    Stream::StartBatchStreamBatches: Send,
-    Stream::StartBatchRetry: Send,
-    Stream::AbortBatchRetry: Send,
-    Stream::AddRetry: Send,
-    Stream::FinishBatchRetry: Send,
-    Stream::CancelBatchRetry: Send,
-    Stream::StreamFlags: Send,
-    Stream::PartyID: From<usize> + Send,
-    Stream::BatchID: Send,
-    Msgs: SharedMsgs<Stream::PartyID, Msg>,
-    Msg: Clone + Send,
-    Ctx: Send + Sync {
-    ctx: Ctx,
+    Msg: Clone + Send {
     /// Buffer for sends in progress.
-    pending: Vec<PushEntry<Msg, Stream, Ctx>>,
-    /// Source of outbound messages.
-    msgs: Msgs,
-    /// `Notify` instance used to indicate that new messages are
-    /// available to be sent.
-    notify: Notify,
-    /// Flag to use to shut the stream down.
-    shutdown: ShutdownFlag,
-    /// Stream to use to send.
-    stream: Stream
+    pending: Vec<PushEntry<Msg, Stream, Ctx>>
+}
+
+#[derive(Debug)]
+pub enum SharedLargeObjPushModeSendError<Frags, Msgs> {
+    Frags { err: Frags },
+    Msgs { err: Msgs }
 }
 
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
@@ -649,7 +676,45 @@ where
     }
 }
 
-impl<Msg, Msgs, Stream, Ctx> PushStreamSharedThread<Msg, Msgs, Stream, Ctx>
+impl<Msg, Stream, Ctx> PushModeCreate
+    for SharedDatagramPushMode<Msg, Stream, Ctx>
+where
+    Stream: 'static
+        + PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        >
+        + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        >
+        + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        >
+        + PushStreamSharedSingle<Msg, Ctx>
+        + PushStreamShared<Ctx>
+        + PushStreamParties
+        + Send,
+    Msg: 'static + Clone + Send
+{
+    type Config = SharedDatagramModeConfig;
+
+    fn create(config: Self::Config) -> Self {
+        let retries_hint = config.take();
+
+        match retries_hint {
+            Some(hint) => SharedDatagramPushMode {
+                pending: Vec::with_capacity(hint)
+            },
+            None => SharedDatagramPushMode {
+                pending: Vec::new()
+            }
+        }
+    }
+}
+
+impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
+    for SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -677,75 +742,28 @@ where
     Stream::PartyID: From<usize> + Send,
     Stream::BatchID: Send,
     Msgs: 'static + SharedMsgs<Stream::PartyID, Msg> + Send,
-    Msg: 'static + Clone + Send,
-    Ctx: 'static + Send + Sync
+    Msg: 'static + Clone + Send
 {
-    #[inline]
-    pub fn create(
-        ctx: Ctx,
-        msgs: Msgs,
-        notify: Notify,
-        stream: Stream,
-        shutdown: ShutdownFlag
-    ) -> Self {
-        PushStreamSharedThread {
-            pending: Vec::new(),
-            msgs: msgs,
-            notify: notify,
-            shutdown: shutdown,
-            stream: stream,
-            ctx: ctx
-        }
-    }
+    type RetryError = Infallible;
+    type SendError = Msgs::MsgsError;
 
-    #[inline]
-    pub fn with_capacity(
-        ctx: Ctx,
-        msgs: Msgs,
-        notify: Notify,
-        stream: Stream,
-        shutdown: ShutdownFlag,
-        size: usize
-    ) -> Self {
-        PushStreamSharedThread {
-            pending: Vec::with_capacity(size),
-            msgs: msgs,
-            notify: notify,
-            shutdown: shutdown,
-            stream: stream,
-            ctx: ctx
-        }
-    }
-
-    /// Get the `Notify` used to signal availability of new messages
-    /// to this thread.
-    #[inline]
-    pub fn notify(&self) -> Notify {
-        self.notify.clone()
-    }
-
-    #[inline]
-    pub fn parties(&self) -> Result<Stream::PartiesIter, Stream::PartiesError> {
-        self.stream.parties()
-    }
-
-    fn update_from_outbound(
-        &mut self
-    ) -> Result<Option<Instant>, Msgs::MsgsError> {
-        debug!(target: "push-stream-shared-thread",
+    fn send_from_outbound(
+        &mut self,
+        ctx: &mut Ctx,
+        msgs: &mut Msgs,
+        stream: &mut Stream
+    ) -> Result<Option<Instant>, Self::SendError> {
+        debug!(target: "shared-small-obj-push-mode",
                "fetching new outbound messages");
 
-        let (groups, next) = self.msgs.msgs()?;
+        let (groups, next) = msgs.msgs()?;
 
         if let Some(groups) = groups {
             // Go through each group and try sending it
             for (parties, msgs) in groups {
-                if let RetryResult::Retry(retry) = PushEntry::from_try_send(
-                    &mut self.ctx,
-                    &mut self.stream,
-                    parties,
-                    msgs
-                ) {
+                if let RetryResult::Retry(retry) =
+                    PushEntry::from_try_send(ctx, stream, parties, msgs)
+                {
                     // We got a retry somewhere along the process, store it.
                     self.pending.push(retry)
                 }
@@ -757,9 +775,12 @@ where
 
     fn retry_pending(
         &mut self,
+        ctx: &mut Ctx,
+        _msgs: &mut Msgs,
+        stream: &mut Stream,
         now: Instant
-    ) -> Option<Instant> {
-        debug!(target: "push-stream-shared-thread",
+    ) -> Result<Option<Instant>, Self::RetryError> {
+        debug!(target: "shared-small-obj-push-mode",
                "retrying pending operations");
 
         let mut curr = Vec::with_capacity(self.pending.len());
@@ -774,14 +795,19 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.pending.last().is_none_or(|ent| ent.when() <= now) {
+        while self.pending.last().is_some_and(|ent| now > ent.when()) {
+            debug!(target: "shared-small-obj-push-mode",
+                   "retrying pending operation");
+
             match self.pending.pop() {
                 Some(ent) => {
                     curr.push(ent);
                 }
                 None => {
-                    error!(target: "push-stream-shared-thread",
+                    error!(target: "shared-small-obj-push-mode",
                            "pop should not be empty");
+
+                    break;
                 }
             }
         }
@@ -791,104 +817,327 @@ where
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
-            if let RetryResult::Retry(retry) =
-                ent.exec(&mut self.ctx, &mut self.stream)
-            {
+            if let RetryResult::Retry(retry) = ent.exec(ctx, stream) {
                 // We got a retry somewhere along the process, store it.
                 self.pending.push(retry)
             }
         }
 
-        out
+        Ok(out)
     }
+}
 
-    fn run(mut self) {
-        let mut next_outbound = Some(Instant::now());
-        let mut next_pending = None;
-        let mut valid = true;
+impl<H, Stream, Ctx> PushModeCreate for SharedLargeObjPushMode<H, Stream, Ctx>
+where
+    Stream: PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        > + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
+        + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        > + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
+        + PushStreamShared<Ctx>
+        + PushStreamParties
+        + Send,
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Send
+{
+    type Config = SharedLargeObjModeConfig;
 
-        info!(target: "push-stream-shared-thread",
-              "push stream send thread starting");
+    fn create(config: Self::Config) -> Self {
+        let (msg_retries_hint, frag_retries_hint) = config.take();
+        let pending_msgs = match msg_retries_hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
+        };
+        let pending_frags = match frag_retries_hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
+        };
 
-        // Loop until told to shut down.
-        while valid && self.shutdown.is_live() {
-            let now = Instant::now();
+        SharedLargeObjPushMode {
+            pending_msgs: pending_msgs,
+            pending_frags: pending_frags
+        }
+    }
+}
 
-            if let Some(when) = next_outbound &&
-                when <= now
-            {
-                match self.update_from_outbound() {
-                    Ok(next) => next_outbound = next,
-                    Err(err) => {
-                        error!(target: "push-stream-shared-thread",
-                               "error obtaining messages: {}",
-                               err);
+impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
+    PushMode<
+        Stream,
+        LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Stream::PartyID,
+            WrapperCodec,
+            IDs,
+            Msgs,
+            Recv,
+            Stream::Frags
+        >,
+        Ctx
+    > for SharedLargeObjPushMode<H, Stream, Ctx>
+where
+    Stream: 'static
+        + PushStreamReportBatchError<
+            <Stream::FinishBatchError as BatchError>::Permanent,
+            Stream::BatchID
+        >
+        + PushStreamReportError<
+            <Stream::StartBatchError as BatchError>::Permanent
+        >
+        + PushStreamReportBatchError<
+            <Stream::AddError as BatchError>::Permanent,
+            Stream::BatchID
+        >
+        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
+        + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
+        + PushStreamShared<Ctx>
+        + PushStreamParties
+        + Send,
+    Stream::PartyID: Display + From<usize>,
+    Msgs: LargeObjMsgs<H, Wrapper>,
+    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
+    IDs: IDGen + Iterator<Item = LargeObjID>,
+    Auth: MsgAuthN<Msg, Wrapper>,
+    WrapperCodec: Clone + Codec<Wrapper>,
+    WrapperCodec::Param: Default,
+    H: Clone + HashAlgo,
+    H::HashID: 'static + Clone + Display + Hash + HashID + Eq + Send
+{
+    type RetryError = Infallible;
+    type SendError = SharedLargeObjPushModeSendError<
+        LargeObjPushError<
+            H::HashID,
+            <Stream::PushFragError as BatchError>::Permanent,
+            <Stream::PushOfferError as BatchError>::Permanent
+        >,
+        LargeObjSendError<
+            H::HashID,
+            Auth::SessionPrin,
+            Msgs::AddMsgsError<WrapperCodec::EncodeError>
+        >
+    >;
 
-                        if err.scope() >= ErrorScope::Shutdown {
-                            valid = false
-                        }
-                    }
-                }
-            }
+    fn send_from_outbound(
+        &mut self,
+        ctx: &mut Ctx,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Stream::PartyID,
+            WrapperCodec,
+            IDs,
+            Msgs,
+            Recv,
+            Stream::Frags
+        >,
+        stream: &mut Stream
+    ) -> Result<Option<Instant>, Self::SendError> {
+        debug!(target: "shared-small-obj-push-mode",
+               "fetching new outbound messages");
 
-            if let Some(next) = next_pending &&
-                next <= now
-            {
-                next_pending = self.retry_pending(now)
-            }
+        let (groups, msgs_next) = proto.msgs().map_err(|err| {
+            SharedLargeObjPushModeSendError::Msgs { err: err }
+        })?;
 
-            match next_pending.map_or(next_outbound, |next| {
-                next_outbound.map(|when| when.max(next))
-            }) {
-                Some(when) => {
-                    let now = Instant::now();
-
-                    if now < when {
-                        let duration = when - now;
-
-                        trace!(target: "push-stream-shared-thread",
-                               "next activity at {}.{:03}",
-                               duration.as_secs(), duration.subsec_millis());
-
-                        match self.notify.wait_timeout(duration) {
-                            Ok(notify) => {
-                                if notify {
-                                    next_outbound = Some(now)
-                                }
-                            }
-                            Err(err) => {
-                                error!(target: "push-stream-shared-thread",
-                                       "error waiting for notification: {}",
-                                       err);
-
-                                valid = false
-                            }
-                        }
-                    }
-                }
-                None => {
-                    trace!(target: "push-stream-shared-thread",
-                           "waiting for notification indefinitely");
-
-                    match self.notify.wait() {
-                        Ok(_) => next_outbound = Some(now),
-                        Err(err) => {
-                            error!(target: "push-stream-shared-thread",
-                                   "error waiting for notification: {}",
-                                   err);
-
-                            valid = false
-                        }
-                    }
+        if let Some(groups) = groups {
+            // Go through each group and try sending it
+            for (parties, msgs) in groups {
+                if let RetryResult::Retry(retry) =
+                    PushEntry::from_try_send(ctx, stream, parties, msgs)
+                {
+                    // We got a retry somewhere along the process, store it.
+                    self.pending_msgs.push(retry)
                 }
             }
         }
 
-        debug!(target: "push-stream-shared-thread",
-               "push stream send thread exiting");
+        debug!(target: "shared-large-obj-push-mode",
+               "sending data fragments");
+
+        let frags_next = match LargeObjEntry::from_try_send(ctx, stream, proto)
+            .map_err(|err| SharedLargeObjPushModeSendError::Frags {
+                err: err
+            })? {
+            RetryResult::Success(next) => next,
+            RetryResult::Retry(retry) => {
+                self.pending_frags.push(retry);
+
+                None
+            }
+        };
+        let next = msgs_next.map_or(frags_next, |msgs| {
+            Some(frags_next.map_or(msgs, |frags| msgs.min(frags)))
+        });
+
+        Ok(next)
     }
 
-    pub fn start(self) -> JoinHandle<()> {
-        spawn(move || self.run())
+    fn retry_pending(
+        &mut self,
+        ctx: &mut Ctx,
+        proto: &mut LargeObjProto<
+            H,
+            Msg,
+            Wrapper,
+            Auth,
+            Stream::PartyID,
+            WrapperCodec,
+            IDs,
+            Msgs,
+            Recv,
+            Stream::Frags
+        >,
+        stream: &mut Stream,
+        now: Instant
+    ) -> Result<Option<Instant>, Self::RetryError> {
+        debug!(target: "private-large-obj-push-mode",
+               "retrying pending operations");
+
+        let mut curr = Vec::with_capacity(self.pending_msgs.len());
+
+        // ISSUE #29: Use a better data structure to avoid sorting
+        // this array over and over.
+
+        // First, sort the array by times, but reverse the order so we
+        // can pop the earliest.
+        self.pending_msgs
+            .sort_unstable_by_key(|b| std::cmp::Reverse(b.when()));
+
+        // Go through the sorted pending items and get all the ones
+        // whose times are less than the present.
+        while self.pending_msgs.last().is_some_and(|ent| now > ent.when()) {
+            debug!(target: "private-large-obj-push-mode",
+                   "retrying pending operation");
+
+            match self.pending_msgs.pop() {
+                Some(ent) => {
+                    curr.push(ent);
+                }
+                None => {
+                    error!(target: "private-large-obj-push-mode",
+                           "pop should not be empty");
+
+                    break;
+                }
+            }
+        }
+
+        // The last entry should now be the first time past the present.
+        let msgs_next = self.pending_msgs.last().map(|ent| ent.when());
+
+        // Try running all the entries we collected.
+        for ent in curr.into_iter() {
+            if let RetryResult::Retry(retry) = ent.exec(ctx, stream) {
+                // We got a retry somewhere along the process, store it.
+                self.pending_msgs.push(retry)
+            }
+        }
+
+        // Now do the fragments.
+
+        let mut curr = Vec::with_capacity(self.pending_frags.len());
+
+        // First, sort the array by times, but reverse the order so we
+        // can pop the earliest.
+        self.pending_frags
+            .sort_unstable_by_key(|b| std::cmp::Reverse(b.when()));
+
+        // Go through the sorted pending items and get all the ones
+        // whose times are less than the present.
+        while self
+            .pending_frags
+            .last()
+            .is_some_and(|ent| now > ent.when())
+        {
+            debug!(target: "private-large-obj-push-mode",
+                   "retrying pending fragment");
+
+            match self.pending_frags.pop() {
+                Some(ent) => {
+                    curr.push(ent);
+                }
+                None => {
+                    error!(target: "private-large-obj-push-mode",
+                           "pop should not be empty");
+
+                    break;
+                }
+            }
+        }
+
+        // The last entry should now be the first time past the present.
+        let mut frags_next = self.pending_frags.last().map(|ent| ent.when());
+
+        // Try running all the entries we collected.
+        for ent in curr.into_iter() {
+            match ent.exec(ctx, stream, proto) {
+                Ok(RetryResult::Success(retry)) => {
+                    frags_next = frags_next.map_or(retry, |next| {
+                        retry.map(|retry| retry.min(next))
+                    });
+                }
+                Ok(RetryResult::Retry(retry)) => {
+                    frags_next =
+                        Some(frags_next.map_or(retry.when(), |next| {
+                            next.min(retry.when())
+                        }));
+
+                    self.pending_frags.push(retry)
+                }
+                Err(err) => {
+                    error!(target: "shared-large-obj-push-mode",
+                           "unrecoverable error retrying push frags: {}",
+                           err);
+                }
+            }
+        }
+
+        let out = msgs_next.map_or(frags_next, |msgs| {
+            Some(frags_next.map_or(msgs, |frags| frags.min(msgs)))
+        });
+
+        Ok(out)
+    }
+}
+
+impl<Frags, Msgs> ScopedError for SharedLargeObjPushModeSendError<Frags, Msgs>
+where
+    Frags: ScopedError,
+    Msgs: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            SharedLargeObjPushModeSendError::Frags { err } => err.scope(),
+            SharedLargeObjPushModeSendError::Msgs { err } => err.scope()
+        }
+    }
+}
+
+impl<Frags, Msgs> Display for SharedLargeObjPushModeSendError<Frags, Msgs>
+where
+    Frags: Display,
+    Msgs: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            SharedLargeObjPushModeSendError::Frags { err } => err.fmt(f),
+            SharedLargeObjPushModeSendError::Msgs { err } => err.fmt(f)
+        }
     }
 }

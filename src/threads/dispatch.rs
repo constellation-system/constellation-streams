@@ -42,20 +42,14 @@ use log::error;
 use log::info;
 use log::trace;
 
-use crate::error::BatchError;
 use crate::stream::ConcurrentStream;
 use crate::stream::PullStream;
 use crate::stream::PullStreamListener;
-use crate::stream::PushStream;
-use crate::stream::PushStreamAdd;
-use crate::stream::PushStreamPrivate;
-use crate::stream::PushStreamPrivateSingle;
-use crate::stream::PushStreamReportBatchError;
-use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamReporter;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStream;
-use crate::threads::push::private::PushStreamPrivateThread;
+use crate::threads::push::PushMode;
+use crate::threads::push::PushStreamThread;
 use crate::threads::RecvThread;
 use crate::threads::RecvThreadEntry;
 
@@ -67,22 +61,7 @@ where
     Addr: Clone + Eq + Hash {
     /// Type of top-level push-side streams to be returned from
     /// dispatch.
-    type PushStream: 'static
-        + PushStreamReportBatchError<
-            <<Self::PushStream as PushStream<Ctx>>::FinishBatchError as BatchError>::Permanent,
-            <Self::PushStream as PushStream<Ctx>>::BatchID
-        >
-        + PushStreamReportError<
-            <<Self::PushStream as PushStreamPrivate<Ctx>>::StartBatchError as BatchError>::Permanent
-        >
-        + PushStreamReportBatchError<
-            <<Self::PushStream as PushStreamAdd<Msg, Ctx>>::AddError as BatchError>::Permanent,
-            <Self::PushStream as PushStream<Ctx>>::BatchID
-        >
-        + PushStreamPrivateSingle<Msg, Ctx>
-        + PushStreamPrivate<Ctx>
-        + PushStreamReporter
-        + Send;
+    type PushStream: Send;
     /// Type of outbound message structures.
     ///
     /// This will be used by the created [PushStreamPrivateThread] to
@@ -137,9 +116,16 @@ where
     push_thread: JoinHandle<()>
 }
 
-pub struct PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Ctx>
-where
+pub struct PullStreamsDispatchThread<
+    Msg,
+    AuthN,
+    Dispatcher,
+    Listener,
+    Mode,
+    Ctx
+> where
     Msg: 'static + Clone + Send,
+    Mode: PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx> + Send,
     Listener: PullStreamListener<Msg>,
     Listener::Stream: 'static + ConcurrentStream + Credentials,
     Listener::Addr: 'static + Send,
@@ -153,6 +139,7 @@ where
     AuthN::SessionPrin: Send,
     Ctx: Clone {
     msg: PhantomData<Msg>,
+    mode: Mode::Config,
     dispatcher: Dispatcher,
     listener: Listener,
     shutdown: ShutdownFlag,
@@ -338,10 +325,14 @@ where
     }
 }
 
-impl<Msg, AuthN, Dispatcher, Listener, Ctx>
-    PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Ctx>
+impl<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
+    PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
 where
     Msg: 'static + Clone + Send,
+    Mode: 'static
+        + PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx>
+        + Send,
+    Mode::Config: Send,
     Listener: 'static + PullStreamListener<Msg> + Send,
     Listener::Stream: ConcurrentStream + Credentials,
     Listener::Addr: Send,
@@ -355,15 +346,6 @@ where
             Prin = Listener::Prin,
             Src = Listener::Addr
         > + Send,
-    <Dispatcher::PushStream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches:
-        Send,
-    <Dispatcher::PushStream as PushStreamPrivate<Ctx>>::StartBatchRetry: Send,
-    <Dispatcher::PushStream as PushStreamPrivate<Ctx>>::AbortBatchRetry: Send,
-    <Dispatcher::PushStream as PushStreamAdd<Msg, Ctx>>::AddRetry: Send,
-    <Dispatcher::PushStream as PushStream<Ctx>>::FinishBatchRetry: Send,
-    <Dispatcher::PushStream as PushStream<Ctx>>::CancelBatchRetry: Send,
-    <Dispatcher::PushStream as PushStream<Ctx>>::StreamFlags: Send,
-    <Dispatcher::PushStream as PushStream<Ctx>>::BatchID: Send,
     Dispatcher::Recv: Clone,
     AuthN: 'static
         + Clone
@@ -373,6 +355,7 @@ where
     Ctx: 'static + Clone + Send + Sync
 {
     fn create(
+        mode: Mode::Config,
         dispatcher: Dispatcher,
         listener: Listener,
         shutdown: ShutdownFlag,
@@ -395,6 +378,7 @@ where
     ) -> Self {
         PullStreamsDispatchThread {
             msg: PhantomData,
+            mode: mode,
             dispatcher: dispatcher,
             listener: listener,
             shutdown: shutdown,
@@ -404,6 +388,7 @@ where
     }
 
     pub fn new(
+        mode: Mode::Config,
         dispatcher: Dispatcher,
         listener: Listener,
         shutdown: ShutdownFlag,
@@ -411,10 +396,11 @@ where
     ) -> Self {
         let recvs = Arc::new(Mutex::new(HashMap::new()));
 
-        Self::create(dispatcher, listener, shutdown, ctx, recvs)
+        Self::create(mode, dispatcher, listener, shutdown, ctx, recvs)
     }
 
     pub fn with_capacity(
+        mode: Mode::Config,
         dispatcher: Dispatcher,
         listener: Listener,
         shutdown: ShutdownFlag,
@@ -423,7 +409,7 @@ where
     ) -> Self {
         let recvs = Arc::new(Mutex::new(HashMap::with_capacity(size)));
 
-        Self::create(dispatcher, listener, shutdown, ctx, recvs)
+        Self::create(mode, dispatcher, listener, shutdown, ctx, recvs)
     }
 
     fn report(
@@ -489,13 +475,15 @@ where
                     .dispatch(&mut self.ctx, prin.clone())
                     .map_err(|err| WithMutexPoison::Inner { error: err })?;
                 let reporter = push_stream.reporter();
-                let push_thread = PushStreamPrivateThread::create(
-                    self.ctx.clone(),
-                    msgs,
-                    notify,
-                    push_stream,
-                    dispatched.shutdown.clone()
-                );
+                let push_thread: PushStreamThread<_, _, Mode, _> =
+                    PushStreamThread::create(
+                        self.mode.clone(),
+                        self.ctx.clone(),
+                        msgs,
+                        notify,
+                        push_stream,
+                        dispatched.shutdown.clone()
+                    );
                 let join = push_thread.start();
                 let ent = ent.insert(DispatchEntry {
                     inner: dispatched,

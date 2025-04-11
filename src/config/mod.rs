@@ -214,6 +214,31 @@ pub struct FarSchedulerConfig {
     retry_max_count: usize
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "far-scheduler-config")]
+#[serde(default)]
+pub struct LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default {
+    /// Retry for sending fragments.
+    #[serde(default = "LargeObjProtoConfig::<Codec, IDs>::default_retry")]
+    retry: Retry,
+    #[serde(default)]
+    codec: Codec,
+    #[serde(default)]
+    ids: IDs,
+    #[serde(
+        default = "LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration"
+    )]
+    tombstone_duration: Duration,
+    #[serde(default)]
+    inbound_size_hint: Option<usize>,
+    #[serde(default)]
+    outbound_size_hint: Option<usize>
+}
+
 /// Configuration of a counterparty for a
 /// [StreamSelector](crate::select::StreamSelector).
 ///
@@ -268,6 +293,54 @@ where
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
 #[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct PrivateDatagramModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct SharedLargeObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    msg_retries_hint: Option<usize>,
+    #[serde(default)]
+    frag_retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct PrivateLargeObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    msg_retries_hint: Option<usize>,
+    #[serde(default)]
+    frag_retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct SharedDatagramModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    retries_hint: Option<usize>
+}
+
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
 #[serde(rename = "dispatch-config")]
 pub struct DispatchConfig<Epochs>
 where
@@ -283,6 +356,100 @@ where
     retry: Retry,
     #[serde(default)]
     size_hint: Option<usize>
+}
+
+impl PrivateDatagramModeConfig {
+    #[inline]
+    pub fn new(retries_hint: Option<usize>) -> Self {
+        PrivateDatagramModeConfig {
+            retries_hint: retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn retries_hint(&self) -> Option<usize> {
+        self.retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> Option<usize> {
+        self.retries_hint
+    }
+}
+
+impl PrivateLargeObjModeConfig {
+    #[inline]
+    pub fn new(
+        msg_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>
+    ) -> Self {
+        PrivateLargeObjModeConfig {
+            frag_retries_hint: frag_retries_hint,
+            msg_retries_hint: msg_retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn frag_retries_hint(&self) -> Option<usize> {
+        self.frag_retries_hint
+    }
+
+    #[inline]
+    pub fn msg_retries_hint(&self) -> Option<usize> {
+        self.msg_retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> (Option<usize>, Option<usize>) {
+        (self.msg_retries_hint, self.frag_retries_hint)
+    }
+}
+
+impl SharedDatagramModeConfig {
+    #[inline]
+    pub fn new(retries_hint: Option<usize>) -> Self {
+        SharedDatagramModeConfig {
+            retries_hint: retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn retries_hint(&self) -> Option<usize> {
+        self.retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> Option<usize> {
+        self.retries_hint
+    }
+}
+
+impl SharedLargeObjModeConfig {
+    #[inline]
+    pub fn new(
+        msg_retries_hint: Option<usize>,
+        frag_retries_hint: Option<usize>
+    ) -> Self {
+        SharedLargeObjModeConfig {
+            frag_retries_hint: frag_retries_hint,
+            msg_retries_hint: msg_retries_hint
+        }
+    }
+
+    #[inline]
+    pub fn frag_retries_hint(&self) -> Option<usize> {
+        self.frag_retries_hint
+    }
+
+    #[inline]
+    pub fn msg_retries_hint(&self) -> Option<usize> {
+        self.msg_retries_hint
+    }
+
+    #[inline]
+    pub fn take(self) -> (Option<usize>, Option<usize>) {
+        (self.msg_retries_hint, self.frag_retries_hint)
+    }
 }
 
 impl BatchSlotsConfig {
@@ -541,6 +708,102 @@ where
     #[inline]
     pub fn take(self) -> (Channels, Vec<Channel>, Vec<Endpoint>) {
         (self.channels, self.channel_names, self.endpoints)
+    }
+}
+
+impl<Codec, IDs> Default for LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default
+{
+    #[inline]
+    fn default() -> Self {
+        LargeObjProtoConfig {
+            inbound_size_hint: None,
+            outbound_size_hint: None,
+            tombstone_duration:
+                LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration(),
+            retry: LargeObjProtoConfig::<Codec, IDs>::default_retry(),
+            codec: Codec::default(),
+            ids: IDs::default()
+        }
+    }
+}
+
+impl<Codec, IDs> LargeObjProtoConfig<Codec, IDs>
+where
+    Codec: Default,
+    IDs: Default
+{
+    #[inline]
+    pub fn new(
+        retry: Retry,
+        codec: Codec,
+        ids: IDs,
+        tombstone_duration: Duration,
+        inbound_size_hint: Option<usize>,
+        outbound_size_hint: Option<usize>
+    ) -> Self {
+        LargeObjProtoConfig {
+            inbound_size_hint: inbound_size_hint,
+            outbound_size_hint: outbound_size_hint,
+            tombstone_duration: tombstone_duration,
+            retry: retry,
+            codec: codec,
+            ids: ids
+        }
+    }
+
+    #[inline]
+    pub fn inbound_size_hint(&self) -> &Option<usize> {
+        &self.inbound_size_hint
+    }
+
+    #[inline]
+    pub fn outbound_size_hint(&self) -> &Option<usize> {
+        &self.outbound_size_hint
+    }
+
+    #[inline]
+    pub fn tombstone_duration(&self) -> Duration {
+        self.tombstone_duration
+    }
+
+    #[inline]
+    pub fn retry(&self) -> &Retry {
+        &self.retry
+    }
+
+    #[inline]
+    pub fn codec(&self) -> &Codec {
+        &self.codec
+    }
+
+    #[inline]
+    pub fn ids(&self) -> &IDs {
+        &self.ids
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (Retry, Codec, IDs, Duration, Option<usize>, Option<usize>) {
+        (
+            self.retry,
+            self.codec,
+            self.ids,
+            self.tombstone_duration,
+            self.inbound_size_hint,
+            self.outbound_size_hint
+        )
+    }
+
+    fn default_retry() -> Retry {
+        Retry::TERRESTRIAL_NETWORK_DEFAULT
+    }
+
+    fn default_tombstone_duration() -> Duration {
+        Duration::from_secs(10)
     }
 }
 

@@ -32,6 +32,7 @@ use bitvec::bitvec;
 use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -43,6 +44,8 @@ use log::warn;
 use crate::config::BatchSlotsConfig;
 use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
+use crate::frags::Frags;
+use crate::large_obj::LargeObjID;
 
 // This is a workaround for an OpenSSL implementation issue.
 
@@ -850,39 +853,88 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
-pub trait LargeObjStream<ObjID, Ctx>
-where
-    ObjID: Into<usize> {
+pub trait LargeObjStream<Ctx> {
     /// Type of errors that can occur when sending a fragment.
     type PushFragError: BatchError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
     type PushFragRetry: RetryWhen + Clone;
     /// Type of outbound fragment structures.
-    type Frags;
+    type Frags: Frags;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError>;
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    >;
+}
+
+pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
+where
+    H: HashID {
+    /// Type of errors that can occur when sending an offer.
+    type PushOfferError: BatchError;
+    /// Type of information given by a [RetryResult] for sending an
+    /// offer.
+    type PushOfferRetry: RetryWhen + Clone;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    >;
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    >;
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    >;
 }
 
 /// Helper trait for sending single messages on shared streams.
@@ -2284,62 +2336,120 @@ where
     }
 }
 
-impl<Ctx, ObjID, Inner> LargeObjStream<ObjID, Ctx> for ThreadedStream<Inner>
+impl<Ctx, Inner> LargeObjStream<Ctx> for ThreadedStream<Inner>
 where
-    ObjID: Into<usize>,
-    Inner: LargeObjStream<ObjID, Ctx>
+    Inner: LargeObjStream<Ctx>
 {
     type Frags = Inner::Frags;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
     type PushFragRetry = Inner::PushFragRetry;
 
-    fn push_frag(
+    fn push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        let mut guard = self
-            .inner
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
-
-        guard
-            .push_frag(ctx, id, frags)
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .push_frags(ctx, id, frags)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
-    fn retry_push_frag(
+    fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        let mut guard = self
-            .inner
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
-
-        guard
-            .retry_push_frag(ctx, id, frags, retry)
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .retry_push_frags(ctx, id, frags, retry)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 
-    fn complete_push_frag(
+    fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
-        id: ObjID,
+        id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::PushFragRetry>, Self::PushFragError> {
-        let mut guard = self
-            .inner
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        Self::PushFragError
+    > {
+        self.inner
             .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .complete_push_frags(ctx, id, frags, err)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+}
 
-        guard
-            .complete_push_frag(ctx, id, frags, err)
+impl<Ctx, H, Inner> LargeObjOfferStream<H, Ctx> for ThreadedStream<Inner>
+where
+    Inner: LargeObjOfferStream<H, Ctx>,
+    H: HashID
+{
+    type PushOfferError = ThreadedStreamError<Inner::PushOfferError>;
+    type PushOfferRetry = Inner::PushOfferRetry;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .push_offer(ctx, hash, frags)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .retry_push_offer(ctx, hash, frags, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as BatchError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        Self::PushOfferError
+    > {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .complete_push_offer(ctx, hash, frags, err)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }

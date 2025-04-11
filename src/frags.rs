@@ -22,10 +22,32 @@ use std::fmt::Formatter;
 use std::iter::FusedIterator;
 use std::time::Instant;
 
+use constellation_common::error::ErrorScope;
+use constellation_common::error::ScopedError;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 
 use crate::error::ErrorReportInfo;
+use crate::generated::large_obj::LargeObjFragReq;
+
+pub trait Frags {
+    type Param: Clone + Default;
+    type RecvReqError: Display + ScopedError;
+
+    fn from_data(
+        param: Self::Param,
+        data: Vec<u8>
+    ) -> Self;
+
+    fn is_empty(&self) -> bool;
+
+    fn len(&self) -> usize;
+
+    fn recv_req(
+        &mut self,
+        req: &LargeObjFragReq
+    ) -> Result<(), Self::RecvReqError>;
+}
 
 #[derive(Debug)]
 struct Frag {
@@ -36,33 +58,33 @@ struct Frag {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-struct Frags {
+struct InnerFrags {
     // ISSUE #28: use a good data structure here, like a red-black tree.
     frags: Vec<Frag>
 }
 
 pub struct InboundFrags {
-    frags: Frags,
+    frags: InnerFrags,
+    when: Option<Instant>,
     curr: usize,
-    retry: Retry,
     data: Vec<u8>
 }
 
 pub struct OutboundFrags {
-    frags: Frags,
+    frags: InnerFrags,
     curr: usize,
     retry: Retry,
     data: Vec<u8>
 }
 
 struct FragsIter<'a> {
-    frags: &'a mut Frags,
+    frags: &'a mut InnerFrags,
     retry: Retry,
     idx: usize
 }
 
 struct FragsBytesIter<'a> {
-    frags: &'a mut Frags,
+    frags: &'a mut InnerFrags,
     retry: Retry,
     nbytes: usize,
     idx: usize
@@ -85,30 +107,31 @@ pub enum OutboundDataError {
 
 impl InboundFrags {
     #[inline]
-    pub fn new(
-        retry: Retry,
-        len: usize
-    ) -> Self {
+    pub fn new(len: usize) -> Self {
         InboundFrags {
-            frags: Frags::full(len),
+            frags: InnerFrags::full(len),
+            when: None,
             curr: 0,
-            retry: retry,
             data: vec![0; len]
         }
     }
 
     #[inline]
     pub fn with_capacity(
-        retry: Retry,
         len: usize,
         hint: usize
     ) -> Self {
         InboundFrags {
-            frags: Frags::full_with_capacity(len, hint),
+            frags: InnerFrags::full_with_capacity(len, hint),
+            when: None,
             curr: 0,
-            retry: retry,
             data: vec![0; len]
         }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
     }
 
     /// Check if the transfer is complete.
@@ -126,6 +149,11 @@ impl InboundFrags {
         } else {
             Err(self)
         }
+    }
+
+    #[inline]
+    pub fn when(&self) -> Option<Instant> {
+        self.when
     }
 
     /// Receive fragment data.
@@ -149,10 +177,10 @@ impl InboundFrags {
     /// Attempt to generate requests and acknowledgements for fragments.
     pub fn reqs_acks(
         &mut self,
-        buf: &mut [(bool, usize, usize)]
-    ) -> RetryResult<usize> {
+        buf: &mut [(bool, usize, usize)],
+        retry: &Retry
+    ) -> RetryResult<(usize, Option<Instant>)> {
         let mut curr = 0;
-        let mut when: Option<Instant> = None;
 
         // In case we left off past the last fragment.
         self.curr = if self.frags.is_beyond_last(self.curr) &&
@@ -168,10 +196,10 @@ impl InboundFrags {
             self.curr
         };
 
-        for frag in self.frags.frags_iter(self.retry.clone(), self.curr) {
+        for frag in self.frags.frags_iter(retry.clone(), self.curr) {
             if curr < buf.len() {
                 match frag {
-                    (RetryResult::Success(()), offset, len) => {
+                    (RetryResult::Success(retry), offset, len) => {
                         if self.curr < offset {
                             let gap = offset - self.curr;
 
@@ -184,14 +212,18 @@ impl InboundFrags {
                             }
                         }
 
+                        self.when = Some(
+                            self.when.map_or(retry, |when| when.max(retry))
+                        );
+
                         buf[curr] = (true, offset, len);
                         self.curr = offset + len;
                         curr += 1;
                     }
                     (RetryResult::Retry(retry), offset, len) => {
-                        let retry = when.map_or(retry, |when| when.min(retry));
-
-                        when = Some(retry);
+                        self.when = Some(
+                            self.when.map_or(retry, |when| when.max(retry))
+                        );
 
                         if self.curr < offset {
                             let gap = offset - self.curr;
@@ -222,11 +254,56 @@ impl InboundFrags {
         };
 
         if curr != 0 {
-            RetryResult::Success(curr)
+            RetryResult::Success((curr, self.when))
         } else {
-            match when {
+            match self.when {
                 Some(when) => RetryResult::Retry(when),
-                None => RetryResult::Success(0)
+                None => RetryResult::Success((0, self.when))
+            }
+        }
+    }
+}
+
+impl Frags for OutboundFrags {
+    type Param = Retry;
+    type RecvReqError = OutboundRecvError;
+
+    #[inline]
+    fn from_data(
+        param: Retry,
+        data: Vec<u8>
+    ) -> Self {
+        // XXX Use a size hint here, get it from len / frag len.
+        let frags = InnerFrags::full(data.len());
+
+        OutboundFrags {
+            frags: frags,
+            retry: param,
+            data: data,
+            curr: 0
+        }
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn recv_req(
+        &mut self,
+        req: &LargeObjFragReq
+    ) -> Result<(), OutboundRecvError> {
+        match req {
+            LargeObjFragReq::Ack(req) => {
+                self.recv_ack(req.offset as usize, req.len as usize)
+            }
+            LargeObjFragReq::Need(req) => {
+                self.recv_need(req.offset as usize, req.len as usize)
             }
         }
     }
@@ -239,7 +316,7 @@ impl OutboundFrags {
         data: Vec<u8>
     ) -> Self {
         OutboundFrags {
-            frags: Frags::full(data.len()),
+            frags: InnerFrags::full(data.len()),
             curr: 0,
             retry: retry,
             data: data
@@ -253,21 +330,11 @@ impl OutboundFrags {
         hint: usize
     ) -> Self {
         OutboundFrags {
-            frags: Frags::full_with_capacity(data.len(), hint),
+            frags: InnerFrags::full_with_capacity(data.len(), hint),
             curr: 0,
             retry: retry,
             data: data
         }
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.data.len()
     }
 
     /// Get a reference to the `len` bytes of data at `offset`.
@@ -304,7 +371,7 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data requests.
-    pub fn recv_req(
+    pub fn recv_need(
         &mut self,
         offset: usize,
         len: usize
@@ -323,7 +390,7 @@ impl OutboundFrags {
     pub fn offer_frag(
         &mut self,
         max_bytes: usize
-    ) -> Result<RetryResult<(usize, usize)>, OutboundDataError> {
+    ) -> Result<RetryResult<(usize, usize, Instant)>, OutboundDataError> {
         let mut when: Option<Instant> = None;
 
         // Reset the current offset if needed.
@@ -338,10 +405,11 @@ impl OutboundFrags {
                 .bytes_iter(self.retry.clone(), self.curr, max_bytes)
         {
             match frag {
-                (RetryResult::Success(()), offset, len) => {
+                (RetryResult::Success(retry), offset, len) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
                     self.curr = offset + len;
 
-                    return Ok(RetryResult::Success((offset, len)));
+                    return Ok(RetryResult::Success((offset, len, retry)));
                 }
                 (RetryResult::Retry(retry), offset, len) => {
                     let retry = when.map_or(retry, |when| when.min(retry));
@@ -363,7 +431,7 @@ impl OutboundFrags {
         &mut self,
         buf: &mut [(usize, usize)],
         max_bytes: usize
-    ) -> Result<RetryResult<usize>, OutboundDataError> {
+    ) -> Result<RetryResult<Option<(usize, Instant)>>, OutboundDataError> {
         let mut curr = 0;
         let mut when: Option<Instant> = None;
 
@@ -379,7 +447,10 @@ impl OutboundFrags {
                 .bytes_iter(self.retry.clone(), self.curr, max_bytes)
         {
             match frag {
-                (RetryResult::Success(()), offset, len) => {
+                (RetryResult::Success(retry), offset, len) => {
+                    let retry = when.map_or(retry, |when| when.min(retry));
+                    when = Some(retry);
+
                     if curr < buf.len() {
                         buf[curr] = (offset, len);
                         self.curr = offset + len;
@@ -397,21 +468,17 @@ impl OutboundFrags {
             }
         }
 
-        if curr != 0 {
-            Ok(RetryResult::Success(curr))
-        } else {
-            match when {
-                Some(when) => Ok(RetryResult::Retry(when)),
-                None => Err(OutboundDataError::Empty)
-            }
+        match when {
+            Some(when) => Ok(RetryResult::Success(Some((curr, when)))),
+            None => Ok(RetryResult::Success(None))
         }
     }
 }
 
-impl Frags {
+impl InnerFrags {
     #[inline]
     fn full(len: usize) -> Self {
-        Frags {
+        InnerFrags {
             frags: vec![Frag {
                 when: Instant::now(),
                 nretries: 0,
@@ -435,7 +502,7 @@ impl Frags {
             len: len
         });
 
-        Frags { frags: frags }
+        InnerFrags { frags: frags }
     }
 
     #[inline]
@@ -507,7 +574,7 @@ impl Frags {
         retry: &Retry,
         idx: usize,
         len: usize
-    ) -> (usize, usize) {
+    ) -> (usize, usize, Instant) {
         let nretries = self.frags[idx].nretries;
         let delay = retry.retry_delay(nretries);
         let when = Instant::now() + delay;
@@ -517,7 +584,7 @@ impl Frags {
             self.frags[idx].nretries += 1;
             self.frags[idx].when = when;
 
-            (offset, self.frags[idx].len)
+            (offset, self.frags[idx].len, when)
         } else {
             self.frags[idx].offset += len;
             self.frags[idx].len -= len;
@@ -532,7 +599,7 @@ impl Frags {
                 }
             );
 
-            (offset, len)
+            (offset, len, when)
         }
     }
 
@@ -804,10 +871,10 @@ impl Frags {
 }
 
 impl Iterator for FragsIter<'_> {
-    type Item = (RetryResult<()>, usize, usize);
+    type Item = (RetryResult<Instant>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
+    fn next(&mut self) -> Option<(RetryResult<Instant>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() {
@@ -826,7 +893,7 @@ impl Iterator for FragsIter<'_> {
 
                 self.frags.frags[idx].when = when;
 
-                Some((RetryResult::Success(()), offset, len))
+                Some((RetryResult::Success(when), offset, len))
             } else {
                 Some((
                     RetryResult::Retry(self.frags.frags[idx].when),
@@ -850,15 +917,15 @@ impl Iterator for FragsIter<'_> {
 impl FusedIterator for FragsIter<'_> {}
 
 impl Iterator for FragsBytesIter<'_> {
-    type Item = (RetryResult<()>, usize, usize);
+    type Item = (RetryResult<Instant>, usize, usize);
 
     #[inline]
-    fn next(&mut self) -> Option<(RetryResult<()>, usize, usize)> {
+    fn next(&mut self) -> Option<(RetryResult<Instant>, usize, usize)> {
         let idx = self.idx;
 
         if idx < self.frags.frags.len() && self.nbytes != 0 {
             if self.frags.frags[idx].when < Instant::now() {
-                let (offset, len) =
+                let (offset, len, when) =
                     self.frags.split(&self.retry, idx, self.nbytes);
 
                 self.idx += 1;
@@ -869,7 +936,7 @@ impl Iterator for FragsBytesIter<'_> {
                     self.nbytes = 0;
                 }
 
-                Some((RetryResult::Success(()), offset, len))
+                Some((RetryResult::Success(when), offset, len))
             } else {
                 Some((
                     RetryResult::Retry(self.frags.frags[idx].when),
@@ -908,6 +975,14 @@ impl<Info> ErrorReportInfo<Info> for OutboundDataError {
     fn report_info(&self) -> Option<Info> {
         match self {
             OutboundDataError::Empty => None
+        }
+    }
+}
+
+impl ScopedError for OutboundRecvError {
+    fn scope(&self) -> ErrorScope {
+        match self {
+            OutboundRecvError::OutOfBounds => ErrorScope::Unrecoverable
         }
     }
 }
@@ -953,8 +1028,8 @@ impl Display for OutboundDataError {
 
 #[test]
 fn test_frags_insert_empty() {
-    let mut frags = Frags { frags: vec![] };
-    let expected = Frags {
+    let mut frags = InnerFrags { frags: vec![] };
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -970,7 +1045,7 @@ fn test_frags_insert_empty() {
 
 #[test]
 fn test_frags_insert_single_miss_left_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -978,7 +1053,7 @@ fn test_frags_insert_single_miss_left_nomerge() {
             len: 7
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1002,7 +1077,7 @@ fn test_frags_insert_single_miss_left_nomerge() {
 
 #[test]
 fn test_frags_insert_single_miss_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1010,7 +1085,7 @@ fn test_frags_insert_single_miss_left_merge() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1026,7 +1101,7 @@ fn test_frags_insert_single_miss_left_merge() {
 
 #[test]
 fn test_frags_insert_single_overlap_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1034,7 +1109,7 @@ fn test_frags_insert_single_overlap_left_merge() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1050,7 +1125,7 @@ fn test_frags_insert_single_overlap_left_merge() {
 
 #[test]
 fn test_frags_insert_single_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1058,7 +1133,7 @@ fn test_frags_insert_single_space_right() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1074,7 +1149,7 @@ fn test_frags_insert_single_space_right() {
 
 #[test]
 fn test_frags_insert_single_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1082,7 +1157,7 @@ fn test_frags_insert_single_exact() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1098,7 +1173,7 @@ fn test_frags_insert_single_exact() {
 
 #[test]
 fn test_frags_insert_single_space_both() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1106,7 +1181,7 @@ fn test_frags_insert_single_space_both() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1122,7 +1197,7 @@ fn test_frags_insert_single_space_both() {
 
 #[test]
 fn test_frags_insert_single_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1130,7 +1205,7 @@ fn test_frags_insert_single_space_left() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1146,7 +1221,7 @@ fn test_frags_insert_single_space_left() {
 
 #[test]
 fn test_frags_insert_single_overlap_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1154,7 +1229,7 @@ fn test_frags_insert_single_overlap_right_merge() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1170,7 +1245,7 @@ fn test_frags_insert_single_overlap_right_merge() {
 
 #[test]
 fn test_frags_insert_single_miss_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1178,7 +1253,7 @@ fn test_frags_insert_single_miss_right_merge() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1194,7 +1269,7 @@ fn test_frags_insert_single_miss_right_merge() {
 
 #[test]
 fn test_frags_insert_single_miss_right_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1202,7 +1277,7 @@ fn test_frags_insert_single_miss_right_nomerge() {
             len: 7
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1226,7 +1301,7 @@ fn test_frags_insert_single_miss_right_nomerge() {
 
 #[test]
 fn test_frags_insert_two_miss_left_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1242,7 +1317,7 @@ fn test_frags_insert_two_miss_left_nomerge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1272,7 +1347,7 @@ fn test_frags_insert_two_miss_left_nomerge() {
 
 #[test]
 fn test_frags_insert_two_miss_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1288,7 +1363,7 @@ fn test_frags_insert_two_miss_left_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1312,7 +1387,7 @@ fn test_frags_insert_two_miss_left_merge() {
 
 #[test]
 fn test_frags_insert_two_overlap_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1328,7 +1403,7 @@ fn test_frags_insert_two_overlap_left_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1352,7 +1427,7 @@ fn test_frags_insert_two_overlap_left_merge() {
 
 #[test]
 fn test_frags_insert_two_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1368,7 +1443,7 @@ fn test_frags_insert_two_space_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1384,7 +1459,7 @@ fn test_frags_insert_two_space_right() {
 
 #[test]
 fn test_frags_insert_two_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1400,7 +1475,7 @@ fn test_frags_insert_two_exact() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1416,7 +1491,7 @@ fn test_frags_insert_two_exact() {
 
 #[test]
 fn test_frags_insert_two_space_both() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1432,7 +1507,7 @@ fn test_frags_insert_two_space_both() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1448,7 +1523,7 @@ fn test_frags_insert_two_space_both() {
 
 #[test]
 fn test_frags_insert_two_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1464,7 +1539,7 @@ fn test_frags_insert_two_space_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1480,7 +1555,7 @@ fn test_frags_insert_two_space_left() {
 
 #[test]
 fn test_frags_insert_two_overlap_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1496,7 +1571,7 @@ fn test_frags_insert_two_overlap_right_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1520,7 +1595,7 @@ fn test_frags_insert_two_overlap_right_merge() {
 
 #[test]
 fn test_frags_insert_two_miss_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1536,7 +1611,7 @@ fn test_frags_insert_two_miss_right_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1560,7 +1635,7 @@ fn test_frags_insert_two_miss_right_merge() {
 
 #[test]
 fn test_frags_insert_two_miss_right_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1576,7 +1651,7 @@ fn test_frags_insert_two_miss_right_nomerge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1606,7 +1681,7 @@ fn test_frags_insert_two_miss_right_nomerge() {
 
 #[test]
 fn test_frags_insert_three_miss_left_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1628,7 +1703,7 @@ fn test_frags_insert_three_miss_left_nomerge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1664,7 +1739,7 @@ fn test_frags_insert_three_miss_left_nomerge() {
 
 #[test]
 fn test_frags_insert_three_miss_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1686,7 +1761,7 @@ fn test_frags_insert_three_miss_left_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1716,7 +1791,7 @@ fn test_frags_insert_three_miss_left_merge() {
 
 #[test]
 fn test_frags_insert_three_overlap_left_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1738,7 +1813,7 @@ fn test_frags_insert_three_overlap_left_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1768,7 +1843,7 @@ fn test_frags_insert_three_overlap_left_merge() {
 
 #[test]
 fn test_frags_insert_three_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1790,7 +1865,7 @@ fn test_frags_insert_three_space_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1806,7 +1881,7 @@ fn test_frags_insert_three_space_right() {
 
 #[test]
 fn test_frags_insert_three_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1828,7 +1903,7 @@ fn test_frags_insert_three_exact() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1844,7 +1919,7 @@ fn test_frags_insert_three_exact() {
 
 #[test]
 fn test_frags_insert_three_space_both() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1866,7 +1941,7 @@ fn test_frags_insert_three_space_both() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1882,7 +1957,7 @@ fn test_frags_insert_three_space_both() {
 
 #[test]
 fn test_frags_insert_three_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1904,7 +1979,7 @@ fn test_frags_insert_three_space_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -1920,7 +1995,7 @@ fn test_frags_insert_three_space_left() {
 
 #[test]
 fn test_frags_insert_three_overlap_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1942,7 +2017,7 @@ fn test_frags_insert_three_overlap_right_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1972,7 +2047,7 @@ fn test_frags_insert_three_overlap_right_merge() {
 
 #[test]
 fn test_frags_insert_three_miss_right_merge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -1994,7 +2069,7 @@ fn test_frags_insert_three_miss_right_merge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2024,7 +2099,7 @@ fn test_frags_insert_three_miss_right_merge() {
 
 #[test]
 fn test_frags_insert_three_miss_right_nomerge() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2046,7 +2121,7 @@ fn test_frags_insert_three_miss_right_nomerge() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2082,8 +2157,8 @@ fn test_frags_insert_three_miss_right_nomerge() {
 
 #[test]
 fn test_frags_remove_empty() {
-    let mut frags = Frags { frags: vec![] };
-    let expected = Frags { frags: vec![] };
+    let mut frags = InnerFrags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 8);
 
@@ -2092,7 +2167,7 @@ fn test_frags_remove_empty() {
 
 #[test]
 fn test_frags_remove_single_miss_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2100,7 +2175,7 @@ fn test_frags_remove_single_miss_left() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2116,7 +2191,7 @@ fn test_frags_remove_single_miss_left() {
 
 #[test]
 fn test_frags_remove_single_miss_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2124,7 +2199,7 @@ fn test_frags_remove_single_miss_right() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2140,7 +2215,7 @@ fn test_frags_remove_single_miss_right() {
 
 #[test]
 fn test_frags_remove_single_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2148,7 +2223,7 @@ fn test_frags_remove_single_exact() {
             len: 8
         }]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 8);
 
@@ -2157,7 +2232,7 @@ fn test_frags_remove_single_exact() {
 
 #[test]
 fn test_frags_remove_single_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2165,7 +2240,7 @@ fn test_frags_remove_single_space_left() {
             len: 8
         }]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -2174,7 +2249,7 @@ fn test_frags_remove_single_space_left() {
 
 #[test]
 fn test_frags_remove_single_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2182,7 +2257,7 @@ fn test_frags_remove_single_space_right() {
             len: 8
         }]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -2191,7 +2266,7 @@ fn test_frags_remove_single_space_right() {
 
 #[test]
 fn test_frags_remove_single_space_left_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2199,7 +2274,7 @@ fn test_frags_remove_single_space_left_right() {
             len: 8
         }]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 10);
 
@@ -2208,7 +2283,7 @@ fn test_frags_remove_single_space_left_right() {
 
 #[test]
 fn test_frags_remove_single_pre() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2216,7 +2291,7 @@ fn test_frags_remove_single_pre() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2232,7 +2307,7 @@ fn test_frags_remove_single_pre() {
 
 #[test]
 fn test_frags_remove_single_pre_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2240,7 +2315,7 @@ fn test_frags_remove_single_pre_space_right() {
             len: 8
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2256,7 +2331,7 @@ fn test_frags_remove_single_pre_space_right() {
 
 #[test]
 fn test_frags_remove_single_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2264,7 +2339,7 @@ fn test_frags_remove_single_post() {
             len: 9
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2280,7 +2355,7 @@ fn test_frags_remove_single_post() {
 
 #[test]
 fn test_frags_remove_single_post_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2288,7 +2363,7 @@ fn test_frags_remove_single_post_space_left() {
             len: 9
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2304,7 +2379,7 @@ fn test_frags_remove_single_post_space_left() {
 
 #[test]
 fn test_frags_remove_single_pre_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2312,7 +2387,7 @@ fn test_frags_remove_single_pre_post() {
             len: 10
         }]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2336,7 +2411,7 @@ fn test_frags_remove_single_pre_post() {
 
 #[test]
 fn test_frags_remove_single_exact_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2352,7 +2427,7 @@ fn test_frags_remove_single_exact_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2368,7 +2443,7 @@ fn test_frags_remove_single_exact_before() {
 
 #[test]
 fn test_frags_remove_single_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2384,7 +2459,7 @@ fn test_frags_remove_single_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2400,7 +2475,7 @@ fn test_frags_remove_single_space_left_before() {
 
 #[test]
 fn test_frags_remove_single_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2416,7 +2491,7 @@ fn test_frags_remove_single_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2432,7 +2507,7 @@ fn test_frags_remove_single_space_right_before() {
 
 #[test]
 fn test_frags_remove_single_space_left_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2448,7 +2523,7 @@ fn test_frags_remove_single_space_left_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2464,7 +2539,7 @@ fn test_frags_remove_single_space_left_right_before() {
 
 #[test]
 fn test_frags_remove_single_pre_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2480,7 +2555,7 @@ fn test_frags_remove_single_pre_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2504,7 +2579,7 @@ fn test_frags_remove_single_pre_before() {
 
 #[test]
 fn test_frags_remove_single_pre_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2520,7 +2595,7 @@ fn test_frags_remove_single_pre_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2544,7 +2619,7 @@ fn test_frags_remove_single_pre_space_right_before() {
 
 #[test]
 fn test_frags_remove_single_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2560,7 +2635,7 @@ fn test_frags_remove_single_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2584,7 +2659,7 @@ fn test_frags_remove_single_post_before() {
 
 #[test]
 fn test_frags_remove_single_post_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2600,7 +2675,7 @@ fn test_frags_remove_single_post_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2624,7 +2699,7 @@ fn test_frags_remove_single_post_space_left_before() {
 
 #[test]
 fn test_frags_remove_single_pre_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2640,7 +2715,7 @@ fn test_frags_remove_single_pre_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2670,7 +2745,7 @@ fn test_frags_remove_single_pre_post_before() {
 
 #[test]
 fn test_frags_remove_single_exact_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2686,7 +2761,7 @@ fn test_frags_remove_single_exact_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2702,7 +2777,7 @@ fn test_frags_remove_single_exact_after() {
 
 #[test]
 fn test_frags_remove_single_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2718,7 +2793,7 @@ fn test_frags_remove_single_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2734,7 +2809,7 @@ fn test_frags_remove_single_space_left_after() {
 
 #[test]
 fn test_frags_remove_single_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2750,7 +2825,7 @@ fn test_frags_remove_single_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2766,7 +2841,7 @@ fn test_frags_remove_single_space_right_after() {
 
 #[test]
 fn test_frags_remove_single_space_left_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2782,7 +2857,7 @@ fn test_frags_remove_single_space_left_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -2798,7 +2873,7 @@ fn test_frags_remove_single_space_left_right_after() {
 
 #[test]
 fn test_frags_remove_single_pre_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2814,7 +2889,7 @@ fn test_frags_remove_single_pre_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2838,7 +2913,7 @@ fn test_frags_remove_single_pre_after() {
 
 #[test]
 fn test_frags_remove_single_pre_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2854,7 +2929,7 @@ fn test_frags_remove_single_pre_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2878,7 +2953,7 @@ fn test_frags_remove_single_pre_space_right_after() {
 
 #[test]
 fn test_frags_remove_single_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2894,7 +2969,7 @@ fn test_frags_remove_single_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2918,7 +2993,7 @@ fn test_frags_remove_single_post_after() {
 
 #[test]
 fn test_frags_remove_single_post_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2934,7 +3009,7 @@ fn test_frags_remove_single_post_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2958,7 +3033,7 @@ fn test_frags_remove_single_post_space_left_after() {
 
 #[test]
 fn test_frags_remove_single_pre_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -2974,7 +3049,7 @@ fn test_frags_remove_single_pre_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3004,7 +3079,7 @@ fn test_frags_remove_single_pre_post_after() {
 
 #[test]
 fn test_frags_remove_single_exact_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3026,7 +3101,7 @@ fn test_frags_remove_single_exact_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3050,7 +3125,7 @@ fn test_frags_remove_single_exact_before_after() {
 
 #[test]
 fn test_frags_remove_single_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3072,7 +3147,7 @@ fn test_frags_remove_single_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3096,7 +3171,7 @@ fn test_frags_remove_single_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_single_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3118,7 +3193,7 @@ fn test_frags_remove_single_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3142,7 +3217,7 @@ fn test_frags_remove_single_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_single_space_left_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3164,7 +3239,7 @@ fn test_frags_remove_single_space_left_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3188,7 +3263,7 @@ fn test_frags_remove_single_space_left_right_before_after() {
 
 #[test]
 fn test_frags_remove_single_pre_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3210,7 +3285,7 @@ fn test_frags_remove_single_pre_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3240,7 +3315,7 @@ fn test_frags_remove_single_pre_before_after() {
 
 #[test]
 fn test_frags_remove_single_pre_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3262,7 +3337,7 @@ fn test_frags_remove_single_pre_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3292,7 +3367,7 @@ fn test_frags_remove_single_pre_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_single_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3314,7 +3389,7 @@ fn test_frags_remove_single_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3344,7 +3419,7 @@ fn test_frags_remove_single_post_before_after() {
 
 #[test]
 fn test_frags_remove_single_post_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3366,7 +3441,7 @@ fn test_frags_remove_single_post_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3396,7 +3471,7 @@ fn test_frags_remove_single_post_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_single_pre_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3418,7 +3493,7 @@ fn test_frags_remove_single_pre_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3454,7 +3529,7 @@ fn test_frags_remove_single_pre_post_before_after() {
 
 #[test]
 fn test_frags_remove_two_miss_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3470,7 +3545,7 @@ fn test_frags_remove_two_miss_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3494,7 +3569,7 @@ fn test_frags_remove_two_miss_left() {
 
 #[test]
 fn test_frags_remove_two_miss_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3510,7 +3585,7 @@ fn test_frags_remove_two_miss_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3534,7 +3609,7 @@ fn test_frags_remove_two_miss_right() {
 
 #[test]
 fn test_frags_remove_two_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3550,7 +3625,7 @@ fn test_frags_remove_two_exact() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 8);
 
@@ -3559,7 +3634,7 @@ fn test_frags_remove_two_exact() {
 
 #[test]
 fn test_frags_remove_two_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3575,7 +3650,7 @@ fn test_frags_remove_two_space_left() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -3584,7 +3659,7 @@ fn test_frags_remove_two_space_left() {
 
 #[test]
 fn test_frags_remove_two_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3600,7 +3675,7 @@ fn test_frags_remove_two_space_right() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -3609,7 +3684,7 @@ fn test_frags_remove_two_space_right() {
 
 #[test]
 fn test_frags_remove_two_space_left_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3625,7 +3700,7 @@ fn test_frags_remove_two_space_left_right() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 10);
 
@@ -3634,7 +3709,7 @@ fn test_frags_remove_two_space_left_right() {
 
 #[test]
 fn test_frags_remove_two_pre() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3650,7 +3725,7 @@ fn test_frags_remove_two_pre() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3666,7 +3741,7 @@ fn test_frags_remove_two_pre() {
 
 #[test]
 fn test_frags_remove_two_pre_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3682,7 +3757,7 @@ fn test_frags_remove_two_pre_space_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3698,7 +3773,7 @@ fn test_frags_remove_two_pre_space_right() {
 
 #[test]
 fn test_frags_remove_two_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3714,7 +3789,7 @@ fn test_frags_remove_two_post() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3730,7 +3805,7 @@ fn test_frags_remove_two_post() {
 
 #[test]
 fn test_frags_remove_two_post_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3746,7 +3821,7 @@ fn test_frags_remove_two_post_space_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3762,7 +3837,7 @@ fn test_frags_remove_two_post_space_left() {
 
 #[test]
 fn test_frags_remove_two_pre_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3778,7 +3853,7 @@ fn test_frags_remove_two_pre_post() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3802,7 +3877,7 @@ fn test_frags_remove_two_pre_post() {
 
 #[test]
 fn test_frags_remove_two_exact_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3824,7 +3899,7 @@ fn test_frags_remove_two_exact_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3840,7 +3915,7 @@ fn test_frags_remove_two_exact_before() {
 
 #[test]
 fn test_frags_remove_two_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3862,7 +3937,7 @@ fn test_frags_remove_two_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3878,7 +3953,7 @@ fn test_frags_remove_two_space_left_before() {
 
 #[test]
 fn test_frags_remove_two_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3900,7 +3975,7 @@ fn test_frags_remove_two_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3916,7 +3991,7 @@ fn test_frags_remove_two_space_right_before() {
 
 #[test]
 fn test_frags_remove_two_space_left_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3938,7 +4013,7 @@ fn test_frags_remove_two_space_left_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -3954,7 +4029,7 @@ fn test_frags_remove_two_space_left_right_before() {
 
 #[test]
 fn test_frags_remove_two_pre_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -3976,7 +4051,7 @@ fn test_frags_remove_two_pre_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4000,7 +4075,7 @@ fn test_frags_remove_two_pre_before() {
 
 #[test]
 fn test_frags_remove_two_pre_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4022,7 +4097,7 @@ fn test_frags_remove_two_pre_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4046,7 +4121,7 @@ fn test_frags_remove_two_pre_space_right_before() {
 
 #[test]
 fn test_frags_remove_two_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4068,7 +4143,7 @@ fn test_frags_remove_two_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4092,7 +4167,7 @@ fn test_frags_remove_two_post_before() {
 
 #[test]
 fn test_frags_remove_two_post_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4114,7 +4189,7 @@ fn test_frags_remove_two_post_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4138,7 +4213,7 @@ fn test_frags_remove_two_post_space_left_before() {
 
 #[test]
 fn test_frags_remove_two_pre_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4160,7 +4235,7 @@ fn test_frags_remove_two_pre_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4190,7 +4265,7 @@ fn test_frags_remove_two_pre_post_before() {
 
 #[test]
 fn test_frags_remove_two_exact_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4212,7 +4287,7 @@ fn test_frags_remove_two_exact_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -4228,7 +4303,7 @@ fn test_frags_remove_two_exact_after() {
 
 #[test]
 fn test_frags_remove_two_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4250,7 +4325,7 @@ fn test_frags_remove_two_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -4266,7 +4341,7 @@ fn test_frags_remove_two_space_left_after() {
 
 #[test]
 fn test_frags_remove_two_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4288,7 +4363,7 @@ fn test_frags_remove_two_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -4304,7 +4379,7 @@ fn test_frags_remove_two_space_right_after() {
 
 #[test]
 fn test_frags_remove_two_space_left_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4326,7 +4401,7 @@ fn test_frags_remove_two_space_left_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -4342,7 +4417,7 @@ fn test_frags_remove_two_space_left_right_after() {
 
 #[test]
 fn test_frags_remove_two_pre_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4364,7 +4439,7 @@ fn test_frags_remove_two_pre_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4388,7 +4463,7 @@ fn test_frags_remove_two_pre_after() {
 
 #[test]
 fn test_frags_remove_two_pre_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4410,7 +4485,7 @@ fn test_frags_remove_two_pre_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4434,7 +4509,7 @@ fn test_frags_remove_two_pre_space_right_after() {
 
 #[test]
 fn test_frags_remove_two_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4456,7 +4531,7 @@ fn test_frags_remove_two_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4480,7 +4555,7 @@ fn test_frags_remove_two_post_after() {
 
 #[test]
 fn test_frags_remove_two_post_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4502,7 +4577,7 @@ fn test_frags_remove_two_post_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4526,7 +4601,7 @@ fn test_frags_remove_two_post_space_left_after() {
 
 #[test]
 fn test_frags_remove_two_pre_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4548,7 +4623,7 @@ fn test_frags_remove_two_pre_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4578,7 +4653,7 @@ fn test_frags_remove_two_pre_post_after() {
 
 #[test]
 fn test_frags_remove_two_exact_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4606,7 +4681,7 @@ fn test_frags_remove_two_exact_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4630,7 +4705,7 @@ fn test_frags_remove_two_exact_before_after() {
 
 #[test]
 fn test_frags_remove_two_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4658,7 +4733,7 @@ fn test_frags_remove_two_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4682,7 +4757,7 @@ fn test_frags_remove_two_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_two_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4710,7 +4785,7 @@ fn test_frags_remove_two_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4734,7 +4809,7 @@ fn test_frags_remove_two_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_two_space_left_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4762,7 +4837,7 @@ fn test_frags_remove_two_space_left_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4786,7 +4861,7 @@ fn test_frags_remove_two_space_left_right_before_after() {
 
 #[test]
 fn test_frags_remove_two_pre_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4814,7 +4889,7 @@ fn test_frags_remove_two_pre_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4844,7 +4919,7 @@ fn test_frags_remove_two_pre_before_after() {
 
 #[test]
 fn test_frags_remove_two_pre_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4872,7 +4947,7 @@ fn test_frags_remove_two_pre_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4902,7 +4977,7 @@ fn test_frags_remove_two_pre_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_two_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4930,7 +5005,7 @@ fn test_frags_remove_two_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4960,7 +5035,7 @@ fn test_frags_remove_two_post_before_after() {
 
 #[test]
 fn test_frags_remove_two_post_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -4988,7 +5063,7 @@ fn test_frags_remove_two_post_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5018,7 +5093,7 @@ fn test_frags_remove_two_post_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_two_pre_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5046,7 +5121,7 @@ fn test_frags_remove_two_pre_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5082,7 +5157,7 @@ fn test_frags_remove_two_pre_post_before_after() {
 
 #[test]
 fn test_frags_remove_three_miss_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5104,7 +5179,7 @@ fn test_frags_remove_three_miss_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5134,7 +5209,7 @@ fn test_frags_remove_three_miss_left() {
 
 #[test]
 fn test_frags_remove_three_miss_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5156,7 +5231,7 @@ fn test_frags_remove_three_miss_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5186,7 +5261,7 @@ fn test_frags_remove_three_miss_right() {
 
 #[test]
 fn test_frags_remove_three_exact() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5208,7 +5283,7 @@ fn test_frags_remove_three_exact() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 8);
 
@@ -5217,7 +5292,7 @@ fn test_frags_remove_three_exact() {
 
 #[test]
 fn test_frags_remove_three_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5239,7 +5314,7 @@ fn test_frags_remove_three_space_left() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -5248,7 +5323,7 @@ fn test_frags_remove_three_space_left() {
 
 #[test]
 fn test_frags_remove_three_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5270,7 +5345,7 @@ fn test_frags_remove_three_space_right() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 9);
 
@@ -5279,7 +5354,7 @@ fn test_frags_remove_three_space_right() {
 
 #[test]
 fn test_frags_remove_three_space_left_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5301,7 +5376,7 @@ fn test_frags_remove_three_space_left_right() {
             },
         ]
     };
-    let expected = Frags { frags: vec![] };
+    let expected = InnerFrags { frags: vec![] };
 
     frags.remove(0, 10);
 
@@ -5310,7 +5385,7 @@ fn test_frags_remove_three_space_left_right() {
 
 #[test]
 fn test_frags_remove_three_pre() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5332,7 +5407,7 @@ fn test_frags_remove_three_pre() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5348,7 +5423,7 @@ fn test_frags_remove_three_pre() {
 
 #[test]
 fn test_frags_remove_three_pre_space_right() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5370,7 +5445,7 @@ fn test_frags_remove_three_pre_space_right() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5386,7 +5461,7 @@ fn test_frags_remove_three_pre_space_right() {
 
 #[test]
 fn test_frags_remove_three_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5408,7 +5483,7 @@ fn test_frags_remove_three_post() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5424,7 +5499,7 @@ fn test_frags_remove_three_post() {
 
 #[test]
 fn test_frags_remove_three_post_space_left() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5446,7 +5521,7 @@ fn test_frags_remove_three_post_space_left() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5462,7 +5537,7 @@ fn test_frags_remove_three_post_space_left() {
 
 #[test]
 fn test_frags_remove_three_pre_post() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5484,7 +5559,7 @@ fn test_frags_remove_three_pre_post() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5508,7 +5583,7 @@ fn test_frags_remove_three_pre_post() {
 
 #[test]
 fn test_frags_remove_three_exact_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5536,7 +5611,7 @@ fn test_frags_remove_three_exact_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5552,7 +5627,7 @@ fn test_frags_remove_three_exact_before() {
 
 #[test]
 fn test_frags_remove_three_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5580,7 +5655,7 @@ fn test_frags_remove_three_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5596,7 +5671,7 @@ fn test_frags_remove_three_space_left_before() {
 
 #[test]
 fn test_frags_remove_three_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5624,7 +5699,7 @@ fn test_frags_remove_three_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5640,7 +5715,7 @@ fn test_frags_remove_three_space_right_before() {
 
 #[test]
 fn test_frags_remove_three_space_left_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5668,7 +5743,7 @@ fn test_frags_remove_three_space_left_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5684,7 +5759,7 @@ fn test_frags_remove_three_space_left_right_before() {
 
 #[test]
 fn test_frags_remove_three_pre_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5712,7 +5787,7 @@ fn test_frags_remove_three_pre_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5736,7 +5811,7 @@ fn test_frags_remove_three_pre_before() {
 
 #[test]
 fn test_frags_remove_three_pre_space_right_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5764,7 +5839,7 @@ fn test_frags_remove_three_pre_space_right_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5788,7 +5863,7 @@ fn test_frags_remove_three_pre_space_right_before() {
 
 #[test]
 fn test_frags_remove_three_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5816,7 +5891,7 @@ fn test_frags_remove_three_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5840,7 +5915,7 @@ fn test_frags_remove_three_post_before() {
 
 #[test]
 fn test_frags_remove_three_post_space_left_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5868,7 +5943,7 @@ fn test_frags_remove_three_post_space_left_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5892,7 +5967,7 @@ fn test_frags_remove_three_post_space_left_before() {
 
 #[test]
 fn test_frags_remove_three_pre_post_before() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5920,7 +5995,7 @@ fn test_frags_remove_three_pre_post_before() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5950,7 +6025,7 @@ fn test_frags_remove_three_pre_post_before() {
 
 #[test]
 fn test_frags_remove_three_exact_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -5978,7 +6053,7 @@ fn test_frags_remove_three_exact_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -5994,7 +6069,7 @@ fn test_frags_remove_three_exact_after() {
 
 #[test]
 fn test_frags_remove_three_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6022,7 +6097,7 @@ fn test_frags_remove_three_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -6038,7 +6113,7 @@ fn test_frags_remove_three_space_left_after() {
 
 #[test]
 fn test_frags_remove_three_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6066,7 +6141,7 @@ fn test_frags_remove_three_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -6082,7 +6157,7 @@ fn test_frags_remove_three_space_right_after() {
 
 #[test]
 fn test_frags_remove_three_space_left_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6110,7 +6185,7 @@ fn test_frags_remove_three_space_left_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![Frag {
             when: Instant::now(),
             nretries: 0,
@@ -6126,7 +6201,7 @@ fn test_frags_remove_three_space_left_right_after() {
 
 #[test]
 fn test_frags_remove_three_pre_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6154,7 +6229,7 @@ fn test_frags_remove_three_pre_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6178,7 +6253,7 @@ fn test_frags_remove_three_pre_after() {
 
 #[test]
 fn test_frags_remove_three_pre_space_right_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6206,7 +6281,7 @@ fn test_frags_remove_three_pre_space_right_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6230,7 +6305,7 @@ fn test_frags_remove_three_pre_space_right_after() {
 
 #[test]
 fn test_frags_remove_three_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6258,7 +6333,7 @@ fn test_frags_remove_three_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6282,7 +6357,7 @@ fn test_frags_remove_three_post_after() {
 
 #[test]
 fn test_frags_remove_three_post_space_left_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6310,7 +6385,7 @@ fn test_frags_remove_three_post_space_left_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6334,7 +6409,7 @@ fn test_frags_remove_three_post_space_left_after() {
 
 #[test]
 fn test_frags_remove_three_pre_post_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6362,7 +6437,7 @@ fn test_frags_remove_three_pre_post_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6392,7 +6467,7 @@ fn test_frags_remove_three_pre_post_after() {
 
 #[test]
 fn test_frags_remove_three_exact_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6426,7 +6501,7 @@ fn test_frags_remove_three_exact_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6450,7 +6525,7 @@ fn test_frags_remove_three_exact_before_after() {
 
 #[test]
 fn test_frags_remove_three_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6484,7 +6559,7 @@ fn test_frags_remove_three_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6508,7 +6583,7 @@ fn test_frags_remove_three_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_three_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6542,7 +6617,7 @@ fn test_frags_remove_three_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6566,7 +6641,7 @@ fn test_frags_remove_three_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_three_space_left_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6600,7 +6675,7 @@ fn test_frags_remove_three_space_left_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6624,7 +6699,7 @@ fn test_frags_remove_three_space_left_right_before_after() {
 
 #[test]
 fn test_frags_remove_three_pre_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6658,7 +6733,7 @@ fn test_frags_remove_three_pre_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6688,7 +6763,7 @@ fn test_frags_remove_three_pre_before_after() {
 
 #[test]
 fn test_frags_remove_three_pre_space_right_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6722,7 +6797,7 @@ fn test_frags_remove_three_pre_space_right_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6752,7 +6827,7 @@ fn test_frags_remove_three_pre_space_right_before_after() {
 
 #[test]
 fn test_frags_remove_three_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6786,7 +6861,7 @@ fn test_frags_remove_three_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6816,7 +6891,7 @@ fn test_frags_remove_three_post_before_after() {
 
 #[test]
 fn test_frags_remove_three_post_space_left_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6850,7 +6925,7 @@ fn test_frags_remove_three_post_space_left_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6880,7 +6955,7 @@ fn test_frags_remove_three_post_space_left_before_after() {
 
 #[test]
 fn test_frags_remove_three_pre_post_before_after() {
-    let mut frags = Frags {
+    let mut frags = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6914,7 +6989,7 @@ fn test_frags_remove_three_pre_post_before_after() {
             },
         ]
     };
-    let expected = Frags {
+    let expected = InnerFrags {
         frags: vec![
             Frag {
                 when: Instant::now(),
@@ -6954,7 +7029,7 @@ fn test_offer_frag_exact() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 16)));
+    assert!(matches![first, RetryResult::Success((0, 16, _))]);
 }
 
 #[test]
@@ -6963,7 +7038,7 @@ fn test_offer_frag_short() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 8)));
+    assert!(matches![first, RetryResult::Success((0, 8, _))]);
 }
 
 #[test]
@@ -6972,15 +7047,15 @@ fn test_offer_frag_multi() {
 
     let first = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success((0, 16)));
+    assert!(matches![first, RetryResult::Success((0, 16, _))]);
 
     let second = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success((16, 16)));
+    assert!(matches![second, RetryResult::Success((16, 16, _))]);
 
     let third = frags.offer_frag(16).expect("Expected success");
 
-    assert_eq!(third, RetryResult::Success((32, 8)));
+    assert!(matches![third, RetryResult::Success((32, 8, _))]);
 }
 
 #[test]
@@ -6990,7 +7065,7 @@ fn test_data_frags_exact() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 16));
 }
 
@@ -7001,7 +7076,7 @@ fn test_data_frags_short() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 8));
 }
 
@@ -7014,7 +7089,7 @@ fn test_data_frags_ack() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 8));
 }
 
@@ -7027,7 +7102,7 @@ fn test_data_frags_ack_exact() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7041,7 +7116,7 @@ fn test_data_frags_ack_long() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7055,13 +7130,13 @@ fn test_data_frags_ack_exact_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(2));
+    assert!(matches![second, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7075,7 +7150,7 @@ fn test_data_frags_ack_gap_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
@@ -7083,7 +7158,7 @@ fn test_data_frags_ack_gap_wrap() {
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(2));
+    assert!(matches![second, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 }
@@ -7097,71 +7172,75 @@ fn test_data_frags_ack_req_wrap() {
 
     let first = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success(Some((2, _)))]);
     assert_eq!(&buf[0], &(0, 8));
     assert_eq!(&buf[1], &(12, 8));
 
-    frags.recv_req(8, 4).expect("Expected success");
+    frags.recv_need(8, 4).expect("Expected success");
 
     let second = frags.data_frags(&mut buf, 16).expect("Expected success");
 
-    assert_eq!(second, RetryResult::Success(1));
+    assert!(matches![second, RetryResult::Success(Some((1, _)))]);
     assert_eq!(&buf[0], &(0, 16));
 }
 
 #[test]
 fn test_reqs_exact() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(true, 0, 16));
 }
 
 #[test]
 fn test_reqs_exact_recv_first() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
 
     frags.recv(0, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success((2, _))]);
     assert_eq!(&buf[0], &(false, 0, 8));
     assert_eq!(&buf[1], &(true, 8, 8));
 }
 
 #[test]
 fn test_reqs_exact_recv_second() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
 
     frags.recv(8, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(2));
+    assert!(matches![first, RetryResult::Success((2, _))]);
     assert_eq!(&buf[0], &(true, 0, 8));
     assert_eq!(&buf[1], &(false, 8, 8));
 }
 
 #[test]
 fn test_reqs_exact_recv_cont() {
-    let mut frags = InboundFrags::new(Retry::default(), 16);
+    let retry = Retry::default();
+    let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];
 
     frags.recv(8, &[0; 8]).expect("expected success");
 
-    let first = frags.reqs_acks(&mut buf);
+    let first = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(first, RetryResult::Success(1));
+    assert!(matches![first, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(true, 0, 8));
 
-    let second = frags.reqs_acks(&mut buf);
+    let second = frags.reqs_acks(&mut buf, &retry);
 
-    assert_eq!(second, RetryResult::Success(1));
+    assert!(matches![second, RetryResult::Success((1, _))]);
     assert_eq!(&buf[0], &(false, 8, 8));
 }
