@@ -20,7 +20,8 @@
 
 use std::fmt::Display;
 use std::hash::Hash;
-use std::thread::spawn;
+use std::io::Error;
+use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
@@ -292,7 +293,7 @@ where
         let mut next_pending = None;
         let mut valid = true;
 
-        info!(target: "push-stream-shared-thread",
+        info!(target: "push-stream-thread",
               "push stream send thread starting");
 
         // Loop until told to shut down.
@@ -309,7 +310,7 @@ where
                 ) {
                     Ok(next) => next_outbound = next,
                     Err(err) => {
-                        error!(target: "push-stream-shared-thread",
+                        error!(target: "push-stream-thread",
                                "error obtaining messages: {}",
                                err);
 
@@ -333,7 +334,7 @@ where
                         next_pending = next;
                     }
                     Err(err) => {
-                        error!(target: "push-stream-private-thread",
+                        error!(target: "push-stream-thread",
                                "error retrying pending: {}",
                                err);
                     }
@@ -360,7 +361,7 @@ where
                                 }
                             }
                             Err(err) => {
-                                error!(target: "push-stream-shared-thread",
+                                error!(target: "push-stream-thread",
                                        "error waiting for notification: {}",
                                        err);
 
@@ -376,7 +377,7 @@ where
                     match self.notify.wait() {
                         Ok(_) => next_outbound = Some(now),
                         Err(err) => {
-                            error!(target: "push-stream-shared-thread",
+                            error!(target: "push-stream-thread",
                                    "error waiting for notification: {}",
                                    err);
 
@@ -387,12 +388,14 @@ where
             }
         }
 
-        debug!(target: "push-stream-shared-thread",
+        debug!(target: "push-stream-thread",
                "push stream send thread exiting");
     }
 
-    pub fn start(self) -> JoinHandle<()> {
-        spawn(move || self.run())
+    pub fn start(self) -> Result<JoinHandle<()>, Error> {
+        Builder::new()
+            .name(String::from("push-stream-thread"))
+            .spawn(move || self.run())
     }
 }
 

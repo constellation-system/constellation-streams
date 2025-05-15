@@ -27,6 +27,7 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::iter::once;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -727,6 +728,9 @@ where
                     let retry = now + delay;
                     let msg = LargeObjMsg::req_obj(hash, size, id);
 
+                    trace!(target: "large-obj-proto",
+                           "generating object request message");
+
                     *nretries += 1;
                     *when = retry;
                     next = Some(
@@ -736,6 +740,9 @@ where
                 }
                 InboundFragsState::Active { frags, .. } => {
                     let mut buf = [(false, 0, 0); 16];
+
+                    trace!(target: "large-obj-proto",
+                           "generating requests message");
 
                     match frags.reqs_acks(&mut buf[..], &self.retry) {
                         RetryResult::Success((n, retry)) => {
@@ -760,6 +767,9 @@ where
                     size,
                     send
                 } => {
+                    trace!(target: "large-obj-proto",
+                           "generating finished or accept messages");
+
                     if let Some(expire) = expire {
                         if *send {
                             trace!(target: "large-obj-proto",
@@ -1010,6 +1020,60 @@ where
     #[inline]
     fn create(_param: ()) -> Result<Self, Infallible> {
         Ok(Self::default())
+    }
+
+    #[inline]
+    fn buf_size(
+        &self,
+        val: &LargeObjMsg<H::HashID>
+    ) -> usize {
+        match val {
+            LargeObjMsg::Offer { hash, frag, .. } => {
+                let hash = hash.hash_len() + 9;
+                let frag = frag.data.len() + 9;
+                let size = 9;
+
+                hash + frag + size
+            }
+            LargeObjMsg::Accept { hash, .. } => {
+                let hash = hash.hash_len();
+                let size = 9;
+                let id = 9;
+
+                hash + size + id
+            }
+            LargeObjMsg::ReqObj { hash, .. } => {
+                let hash = hash.hash_len();
+                let size = 9;
+                let id = 9;
+
+                hash + size + id
+            }
+            LargeObjMsg::Frags { frags, .. } => {
+                let frags: usize =
+                    frags.iter().map(|frags| 18 + frags.data.len()).sum();
+                let frags = frags + 9;
+                let id = 9;
+
+                frags + id
+            }
+            LargeObjMsg::Req { reqs, .. } => {
+                let req_tag = 1;
+                let req_offset = 9;
+                let req_len = 9;
+                let req = req_tag + req_offset + req_len;
+                let reqs = (reqs.len() * req) + 9;
+                let id = 9;
+
+                reqs + id
+            }
+            LargeObjMsg::Finish { hash, .. } => {
+                let hash = hash.hash_len();
+                let id = 9;
+
+                hash + id
+            }
+        }
     }
 
     #[inline]
@@ -1327,7 +1391,7 @@ where
         let data = self.codec.encode_to_vec(msg).map_err(|err| {
             LargeObjProtoAddOutboundError::Encode { err: err }
         })?;
-        let hash = self.hash.hash_bytes(&data);
+        let hash = self.hash.hash_bytes(once(&data[..]));
 
         trace!(target: "large-obj-proto",
                "hash for message is {}",
@@ -1390,7 +1454,7 @@ where
         let data = self.codec.encode_to_vec(msg).map_err(|err| {
             LargeObjProtoAddOutboundError::Encode { err: err }
         })?;
-        let hash = self.hash.hash_bytes(&data);
+        let hash = self.hash.hash_bytes(once(&data[..]));
 
         trace!(target: "large-obj-proto",
                "hash for message is {}",
@@ -1587,6 +1651,9 @@ where
 
                 let hash = ents[0].0;
                 let ent = &mut ents[0].1;
+
+                // XXX Need to check to see if it's actually time to
+                // retry here.
 
                 if let Some(id) = ent.id.clone() {
                     trace!(target: "large-obj-proto",
@@ -2553,16 +2620,26 @@ where
                 .map_err(|err| LargeObjRecvError::Auth { err: err })?
             {
                 AuthNResult::Accept((prin, msg)) => {
+                    trace!(target: "large-obj-proto",
+                           "message authenticated");
+
                     // Send it upstream.
                     self.upstream.recv_auth_msg(&prin, msg).map_err(|err| {
                         LargeObjRecvError::Upstream { err: err }
                     })?;
-                }
-                AuthNResult::Reject => return Err(LargeObjRecvError::AuthNFail)
-            }
-        }
 
-        Ok(())
+                    Ok(())
+                }
+                AuthNResult::Reject => {
+                    trace!(target: "large-obj-proto",
+                           "message authentication failed");
+
+                    Err(LargeObjRecvError::AuthNFail)
+                }
+            }
+        } else {
+            Ok(())
+        }
     }
 }
 

@@ -19,11 +19,13 @@
 //! Pull stream management.
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::io::Error;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::sleep;
 use std::thread::spawn;
+use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
@@ -264,7 +266,7 @@ where
     pub fn start<S>(
         mut self,
         stream_reporter: S
-    ) -> JoinHandle<()>
+    ) -> Result<JoinHandle<()>, Error>
     where
         S: 'static
             + StreamReporter<
@@ -273,7 +275,9 @@ where
                 Src = Listener::Addr
             >
             + Send {
-        spawn(move || self.run(stream_reporter))
+        Builder::new()
+            .name(String::from("pull-streams-recv-thread"))
+            .spawn(move || self.run(stream_reporter))
     }
 }
 
