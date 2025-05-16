@@ -773,7 +773,7 @@ where
                     if let Some(expire) = expire {
                         if *send {
                             trace!(target: "large-obj-proto",
-                                   concat!("extendxing expiration for ",
+                                   concat!("extending expiration for ",
                                            "tombstone for {} ({}) to {:?}"),
                                    id, hash, self.tombstone_duration);
 
@@ -950,7 +950,7 @@ where
                     if let Some(expire) = expire {
                         if *send {
                             trace!(target: "large-obj-proto",
-                                   concat!("extendxing expiration for ",
+                                   concat!("extending expiration for ",
                                            "tombstone for {} ({}) to {:?}"),
                                    id, hash, self.tombstone_duration);
 
