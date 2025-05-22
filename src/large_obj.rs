@@ -312,7 +312,8 @@ where
 
 pub enum LargeObjPushRetry<H, Frags, Offer> {
     Frags { retry: Frags, id: LargeObjID },
-    Offer { retry: Offer, hash: H }
+    Offer { retry: Offer, hash: H },
+    Retry { when: Instant }
 }
 
 pub enum LargeObjPushError<H, Frags, Offer> {
@@ -469,7 +470,8 @@ where
     fn when(&self) -> Instant {
         match self {
             LargeObjPushRetry::Frags { retry, .. } => retry.when(),
-            LargeObjPushRetry::Offer { retry, .. } => retry.when()
+            LargeObjPushRetry::Offer { retry, .. } => retry.when(),
+            LargeObjPushRetry::Retry { when } => *when
         }
     }
 }
@@ -1652,68 +1654,103 @@ where
                 let hash = ents[0].0;
                 let ent = &mut ents[0].1;
 
-                // XXX Need to check to see if it's actually time to
-                // retry here.
+                match &ent.when {
+                    Some(when) if *when <= Instant::now() => {
+                        trace!(target: "large-obj-proto",
+                               "ready to go");
 
-                if let Some(id) = ent.id.clone() {
-                    trace!(target: "large-obj-proto",
-                           "pushing fragments for {}",
-                           id);
+                        if let Some(id) = ent.id.clone() {
+                            trace!(target: "large-obj-proto",
+                                   "pushing fragments for {}",
+                                   id);
 
-                    match stream.push_frags(ctx, id.clone(), &mut ent.frags) {
-                        Ok(RetryResult::Success(retry)) => {
-                            ent.when = retry;
+                            match stream.push_frags(
+                                ctx,
+                                id.clone(),
+                                &mut ent.frags
+                            ) {
+                                Ok(RetryResult::Success(retry)) => {
+                                    ent.when = retry;
 
-                            if ents.len() < 2 {
-                                Ok(RetryResult::Success(retry))
-                            } else {
-                                let when =
-                                    ents[1].1.when.map_or(retry, |when| {
-                                        retry.map(|retry| when.min(retry))
-                                    });
+                                    if ents.len() < 2 {
+                                        Ok(RetryResult::Success(retry))
+                                    } else {
+                                        let when = ents[1].1.when.map_or(
+                                            retry,
+                                            |when| {
+                                                retry.map(|retry| {
+                                                    when.min(retry)
+                                                })
+                                            }
+                                        );
 
-                                Ok(RetryResult::Success(when))
+                                        Ok(RetryResult::Success(when))
+                                    }
+                                }
+                                Ok(RetryResult::Retry(retry)) => {
+                                    Ok(RetryResult::Retry(
+                                        LargeObjPushRetry::Frags {
+                                            retry: retry,
+                                            id: id.clone()
+                                        }
+                                    ))
+                                }
+                                Err(err) => {
+                                    Err(PushErr::Frags { id: id, err: err })
+                                }
+                            }
+                        } else {
+                            trace!(target: "large-obj-proto",
+                                   "pushing offer for {}",
+                                   hash);
+
+                            match stream.push_offer(
+                                ctx,
+                                hash.clone(),
+                                &mut ent.frags
+                            ) {
+                                Ok(RetryResult::Success(retry)) => {
+                                    ent.when = retry;
+
+                                    if ents.len() < 2 {
+                                        Ok(RetryResult::Success(retry))
+                                    } else {
+                                        let when = ents[1].1.when.map_or(
+                                            retry,
+                                            |when| {
+                                                retry.map(|retry| {
+                                                    when.min(retry)
+                                                })
+                                            }
+                                        );
+
+                                        Ok(RetryResult::Success(when))
+                                    }
+                                }
+                                Ok(RetryResult::Retry(retry)) => {
+                                    Ok(RetryResult::Retry(
+                                        LargeObjPushRetry::Offer {
+                                            retry: retry,
+                                            hash: hash.clone()
+                                        }
+                                    ))
+                                }
+                                Err(err) => Err(PushErr::Offer {
+                                    hash: hash.clone(),
+                                    err: err
+                                })
                             }
                         }
-                        Ok(RetryResult::Retry(retry)) => {
-                            Ok(RetryResult::Retry(LargeObjPushRetry::Frags {
-                                retry: retry,
-                                id: id.clone()
-                            }))
-                        }
-                        Err(err) => Err(PushErr::Frags { id: id, err: err })
                     }
-                } else {
-                    trace!(target: "large-obj-proto",
-                           "pushing offer for {}",
-                           hash);
+                    Some(when) => {
+                        trace!(target: "large-obj-proto",
+                               "not yet time to push");
 
-                    match stream.push_offer(ctx, hash.clone(), &mut ent.frags) {
-                        Ok(RetryResult::Success(retry)) => {
-                            ent.when = retry;
-
-                            if ents.len() < 2 {
-                                Ok(RetryResult::Success(retry))
-                            } else {
-                                let when =
-                                    ents[1].1.when.map_or(retry, |when| {
-                                        retry.map(|retry| when.min(retry))
-                                    });
-
-                                Ok(RetryResult::Success(when))
-                            }
-                        }
-                        Ok(RetryResult::Retry(retry)) => {
-                            Ok(RetryResult::Retry(LargeObjPushRetry::Offer {
-                                retry: retry,
-                                hash: hash.clone()
-                            }))
-                        }
-                        Err(err) => Err(PushErr::Offer {
-                            hash: hash.clone(),
-                            err: err
-                        })
+                        Ok(RetryResult::Retry(LargeObjPushRetry::Retry {
+                            when: *when
+                        }))
                     }
+                    None => Ok(RetryResult::Success(None))
                 }
             } else {
                 trace!(target: "large-obj-proto",

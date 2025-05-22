@@ -313,7 +313,7 @@ where
                            src);
 
                     let join = Builder::new()
-                        .name(String::from(name))
+                        .name(name)
                         .spawn(move || thread.run())
                         .map_err(|err| WithMutexPoison::Inner { error: err })?;
                     let entry = RecvThreadEntry {

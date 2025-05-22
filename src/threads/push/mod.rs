@@ -236,20 +236,25 @@ where
         H: Clone + HashAlgo,
         H::HashID: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
-        Ok(proto.try_push(ctx, stream)?.map_retry(|retry| match retry {
-            LargeObjPushRetry::Frags { retry, id } => {
-                LargeObjEntry::PushFrags {
-                    retry: retry,
-                    id: id
+        Ok(proto
+            .try_push(ctx, stream)?
+            .flat_map_retry(|retry| match retry {
+                LargeObjPushRetry::Frags { retry, id } => {
+                    RetryResult::Retry(LargeObjEntry::PushFrags {
+                        retry: retry,
+                        id: id
+                    })
                 }
-            }
-            LargeObjPushRetry::Offer { retry, hash } => {
-                LargeObjEntry::PushOffer {
-                    retry: retry,
-                    hash: hash
+                LargeObjPushRetry::Offer { retry, hash } => {
+                    RetryResult::Retry(LargeObjEntry::PushOffer {
+                        retry: retry,
+                        hash: hash
+                    })
                 }
-            }
-        }))
+                LargeObjPushRetry::Retry { when } => {
+                    RetryResult::Success(Some(when))
+                }
+            }))
     }
 }
 
@@ -351,7 +356,7 @@ where
                         let duration = when - now;
 
                         trace!(target: "push-stream-thread",
-                               "waiting, next activity at {}.{:03}",
+                               "waiting, next activity in {}.{:03}s",
                                duration.as_secs(), duration.subsec_millis());
 
                         match self.notify.wait_timeout(duration) {
