@@ -31,8 +31,10 @@ use crate::error::ErrorReportInfo;
 use crate::generated::large_obj::LargeObjFragReq;
 
 pub trait Frags {
-    type Param: Clone + Default;
+    type Param: Clone;
     type RecvReqError: Display + ScopedError;
+
+    fn param(retry: Retry) -> Self::Param;
 
     fn from_data(
         param: Self::Param,
@@ -267,6 +269,11 @@ impl InboundFrags {
 impl Frags for OutboundFrags {
     type Param = Retry;
     type RecvReqError = OutboundRecvError;
+
+    #[inline]
+    fn param(retry: Retry) -> Self::Param {
+        retry
+    }
 
     #[inline]
     fn from_data(

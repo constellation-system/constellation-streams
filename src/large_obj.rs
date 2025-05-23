@@ -682,6 +682,10 @@ where
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
+        let mut next = self
+            .msgs
+            .add_msgs(&mut self.sender())
+            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let mut inbound = self
             .inbound
             .lock()
@@ -691,10 +695,6 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let mut next = self
-            .msgs
-            .add_msgs(&mut self.sender())
-            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
             .hashes
             .iter()
@@ -875,6 +875,10 @@ where
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
+        let mut next = self
+            .msgs
+            .add_msgs(&mut self.sender())
+            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let mut inbound = self
             .inbound
             .lock()
@@ -884,10 +888,6 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let mut next = self
-            .msgs
-            .add_msgs(&mut self.sender())
-            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
             .hashes
             .iter()
@@ -1552,7 +1552,7 @@ where
             .map_err(|err| LargeObjProtoCreateError::Codec { err })?;
         let ids = IDs::create(ids);
         let ids = Arc::new(Mutex::new(ids));
-        let param = Arc::new(RwLock::new(F::Param::default()));
+        let param = Arc::new(RwLock::new(F::param(retry.clone())));
 
         Ok(LargeObjProto {
             wrapper: PhantomData,
@@ -1656,9 +1656,6 @@ where
 
                 match &ent.when {
                     Some(when) if *when <= Instant::now() => {
-                        trace!(target: "large-obj-proto",
-                               "ready to go");
-
                         if let Some(id) = ent.id.clone() {
                             trace!(target: "large-obj-proto",
                                    "pushing fragments for {}",
@@ -1743,9 +1740,6 @@ where
                         }
                     }
                     Some(when) => {
-                        trace!(target: "large-obj-proto",
-                               "not yet time to push");
-
                         Ok(RetryResult::Retry(LargeObjPushRetry::Retry {
                             when: *when
                         }))
@@ -2072,6 +2066,7 @@ where
             .inbound
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
         let out = match inbound.hashes.entry((prin.clone(), hash.clone())) {
             Entry::Occupied(ent) => {
                 // ID already exists, get the entry.
@@ -2155,7 +2150,7 @@ where
                     Ok(None)
                 }
             }
-            Entry::Vacant(ent) => {
+            Entry::Vacant(hashes) => {
                 trace!(target: "large-obj-proto",
                        "no entry exists for {}",
                        hash);
@@ -2169,7 +2164,7 @@ where
                     .ok_or(LargeObjRecvError::NoID)?;
                 let size = size as usize;
 
-                ent.insert(id.clone());
+                hashes.insert(id.clone());
 
                 debug!(target: "large-obj-proto",
                        "creating new transfer for {} with ID {}",
