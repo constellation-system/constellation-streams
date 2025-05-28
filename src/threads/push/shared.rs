@@ -1003,7 +1003,7 @@ where
         stream: &mut Stream,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
-        debug!(target: "private-large-obj-push-mode",
+        debug!(target: "shared-large-obj-push-mode",
                "retrying pending operations");
 
         let mut curr = Vec::with_capacity(self.pending_msgs.len());
@@ -1019,7 +1019,7 @@ where
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
         while self.pending_msgs.last().is_some_and(|ent| now > ent.when()) {
-            debug!(target: "private-large-obj-push-mode",
+            debug!(target: "shared-large-obj-push-mode",
                    "retrying pending operation");
 
             match self.pending_msgs.pop() {
@@ -1027,7 +1027,7 @@ where
                     curr.push(ent);
                 }
                 None => {
-                    error!(target: "private-large-obj-push-mode",
+                    error!(target: "shared-large-obj-push-mode",
                            "pop should not be empty");
 
                     break;
@@ -1062,7 +1062,7 @@ where
             .last()
             .is_some_and(|ent| now > ent.when())
         {
-            debug!(target: "private-large-obj-push-mode",
+            debug!(target: "shared-large-obj-push-mode",
                    "retrying pending fragment");
 
             match self.pending_frags.pop() {
@@ -1070,7 +1070,7 @@ where
                     curr.push(ent);
                 }
                 None => {
-                    error!(target: "private-large-obj-push-mode",
+                    error!(target: "shared-large-obj-push-mode",
                            "pop should not be empty");
 
                     break;
