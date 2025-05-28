@@ -27,6 +27,7 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::iter::once;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -311,7 +312,8 @@ where
 
 pub enum LargeObjPushRetry<H, Frags, Offer> {
     Frags { retry: Frags, id: LargeObjID },
-    Offer { retry: Offer, hash: H }
+    Offer { retry: Offer, hash: H },
+    Retry { when: Instant }
 }
 
 pub enum LargeObjPushError<H, Frags, Offer> {
@@ -468,7 +470,8 @@ where
     fn when(&self) -> Instant {
         match self {
             LargeObjPushRetry::Frags { retry, .. } => retry.when(),
-            LargeObjPushRetry::Offer { retry, .. } => retry.when()
+            LargeObjPushRetry::Offer { retry, .. } => retry.when(),
+            LargeObjPushRetry::Retry { when } => *when
         }
     }
 }
@@ -679,6 +682,10 @@ where
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
+        let mut next = self
+            .msgs
+            .add_msgs(&mut self.sender())
+            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let mut inbound = self
             .inbound
             .lock()
@@ -688,10 +695,6 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let mut next = self
-            .msgs
-            .add_msgs(&mut self.sender())
-            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
             .hashes
             .iter()
@@ -727,6 +730,9 @@ where
                     let retry = now + delay;
                     let msg = LargeObjMsg::req_obj(hash, size, id);
 
+                    trace!(target: "large-obj-proto",
+                           "generating object request message");
+
                     *nretries += 1;
                     *when = retry;
                     next = Some(
@@ -736,6 +742,9 @@ where
                 }
                 InboundFragsState::Active { frags, .. } => {
                     let mut buf = [(false, 0, 0); 16];
+
+                    trace!(target: "large-obj-proto",
+                           "generating requests message");
 
                     match frags.reqs_acks(&mut buf[..], &self.retry) {
                         RetryResult::Success((n, retry)) => {
@@ -760,10 +769,13 @@ where
                     size,
                     send
                 } => {
+                    trace!(target: "large-obj-proto",
+                           "generating finished or accept messages");
+
                     if let Some(expire) = expire {
                         if *send {
                             trace!(target: "large-obj-proto",
-                                   concat!("extendxing expiration for ",
+                                   concat!("extending expiration for ",
                                            "tombstone for {} ({}) to {:?}"),
                                    id, hash, self.tombstone_duration);
 
@@ -863,6 +875,10 @@ where
         debug!(target: "large-obj-proto",
                "collecting outbound messages");
 
+        let mut next = self
+            .msgs
+            .add_msgs(&mut self.sender())
+            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let mut inbound = self
             .inbound
             .lock()
@@ -872,10 +888,6 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let mut next = self
-            .msgs
-            .add_msgs(&mut self.sender())
-            .map_err(|err| LargeObjSendError::Msgs { err: err })?;
         let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
             .hashes
             .iter()
@@ -940,7 +952,7 @@ where
                     if let Some(expire) = expire {
                         if *send {
                             trace!(target: "large-obj-proto",
-                                   concat!("extendxing expiration for ",
+                                   concat!("extending expiration for ",
                                            "tombstone for {} ({}) to {:?}"),
                                    id, hash, self.tombstone_duration);
 
@@ -1010,6 +1022,60 @@ where
     #[inline]
     fn create(_param: ()) -> Result<Self, Infallible> {
         Ok(Self::default())
+    }
+
+    #[inline]
+    fn buf_size(
+        &self,
+        val: &LargeObjMsg<H::HashID>
+    ) -> usize {
+        match val {
+            LargeObjMsg::Offer { hash, frag, .. } => {
+                let hash = hash.hash_len() + 9;
+                let frag = frag.data.len() + 9;
+                let size = 9;
+
+                hash + frag + size
+            }
+            LargeObjMsg::Accept { hash, .. } => {
+                let hash = hash.hash_len();
+                let size = 9;
+                let id = 9;
+
+                hash + size + id
+            }
+            LargeObjMsg::ReqObj { hash, .. } => {
+                let hash = hash.hash_len();
+                let size = 9;
+                let id = 9;
+
+                hash + size + id
+            }
+            LargeObjMsg::Frags { frags, .. } => {
+                let frags: usize =
+                    frags.iter().map(|frags| 18 + frags.data.len()).sum();
+                let frags = frags + 9;
+                let id = 9;
+
+                frags + id
+            }
+            LargeObjMsg::Req { reqs, .. } => {
+                let req_tag = 1;
+                let req_offset = 9;
+                let req_len = 9;
+                let req = req_tag + req_offset + req_len;
+                let reqs = (reqs.len() * req) + 9;
+                let id = 9;
+
+                reqs + id
+            }
+            LargeObjMsg::Finish { hash, .. } => {
+                let hash = hash.hash_len();
+                let id = 9;
+
+                hash + id
+            }
+        }
     }
 
     #[inline]
@@ -1327,7 +1393,7 @@ where
         let data = self.codec.encode_to_vec(msg).map_err(|err| {
             LargeObjProtoAddOutboundError::Encode { err: err }
         })?;
-        let hash = self.hash.hash_bytes(&data);
+        let hash = self.hash.hash_bytes(once(&data[..]));
 
         trace!(target: "large-obj-proto",
                "hash for message is {}",
@@ -1390,7 +1456,7 @@ where
         let data = self.codec.encode_to_vec(msg).map_err(|err| {
             LargeObjProtoAddOutboundError::Encode { err: err }
         })?;
-        let hash = self.hash.hash_bytes(&data);
+        let hash = self.hash.hash_bytes(once(&data[..]));
 
         trace!(target: "large-obj-proto",
                "hash for message is {}",
@@ -1486,7 +1552,7 @@ where
             .map_err(|err| LargeObjProtoCreateError::Codec { err })?;
         let ids = IDs::create(ids);
         let ids = Arc::new(Mutex::new(ids));
-        let param = Arc::new(RwLock::new(F::Param::default()));
+        let param = Arc::new(RwLock::new(F::param(retry.clone())));
 
         Ok(LargeObjProto {
             wrapper: PhantomData,
@@ -1588,65 +1654,97 @@ where
                 let hash = ents[0].0;
                 let ent = &mut ents[0].1;
 
-                if let Some(id) = ent.id.clone() {
-                    trace!(target: "large-obj-proto",
-                           "pushing fragments for {}",
-                           id);
+                match &ent.when {
+                    Some(when) if *when <= Instant::now() => {
+                        if let Some(id) = ent.id.clone() {
+                            trace!(target: "large-obj-proto",
+                                   "pushing fragments for {}",
+                                   id);
 
-                    match stream.push_frags(ctx, id.clone(), &mut ent.frags) {
-                        Ok(RetryResult::Success(retry)) => {
-                            ent.when = retry;
+                            match stream.push_frags(
+                                ctx,
+                                id.clone(),
+                                &mut ent.frags
+                            ) {
+                                Ok(RetryResult::Success(retry)) => {
+                                    ent.when = retry;
 
-                            if ents.len() < 2 {
-                                Ok(RetryResult::Success(retry))
-                            } else {
-                                let when =
-                                    ents[1].1.when.map_or(retry, |when| {
-                                        retry.map(|retry| when.min(retry))
-                                    });
+                                    if ents.len() < 2 {
+                                        Ok(RetryResult::Success(retry))
+                                    } else {
+                                        let when = ents[1].1.when.map_or(
+                                            retry,
+                                            |when| {
+                                                retry.map(|retry| {
+                                                    when.min(retry)
+                                                })
+                                            }
+                                        );
 
-                                Ok(RetryResult::Success(when))
+                                        Ok(RetryResult::Success(when))
+                                    }
+                                }
+                                Ok(RetryResult::Retry(retry)) => {
+                                    Ok(RetryResult::Retry(
+                                        LargeObjPushRetry::Frags {
+                                            retry: retry,
+                                            id: id.clone()
+                                        }
+                                    ))
+                                }
+                                Err(err) => {
+                                    Err(PushErr::Frags { id: id, err: err })
+                                }
+                            }
+                        } else {
+                            trace!(target: "large-obj-proto",
+                                   "pushing offer for {}",
+                                   hash);
+
+                            match stream.push_offer(
+                                ctx,
+                                hash.clone(),
+                                &mut ent.frags
+                            ) {
+                                Ok(RetryResult::Success(retry)) => {
+                                    ent.when = retry;
+
+                                    if ents.len() < 2 {
+                                        Ok(RetryResult::Success(retry))
+                                    } else {
+                                        let when = ents[1].1.when.map_or(
+                                            retry,
+                                            |when| {
+                                                retry.map(|retry| {
+                                                    when.min(retry)
+                                                })
+                                            }
+                                        );
+
+                                        Ok(RetryResult::Success(when))
+                                    }
+                                }
+                                Ok(RetryResult::Retry(retry)) => {
+                                    Ok(RetryResult::Retry(
+                                        LargeObjPushRetry::Offer {
+                                            retry: retry,
+                                            hash: hash.clone()
+                                        }
+                                    ))
+                                }
+                                Err(err) => Err(PushErr::Offer {
+                                    hash: hash.clone(),
+                                    err: err
+                                })
                             }
                         }
-                        Ok(RetryResult::Retry(retry)) => {
-                            Ok(RetryResult::Retry(LargeObjPushRetry::Frags {
-                                retry: retry,
-                                id: id.clone()
-                            }))
-                        }
-                        Err(err) => Err(PushErr::Frags { id: id, err: err })
                     }
-                } else {
-                    trace!(target: "large-obj-proto",
-                           "pushing offer for {}",
-                           hash);
-
-                    match stream.push_offer(ctx, hash.clone(), &mut ent.frags) {
-                        Ok(RetryResult::Success(retry)) => {
-                            ent.when = retry;
-
-                            if ents.len() < 2 {
-                                Ok(RetryResult::Success(retry))
-                            } else {
-                                let when =
-                                    ents[1].1.when.map_or(retry, |when| {
-                                        retry.map(|retry| when.min(retry))
-                                    });
-
-                                Ok(RetryResult::Success(when))
-                            }
-                        }
-                        Ok(RetryResult::Retry(retry)) => {
-                            Ok(RetryResult::Retry(LargeObjPushRetry::Offer {
-                                retry: retry,
-                                hash: hash.clone()
-                            }))
-                        }
-                        Err(err) => Err(PushErr::Offer {
-                            hash: hash.clone(),
-                            err: err
-                        })
+                    Some(when) => {
+                        Ok(RetryResult::Retry(LargeObjPushRetry::Retry {
+                            when: *when
+                        }))
                     }
+                    None => Ok(RetryResult::Success(None))
                 }
             } else {
                 trace!(target: "large-obj-proto",
@@ -1968,6 +2066,7 @@ where
             .inbound
             .lock()
             .map_err(|_| LargeObjRecvError::MutexPoison)?;
+
         let out = match inbound.hashes.entry((prin.clone(), hash.clone())) {
             Entry::Occupied(ent) => {
                 // ID already exists, get the entry.
@@ -2051,7 +2150,7 @@ where
                     Ok(None)
                 }
             }
-            Entry::Vacant(ent) => {
+            Entry::Vacant(hashes) => {
                 trace!(target: "large-obj-proto",
                        "no entry exists for {}",
                        hash);
@@ -2065,7 +2164,7 @@ where
                     .ok_or(LargeObjRecvError::NoID)?;
                 let size = size as usize;
 
-                ent.insert(id.clone());
+                hashes.insert(id.clone());
 
                 debug!(target: "large-obj-proto",
                        "creating new transfer for {} with ID {}",
@@ -2553,16 +2652,26 @@ where
                 .map_err(|err| LargeObjRecvError::Auth { err: err })?
             {
                 AuthNResult::Accept((prin, msg)) => {
+                    trace!(target: "large-obj-proto",
+                           "message authenticated");
+
                     // Send it upstream.
                     self.upstream.recv_auth_msg(&prin, msg).map_err(|err| {
                         LargeObjRecvError::Upstream { err: err }
                     })?;
-                }
-                AuthNResult::Reject => return Err(LargeObjRecvError::AuthNFail)
-            }
-        }
 
-        Ok(())
+                    Ok(())
+                }
+                AuthNResult::Reject => {
+                    trace!(target: "large-obj-proto",
+                           "message authentication failed");
+
+                    Err(LargeObjRecvError::AuthNFail)
+                }
+            }
+        } else {
+            Ok(())
+        }
     }
 }
 

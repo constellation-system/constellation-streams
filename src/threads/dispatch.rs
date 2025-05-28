@@ -19,19 +19,20 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::fmt::Formatter;
 use std::hash::Hash;
+use std::io::Error;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread::sleep;
-use std::thread::spawn;
+use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
-use constellation_common::error::MutexPoison;
 use constellation_common::error::WithMutexPoison;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::retry::RetryResult;
@@ -175,6 +176,13 @@ where
     inner: Dispatched<Msg, Addr, Stream, AuthN, Recv>
 }
 
+#[derive(Debug)]
+pub enum DispatchHandlerError<Dispatch> {
+    Dispatch { err: Dispatch },
+    IO { err: Error },
+    MutexPoison
+}
+
 unsafe impl<Msg, Addr, Stream, AuthN, Recv> Sync
     for Dispatched<Msg, Addr, Stream, AuthN, Recv>
 where
@@ -265,7 +273,7 @@ where
     Addr: 'static + Clone + Display + Eq + Hash + Send
 {
     type Prin = AuthN::SessionPrin;
-    type ReportError = MutexPoison;
+    type ReportError = WithMutexPoison<Error>;
     type Src = Addr;
     type Stream = ThreadedStream<Stream>;
 
@@ -288,6 +296,7 @@ where
                            "adding stream for {} to listeners",
                            src);
 
+                    let name = format!("dispatch-recv-{}", prin);
                     let mut thread = RecvThread {
                         msg: PhantomData,
                         authn: self.inner.authn.clone(),
@@ -303,7 +312,10 @@ where
                            "launching receiver for {}",
                            src);
 
-                    let join = spawn(move || thread.run());
+                    let join = Builder::new()
+                        .name(name)
+                        .spawn(move || thread.run())
+                        .map_err(|err| WithMutexPoison::Inner { error: err })?;
                     let entry = RecvThreadEntry {
                         msg: PhantomData,
                         join: join,
@@ -319,7 +331,7 @@ where
                 error!(target: "dispatch-entry-reporter",
                        "mutex poisoned");
 
-                Err(MutexPoison)
+                Err(WithMutexPoison::MutexPoison)
             }
         }
     }
@@ -451,11 +463,11 @@ where
         stream: Listener::Stream,
         addr: Listener::Addr,
         prin: Listener::Prin
-    ) -> Result<(), WithMutexPoison<Dispatcher::DispatchError>> {
+    ) -> Result<(), DispatchHandlerError<Dispatcher::DispatchError>> {
         match self
             .recvs
             .lock()
-            .map_err(|_| WithMutexPoison::MutexPoison)?
+            .map_err(|_| DispatchHandlerError::MutexPoison)?
             .entry(prin.clone())
         {
             Entry::Occupied(mut ent) => {
@@ -473,7 +485,9 @@ where
                 let (push_stream, msgs, notify, dispatched) = self
                     .dispatcher
                     .dispatch(&mut self.ctx, prin.clone())
-                    .map_err(|err| WithMutexPoison::Inner { error: err })?;
+                    .map_err(|err| DispatchHandlerError::Dispatch {
+                        err: err
+                    })?;
                 let reporter = push_stream.reporter();
                 let push_thread: PushStreamThread<_, _, Mode, _> =
                     PushStreamThread::create(
@@ -484,7 +498,9 @@ where
                         push_stream,
                         dispatched.shutdown.clone()
                     );
-                let join = push_thread.start();
+                let join = push_thread
+                    .start()
+                    .map_err(|err| DispatchHandlerError::IO { err: err })?;
                 let ent = ent.insert(DispatchEntry {
                     inner: dispatched,
                     reporter: reporter,
@@ -552,7 +568,25 @@ where
     }
 
     #[inline]
-    pub fn start(mut self) -> JoinHandle<()> {
-        spawn(move || self.run())
+    pub fn start(mut self) -> Result<JoinHandle<()>, Error> {
+        Builder::new()
+            .name(String::from("pull-streams-dispatch-thread"))
+            .spawn(move || self.run())
+    }
+}
+
+impl<Dispatch> Display for DispatchHandlerError<Dispatch>
+where
+    Dispatch: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            DispatchHandlerError::Dispatch { err } => err.fmt(f),
+            DispatchHandlerError::IO { err } => err.fmt(f),
+            DispatchHandlerError::MutexPoison => write!(f, "mutex poisoned")
+        }
     }
 }

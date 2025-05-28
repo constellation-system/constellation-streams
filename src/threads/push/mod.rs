@@ -20,7 +20,8 @@
 
 use std::fmt::Display;
 use std::hash::Hash;
-use std::thread::spawn;
+use std::io::Error;
+use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
@@ -235,20 +236,25 @@ where
         H: Clone + HashAlgo,
         H::HashID: Clone + Display + Hash + HashID + Eq,
         PartyID: Clone {
-        Ok(proto.try_push(ctx, stream)?.map_retry(|retry| match retry {
-            LargeObjPushRetry::Frags { retry, id } => {
-                LargeObjEntry::PushFrags {
-                    retry: retry,
-                    id: id
+        Ok(proto
+            .try_push(ctx, stream)?
+            .flat_map_retry(|retry| match retry {
+                LargeObjPushRetry::Frags { retry, id } => {
+                    RetryResult::Retry(LargeObjEntry::PushFrags {
+                        retry: retry,
+                        id: id
+                    })
                 }
-            }
-            LargeObjPushRetry::Offer { retry, hash } => {
-                LargeObjEntry::PushOffer {
-                    retry: retry,
-                    hash: hash
+                LargeObjPushRetry::Offer { retry, hash } => {
+                    RetryResult::Retry(LargeObjEntry::PushOffer {
+                        retry: retry,
+                        hash: hash
+                    })
                 }
-            }
-        }))
+                LargeObjPushRetry::Retry { when } => {
+                    RetryResult::Success(Some(when))
+                }
+            }))
     }
 }
 
@@ -288,111 +294,123 @@ where
     }
 
     fn run(mut self) {
-        let mut next_outbound = Some(Instant::now());
-        let mut next_pending = None;
-        let mut valid = true;
+        match self.notify.register() {
+            Ok(idx) => {
+                let mut next_outbound = Some(Instant::now());
+                let mut next_pending = None;
+                let mut valid = true;
 
-        info!(target: "push-stream-shared-thread",
-              "push stream send thread starting");
+                info!(target: "push-stream-thread",
+                      "push stream send thread starting");
 
-        // Loop until told to shut down.
-        while valid && self.shutdown.is_live() {
-            let now = Instant::now();
-
-            if let Some(when) = next_outbound &&
-                when <= now
-            {
-                match self.mode.send_from_outbound(
-                    &mut self.ctx,
-                    &mut self.msgs,
-                    &mut self.stream
-                ) {
-                    Ok(next) => next_outbound = next,
-                    Err(err) => {
-                        error!(target: "push-stream-shared-thread",
-                               "error obtaining messages: {}",
-                               err);
-
-                        if err.scope() >= ErrorScope::Shutdown {
-                            valid = false
-                        }
-                    }
-                }
-            }
-
-            if let Some(next) = next_pending &&
-                next <= now
-            {
-                match self.mode.retry_pending(
-                    &mut self.ctx,
-                    &mut self.msgs,
-                    &mut self.stream,
-                    now
-                ) {
-                    Ok(next) => {
-                        next_pending = next;
-                    }
-                    Err(err) => {
-                        error!(target: "push-stream-private-thread",
-                               "error retrying pending: {}",
-                               err);
-                    }
-                }
-            }
-
-            match next_pending.map_or(next_outbound, |next| {
-                next_outbound.map(|when| when.max(next))
-            }) {
-                Some(when) => {
+                // Loop until told to shut down.
+                while valid && self.shutdown.is_live() {
                     let now = Instant::now();
 
-                    if now < when {
-                        let duration = when - now;
-
-                        trace!(target: "push-stream-thread",
-                               "waiting, next activity at {}.{:03}",
-                               duration.as_secs(), duration.subsec_millis());
-
-                        match self.notify.wait_timeout(duration) {
-                            Ok(notify) => {
-                                if notify {
-                                    next_outbound = Some(now)
-                                }
-                            }
+                    if let Some(when) = next_outbound &&
+                        when <= now
+                    {
+                        match self.mode.send_from_outbound(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream
+                        ) {
+                            Ok(next) => next_outbound = next,
                             Err(err) => {
-                                error!(target: "push-stream-shared-thread",
-                                       "error waiting for notification: {}",
+                                error!(target: "push-stream-thread",
+                                       "error obtaining messages: {}",
                                        err);
 
-                                valid = false
+                                if err.scope() >= ErrorScope::Shutdown {
+                                    valid = false
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(next) = next_pending &&
+                        next <= now
+                    {
+                        match self.mode.retry_pending(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream,
+                            now
+                        ) {
+                            Ok(next) => {
+                                next_pending = next;
+                            }
+                            Err(err) => {
+                                error!(target: "push-stream-thread",
+                                       "error retrying pending: {}",
+                                       err);
+                            }
+                        }
+                    }
+
+                    match next_pending.map_or(next_outbound, |next| {
+                        next_outbound.map(|when| when.max(next))
+                    }) {
+                        Some(when) => {
+                            let now = Instant::now();
+
+                            if now < when {
+                                let duration = when - now;
+
+                                trace!(target: "push-stream-thread",
+                                       "waiting, next activity in {}.{:03}s",
+                                       duration.as_secs(),
+                                       duration.subsec_millis());
+
+                                match self.notify.wait_timeout(&idx, duration) {
+                                    Ok(notify) => {
+                                        if notify {
+                                            next_outbound = Some(now)
+                                        }
+                                    }
+                                    Err(err) => {
+                                        error!(target: "push-stream-thread",
+                                               "error waiting: {}",
+                                               err);
+
+                                        valid = false
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            trace!(target: "push-stream-thread",
+                                   "waiting for notification indefinitely");
+
+                            match self.notify.wait(&idx) {
+                                Ok(_) => next_outbound = Some(now),
+                                Err(err) => {
+                                    error!(target: "push-stream-thread",
+                                           "error waiting for notification: {}",
+                                           err);
+
+                                    valid = false
+                                }
                             }
                         }
                     }
                 }
-                None => {
-                    trace!(target: "push-stream-thread",
-                           "waiting for notification indefinitely");
-
-                    match self.notify.wait() {
-                        Ok(_) => next_outbound = Some(now),
-                        Err(err) => {
-                            error!(target: "push-stream-shared-thread",
-                                   "error waiting for notification: {}",
-                                   err);
-
-                            valid = false
-                        }
-                    }
-                }
+            }
+            Err(err) => {
+                error!(target: "push-stream-thread",
+                       "error registering to notify: {}",
+                       err);
             }
         }
 
-        debug!(target: "push-stream-shared-thread",
+        debug!(target: "push-stream-thread",
                "push stream send thread exiting");
     }
 
-    pub fn start(self) -> JoinHandle<()> {
-        spawn(move || self.run())
+    pub fn start(self) -> Result<JoinHandle<()>, Error> {
+        Builder::new()
+            .name(String::from("push-stream-thread"))
+            .spawn(move || self.run())
     }
 }
 

@@ -35,6 +35,7 @@ use std::vec::IntoIter;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
+use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use log::debug;
@@ -2804,6 +2805,11 @@ where
 {
     type Param = Vec<F::Param>;
     type RecvReqError = ErrorSet<Idx, (), F::RecvReqError>;
+
+    #[inline]
+    fn param(_retry: Retry) -> Self::Param {
+        vec![]
+    }
 
     #[inline]
     fn from_data(
