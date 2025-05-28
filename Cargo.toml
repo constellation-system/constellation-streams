@@ -61,6 +61,7 @@ bitvec = { version = "1.0" }
 constellation-auth = { git = "https://github.com/constellation-system/constellation-auth.git", branch = "project/ioc", default-features = false }
 constellation-common = { git = "https://github.com/constellation-system/constellation-common.git", branch = "project/ioc", default-features = false }
 log = { version = "0.4", optional = true }
+mio = { version = "1.0" }
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
