@@ -159,10 +159,10 @@ where
         id: LargeObjID
     }
 }
+
 #[derive(Debug)]
-pub enum LargeObjProtoAddOutboundError<H, Encode> {
+pub enum LargeObjProtoAddOutboundError<Encode> {
     Encode { err: Encode },
-    HashCollision { hash: H },
     NoIDs,
     MutexPoison
 }
@@ -1379,13 +1379,12 @@ where
     H::HashID: Clone + Display + Hash + HashID + Eq,
     F: Frags
 {
-    pub fn add_outbound_unless_pending(
+    pub fn add_outbound(
         &mut self,
-        curr: &H::HashID,
         msg: &Wrapper
     ) -> Result<
         Option<H::HashID>,
-        LargeObjProtoAddOutboundError<H::HashID, WrapperCodec::EncodeError>
+        LargeObjProtoAddOutboundError<WrapperCodec::EncodeError>
     > {
         trace!(target: "large-obj-proto",
                "adding new outbound message if not already present");
@@ -1404,7 +1403,7 @@ where
             .lock()
             .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?;
 
-        if !guard.objs.contains_key(curr) {
+        if !guard.objs.contains_key(&hash) {
             trace!(target: "large-obj-proto",
                    "message {} was not present",
                    hash);
@@ -1423,11 +1422,7 @@ where
 
             // Insert into objs *only*; hashes is for the
             // *counterparty's* IDs.
-            if guard.objs.insert(hash.clone(), ent).is_some() {
-                return Err(LargeObjProtoAddOutboundError::HashCollision {
-                    hash: hash.clone()
-                });
-            }
+            let _ = guard.objs.insert(hash.clone(), ent);
 
             debug!(target: "large-obj-proto",
                    "added message {} to outbound",
@@ -1441,56 +1436,6 @@ where
 
             Ok(None)
         }
-    }
-
-    pub fn add_outbound(
-        &mut self,
-        msg: &Wrapper
-    ) -> Result<
-        H::HashID,
-        LargeObjProtoAddOutboundError<H::HashID, WrapperCodec::EncodeError>
-    > {
-        trace!(target: "large-obj-proto",
-               "adding new outbound message");
-
-        let data = self.codec.encode_to_vec(msg).map_err(|err| {
-            LargeObjProtoAddOutboundError::Encode { err: err }
-        })?;
-        let hash = self.hash.hash_bytes(once(&data[..]));
-
-        trace!(target: "large-obj-proto",
-               "hash for message is {}",
-               hash);
-
-        let mut guard = self
-            .outbound
-            .lock()
-            .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?;
-        let param = self
-            .param
-            .read()
-            .map_err(|_| LargeObjProtoAddOutboundError::MutexPoison)?
-            .clone();
-        let frags = F::from_data(param, data);
-        let ent = SendEntry {
-            when: Some(Instant::now()),
-            frags: frags,
-            id: None
-        };
-
-        // Insert into objs *only*; hashes is for the
-        // *counterparty's* IDs.
-        if guard.objs.insert(hash.clone(), ent).is_some() {
-            return Err(LargeObjProtoAddOutboundError::HashCollision {
-                hash: hash.clone()
-            });
-        }
-
-        debug!(target: "large-obj-proto",
-               "added message {} to outbound",
-               hash);
-
-        Ok(hash)
     }
 }
 
@@ -2692,14 +2637,13 @@ where
     const MAX_BYTES: usize = 1286;
 }
 
-impl<H, Encode> ScopedError for LargeObjProtoAddOutboundError<H, Encode>
+impl<Encode> ScopedError for LargeObjProtoAddOutboundError<Encode>
 where
     Encode: ScopedError
 {
     fn scope(&self) -> ErrorScope {
         match self {
             LargeObjProtoAddOutboundError::Encode { err } => err.scope(),
-            LargeObjProtoAddOutboundError::HashCollision { .. } |
             LargeObjProtoAddOutboundError::NoIDs |
             LargeObjProtoAddOutboundError::MutexPoison => {
                 ErrorScope::Unrecoverable
@@ -2991,10 +2935,9 @@ where
     }
 }
 
-impl<H, Encode> Display for LargeObjProtoAddOutboundError<H, Encode>
+impl<Encode> Display for LargeObjProtoAddOutboundError<Encode>
 where
-    Encode: Display,
-    H: Display
+    Encode: Display
 {
     fn fmt(
         &self,
@@ -3002,9 +2945,6 @@ where
     ) -> Result<(), Error> {
         match self {
             LargeObjProtoAddOutboundError::Encode { err } => err.fmt(f),
-            LargeObjProtoAddOutboundError::HashCollision { hash } => {
-                write!(f, "object for hash {} already exists", hash)
-            }
             LargeObjProtoAddOutboundError::NoIDs => write!(f, "IDs exhausted"),
             LargeObjProtoAddOutboundError::MutexPoison => {
                 write!(f, "mutex poisoned")
