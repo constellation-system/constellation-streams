@@ -23,14 +23,11 @@ use std::fmt::Formatter;
 use std::hash::Hash;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNMsgRecv;
-use constellation_auth::authn::MsgAuthN;
-use constellation_common::codec::Codec;
+use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
-use constellation_common::ids::IDGen;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -41,13 +38,16 @@ use log::trace;
 use crate::config::PrivateDatagramModeConfig;
 use crate::config::PrivateLargeObjModeConfig;
 use crate::error::BatchError;
-use crate::large_obj::LargeObjID;
+use crate::frags::Frags;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
+use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
+use crate::stream::LargeObjStream;
 use crate::stream::LargeObjOfferStream;
+use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
@@ -55,6 +55,42 @@ use crate::stream::PushStreamReportError;
 use crate::threads::push::LargeObjEntry;
 use crate::threads::push::PushMode;
 use crate::threads::push::PushModeCreate;
+
+pub trait PrivateLargeObjPushModeTypes<Ctx> {
+    type Frags: Frags;
+    type BatchID: Clone;
+    type HashID: Clone + Display + Hash + HashID + Eq + Send;
+    type Hash: Clone + HashAlgo<HashID = Self::HashID>;
+    type AddError: BatchError;
+    type StartBatchError: BatchError;
+    type FinishBatchError: BatchError;
+    type PushFragError: BatchError;
+    type PushOfferError: BatchError;
+    type Stream: PushStreamReportBatchError<
+            <Self::FinishBatchError as BatchError>::Permanent,
+            Self::BatchID
+        >
+        + PushStreamReportError<<Self::PushFragError as BatchError>::Permanent>
+        + PushStreamReportError<<Self::PushOfferError as BatchError>::Permanent>
+        + PushStreamReportError<
+            <Self::StartBatchError as BatchError>::Permanent
+        >
+        + PushStreamReportBatchError<
+            <Self::AddError as BatchError>::Permanent,
+            Self::BatchID
+        >
+        + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx,
+                        AddError = Self::AddError>
+        + PushStreamPrivate<Ctx, StartBatchError = Self::StartBatchError>
+        + PushStream<Ctx,
+                     BatchID = Self::BatchID,
+                     FinishBatchError = Self::FinishBatchError>
+        + LargeObjOfferStream<Self::HashID, Ctx,
+                              PushOfferError = Self::PushOfferError>
+        + LargeObjStream<Ctx, Frags = Self::Frags,
+                         PushFragError = Self::PushFragError>
+        + Send;
+}
 
 /// Backlog entry for push threads.
 ///
@@ -117,25 +153,13 @@ where
     pending: Vec<PushEntry<Msg, Stream, Ctx>>
 }
 
-pub struct PrivateLargeObjPushMode<H, Stream, Ctx>
+pub struct PrivateLargeObjPushMode<Types, Ctx>
 where
-    Stream: PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
-            Stream::BatchID
-        > + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
-            Stream::BatchID
-        > + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
-        + PushStreamPrivate<Ctx>
-        + LargeObjOfferStream<H::HashID, Ctx>
-        + Send,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Send {
+    Types: PrivateLargeObjPushModeTypes<Ctx> {
     /// Buffer for sends in progress.
-    pending_msgs: Vec<PushEntry<LargeObjMsg<H::HashID>, Stream, Ctx>>,
-    pending_frags: Vec<LargeObjEntry<Stream, H, Ctx>>
+    pending_msgs: Vec<PushEntry<LargeObjMsg<Types::HashID>,
+                                Types::Stream, Ctx>>,
+    pending_frags: Vec<LargeObjEntry<Types::Stream, Types::Hash, Ctx>>
 }
 
 #[derive(Clone)]
@@ -804,23 +828,10 @@ where
     }
 }
 
-impl<H, Stream, Ctx> PushModeCreate for PrivateLargeObjPushMode<H, Stream, Ctx>
+impl<Types, Ctx> PushModeCreate
+    for PrivateLargeObjPushMode<Types, Ctx>
 where
-    Stream: PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
-            Stream::BatchID
-        > + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
-        > + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
-            Stream::BatchID
-        > + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
-        + PushStreamPrivate<Ctx>
-        + LargeObjOfferStream<H::HashID, Ctx>
-        + Send,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Send
-{
+    Types: PrivateLargeObjPushModeTypes<Ctx> {
     type Config = PrivateLargeObjModeConfig;
 
     fn create(config: Self::Config) -> Self {
@@ -841,81 +852,41 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
+impl<InMsg, OutMsg, LargeObjTypes, Types, Ctx>
     PushMode<
-        Stream,
-        LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            (),
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
+        Types::Stream,
+        LargeObjProto<InMsg, OutMsg, (), Types::Frags, LargeObjTypes>,
         Ctx
-    > for PrivateLargeObjPushMode<H, Stream, Ctx>
+    > for PrivateLargeObjPushMode<Types, Ctx>
 where
-    Stream: 'static
-        + PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
-            Stream::BatchID
-        >
-        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
-        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
-        + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
-        >
-        + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
-            Stream::BatchID
-        >
-        + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
-        + PushStreamPrivate<Ctx>
-        + LargeObjOfferStream<H::HashID, Ctx>
-        + Send,
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: 'static + Clone + Display + Hash + HashID + Eq + Send
+    LargeObjTypes: LargeObjProtoTypes<InMsg, OutMsg,
+                                      Hash = Types::Hash,
+                                      HashID = Types::HashID>,
+    Types: PrivateLargeObjPushModeTypes<Ctx>,
+    LargeObjTypes::HashID: 'static,
+    Types::Stream: 'static
 {
     type RetryError = Infallible;
     type SendError = PrivateLargeObjPushModeSendError<
         LargeObjPushError<
-            H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            Types::HashID,
+            <Types::PushFragError as BatchError>::Permanent,
+            <Types::PushOfferError as BatchError>::Permanent
         >,
         LargeObjSendError<
-            H::HashID,
-            Auth::SessionPrin,
-            Msgs::AddMsgsError<WrapperCodec::EncodeError>
+            Types::HashID,
+            <LargeObjTypes::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+            <LargeObjTypes::Msgs as LargeObjMsgs<Types::Hash, OutMsg>
+             >::AddMsgsError<LargeObjTypes::EncodeError>
         >
     >;
 
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            (),
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
-        stream: &mut Stream
+        proto: &mut LargeObjProto<InMsg, OutMsg, (), Types::Frags,
+                                  LargeObjTypes>,
+        stream: &mut Types::Stream
     ) -> Result<Option<Instant>, Self::SendError> {
         debug!(target: "private-large-obj-push-mode",
                "fetching new outbound protocol messages");
@@ -959,19 +930,9 @@ where
     fn retry_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            (),
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
-        stream: &mut Stream,
+        proto: &mut LargeObjProto<InMsg, OutMsg, (), Types::Frags,
+                                  LargeObjTypes>,
+        stream: &mut Types::Stream,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
         debug!(target: "private-large-obj-push-mode",

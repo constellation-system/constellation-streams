@@ -19,20 +19,16 @@
 //! Manager threads for various kinds of push streams.
 
 use std::fmt::Display;
-use std::hash::Hash;
 use std::io::Error;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNMsgRecv;
-use constellation_auth::authn::MsgAuthN;
-use constellation_common::codec::Codec;
+use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
-use constellation_common::ids::IDGen;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -44,8 +40,8 @@ use log::trace;
 
 use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
-use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
+use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjPushRetry;
 use crate::stream::LargeObjOfferStream;
@@ -131,31 +127,11 @@ where
         + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>,
     H: Clone + HashAlgo
 {
-    pub(crate) fn exec<
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv
-    >(
+    pub(crate) fn exec<InMsg, OutMsg, PartyID, Types>(
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            PartyID,
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >
+        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushError<
@@ -165,14 +141,7 @@ where
         >
     >
     where
-        Msgs: LargeObjMsgs<H, Wrapper>,
-        Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = LargeObjID>,
-        Auth: MsgAuthN<Msg, Wrapper>,
-        WrapperCodec: Clone + Codec<Wrapper>,
-        WrapperCodec::Param: Default,
-        H: Clone + HashAlgo,
-        H::HashID: Clone + Display + Hash + HashID + Eq,
+        Types: LargeObjProtoTypes<InMsg, OutMsg>,
         PartyID: Clone {
         match self {
             LargeObjEntry::PushFrags { id, retry } => proto
@@ -194,30 +163,10 @@ where
         }
     }
 
-    pub(crate) fn from_try_send<
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv
-    >(
+    pub(crate) fn from_try_send<InMsg, OutMsg, PartyID, Types>(
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            PartyID,
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >
+        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
         RetryResult<Option<Instant>, Self>,
         LargeObjPushError<
@@ -227,14 +176,7 @@ where
         >
     >
     where
-        Msgs: LargeObjMsgs<H, Wrapper>,
-        Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-        IDs: IDGen + Iterator<Item = LargeObjID>,
-        Auth: MsgAuthN<Msg, Wrapper>,
-        WrapperCodec: Clone + Codec<Wrapper>,
-        WrapperCodec::Param: Default,
-        H: Clone + HashAlgo,
-        H::HashID: Clone + Display + Hash + HashID + Eq,
+        Types: LargeObjProtoTypes<InMsg, OutMsg>,
         PartyID: Clone {
         Ok(proto
             .try_push(ctx, stream)?

@@ -35,18 +35,21 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 
+use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
+use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::codec::per::PERCodec;
-use constellation_common::codec::Codec;
 use constellation_common::codec::DatagramCodec;
+use constellation_common::codec::Decoder;
+use constellation_common::codec::Encoder;
+use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
-use constellation_common::ids::IDGen;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
@@ -92,9 +95,28 @@ where
         sender: &mut LargeObjSender<H, Wrapper, WrapperCodec, F>
     ) -> Result<Option<Instant>, Self::AddMsgsError<WrapperCodec::EncodeError>>
     where
-        WrapperCodec: Clone + Codec<Wrapper>,
-        WrapperCodec::Param: Default,
+        WrapperCodec: Clone + Create + Decoder<Wrapper> + Encoder<Wrapper>,
+        WrapperCodec::Config: Default,
         F: Frags;
+}
+
+pub trait LargeObjProtoTypes<InMsg, OutMsg> {
+    type IDsConfig: Default;
+    type IDs: Create<Config = Self::IDsConfig> + Iterator<Item = LargeObjID>;
+    type HashID: Clone + Display + Hash + HashID + Eq;
+    /// Hash algorithm to use.
+    type Hash: Clone + HashAlgo<HashID = Self::HashID>;
+    type EncoderConfig: Default;
+    type EncodeError: Display + ScopedError;
+    type Encoder: Clone + Create<Config = Self::EncoderConfig>
+        + Encoder<OutMsg, EncodeError = Self::EncodeError>;
+    /// Type of message source.
+    type Msgs: LargeObjMsgs<Self::Hash, OutMsg>;
+    /// Type of message receiver.
+    type Recv: AuthNMsgRecv<<Self::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                            InMsg> + Clone;
+    /// Message authentication types.
+    type AuthNTypes: MsgAuthNTypes<InMsg>;
 }
 
 const LARGE_OBJ_METADATA_SIZE: usize = 1171;
@@ -210,84 +232,64 @@ where
     hashes: HashMap<LargeObjID, H>
 }
 
-pub struct LargeObjSender<H, Wrapper, WrapperCodec, F>
+pub struct LargeObjSender<H, Msg, Enc, F>
 where
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
+    Enc: Create + Encoder<Msg>,
+    Enc::Config: Default,
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq,
     F: Frags {
-    wrapper: PhantomData<Wrapper>,
+    wrapper: PhantomData<Msg>,
     outbound: Arc<Mutex<LargeObjOutbound<H::HashID, F>>>,
     param: Arc<RwLock<F::Param>>,
-    codec: WrapperCodec,
+    encoder: Enc,
     hash: H
 }
 
-pub struct LargeObjProto<
-    H,
-    Msg,
-    Wrapper,
-    Auth,
-    PartyID,
-    WrapperCodec,
-    IDs,
-    Msgs,
-    Recv,
-    F
-> where
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+pub struct LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
+where
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags {
-    wrapper: PhantomData<Wrapper>,
-    msg: PhantomData<Msg>,
-    outbound: Arc<Mutex<LargeObjOutbound<H::HashID, F>>>,
-    parties: Arc<RwLock<HashMap<Auth::SessionPrin, PartyID>>>,
-    inbound: Arc<Mutex<LargeObjInbound<H::HashID, Auth::SessionPrin>>>,
+    in_msg: PhantomData<InMsg>,
+    out_msg: PhantomData<OutMsg>,
+    outbound:
+        Arc<Mutex<LargeObjOutbound<<Types::Hash as HashAlgo>::HashID, F>>>,
+    parties: Arc<
+        RwLock<
+            HashMap<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+                PartyID
+            >
+        >
+    >,
+    inbound: Arc<
+        Mutex<
+            LargeObjInbound<
+                Types::HashID,
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin
+            >
+        >
+    >,
     param: Arc<RwLock<F::Param>>,
-    ids: Arc<Mutex<IDs>>,
+    ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
     notify: Notify,
-    upstream: Recv,
-    msgs: Msgs,
+    upstream: Types::Recv,
+    msgs: Types::Msgs,
     retry: Retry,
-    codec: WrapperCodec,
-    auth: Auth,
-    hash: H
+    encoder: Types::Encoder,
+    decoder: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder,
+    auth: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::MsgAuthN,
+    hash: Types::Hash
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Msgs, Recv, F> Clone
-    for LargeObjProto<
-        H,
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv,
-        F
-    >
+impl<InMsg, OutMsg, PartyID, F, Types> Clone
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    Msgs: Clone + LargeObjMsgs<H, Wrapper>,
-    Recv: Clone + AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: Clone + IDGen + Iterator<Item = LargeObjID>,
-    Auth: Clone + MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
-    F: Frags,
-    F::Param: Clone
+    F: Frags
 {
     fn clone(&self) -> Self {
         LargeObjProto {
@@ -296,16 +298,15 @@ where
             outbound: self.outbound.clone(),
             upstream: self.upstream.clone(),
             parties: self.parties.clone(),
+            encoder: self.encoder.clone(),
+            decoder: self.decoder.clone(),
             notify: self.notify.clone(),
             param: self.param.clone(),
             retry: self.retry.clone(),
-            codec: self.codec.clone(),
             auth: self.auth.clone(),
             hash: self.hash.clone(),
             msgs: self.msgs.clone(),
             ids: self.ids.clone(),
-            wrapper: self.wrapper,
-            msg: self.msg
         }
     }
 }
@@ -381,10 +382,12 @@ pub enum LargeObjProtoCreateError<Codec> {
 #[derive(Debug)]
 pub enum LargeObjMsgEncodeError {
     Metadata {
-        err: <LargeObjMetadataPERCodec as Codec<LargeObjMetadata>>::EncodeError
+        err: <LargeObjMetadataPERCodec
+              as Encoder<LargeObjMetadata>>::EncodeError
     },
     FragHeader {
-        err: <LargeObjFragHeaderPERCodec as Codec<LargeObjFragHeader>>::EncodeError
+        err: <LargeObjFragHeaderPERCodec
+              as Encoder<LargeObjFragHeader>>::EncodeError
     },
     TooShort
 }
@@ -392,10 +395,12 @@ pub enum LargeObjMsgEncodeError {
 #[derive(Debug)]
 pub enum LargeObjMsgDecodeError {
     Metadata {
-        err: <LargeObjMetadataPERCodec as Codec<LargeObjMetadata>>::EncodeError
+        err: <LargeObjMetadataPERCodec
+              as Decoder<LargeObjMetadata>>::DecodeError
     },
     FragHeader {
-        err: <LargeObjFragHeaderPERCodec as Codec<LargeObjFragHeader>>::EncodeError
+        err: <LargeObjFragHeaderPERCodec
+              as Decoder<LargeObjFragHeader>>::DecodeError
     },
     Hash {
         err: TryFromSliceError
@@ -638,43 +643,26 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Msgs, Recv, F>
-    SharedMsgs<PartyID, LargeObjMsg<H::HashID>>
-    for LargeObjProto<
-        H,
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv,
-        F
-    >
+impl<InMsg, OutMsg, PartyID, F, Types>
+    SharedMsgs<PartyID, LargeObjMsg<Types::HashID>>
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
     type MsgsError = LargeObjSendError<
-        H::HashID,
-        Auth::SessionPrin,
-        Msgs::AddMsgsError<WrapperCodec::EncodeError>
+        Types::HashID,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        <Types::Msgs
+         as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<Types::EncodeError>
     >;
 
     fn msgs(
         &mut self
     ) -> Result<
         (
-            Option<Vec<(Vec<PartyID>, Vec<LargeObjMsg<H::HashID>>)>>,
+            Option<Vec<(Vec<PartyID>, Vec<LargeObjMsg<Types::HashID>>)>>,
             Option<Instant>
         ),
         Self::MsgsError
@@ -695,7 +683,13 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
+        let hashes: Vec<(
+            (
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+                Types::HashID
+            ),
+            LargeObjID
+        )> = inbound
             .hashes
             .iter()
             .map(|((prin, hash), id)| {
@@ -833,43 +827,24 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Msgs, Recv, F>
-    PrivateMsgs<LargeObjMsg<H::HashID>>
-    for LargeObjProto<
-        H,
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv,
-        F
-    >
+impl<InMsg, OutMsg, PartyID, F, Types> PrivateMsgs<LargeObjMsg<Types::HashID>>
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
     type MsgsError = LargeObjSendError<
-        H::HashID,
-        Auth::SessionPrin,
-        Msgs::AddMsgsError<WrapperCodec::EncodeError>
+        Types::HashID,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        <Types::Msgs
+         as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<Types::EncodeError>
     >;
 
     fn msgs(
         &mut self
     ) -> Result<
-        (Option<Vec<LargeObjMsg<H::HashID>>>, Option<Instant>),
+        (Option<Vec<LargeObjMsg<Types::HashID>>>, Option<Instant>),
         Self::MsgsError
     > {
         debug!(target: "large-obj-proto",
@@ -888,7 +863,13 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let hashes: Vec<((Auth::SessionPrin, H::HashID), IDs::Item)> = inbound
+        let hashes: Vec<(
+            (
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+                Types::HashID
+            ),
+            LargeObjID
+        )> = inbound
             .hashes
             .iter()
             .map(|((prin, hash), id)| {
@@ -1010,19 +991,160 @@ where
     }
 }
 
-impl<H> Codec<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
+impl<H> Create for LargeObjMsgCodec<H>
 where
     H: HashAlgo + Default
 {
+    type Config = ();
     type CreateError = Infallible;
-    type DecodeError = LargeObjMsgDecodeError;
-    type EncodeError = LargeObjMsgEncodeError;
-    type Param = ();
 
     #[inline]
     fn create(_param: ()) -> Result<Self, Infallible> {
         Ok(Self::default())
     }
+}
+
+impl<H> Decoder<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
+where
+    H: HashAlgo + Default
+{
+    type DecodeError = LargeObjMsgDecodeError;
+
+    fn decode(
+        &mut self,
+        buf: &[u8]
+    ) -> Result<(LargeObjMsg<H::HashID>, usize), Self::DecodeError> {
+        let (metadata, mut curr) = self
+            .metadata
+            .decode(buf)
+            .map_err(|err| LargeObjMsgDecodeError::Metadata { err: err })?;
+
+        match metadata {
+            LargeObjMetadata::Offer(LargeObjOffer { hash, size, frag }) => {
+                let datalen = frag.len as usize;
+                let mut data = vec![0; datalen];
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
+
+                curr += if curr + datalen <= buf.len() {
+                    data.copy_from_slice(&buf[curr..curr + datalen]);
+
+                    Ok(datalen)
+                } else {
+                    Err(LargeObjMsgDecodeError::TooShort)
+                }?;
+
+                Ok((
+                    LargeObjMsg::Offer {
+                        hash: hash,
+                        size: size,
+                        frag: LargeObjFrag {
+                            offset: frag.offset,
+                            data: data
+                        }
+                    },
+                    curr
+                ))
+            }
+            LargeObjMetadata::ReqObj(LargeObjReqObj { hash, size, id }) => {
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
+
+                Ok((
+                    LargeObjMsg::ReqObj {
+                        id: id.into(),
+                        hash: hash,
+                        size: size
+                    },
+                    curr
+                ))
+            }
+            LargeObjMetadata::Accept(LargeObjAccept { hash, size, id }) => {
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
+
+                Ok((
+                    LargeObjMsg::Accept {
+                        id: id.into(),
+                        hash: hash,
+                        size: size
+                    },
+                    curr
+                ))
+            }
+            LargeObjMetadata::Frags(LargeObjFrags { id, nfrags }) => {
+                let mut frags = Vec::with_capacity(nfrags as usize);
+
+                for _ in 0..nfrags {
+                    let (header, nbytes) = self
+                        .frag_header
+                        .decode(&buf[curr..])
+                        .map_err(|err| LargeObjMsgDecodeError::FragHeader {
+                            err: err
+                        })?;
+
+                    curr += nbytes;
+
+                    let datalen = header.len as usize;
+                    let mut data = vec![0; datalen];
+
+                    curr += if curr + datalen <= buf.len() {
+                        data.copy_from_slice(&buf[curr..curr + datalen]);
+                        frags.push(LargeObjFrag {
+                            offset: header.offset,
+                            data: data
+                        });
+
+                        Ok(datalen)
+                    } else {
+                        Err(LargeObjMsgDecodeError::TooShort)
+                    }?;
+                }
+
+                Ok((
+                    LargeObjMsg::Frags {
+                        id: id.into(),
+                        frags: frags
+                    },
+                    curr
+                ))
+            }
+            LargeObjMetadata::Req(LargeObjReq { id, reqs }) => Ok((
+                LargeObjMsg::Req {
+                    id: id.into(),
+                    reqs: reqs
+                },
+                curr
+            )),
+            LargeObjMetadata::Finish(LargeObjFinish { id, hash }) => {
+                let hash = self
+                    .hash
+                    .wrap_hashed_bytes(&hash)
+                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
+
+                Ok((
+                    LargeObjMsg::Finish {
+                        hash: hash,
+                        id: id.into()
+                    },
+                    curr
+                ))
+            }
+        }
+    }
+}
+
+impl<H> Encoder<LargeObjMsg<H::HashID>> for LargeObjMsgCodec<H>
+where
+    H: HashAlgo + Default
+{
+    type EncodeError = LargeObjMsgEncodeError;
 
     #[inline]
     fn buf_size(
@@ -1201,135 +1323,6 @@ where
             }
         }
     }
-
-    fn decode(
-        &mut self,
-        buf: &[u8]
-    ) -> Result<(LargeObjMsg<H::HashID>, usize), Self::DecodeError> {
-        let (metadata, mut curr) = self
-            .metadata
-            .decode(buf)
-            .map_err(|err| LargeObjMsgDecodeError::Metadata { err: err })?;
-
-        match metadata {
-            LargeObjMetadata::Offer(LargeObjOffer { hash, size, frag }) => {
-                let datalen = frag.len as usize;
-                let mut data = vec![0; datalen];
-                let hash = self
-                    .hash
-                    .wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
-
-                curr += if curr + datalen <= buf.len() {
-                    data.copy_from_slice(&buf[curr..curr + datalen]);
-
-                    Ok(datalen)
-                } else {
-                    Err(LargeObjMsgDecodeError::TooShort)
-                }?;
-
-                Ok((
-                    LargeObjMsg::Offer {
-                        hash: hash,
-                        size: size,
-                        frag: LargeObjFrag {
-                            offset: frag.offset,
-                            data: data
-                        }
-                    },
-                    curr
-                ))
-            }
-            LargeObjMetadata::ReqObj(LargeObjReqObj { hash, size, id }) => {
-                let hash = self
-                    .hash
-                    .wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
-
-                Ok((
-                    LargeObjMsg::ReqObj {
-                        id: id.into(),
-                        hash: hash,
-                        size: size
-                    },
-                    curr
-                ))
-            }
-            LargeObjMetadata::Accept(LargeObjAccept { hash, size, id }) => {
-                let hash = self
-                    .hash
-                    .wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
-
-                Ok((
-                    LargeObjMsg::Accept {
-                        id: id.into(),
-                        hash: hash,
-                        size: size
-                    },
-                    curr
-                ))
-            }
-            LargeObjMetadata::Frags(LargeObjFrags { id, nfrags }) => {
-                let mut frags = Vec::with_capacity(nfrags as usize);
-
-                for _ in 0..nfrags {
-                    let (header, nbytes) = self
-                        .frag_header
-                        .decode(&buf[curr..])
-                        .map_err(|err| LargeObjMsgDecodeError::FragHeader {
-                            err: err
-                        })?;
-
-                    curr += nbytes;
-
-                    let datalen = header.len as usize;
-                    let mut data = vec![0; datalen];
-
-                    curr += if curr + datalen <= buf.len() {
-                        data.copy_from_slice(&buf[curr..curr + datalen]);
-                        frags.push(LargeObjFrag {
-                            offset: header.offset,
-                            data: data
-                        });
-
-                        Ok(datalen)
-                    } else {
-                        Err(LargeObjMsgDecodeError::TooShort)
-                    }?;
-                }
-
-                Ok((
-                    LargeObjMsg::Frags {
-                        id: id.into(),
-                        frags: frags
-                    },
-                    curr
-                ))
-            }
-            LargeObjMetadata::Req(LargeObjReq { id, reqs }) => Ok((
-                LargeObjMsg::Req {
-                    id: id.into(),
-                    reqs: reqs
-                },
-                curr
-            )),
-            LargeObjMetadata::Finish(LargeObjFinish { id, hash }) => {
-                let hash = self
-                    .hash
-                    .wrap_hashed_bytes(&hash)
-                    .map_err(|err| LargeObjMsgDecodeError::Hash { err: err })?;
-
-                Ok((
-                    LargeObjMsg::Finish {
-                        hash: hash,
-                        id: id.into()
-                    },
-                    curr
-                ))
-            }
-        }
-    }
 }
 
 impl<H, Prin> LargeObjInbound<H, Prin> {
@@ -1371,25 +1364,25 @@ where
     }
 }
 
-impl<H, Wrapper, WrapperCodec, F> LargeObjSender<H, Wrapper, WrapperCodec, F>
+impl<H, Msg, Enc, F> LargeObjSender<H, Msg, Enc, F>
 where
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
+    Enc: Create + Decoder<Msg> + Encoder<Msg>,
+    Enc::Config: Default,
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq,
     F: Frags
 {
     pub fn add_outbound(
         &mut self,
-        msg: &Wrapper
+        msg: &Msg
     ) -> Result<
         Option<H::HashID>,
-        LargeObjProtoAddOutboundError<WrapperCodec::EncodeError>
+        LargeObjProtoAddOutboundError<Enc::EncodeError>
     > {
         trace!(target: "large-obj-proto",
                "adding new outbound message if not already present");
 
-        let data = self.codec.encode_to_vec(msg).map_err(|err| {
+        let data = self.encoder.encode_to_vec(msg).map_err(|err| {
             LargeObjProtoAddOutboundError::Encode { err: err }
         })?;
         let hash = self.hash.hash_bytes(once(&data[..]));
@@ -1439,41 +1432,31 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Msgs, Recv, F>
-    LargeObjProto<
-        H,
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv,
-        F
-    >
+impl<InMsg, OutMsg, PartyID, F, Types>
+    LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
     /// Create a protocol instance.
     pub fn create(
-        config: LargeObjProtoConfig<WrapperCodec::Param, IDs::Config>,
+        config: LargeObjProtoConfig<
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecoderConfig,
+            Types::IDsConfig
+        >,
         notify: Notify,
-        upstream: Recv,
-        msgs: Msgs,
-        auth: Auth,
-        hash: H
-    ) -> Result<Self, LargeObjProtoCreateError<WrapperCodec::CreateError>> {
+        upstream: Types::Recv,
+        msgs: Types::Msgs,
+        auth: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::MsgAuthN,
+        hash: Types::Hash
+    ) -> Result<
+        Self,
+        LargeObjProtoCreateError<
+            <<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder
+             as Create>::CreateError
+        >
+    >{
         let (
             retry,
             codec,
@@ -1493,9 +1476,11 @@ where
         };
         let outbound = Arc::new(Mutex::new(outbound));
         let parties = Arc::new(RwLock::new(HashMap::new()));
-        let codec = WrapperCodec::create(codec)
+        let codec =
+            <<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder as Create>
+            ::create(codec)
             .map_err(|err| LargeObjProtoCreateError::Codec { err })?;
-        let ids = IDs::create(ids);
+        let ids = Types::IDs::create(ids);
         let ids = Arc::new(Mutex::new(ids));
         let param = Arc::new(RwLock::new(F::param(retry.clone())));
 
@@ -1519,7 +1504,9 @@ where
     }
 
     #[inline]
-    pub fn sender(&self) -> LargeObjSender<H, Wrapper, WrapperCodec, F> {
+    pub fn sender(
+        &self
+    ) -> LargeObjSender<Types::Hash, OutMsg, Types::Encoder, F> {
         LargeObjSender {
             wrapper: self.wrapper,
             outbound: self.outbound.clone(),
@@ -1536,7 +1523,12 @@ where
         parties: I
     ) -> Result<(), MutexPoison>
     where
-        I: Iterator<Item = (PartyID, Auth::SessionPrin)> {
+        I: Iterator<
+            Item = (
+                PartyID,
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin
+            )
+        > {
         let mut guard = self.parties.write().map_err(|_| MutexPoison)?;
 
         *guard = parties.map(|(a, b)| (b, a)).collect();
@@ -1556,19 +1548,19 @@ where
         RetryResult<
             Option<Instant>,
             LargeObjPushRetry<
-                H::HashID,
+                Types::HashID,
                 Stream::PushFragRetry,
                 Stream::PushOfferRetry
             >
         >,
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjOfferStream<H::HashID, Ctx, Frags = F>
+        Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
             > + PushStreamReportError<
@@ -1583,7 +1575,7 @@ where
                 .lock()
                 .map_err(|_| LargeObjPushError::MutexPoison)?;
             // XXX use a better data structure here.
-            let mut ents: Vec<(&H::HashID, &mut SendEntry<F>)> =
+            let mut ents: Vec<(&Types::HashID, &mut SendEntry<F>)> =
                 outbound.objs.iter_mut().collect();
 
             if !ents.is_empty() {
@@ -1725,22 +1717,21 @@ where
         &mut self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        id: IDs::Item,
+        id: LargeObjID,
         retry: Stream::PushFragRetry
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjOfferStream<H::HashID, Ctx, Frags = F>
+        Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
-            >,
-        IDs::Item: Into<usize> {
+            > {
         trace!(target: "large-obj-proto",
                "retrying pushing fragments for {}",
                id);
@@ -1787,22 +1778,21 @@ where
         &mut self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        hash: H::HashID,
+        hash: Types::HashID,
         retry: Stream::PushOfferRetry
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjOfferStream<H::HashID, Ctx, Frags = F>
+        Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushOfferError as BatchError>::Permanent
-            >,
-        IDs::Item: Into<usize> {
+            > {
         trace!(target: "large-obj-proto",
                "retrying pushing offer for {}",
                hash);
@@ -1835,22 +1825,21 @@ where
         &mut self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        id: IDs::Item,
+        id: LargeObjID,
         err: Stream::PushFragError
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjOfferStream<H::HashID, Ctx, Frags = F>
+        Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushFragError as BatchError>::Permanent
-            >,
-        IDs::Item: Into<usize> {
+            > {
         trace!(target: "large-obj-proto",
                "completing pushing fragments for {}",
                id);
@@ -1920,22 +1909,21 @@ where
         &mut self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        hash: H::HashID,
+        hash: Types::HashID,
         err: Stream::PushOfferError
     ) -> Result<
         RetryResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >
     >
     where
-        Stream: LargeObjOfferStream<H::HashID, Ctx, Frags = F>
+        Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
                 <Stream::PushOfferError as BatchError>::Permanent
-            >,
-        IDs::Item: Into<usize> {
+            > {
         trace!(target: "large-obj-proto",
                "completing pushing offer for {}",
                hash);
@@ -1989,17 +1977,20 @@ where
 
     fn recv_offer_msg(
         &mut self,
-        prin: &Auth::SessionPrin,
-        hash: H::HashID,
+        prin: &<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        hash: Types::HashID,
         size: u64,
         frag: LargeObjFrag
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2183,15 +2174,18 @@ where
 
     fn recv_frags_msg(
         &mut self,
-        id: IDs::Item,
+        id: LargeObjID,
         recv: Vec<LargeObjFrag>
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2292,15 +2286,18 @@ where
 
     fn recv_accept_msg(
         &mut self,
-        hash: H::HashID,
-        id: IDs::Item
+        hash: Types::HashID,
+        id: LargeObjID
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2337,15 +2334,18 @@ where
 
     fn recv_req_obj_msg(
         &mut self,
-        hash: H::HashID,
-        id: IDs::Item
+        hash: Types::HashID,
+        id: LargeObjID
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2403,15 +2403,18 @@ where
 
     fn recv_reqs_msg(
         &mut self,
-        id: IDs::Item,
+        id: LargeObjID,
         reqs: Vec<LargeObjFragReq>
     ) -> Result<
         Option<Vec<u8>>,
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2468,15 +2471,18 @@ where
 
     fn recv_finish_msg(
         &mut self,
-        hash: H::HashID,
-        id: IDs::Item
+        hash: Types::HashID,
+        id: LargeObjID
     ) -> Result<
         (),
         LargeObjRecvError<
-            H::HashID,
-            Auth::Error,
-            WrapperCodec::DecodeError,
-            Recv::RecvError,
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+                InMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2508,45 +2514,31 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, PartyID, WrapperCodec, IDs, Msgs, Recv, F>
-    AuthNMsgRecv<Auth::SessionPrin, LargeObjMsg<H::HashID>>
-    for LargeObjProto<
-        H,
-        Msg,
-        Wrapper,
-        Auth,
-        PartyID,
-        WrapperCodec,
-        IDs,
-        Msgs,
-        Recv,
-        F
-    >
+impl<InMsg, OutMsg, PartyID, F, Types>
+    AuthNMsgRecv<
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        LargeObjMsg<Types::HashID>
+    > for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    IDs::Item: Clone + Default + Display + Eq + Hash + Into<u64>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: Clone + Display + Hash + HashID + Eq,
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
     type RecvError = LargeObjRecvError<
-        H::HashID,
-        Auth::Error,
-        WrapperCodec::DecodeError,
-        Recv::RecvError,
+        Types::HashID,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+        <Types::Recv as AuthNMsgRecv<
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
+            InMsg
+        >>::RecvError,
         F::RecvReqError
     >;
 
     fn recv_auth_msg(
         &mut self,
-        prin: &Auth::SessionPrin,
-        msg: LargeObjMsg<H::HashID>
+        prin: &<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        msg: LargeObjMsg<Types::HashID>
     ) -> Result<(), Self::RecvError> {
         let data = match msg {
             // Inbound messages.
@@ -2579,7 +2571,7 @@ where
                    data.len());
 
             // Decode the complete message.
-            let (wrapper, _) = self.codec.decode(&data).map_err(|err| {
+            let (wrapper, _) = self.decoder.decode(&data).map_err(|err| {
                 error!(target: "large-obj-proto",
                            "error decoding message: {}",
                            err);
@@ -2596,7 +2588,8 @@ where
                 .msg_authn(prin, wrapper)
                 .map_err(|err| LargeObjRecvError::Auth { err: err })?
             {
-                AuthNResult::Accept((prin, msg)) => {
+                AuthNResult::Accept(auth) => {
+                    let (prin, msg) = auth.take();
                     trace!(target: "large-obj-proto",
                            "message authenticated");
 
@@ -2607,7 +2600,7 @@ where
 
                     Ok(())
                 }
-                AuthNResult::Reject => {
+                AuthNResult::Reject(_) => {
                     trace!(target: "large-obj-proto",
                            "message authentication failed");
 

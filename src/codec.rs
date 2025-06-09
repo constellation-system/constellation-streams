@@ -34,8 +34,11 @@ use std::sync::Condvar;
 use std::time::Instant;
 
 use constellation_auth::cred::Credentials;
-use constellation_common::codec::BytestreamCodec;
+use constellation_common::codec::BytestreamDecoder;
+use constellation_common::codec::BytestreamEncoder;
 use constellation_common::codec::DatagramCodec;
+use constellation_common::codec::Decoder;
+use constellation_common::codec::Encoder;
 use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
@@ -69,7 +72,9 @@ use crate::stream::PushStreamPrivateSingle;
 /// will ignore all batching-related API calls.  It will immediately
 /// encode and send messages when its implementation of
 /// [add](PushStreamAdd::add) is called.
-pub struct DatagramCodecStream<Msg, IO, Codec: DatagramCodec<Msg> + Send> {
+pub struct DatagramCodecStream<Msg, IO, Codec>
+where
+    Codec: Send {
     msg: PhantomData<Msg>,
     /// Codec to use.
     codec: Codec,
@@ -77,7 +82,9 @@ pub struct DatagramCodecStream<Msg, IO, Codec: DatagramCodec<Msg> + Send> {
     io: IO
 }
 
-pub struct BytestreamCodecStream<Msg, IO, Codec: BytestreamCodec<Msg> + Send> {
+pub struct BytestreamCodecStream<Msg, IO, Codec>
+where
+    Codec: Send {
     msg: PhantomData<Msg>,
     /// Codec to use.
     codec: Codec,
@@ -107,7 +114,7 @@ where
 
 impl<Msg, IO, Codec> ConcurrentStream for DatagramCodecStream<Msg, IO, Codec>
 where
-    Codec: DatagramCodec<Msg> + Send,
+    Codec: Send,
     IO: ConcurrentStream
 {
     #[inline]
@@ -131,8 +138,8 @@ where
 
 impl<Msg, IO, Codec> BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: Send,
+    IO: Write
 {
     #[inline]
     pub fn create(
@@ -149,8 +156,8 @@ where
 
 impl<Msg, IO, Codec> DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Send,
+    IO: Write
 {
     #[inline]
     pub fn create(
@@ -194,8 +201,8 @@ where
 
 impl<Msg, IO, Codec> Credentials for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Credentials,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: Send,
+    IO: Credentials
 {
     type Cred = IO::Cred;
     type CredError = IO::CredError;
@@ -208,8 +215,8 @@ where
 
 impl<Msg, IO, Codec> Credentials for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Credentials,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: Send,
+    IO: Credentials
 {
     type Cred = IO::Cred;
     type CredError = IO::CredError;
@@ -223,8 +230,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: BytestreamEncoder<Msg> + Send,
+    IO: Write
 {
     type BatchID = ();
     type CancelBatchError = Infallible;
@@ -334,8 +341,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
     for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    IO: Write
 {
     type BatchID = ();
     type CancelBatchError = Infallible;
@@ -444,16 +451,16 @@ where
 
 impl<Msg, IO, Codec> PushStreamPartyID for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: Send,
+    IO: Write
 {
     type PartyID = ();
 }
 
 impl<Msg, IO, Codec> PushStreamPartyID for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: Send,
+    IO: Write
 {
     type PartyID = ();
 }
@@ -461,9 +468,9 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send,
-    Codec::StreamEncodeError: BatchError
+    Codec: BytestreamEncoder<Msg> + Send,
+    Codec::StreamEncodeError: BatchError,
+    IO: Write
 {
     type AddError = Codec::StreamEncodeError;
     type AddRetry = Infallible;
@@ -510,8 +517,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
     for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    IO: Write
 {
     type AddError = CodecStreamError<Codec::EncodeError, Error>;
     type AddRetry = Infallible;
@@ -558,8 +565,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: BytestreamEncoder<Msg> + Send,
+    IO: Write
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = Infallible;
@@ -733,8 +740,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
     for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    IO: Write
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = Infallible;
@@ -907,8 +914,8 @@ where
 
 impl<Msg, IO, Codec> PullStream<Msg> for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Read,
-    Codec: BytestreamCodec<Msg> + Send
+    Codec: BytestreamDecoder<Msg> + Send,
+    IO: Read
 {
     type PullError = Codec::StreamDecodeError;
 
@@ -921,8 +928,8 @@ where
 
 impl<Msg, IO, Codec> PullStream<Msg> for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Read,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Decoder<Msg> + Send,
+    IO: Read
 {
     type PullError = CodecStreamError<Codec::DecodeError, Error>;
 
@@ -945,9 +952,9 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: BytestreamCodec<Msg> + Send,
-    Codec::StreamEncodeError: BatchError
+    Codec: BytestreamEncoder<Msg> + Send,
+    Codec::StreamEncodeError: BatchError,
+    IO: Write
 {
     type CancelPushError = Infallible;
     type CancelPushRetry = Infallible;
@@ -1028,8 +1035,8 @@ where
 impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
     for DatagramCodecStream<Msg, IO, Codec>
 where
-    IO: Write,
-    Codec: DatagramCodec<Msg> + Send
+    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    IO: Write
 {
     type CancelPushError = Infallible;
     type CancelPushRetry = Infallible;

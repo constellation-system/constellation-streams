@@ -20,17 +20,12 @@ use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
-use std::hash::Hash;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNMsgRecv;
-use constellation_auth::authn::MsgAuthN;
-use constellation_common::codec::Codec;
+use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
-use constellation_common::hashid::HashID;
-use constellation_common::ids::IDGen;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -41,10 +36,10 @@ use log::trace;
 use crate::config::SharedDatagramModeConfig;
 use crate::config::SharedLargeObjModeConfig;
 use crate::error::BatchError;
-use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
+use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
 use crate::stream::LargeObjOfferStream;
@@ -867,23 +862,13 @@ where
     }
 }
 
-impl<H, Msg, Wrapper, Auth, WrapperCodec, IDs, Msgs, Recv, Stream, Ctx>
+// XXX Why is there a stream party ID and then a parameter here?
+impl<InMsg, OutMsg, PartyID, Types, Stream, Ctx>
     PushMode<
         Stream,
-        LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            Stream::PartyID,
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
+        LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>,
         Ctx
-    > for SharedLargeObjPushMode<H, Stream, Ctx>
+    > for SharedLargeObjPushMode<Types::Hash, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
@@ -899,50 +884,35 @@ where
         >
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
         + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>
-        + PushStreamSharedSingle<LargeObjMsg<H::HashID>, Ctx>
-        + LargeObjOfferStream<H::HashID, Ctx>
+        + PushStreamSharedSingle<LargeObjMsg<Types::HashID>, Ctx>
+        + LargeObjOfferStream<Types::HashID, Ctx>
         + PushStreamShared<Ctx>
         + PushStreamParties
         + Send,
     Stream::PartyID: Display + From<usize>,
-    Msgs: LargeObjMsgs<H, Wrapper>,
-    Recv: AuthNMsgRecv<Auth::Prin, Msg>,
-    IDs: IDGen + Iterator<Item = LargeObjID>,
-    Auth: MsgAuthN<Msg, Wrapper>,
-    WrapperCodec: Clone + Codec<Wrapper>,
-    WrapperCodec::Param: Default,
-    H: Clone + HashAlgo,
-    H::HashID: 'static + Clone + Display + Hash + HashID + Eq + Send
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
+    PartyID: Clone
 {
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
         LargeObjPushError<
-            H::HashID,
+            Types::HashID,
             <Stream::PushFragError as BatchError>::Permanent,
             <Stream::PushOfferError as BatchError>::Permanent
         >,
         LargeObjSendError<
-            H::HashID,
-            Auth::SessionPrin,
-            Msgs::AddMsgsError<WrapperCodec::EncodeError>
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+            <Types::Msgs
+             as LargeObjMsgs<Types::Hash, OutMsg>
+             >::AddMsgsError<Types::EncodeError>
         >
     >;
 
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            Stream::PartyID,
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
+        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>,
         stream: &mut Stream
     ) -> Result<Option<Instant>, Self::SendError> {
         debug!(target: "shared-small-obj-push-mode",
@@ -988,18 +958,7 @@ where
     fn retry_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
-            H,
-            Msg,
-            Wrapper,
-            Auth,
-            Stream::PartyID,
-            WrapperCodec,
-            IDs,
-            Msgs,
-            Recv,
-            Stream::Frags
-        >,
+        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>,
         stream: &mut Stream,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {

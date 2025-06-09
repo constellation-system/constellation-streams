@@ -129,7 +129,7 @@ where
                 .recv
                 .recv_auth_msg(&prin, msg)
                 .map_err(|_| RecvSendError::Shutdown),
-            Ok(AuthNResult::Reject) => {
+            Ok(AuthNResult::Reject(_)) => {
                 warn!(target: "pull-streams-recv-thread",
                       "message from {} failed authentication, discarding",
                       self.addr);

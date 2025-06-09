@@ -27,10 +27,10 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Instant;
 
+use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
-use constellation_common::ids::IDGen;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::sched::DenseItemID;
@@ -78,7 +78,8 @@ use crate::stream::StreamReporter;
 
 pub struct DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Default,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -92,7 +93,7 @@ where
 
 pub struct DispatchSelectorReporter<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
     Epochs::Item: Default,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -508,7 +509,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> Clone
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Default,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: Clone + StreamReporter<Src = StreamID, Stream = Stream>,
@@ -526,7 +528,7 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> StreamReporter
     for DispatchSelectorReporter<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
     Epochs::Item: Clone + Default + Display + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -562,7 +564,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamReporter
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: Clone + StreamReporter<Src = StreamID, Stream = Stream>,
@@ -585,7 +588,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx>
     DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -719,7 +723,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStream<Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -860,7 +865,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx>
     PushStreamReportError<DenseItemID<Epochs::Item>>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -884,7 +890,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx, Error>
     PushStreamReportError<Error>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -911,7 +918,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx, Error>
         StreamSelectorBatch<Epochs::Item, <Stream as PushStream<Ctx>>::BatchID>
     > for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -934,7 +942,8 @@ where
 impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx> PushStreamAdd<Msg, Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -991,7 +1000,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamPartyID
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -1003,7 +1013,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamShared<Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -1485,7 +1496,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamPrivate<Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -1954,7 +1966,8 @@ where
 impl<Epochs, StreamID, Stream, Reporter, Ctx> LargeObjStream<Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -2095,7 +2108,8 @@ impl<H, Epochs, StreamID, Stream, Reporter, Ctx> LargeObjOfferStream<H, Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
     H: HashID,
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -2235,7 +2249,8 @@ impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx>
     PushStreamPrivateSingle<Msg, Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
@@ -2531,7 +2546,8 @@ impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx>
     PushStreamSharedSingle<Msg, Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Reporter, Ctx>
 where
-    Epochs: IDGen + Iterator,
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
