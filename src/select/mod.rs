@@ -318,13 +318,15 @@ pub enum StreamSelectorConnectionCreateError<Channels, Addrs> {
 
 /// Errors that can occur when creating a [StreamSelector].
 #[derive(Debug)]
-pub enum StreamSelectorCreateError<Src, Addrs> {
+pub enum StreamSelectorCreateError<Src, Addrs, Epochs> {
     /// Error occurred creating the connection options.
     Connection {
         err: StreamSelectorConnectionCreateError<Src, Addrs>
     },
     /// Error occurred during the initial refresh.
-    Refresh { err: RefreshError }
+    Refresh { err: RefreshError },
+    /// Error occurred creating the [Epochs] instance.
+    Epochs { err: Epochs }
 }
 
 /// Errors that can occur when reporting a success or failure.
@@ -1136,14 +1138,19 @@ where
         >
     ) -> Result<
         Self,
-        StreamSelectorCreateError<Src::CreateError, Resolve::CreateError>
+        StreamSelectorCreateError<
+            Src::CreateError,
+            Resolve::CreateError,
+            Epochs::CreateError
+        >
     >
     where
         Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
         Resolve::Config: Clone + Default {
         let (scheduler, resolver, epochs, retry, size_hint, connections) =
             config.take();
-        let epochs = Epochs::create(epochs);
+        let epochs = Epochs::create(epochs)
+            .map_err(|err| StreamSelectorCreateError::Epochs { err: err })?;
         let state = match size_hint {
             Some(size) => StreamSelectorState::with_capacity(
                 scheduler, retry, epochs, size
@@ -4155,10 +4162,12 @@ where
     }
 }
 
-impl<Src, Addrs> Display for StreamSelectorCreateError<Src, Addrs>
+impl<Src, Addrs, Epochs> Display
+    for StreamSelectorCreateError<Src, Addrs, Epochs>
 where
     Src: Display,
-    Addrs: Display
+    Addrs: Display,
+    Epochs: Display
 {
     fn fmt(
         &self,
@@ -4166,7 +4175,8 @@ where
     ) -> Result<(), Error> {
         match self {
             StreamSelectorCreateError::Connection { err } => err.fmt(f),
-            StreamSelectorCreateError::Refresh { err } => err.fmt(f)
+            StreamSelectorCreateError::Refresh { err } => err.fmt(f),
+            StreamSelectorCreateError::Epochs { err } => err.fmt(f)
         }
     }
 }

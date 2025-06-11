@@ -35,9 +35,9 @@ use std::sync::RwLock;
 use std::time::Duration;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
+use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::codec::per::PERCodec;
@@ -81,7 +81,7 @@ use crate::generated::large_obj::LargeObjReqObj;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamReportError;
 
-pub trait LargeObjMsgs<H, Wrapper>: Sized
+pub trait LargeObjMsgs<H, Msg>: Sized
 where
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq {
@@ -90,33 +90,63 @@ where
         Encode: Display + ScopedError;
 
     /// Use `sender` to add outbound large object messages.
-    fn add_msgs<WrapperCodec, F>(
+    fn add_msgs<Enc, F>(
         &mut self,
-        sender: &mut LargeObjSender<H, Wrapper, WrapperCodec, F>
-    ) -> Result<Option<Instant>, Self::AddMsgsError<WrapperCodec::EncodeError>>
+        sender: &mut LargeObjSender<H, Msg, Enc, F>
+    ) -> Result<Option<Instant>, Self::AddMsgsError<Enc::EncodeError>>
     where
-        WrapperCodec: Clone + Create + Decoder<Wrapper> + Encoder<Wrapper>,
-        WrapperCodec::Config: Default,
+        Enc: Clone + Create + Encoder<Msg>,
+        Enc::Config: Default,
         F: Frags;
 }
 
 pub trait LargeObjProtoTypes<InMsg, OutMsg> {
+    /// Type of principals assigned to messages.
+    type Prin: Display + Clone;
+    /// Type of session principals.
+    type SessionPrin: Clone + Display + Eq + Hash;
     type IDsConfig: Default;
     type IDs: Create<Config = Self::IDsConfig> + Iterator<Item = LargeObjID>;
     type HashID: Clone + Display + Hash + HashID + Eq;
     /// Hash algorithm to use.
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
+    /// Type of wrapper messages.
+    type Wrapper;
+    type DecoderConfig: Default;
+    type DecodeError: Display;
+    type Decoder: Clone
+        + Create<Config = Self::DecoderConfig>
+        + Decoder<Self::Wrapper, DecodeError = Self::DecodeError>;
     type EncoderConfig: Default;
     type EncodeError: Display + ScopedError;
-    type Encoder: Clone + Create<Config = Self::EncoderConfig>
+    type Encoder: Clone
+        + Create<Config = Self::EncoderConfig>
         + Encoder<OutMsg, EncodeError = Self::EncodeError>;
     /// Type of message source.
-    type Msgs: LargeObjMsgs<Self::Hash, OutMsg>;
+    type Msgs: Clone + LargeObjMsgs<Self::Hash, OutMsg>;
     /// Type of message receiver.
-    type Recv: AuthNMsgRecv<<Self::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                            InMsg> + Clone;
+    type Recv: AuthNMsgRecv<Self::Prin, InMsg> + Clone;
+    type AuthNError: Display;
+    type MsgAuthN: Clone
+        + MsgAuthN<
+            InMsg,
+            Self::Wrapper,
+            SessionPrin = Self::SessionPrin,
+            Prin = Self::Prin,
+            Error = Self::AuthNError
+        >;
     /// Message authentication types.
-    type AuthNTypes: MsgAuthNTypes<InMsg>;
+    type AuthNTypes: MsgAuthNTypes<
+        InMsg,
+        Wrapper = Self::Wrapper,
+        Prin = Self::Prin,
+        SessionPrin = Self::SessionPrin,
+        Decoder = Self::Decoder,
+        DecoderConfig = Self::DecoderConfig,
+        DecodeError = Self::DecodeError,
+        AuthNError = Self::AuthNError,
+        MsgAuthN = Self::MsgAuthN
+    >;
 }
 
 const LARGE_OBJ_METADATA_SIZE: usize = 1171;
@@ -253,24 +283,9 @@ where
     F: Frags {
     in_msg: PhantomData<InMsg>,
     out_msg: PhantomData<OutMsg>,
-    outbound:
-        Arc<Mutex<LargeObjOutbound<<Types::Hash as HashAlgo>::HashID, F>>>,
-    parties: Arc<
-        RwLock<
-            HashMap<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-                PartyID
-            >
-        >
-    >,
-    inbound: Arc<
-        Mutex<
-            LargeObjInbound<
-                Types::HashID,
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin
-            >
-        >
-    >,
+    outbound: Arc<Mutex<LargeObjOutbound<Types::HashID, F>>>,
+    parties: Arc<RwLock<HashMap<Types::SessionPrin, PartyID>>>,
+    inbound: Arc<Mutex<LargeObjInbound<Types::HashID, Types::SessionPrin>>>,
     param: Arc<RwLock<F::Param>>,
     ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
@@ -279,8 +294,8 @@ where
     msgs: Types::Msgs,
     retry: Retry,
     encoder: Types::Encoder,
-    decoder: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder,
-    auth: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::MsgAuthN,
+    decoder: Types::Decoder,
+    auth: Types::MsgAuthN,
     hash: Types::Hash
 }
 
@@ -293,6 +308,8 @@ where
 {
     fn clone(&self) -> Self {
         LargeObjProto {
+            out_msg: PhantomData,
+            in_msg: PhantomData,
             tombstone_duration: self.tombstone_duration,
             inbound: self.inbound.clone(),
             outbound: self.outbound.clone(),
@@ -306,7 +323,7 @@ where
             auth: self.auth.clone(),
             hash: self.hash.clone(),
             msgs: self.msgs.clone(),
-            ids: self.ids.clone(),
+            ids: self.ids.clone()
         }
     }
 }
@@ -375,8 +392,10 @@ pub enum LargeObjRecvError<H, Auth, Decode, Upstream, Frags> {
 }
 
 #[derive(Debug)]
-pub enum LargeObjProtoCreateError<Codec> {
-    Codec { err: Codec }
+pub enum LargeObjProtoCreateError<Encoder, Decoder, IDs> {
+    Encoder { err: Encoder },
+    Decoder { err: Decoder },
+    IDs { err: IDs }
 }
 
 #[derive(Debug)]
@@ -653,9 +672,10 @@ where
 {
     type MsgsError = LargeObjSendError<
         Types::HashID,
-        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-        <Types::Msgs
-         as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<Types::EncodeError>
+        Types::SessionPrin,
+        <Types::Msgs as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<
+            Types::EncodeError
+        >
     >;
 
     fn msgs(
@@ -683,19 +703,14 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let hashes: Vec<(
-            (
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-                Types::HashID
-            ),
-            LargeObjID
-        )> = inbound
-            .hashes
-            .iter()
-            .map(|((prin, hash), id)| {
-                ((prin.clone(), hash.clone()), id.clone())
-            })
-            .collect();
+        let hashes: Vec<((Types::SessionPrin, Types::HashID), LargeObjID)> =
+            inbound
+                .hashes
+                .iter()
+                .map(|((prin, hash), id)| {
+                    ((prin.clone(), hash.clone()), id.clone())
+                })
+                .collect();
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
@@ -836,9 +851,10 @@ where
 {
     type MsgsError = LargeObjSendError<
         Types::HashID,
-        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-        <Types::Msgs
-         as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<Types::EncodeError>
+        Types::SessionPrin,
+        <Types::Msgs as LargeObjMsgs<Types::Hash, OutMsg>>::AddMsgsError<
+            Types::EncodeError
+        >
     >;
 
     fn msgs(
@@ -863,19 +879,14 @@ where
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
-        let hashes: Vec<(
-            (
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-                Types::HashID
-            ),
-            LargeObjID
-        )> = inbound
-            .hashes
-            .iter()
-            .map(|((prin, hash), id)| {
-                ((prin.clone(), hash.clone()), id.clone())
-            })
-            .collect();
+        let hashes: Vec<((Types::SessionPrin, Types::HashID), LargeObjID)> =
+            inbound
+                .hashes
+                .iter()
+                .map(|((prin, hash), id)| {
+                    ((prin.clone(), hash.clone()), id.clone())
+                })
+                .collect();
 
         // Scan the inbound objects for protocol replies that need to
         // be sent out.
@@ -1366,7 +1377,7 @@ where
 
 impl<H, Msg, Enc, F> LargeObjSender<H, Msg, Enc, F>
 where
-    Enc: Create + Decoder<Msg> + Encoder<Msg>,
+    Enc: Create + Encoder<Msg>,
     Enc::Config: Default,
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq,
@@ -1442,24 +1453,27 @@ where
     /// Create a protocol instance.
     pub fn create(
         config: LargeObjProtoConfig<
-            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecoderConfig,
+            Types::EncoderConfig,
+            Types::DecoderConfig,
             Types::IDsConfig
         >,
         notify: Notify,
         upstream: Types::Recv,
         msgs: Types::Msgs,
-        auth: <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::MsgAuthN,
+        auth: Types::MsgAuthN,
         hash: Types::Hash
     ) -> Result<
         Self,
         LargeObjProtoCreateError<
-            <<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder
-             as Create>::CreateError
+            <Types::Encoder as Create>::CreateError,
+            <Types::Decoder as Create>::CreateError,
+            <Types::IDs as Create>::CreateError
         >
-    >{
+    > {
         let (
             retry,
-            codec,
+            encoder,
+            decoder,
             ids,
             tombstone_duration,
             inbound_size,
@@ -1476,17 +1490,18 @@ where
         };
         let outbound = Arc::new(Mutex::new(outbound));
         let parties = Arc::new(RwLock::new(HashMap::new()));
-        let codec =
-            <<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Decoder as Create>
-            ::create(codec)
-            .map_err(|err| LargeObjProtoCreateError::Codec { err })?;
-        let ids = Types::IDs::create(ids);
+        let encoder = <Types::Encoder as Create>::create(encoder)
+            .map_err(|err| LargeObjProtoCreateError::Encoder { err })?;
+        let decoder = <Types::Decoder as Create>::create(decoder)
+            .map_err(|err| LargeObjProtoCreateError::Decoder { err })?;
+        let ids = Types::IDs::create(ids)
+            .map_err(|err| LargeObjProtoCreateError::IDs { err })?;
         let ids = Arc::new(Mutex::new(ids));
         let param = Arc::new(RwLock::new(F::param(retry.clone())));
 
         Ok(LargeObjProto {
-            wrapper: PhantomData,
-            msg: PhantomData,
+            out_msg: PhantomData,
+            in_msg: PhantomData,
             tombstone_duration: tombstone_duration,
             inbound: inbound,
             outbound: outbound,
@@ -1495,7 +1510,8 @@ where
             notify: notify,
             param: param,
             retry: retry,
-            codec: codec,
+            encoder: encoder,
+            decoder: decoder,
             auth: auth,
             hash: hash,
             msgs: msgs,
@@ -1508,9 +1524,9 @@ where
         &self
     ) -> LargeObjSender<Types::Hash, OutMsg, Types::Encoder, F> {
         LargeObjSender {
-            wrapper: self.wrapper,
+            wrapper: PhantomData,
             outbound: self.outbound.clone(),
-            codec: self.codec.clone(),
+            encoder: self.encoder.clone(),
             param: self.param.clone(),
             hash: self.hash.clone()
         }
@@ -1523,12 +1539,7 @@ where
         parties: I
     ) -> Result<(), MutexPoison>
     where
-        I: Iterator<
-            Item = (
-                PartyID,
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin
-            )
-        > {
+        I: Iterator<Item = (PartyID, Types::SessionPrin)> {
         let mut guard = self.parties.write().map_err(|_| MutexPoison)?;
 
         *guard = parties.map(|(a, b)| (b, a)).collect();
@@ -1987,10 +1998,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2182,10 +2190,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2294,10 +2299,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2342,10 +2344,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2411,10 +2410,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2479,10 +2475,7 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-                InMsg
-            >>::RecvError,
+            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2528,16 +2521,13 @@ where
         Types::HashID,
         <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
         <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-        <Types::Recv as AuthNMsgRecv<
-            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::Prin,
-            InMsg
-        >>::RecvError,
+        <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
         F::RecvReqError
     >;
 
     fn recv_auth_msg(
         &mut self,
-        prin: &<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
+        prin: &Types::SessionPrin,
         msg: LargeObjMsg<Types::HashID>
     ) -> Result<(), Self::RecvError> {
         let data = match msg {
@@ -2774,16 +2764,21 @@ impl Display for LargeObjDataError {
     }
 }
 
-impl<Codec> Display for LargeObjProtoCreateError<Codec>
+impl<Encoder, Decoder, IDs> Display
+    for LargeObjProtoCreateError<Encoder, Decoder, IDs>
 where
-    Codec: Display
+    Encoder: Display,
+    Decoder: Display,
+    IDs: Display
 {
     fn fmt(
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjProtoCreateError::Codec { err } => err.fmt(f)
+            LargeObjProtoCreateError::Encoder { err } => err.fmt(f),
+            LargeObjProtoCreateError::Decoder { err } => err.fmt(f),
+            LargeObjProtoCreateError::IDs { err } => err.fmt(f)
         }
     }
 }

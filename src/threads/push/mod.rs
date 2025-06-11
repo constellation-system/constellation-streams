@@ -24,11 +24,9 @@ use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
-use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -125,7 +123,8 @@ where
     Stream: LargeObjOfferStream<H::HashID, Ctx>
         + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
         + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>,
-    H: Clone + HashAlgo
+    H: Clone + HashAlgo,
+    H::HashID: Clone
 {
     pub(crate) fn exec<InMsg, OutMsg, PartyID, Types>(
         self,
@@ -141,7 +140,7 @@ where
         >
     >
     where
-        Types: LargeObjProtoTypes<InMsg, OutMsg>,
+        Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         match self {
             LargeObjEntry::PushFrags { id, retry } => proto
@@ -176,7 +175,7 @@ where
         >
     >
     where
-        Types: LargeObjProtoTypes<InMsg, OutMsg>,
+        Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         Ok(proto
             .try_push(ctx, stream)?

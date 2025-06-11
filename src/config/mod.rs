@@ -218,19 +218,24 @@ pub struct FarSchedulerConfig {
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
 #[serde(default)]
-pub struct LargeObjProtoConfig<Codec, IDs>
+pub struct LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default {
     /// Retry for sending fragments.
-    #[serde(default = "LargeObjProtoConfig::<Codec, IDs>::default_retry")]
+    #[serde(
+        default = "LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_retry"
+    )]
     retry: Retry,
     #[serde(default)]
-    codec: Codec,
+    encoder: Encoder,
+    #[serde(default)]
+    decoder: Decoder,
     #[serde(default)]
     ids: IDs,
     #[serde(
-        default = "LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration"
+        default = "LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_tombstone_duration"
     )]
     tombstone_duration: Duration,
     #[serde(default)]
@@ -711,9 +716,11 @@ where
     }
 }
 
-impl<Codec, IDs> Default for LargeObjProtoConfig<Codec, IDs>
+impl<Encoder, Decoder, IDs> Default
+    for LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default
 {
     #[inline]
@@ -722,23 +729,26 @@ where
             inbound_size_hint: None,
             outbound_size_hint: None,
             tombstone_duration:
-                LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration(),
-            retry: LargeObjProtoConfig::<Codec, IDs>::default_retry(),
-            codec: Codec::default(),
+                LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_tombstone_duration(),
+            retry: LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_retry(),
+            encoder: Encoder::default(),
+            decoder: Decoder::default(),
             ids: IDs::default()
         }
     }
 }
 
-impl<Codec, IDs> LargeObjProtoConfig<Codec, IDs>
+impl<Encoder, Decoder, IDs> LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default
 {
     #[inline]
     pub fn new(
         retry: Retry,
-        codec: Codec,
+        encoder: Encoder,
+        decoder: Decoder,
         ids: IDs,
         tombstone_duration: Duration,
         inbound_size_hint: Option<usize>,
@@ -748,8 +758,9 @@ where
             inbound_size_hint: inbound_size_hint,
             outbound_size_hint: outbound_size_hint,
             tombstone_duration: tombstone_duration,
+            encoder: encoder,
+            decoder: decoder,
             retry: retry,
-            codec: codec,
             ids: ids
         }
     }
@@ -775,8 +786,13 @@ where
     }
 
     #[inline]
-    pub fn codec(&self) -> &Codec {
-        &self.codec
+    pub fn decoder(&self) -> &Decoder {
+        &self.decoder
+    }
+
+    #[inline]
+    pub fn encoder(&self) -> &Encoder {
+        &self.encoder
     }
 
     #[inline]
@@ -787,10 +803,19 @@ where
     #[inline]
     pub fn take(
         self
-    ) -> (Retry, Codec, IDs, Duration, Option<usize>, Option<usize>) {
+    ) -> (
+        Retry,
+        Encoder,
+        Decoder,
+        IDs,
+        Duration,
+        Option<usize>,
+        Option<usize>
+    ) {
         (
             self.retry,
-            self.codec,
+            self.encoder,
+            self.decoder,
             self.ids,
             self.tombstone_duration,
             self.inbound_size_hint,

@@ -30,6 +30,7 @@ use std::thread::JoinHandle;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
+use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
 use constellation_common::error::ErrorScope;
@@ -125,10 +126,13 @@ where
         // ISSUE #10: future: unwrap XCIAP here and report successes.
 
         match self.authn.msg_authn(&self.session_prin, msg) {
-            Ok(AuthNResult::Accept((prin, msg))) => self
-                .recv
-                .recv_auth_msg(&prin, msg)
-                .map_err(|_| RecvSendError::Shutdown),
+            Ok(AuthNResult::Accept(msg)) => {
+                let (prin, msg) = msg.take();
+
+                self.recv
+                    .recv_auth_msg(&prin, msg)
+                    .map_err(|_| RecvSendError::Shutdown)
+            }
             Ok(AuthNResult::Reject(_)) => {
                 warn!(target: "pull-streams-recv-thread",
                       "message from {} failed authentication, discarding",

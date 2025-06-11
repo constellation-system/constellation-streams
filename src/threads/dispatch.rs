@@ -315,7 +315,7 @@ where
                     let join = Builder::new()
                         .name(name)
                         .spawn(move || thread.run())
-                        .map_err(|err| WithMutexPoison::Inner { error: err })?;
+                        .map_err(|err| WithMutexPoison::Inner { err: err })?;
                     let entry = RecvThreadEntry {
                         msg: PhantomData,
                         join: join,

@@ -129,6 +129,15 @@ struct StreamEntry<StreamID, Stream> {
     stream: Stream
 }
 
+/// Errors that can occur when creating a [StreamSelector].
+#[derive(Debug)]
+pub enum DispatchSelectorCreateError<Epochs> {
+    /// Error occurred during the initial refresh.
+    Refresh { err: RefreshError },
+    /// Error occurred creating the [Epochs] instance.
+    Epochs { err: Epochs }
+}
+
 /// Errors that can occur when selecting a stream on a [StreamSelector].
 #[derive(Debug)]
 pub enum DispatchSelectorSelectError<Item> {
@@ -605,15 +614,17 @@ where
     pub fn create(
         reporter: Reporter,
         config: DispatchConfig<Epochs::Config>
-    ) -> Result<Self, RefreshError> {
+    ) -> Result<Self, DispatchSelectorCreateError<Epochs::CreateError>> {
         let (scheduler, epochs, retry, size_hint) = config.take();
-        let epochs = Epochs::create(epochs);
+        let epochs = Epochs::create(epochs)
+            .map_err(|err| DispatchSelectorCreateError::Epochs { err: err })?;
         let state = match size_hint {
             Some(size) => DispatchSelectorState::with_capacity(
                 scheduler, retry, epochs, size
             ),
             None => DispatchSelectorState::create(scheduler, retry, epochs)
-        }?;
+        }
+        .map_err(|err| DispatchSelectorCreateError::Refresh { err: err })?;
         let now = Instant::now();
 
         Ok(DispatchSelector {
@@ -2859,6 +2870,21 @@ where
                         stream: retry
                     }))
             }
+        }
+    }
+}
+
+impl<Epochs> Display for DispatchSelectorCreateError<Epochs>
+where
+    Epochs: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            DispatchSelectorCreateError::Refresh { err } => err.fmt(f),
+            DispatchSelectorCreateError::Epochs { err } => err.fmt(f)
         }
     }
 }
