@@ -41,12 +41,12 @@ use constellation_common::codec::Decoder;
 use constellation_common::codec::Encoder;
 use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::retry::RetryResult;
 use log::error;
 
-use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::OutboundFrags;
 use crate::large_obj::LargeObjDataError;
@@ -181,9 +181,9 @@ where
     }
 }
 
-impl<Stream> BatchError for DatagramCodecFragError<Stream>
+impl<Stream> RecoverableError for DatagramCodecFragError<Stream>
 where
-    Stream: BatchError
+    Stream: RecoverableError
 {
     type Completable = DatagramCodecFragError<Stream::Completable>;
     type Permanent = DatagramCodecFragError<Stream::Permanent>;
@@ -285,7 +285,7 @@ where
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
         _batch: &Self::BatchID,
-        _err: <Self::FinishBatchError as BatchError>::Completable
+        _err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
         error!(target: "datagram-codec-stream",
@@ -326,7 +326,7 @@ where
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
         _batch: &Self::BatchID,
-        _err: <Self::CancelBatchError as BatchError>::Completable
+        _err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
         error!(target: "datagram-codec-stream",
@@ -396,7 +396,7 @@ where
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
         _batch: &Self::BatchID,
-        _err: <Self::FinishBatchError as BatchError>::Completable
+        _err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
         error!(target: "datagram-codec-stream",
@@ -437,7 +437,7 @@ where
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
         _batch: &Self::BatchID,
-        _err: <Self::CancelBatchError as BatchError>::Completable
+        _err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
         error!(target: "datagram-codec-stream",
@@ -478,7 +478,7 @@ impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
     Codec: BytestreamEncoder<Msg> + Send,
-    Codec::StreamEncodeError: BatchError,
+    Codec::StreamEncodeError: RecoverableError,
     IO: Write
 {
     type AddError = Codec::StreamEncodeError;
@@ -517,7 +517,7 @@ where
         flags: &mut Self::StreamFlags,
         msg: &Msg,
         batch: &Self::BatchID,
-        _err: <Self::AddError as BatchError>::Completable
+        _err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         self.add(ctx, flags, msg, batch)
     }
@@ -565,7 +565,7 @@ where
         flags: &mut Self::StreamFlags,
         msg: &Msg,
         batch: &Self::BatchID,
-        _err: <Self::AddError as BatchError>::Completable
+        _err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         self.add(ctx, flags, msg, batch)
     }
@@ -625,7 +625,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        _err: <Self::SelectError as BatchError>::Completable
+        _err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
     {
         error!(target: "datagram-codec-stream",
@@ -670,7 +670,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        _err: <Self::CreateBatchError as BatchError>::Completable
+        _err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -711,7 +711,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        _err: <Self::StartBatchError as BatchError>::Completable
+        _err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -727,7 +727,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Completable
+        _err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         RetryResult::Success(())
     }
@@ -800,7 +800,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        _err: <Self::SelectError as BatchError>::Completable
+        _err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::SelectRetry>, Self::SelectError>
     {
         error!(target: "datagram-codec-stream",
@@ -845,7 +845,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        _err: <Self::CreateBatchError as BatchError>::Completable
+        _err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -886,7 +886,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        _err: <Self::StartBatchError as BatchError>::Completable
+        _err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -902,7 +902,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Completable
+        _err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         RetryResult::Success(())
     }
@@ -962,7 +962,7 @@ impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
     for BytestreamCodecStream<Msg, IO, Codec>
 where
     Codec: BytestreamEncoder<Msg> + Send,
-    Codec::StreamEncodeError: BatchError,
+    Codec::StreamEncodeError: RecoverableError,
     IO: Write
 {
     type CancelPushError = Infallible;
@@ -1001,7 +1001,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &Msg,
-        _err: <Self::PushError as BatchError>::Completable
+        _err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push(ctx, msg).map(|_| RetryResult::Success(()))
@@ -1010,7 +1010,7 @@ where
     fn cancel_push(
         &mut self,
         _ctx: &mut Ctx,
-        _err: <Self::PushError as BatchError>::Permanent
+        _err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         Ok(RetryResult::Success(()))
@@ -1031,7 +1031,7 @@ where
     fn complete_cancel_push(
         &mut self,
         _ctx: &mut Ctx,
-        _err: <Self::CancelPushError as BatchError>::Completable
+        _err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         error!(target: "datagram-codec-stream",
@@ -1091,7 +1091,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &Msg,
-        _err: <Self::PushError as BatchError>::Completable
+        _err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push(ctx, msg)
@@ -1100,7 +1100,7 @@ where
     fn cancel_push(
         &mut self,
         _ctx: &mut Ctx,
-        _err: <Self::PushError as BatchError>::Permanent
+        _err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         Ok(RetryResult::Success(()))
@@ -1121,7 +1121,7 @@ where
     fn complete_cancel_push(
         &mut self,
         _ctx: &mut Ctx,
-        _err: <Self::CancelPushError as BatchError>::Completable
+        _err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         error!(target: "datagram-codec-stream",
@@ -1183,7 +1183,7 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags,
-        _err: <Self::PushFragError as BatchError>::Completable
+        _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
@@ -1240,7 +1240,7 @@ where
         ctx: &mut Ctx,
         hash: H::HashID,
         frags: &mut Self::Frags,
-        _err: <Self::PushOfferError as BatchError>::Completable
+        _err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError

@@ -25,6 +25,7 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::retry::RetryResult;
@@ -36,7 +37,6 @@ use log::error;
 use log::info;
 use log::trace;
 
-use crate::error::BatchError;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
@@ -121,8 +121,11 @@ where
 impl<Stream, H, Ctx> LargeObjEntry<Stream, H, Ctx>
 where
     Stream: LargeObjOfferStream<H::HashID, Ctx>
-        + PushStreamReportError<<Stream::PushFragError as BatchError>::Permanent>
-        + PushStreamReportError<<Stream::PushOfferError as BatchError>::Permanent>,
+        + PushStreamReportError<
+            <Stream::PushFragError as RecoverableError>::Permanent
+        > + PushStreamReportError<
+            <Stream::PushOfferError as RecoverableError>::Permanent
+        >,
     H: Clone + HashAlgo,
     H::HashID: Clone
 {
@@ -135,8 +138,8 @@ where
         RetryResult<Option<Instant>, Self>,
         LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
@@ -170,8 +173,8 @@ where
         RetryResult<Option<Instant>, Self>,
         LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where

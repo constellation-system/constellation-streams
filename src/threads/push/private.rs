@@ -25,6 +25,7 @@ use std::time::Instant;
 
 use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
@@ -37,7 +38,6 @@ use log::trace;
 
 use crate::config::PrivateDatagramModeConfig;
 use crate::config::PrivateLargeObjModeConfig;
-use crate::error::BatchError;
 use crate::frags::Frags;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
@@ -61,19 +61,22 @@ pub trait PrivateLargeObjPushModeTypes<Ctx> {
     type BatchID: Clone;
     type HashID: Clone + Display + Hash + HashID + Eq + Send;
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
-    type AddError: BatchError;
-    type StartBatchError: BatchError;
-    type FinishBatchError: BatchError;
-    type PushFragError: BatchError;
-    type PushOfferError: BatchError;
+    type AddError: RecoverableError;
+    type StartBatchError: RecoverableError;
+    type FinishBatchError: RecoverableError;
+    type PushFragError: RecoverableError;
+    type PushOfferError: RecoverableError;
     type Stream: PushStreamReportBatchError<
-            <Self::FinishBatchError as BatchError>::Permanent,
+            <Self::FinishBatchError as RecoverableError>::Permanent,
             Self::BatchID
-        > + PushStreamReportError<<Self::PushFragError as BatchError>::Permanent>
-        + PushStreamReportError<<Self::PushOfferError as BatchError>::Permanent>
-        + PushStreamReportError<<Self::StartBatchError as BatchError>::Permanent>
-        + PushStreamReportBatchError<
-            <Self::AddError as BatchError>::Permanent,
+        > + PushStreamReportError<
+            <Self::PushFragError as RecoverableError>::Permanent
+        > + PushStreamReportError<
+            <Self::PushOfferError as RecoverableError>::Permanent
+        > + PushStreamReportError<
+            <Self::StartBatchError as RecoverableError>::Permanent
+        > + PushStreamReportBatchError<
+            <Self::AddError as RecoverableError>::Permanent,
             Self::BatchID
         > + PushStreamPrivate<Ctx, StartBatchError = Self::StartBatchError>
         + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx, AddError = Self::AddError>
@@ -98,12 +101,12 @@ pub trait PrivateLargeObjPushModeTypes<Ctx> {
 enum PushEntry<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         > + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>
@@ -138,12 +141,12 @@ where
 pub struct PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         > + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>
@@ -176,12 +179,12 @@ where
     Stream: PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>
         + PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         > + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         > + Send,
     Msg: Clone + Send
@@ -201,14 +204,14 @@ impl<Msg, Stream, Ctx> PushEntry<Msg, Stream, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         >
         + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamAdd<Msg, Ctx>
@@ -695,14 +698,14 @@ impl<Msg, Stream, Ctx> PushModeCreate
 where
     Stream: 'static
         + PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         >
         + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamAdd<Msg, Ctx>
@@ -731,14 +734,14 @@ impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
 where
     Stream: 'static
         + PushStreamReportBatchError<
-            <Stream::FinishBatchError as BatchError>::Permanent,
+            <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamReportError<
-            <Stream::StartBatchError as BatchError>::Permanent
+            <Stream::StartBatchError as RecoverableError>::Permanent
         >
         + PushStreamReportBatchError<
-            <Stream::AddError as BatchError>::Permanent,
+            <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         >
         + PushStreamAdd<Msg, Ctx>
@@ -873,8 +876,8 @@ where
     type SendError = PrivateLargeObjPushModeSendError<
         LargeObjPushError<
             Types::HashID,
-            <Types::PushFragError as BatchError>::Permanent,
-            <Types::PushOfferError as BatchError>::Permanent
+            <Types::PushFragError as RecoverableError>::Permanent,
+            <Types::PushOfferError as RecoverableError>::Permanent
         >,
         LargeObjSendError<
             Types::HashID,

@@ -32,6 +32,7 @@ use std::time::Instant;
 use bitvec::bitvec;
 use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryResult;
@@ -43,7 +44,6 @@ use log::trace;
 use log::warn;
 
 use crate::config::BatchSlotsConfig;
-use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
 use crate::large_obj::LargeObjID;
@@ -147,11 +147,11 @@ pub trait PushStream<Ctx> {
     /// ID for batches.
     type BatchID: Clone;
     /// Type of errors that can occur when canceling a batch.
-    type CancelBatchError: BatchError + Debug;
+    type CancelBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a new batch.
     type CancelBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when sending a batch.
-    type FinishBatchError: BatchError + Debug;
+    type FinishBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for finishing a new batch.
     type FinishBatchRetry: RetryWhen + Clone + Debug;
     /// Type of stream flags used in [add](PushStreamAdd::add).
@@ -208,7 +208,7 @@ pub trait PushStream<Ctx> {
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::FinishBatchError as BatchError>::Completable
+        err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>;
 
     /// Cancel a pending batch and release any resources allocated to
@@ -251,7 +251,7 @@ pub trait PushStream<Ctx> {
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::CancelBatchError as BatchError>::Completable
+        err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>;
 
     /// Cancel all pending batches.
@@ -336,7 +336,7 @@ pub trait PushStreamReportBatchError<Error, Batch> {
 ///  called successfully.
 pub trait PushStreamAdd<T, Ctx>: PushStream<Ctx> {
     /// Type of errors that can occur when adding a message to a batch.
-    type AddError: BatchError + Debug;
+    type AddError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for adding a
     /// message to a batch.
     type AddRetry: RetryWhen + Clone + Debug;
@@ -387,7 +387,7 @@ pub trait PushStreamAdd<T, Ctx>: PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         msg: &T,
         batch: &Self::BatchID,
-        err: <Self::AddError as BatchError>::Completable
+        err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError>;
 }
 
@@ -428,16 +428,16 @@ pub trait PushStreamParties: PushStreamPartyID {
 pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: BatchError + Debug;
+    type SelectError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
     type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type CreateBatchError: BatchError + Debug;
+    type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type StartBatchError: BatchError + Debug;
+    type StartBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type StartBatchRetry: RetryWhen + Clone + Debug;
     /// Type of information given by a [RetryResult] for aborting a
@@ -510,7 +510,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Create a new batch.
@@ -557,7 +557,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -609,7 +609,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -627,7 +627,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
+        err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 
     /// Retry a previous call to
@@ -647,16 +647,16 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
 pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: BatchError + Debug;
+    type SelectError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
     type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type CreateBatchError: BatchError + Debug;
+    type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when starting a new batch.
-    type StartBatchError: BatchError + Debug;
+    type StartBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for starting a new batch.
     type StartBatchRetry: RetryWhen + Clone + Debug;
     /// Type of information given by a [RetryResult] for aborting a
@@ -725,7 +725,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
 
     /// Create a new batch.
@@ -772,7 +772,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -820,7 +820,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -838,7 +838,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
+        err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 
     /// Retry a previous call to
@@ -857,7 +857,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
 
 pub trait LargeObjStream<Ctx> {
     /// Type of errors that can occur when sending a fragment.
-    type PushFragError: BatchError;
+    type PushFragError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
     type PushFragRetry: RetryWhen + Clone + Debug;
@@ -890,7 +890,7 @@ pub trait LargeObjStream<Ctx> {
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags,
-        err: <Self::PushFragError as BatchError>::Completable
+        err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
@@ -901,7 +901,7 @@ pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
 where
     H: HashID {
     /// Type of errors that can occur when sending an offer.
-    type PushOfferError: BatchError + Debug;
+    type PushOfferError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending an
     /// offer.
     type PushOfferRetry: RetryWhen + Clone + Debug;
@@ -932,7 +932,7 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags,
-        err: <Self::PushOfferError as BatchError>::Completable
+        err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
@@ -950,13 +950,13 @@ where
 pub trait PushStreamSharedSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamShared<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: BatchError + Debug;
+    type PushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
     type PushRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: BatchError + Debug;
+    type CancelPushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
     type CancelPushRetry: RetryWhen + Clone + Debug;
@@ -998,13 +998,13 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         &mut self,
         ctx: &mut Ctx,
         msg: &T,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>;
 
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>;
 
     fn retry_cancel_push(
@@ -1016,7 +1016,7 @@ pub trait PushStreamSharedSingle<T, Ctx>:
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>;
 }
 
@@ -1029,13 +1029,13 @@ pub trait PushStreamSharedSingle<T, Ctx>:
 pub trait PushStreamPrivateSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamPrivate<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: BatchError + Debug;
+    type PushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
     type PushRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: BatchError + Debug;
+    type CancelPushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
     type CancelPushRetry: RetryWhen + Clone + Debug;
@@ -1073,13 +1073,13 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
         &mut self,
         ctx: &mut Ctx,
         msg: &T,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>;
 
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>;
 
     fn retry_cancel_push(
@@ -1091,7 +1091,7 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>;
 }
 
@@ -1180,10 +1180,10 @@ where
     }
 }
 
-impl<Finish, Cancel> BatchError for StreamFinishCancel<Finish, Cancel>
+impl<Finish, Cancel> RecoverableError for StreamFinishCancel<Finish, Cancel>
 where
-    Finish: BatchError,
-    Cancel: BatchError
+    Finish: RecoverableError,
+    Cancel: RecoverableError
 {
     type Completable =
         StreamFinishCancel<Finish::Completable, Cancel::Completable>;
@@ -1382,7 +1382,7 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::FinishBatchError as BatchError>::Completable
+        err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
         let mut guard = self
@@ -1435,7 +1435,7 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::CancelBatchError as BatchError>::Completable
+        err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
         let mut guard = self
@@ -1569,7 +1569,7 @@ where
         flags: &mut Self::StreamFlags,
         msg: &T,
         batch: &Self::BatchID,
-        err: <Self::AddError as BatchError>::Completable
+        err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         let mut guard = self
             .inner
@@ -1670,7 +1670,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
@@ -1726,7 +1726,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -1779,7 +1779,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -1798,7 +1798,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
+        err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         match err {
             ThreadedStreamError::Inner { error } => match self.inner.lock() {
@@ -1903,7 +1903,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         let mut guard = self
             .inner
@@ -1959,7 +1959,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -2016,7 +2016,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -2035,7 +2035,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
+        err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         match err {
             ThreadedStreamError::Inner { error } => match self.inner.lock() {
@@ -2124,7 +2124,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         let mut guard = self
@@ -2140,7 +2140,7 @@ where
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -2178,7 +2178,7 @@ where
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         let mut guard = self
@@ -2238,7 +2238,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         let mut guard = self
@@ -2254,7 +2254,7 @@ where
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -2292,7 +2292,7 @@ where
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         let mut guard = self
@@ -2384,7 +2384,7 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags,
-        err: <Self::PushFragError as BatchError>::Completable
+        err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
@@ -2443,7 +2443,7 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags,
-        err: <Self::PushOfferError as BatchError>::Completable
+        err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
@@ -2652,9 +2652,9 @@ where
     }
 }
 
-impl<Inner> BatchError for ThreadedStreamError<Inner>
+impl<Inner> RecoverableError for ThreadedStreamError<Inner>
 where
-    Inner: BatchError
+    Inner: RecoverableError
 {
     type Completable = Inner::Completable;
     type Permanent = ThreadedStreamError<Inner::Permanent>;

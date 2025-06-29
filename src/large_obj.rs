@@ -48,6 +48,7 @@ use constellation_common::codec::Encoder;
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
@@ -62,7 +63,6 @@ use log::error;
 use log::trace;
 
 use crate::config::LargeObjProtoConfig;
-use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
 use crate::frags::InboundFrags;
@@ -1573,16 +1573,16 @@ where
         >,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
-                <Stream::PushFragError as BatchError>::Permanent
+                <Stream::PushFragError as RecoverableError>::Permanent
             > + PushStreamReportError<
-                <Stream::PushOfferError as BatchError>::Permanent
+                <Stream::PushOfferError as RecoverableError>::Permanent
             > {
         trace!(target: "large-obj-proto",
                "trying to push fragments");
@@ -1741,14 +1741,14 @@ where
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
-                <Stream::PushFragError as BatchError>::Permanent
+                <Stream::PushFragError as RecoverableError>::Permanent
             > {
         trace!(target: "large-obj-proto",
                "retrying pushing fragments for {}",
@@ -1802,14 +1802,14 @@ where
         RetryResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
-                <Stream::PushOfferError as BatchError>::Permanent
+                <Stream::PushOfferError as RecoverableError>::Permanent
             > {
         trace!(target: "large-obj-proto",
                "retrying pushing offer for {}",
@@ -1849,14 +1849,14 @@ where
         RetryResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
-                <Stream::PushFragError as BatchError>::Permanent
+                <Stream::PushFragError as RecoverableError>::Permanent
             > {
         trace!(target: "large-obj-proto",
                "completing pushing fragments for {}",
@@ -1933,14 +1933,14 @@ where
         RetryResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as BatchError>::Permanent,
-            <Stream::PushOfferError as BatchError>::Permanent
+            <Stream::PushFragError as RecoverableError>::Permanent,
+            <Stream::PushOfferError as RecoverableError>::Permanent
         >
     >
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
-                <Stream::PushOfferError as BatchError>::Permanent
+                <Stream::PushOfferError as RecoverableError>::Permanent
             > {
         trace!(target: "large-obj-proto",
                "completing pushing offer for {}",
@@ -2638,7 +2638,7 @@ where
     }
 }
 
-impl BatchError for LargeObjMsgEncodeError {
+impl RecoverableError for LargeObjMsgEncodeError {
     type Completable = Infallible;
     type Permanent = Self;
 

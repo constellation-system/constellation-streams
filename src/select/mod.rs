@@ -44,6 +44,7 @@ use std::time::Instant;
 
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::net::IPEndpointAddr;
@@ -71,7 +72,6 @@ use crate::channels::ChannelsCreate;
 use crate::config::ConnectionConfig;
 use crate::config::FarSchedulerConfig;
 use crate::config::PartyConfig;
-use crate::error::BatchError;
 use crate::error::ErrorReportInfo;
 use crate::error::PartiesBatchError;
 use crate::error::SelectionsError;
@@ -1582,7 +1582,7 @@ where
     }
 }
 
-impl<Epoch> BatchError for SelectorStreamError<Epoch>
+impl<Epoch> RecoverableError for SelectorStreamError<Epoch>
 where
     Epoch: Debug + Display
 {
@@ -1634,9 +1634,9 @@ where
     }
 }
 
-impl<Epoch, Err> BatchError for SelectorBatchError<Epoch, Err>
+impl<Epoch, Err> RecoverableError for SelectorBatchError<Epoch, Err>
 where
-    Err: BatchError,
+    Err: RecoverableError,
     Epoch: Debug + Display
 {
     type Completable = Err::Completable;
@@ -1681,11 +1681,11 @@ where
     }
 }
 
-impl<Select, Parties, Stream, Epoch> BatchError
+impl<Select, Parties, Stream, Epoch> RecoverableError
     for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
 where
-    Select: BatchError,
-    Stream: BatchError,
+    Select: RecoverableError,
+    Stream: RecoverableError,
     Parties: Clone,
     Epoch: Clone + Debug
 {
@@ -1821,7 +1821,7 @@ where
     }
 }
 
-impl<Addrs, Param, StreamID> BatchError
+impl<Addrs, Param, StreamID> RecoverableError
     for StreamSelectorSelectError<Addrs, Param, StreamID>
 where
     Param: Debug + Display + ScopedError,
@@ -1911,7 +1911,7 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::FinishBatchError as BatchError>::Completable
+        err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
         self.batch_stream(batch)
@@ -1952,7 +1952,7 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        err: <Self::CancelBatchError as BatchError>::Completable
+        err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
         self.batch_stream(batch)
@@ -2154,7 +2154,7 @@ where
         flags: &mut Self::StreamFlags,
         msg: &Msg,
         batch: &Self::BatchID,
-        err: <Self::AddError as BatchError>::Completable
+        err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         self.batch_stream(batch)
             .map_err(|err| SelectorBatchError::Stream { err: err })?
@@ -2370,7 +2370,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         match err {
             // This is here as a placeholder; this type is
@@ -2475,7 +2475,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -2609,7 +2609,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -2661,7 +2661,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Permanent
+        _err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Infallible> {
         // We don't actually have to do anything here.  There's no
         // state prior to creating a batch on the underlying stream.
@@ -2863,7 +2863,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        err: <Self::SelectError as BatchError>::Completable
+        err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
         match err {
             // This is here as a placeholder; this type is
@@ -2968,7 +2968,7 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        err: <Self::CreateBatchError as BatchError>::Completable
+        err: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
@@ -3094,7 +3094,7 @@ where
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::StartBatchError as BatchError>::Completable
+        err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -3146,7 +3146,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as BatchError>::Permanent
+        _err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Infallible> {
         // We don't actually have to do anything here.  There's no
         // state prior to creating a batch on the underlying stream.
@@ -3288,7 +3288,7 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags,
-        err: <Self::PushFragError as BatchError>::Completable
+        err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
@@ -3440,7 +3440,7 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags,
-        err: <Self::PushOfferError as BatchError>::Completable
+        err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
@@ -3627,7 +3627,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &Msg,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         match err {
@@ -3669,7 +3669,7 @@ where
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -3747,7 +3747,7 @@ where
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -3967,7 +3967,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &Msg,
-        err: <Self::PushError as BatchError>::Completable
+        err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         match err {
@@ -4016,7 +4016,7 @@ where
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -4094,7 +4094,7 @@ where
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
