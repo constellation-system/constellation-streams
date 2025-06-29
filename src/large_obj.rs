@@ -23,6 +23,7 @@ use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -85,9 +86,9 @@ pub trait LargeObjMsgs<H, Msg>: Sized
 where
     H: Clone + HashAlgo,
     H::HashID: Clone + Display + Hash + HashID + Eq {
-    type AddMsgsError<Encode>: Display + ScopedError
+    type AddMsgsError<Encode>: Debug + Display + ScopedError
     where
-        Encode: Display + ScopedError;
+        Encode: Debug + Display + ScopedError;
 
     /// Use `sender` to add outbound large object messages.
     fn add_msgs<Enc, F>(
@@ -102,37 +103,39 @@ where
 
 pub trait LargeObjProtoTypes<InMsg, OutMsg> {
     /// Type of principals assigned to messages.
-    type Prin: Display + Clone;
+    type Prin: Debug + Display + Clone;
     /// Type of session principals.
-    type SessionPrin: Clone + Display + Eq + Hash;
+    type SessionPrin: Clone + Debug + Display + Eq + Hash;
     type IDsConfig: Default;
     type IDs: Create<Config = Self::IDsConfig> + Iterator<Item = LargeObjID>;
-    type HashID: Clone + Display + Hash + HashID + Eq;
+    type HashID: Clone + Debug + Display + Hash + HashID + Eq;
     /// Hash algorithm to use.
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
     /// Type of wrapper messages.
     type Wrapper;
     type DecoderConfig: Default;
-    type DecodeError: Display;
+    type DecodeError: Debug + Display;
     type Decoder: Clone
         + Create<Config = Self::DecoderConfig>
         + Decoder<Self::Wrapper, DecodeError = Self::DecodeError>;
     type EncoderConfig: Default;
-    type EncodeError: Display + ScopedError;
+    type EncodeError: Debug + Display + ScopedError;
     type Encoder: Clone
         + Create<Config = Self::EncoderConfig>
         + Encoder<OutMsg, EncodeError = Self::EncodeError>;
     /// Type of message source.
     type Msgs: Clone + LargeObjMsgs<Self::Hash, OutMsg>;
     /// Type of message receiver.
-    type Recv: AuthNMsgRecv<Self::Prin, InMsg> + Clone;
-    type AuthNError: Display;
+    type Recv: AuthNMsgRecv<Self::Prin, InMsg, Self::AuthNMsg> + Clone;
+    type AuthNMsg: AuthNed<Self::Prin, InMsg>;
+    type AuthNError: Debug + Display;
     type MsgAuthN: Clone
         + MsgAuthN<
             InMsg,
             Self::Wrapper,
             SessionPrin = Self::SessionPrin,
             Prin = Self::Prin,
+            AuthNMsg = Self::AuthNMsg,
             Error = Self::AuthNError
         >;
     /// Message authentication types.
@@ -334,6 +337,7 @@ pub enum LargeObjPushRetry<H, Frags, Offer> {
     Retry { when: Instant }
 }
 
+#[derive(Debug)]
 pub enum LargeObjPushError<H, Frags, Offer> {
     Frags { err: Frags },
     Offer { err: Offer },
@@ -342,6 +346,7 @@ pub enum LargeObjPushError<H, Frags, Offer> {
     MutexPoison
 }
 
+#[derive(Debug)]
 pub enum LargeObjSendError<H, Prin, Msgs> {
     Msgs { err: Msgs },
     NoObj { hash: H, id: LargeObjID },
@@ -349,6 +354,7 @@ pub enum LargeObjSendError<H, Prin, Msgs> {
     MutexPoison
 }
 
+#[derive(Debug)]
 pub enum LargeObjRecvError<H, Auth, Decode, Upstream, Frags> {
     Upstream {
         err: Upstream
@@ -427,6 +433,7 @@ pub enum LargeObjMsgDecodeError {
     TooShort
 }
 
+#[derive(Debug)]
 pub enum LargeObjDataError {
     Frags { err: OutboundDataError },
     OutOfBounds
@@ -1998,7 +2005,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2190,7 +2201,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2299,7 +2314,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2344,7 +2363,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2410,7 +2433,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2475,7 +2502,11 @@ where
             Types::HashID,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
             F::RecvReqError
         >
     > {
@@ -2507,33 +2538,38 @@ where
     }
 }
 
-impl<InMsg, OutMsg, PartyID, F, Types>
-    AuthNMsgRecv<
-        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
-        LargeObjMsg<Types::HashID>
-    > for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
+impl<InMsg, OutMsg, PartyID, F, AuthNMsg, Types>
+    AuthNMsgRecv<Types::SessionPrin, LargeObjMsg<Types::HashID>, AuthNMsg>
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
+    AuthNMsg: AuthNed<Types::SessionPrin, LargeObjMsg<Types::HashID>>,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
-    type RecvError = LargeObjRecvError<
-        Types::HashID,
-        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
-        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-        <Types::Recv as AuthNMsgRecv<Types::Prin, InMsg>>::RecvError,
-        F::RecvReqError
-    >;
+    type RecvError =
+        LargeObjRecvError<
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
+            F::RecvReqError
+        >;
 
     fn recv_auth_msg(
         &mut self,
-        prin: &Types::SessionPrin,
-        msg: LargeObjMsg<Types::HashID>
+        msg: AuthNMsg
     ) -> Result<(), Self::RecvError> {
+        let (prin, msg) = msg.take();
+
         let data = match msg {
             // Inbound messages.
             LargeObjMsg::Offer { hash, size, frag } => {
-                self.recv_offer_msg(prin, hash, size, frag)
+                self.recv_offer_msg(&prin, hash, size, frag)
             }
             LargeObjMsg::Frags { id, frags } => self.recv_frags_msg(id, frags),
             // Outbound messages.
@@ -2575,16 +2611,15 @@ where
             // Authenticate the complete message.
             match self
                 .auth
-                .msg_authn(prin, wrapper)
+                .msg_authn(&prin, wrapper)
                 .map_err(|err| LargeObjRecvError::Auth { err: err })?
             {
-                AuthNResult::Accept(auth) => {
-                    let (prin, msg) = auth.take();
+                AuthNResult::Accept(msg) => {
                     trace!(target: "large-obj-proto",
                            "message authenticated");
 
                     // Send it upstream.
-                    self.upstream.recv_auth_msg(&prin, msg).map_err(|err| {
+                    self.upstream.recv_auth_msg(msg).map_err(|err| {
                         LargeObjRecvError::Upstream { err: err }
                     })?;
 
@@ -2756,7 +2791,7 @@ impl Display for LargeObjDataError {
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjDataError::Frags { err } => err.fmt(f),
+            LargeObjDataError::Frags { err } => write!(f, "{}", err),
             LargeObjDataError::OutOfBounds => {
                 write!(f, "offered data is outside available data range")
             }
@@ -2789,8 +2824,8 @@ impl Display for LargeObjMsgEncodeError {
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjMsgEncodeError::Metadata { err } => err.fmt(f),
-            LargeObjMsgEncodeError::FragHeader { err } => err.fmt(f),
+            LargeObjMsgEncodeError::Metadata { err } => write!(f, "{}", err),
+            LargeObjMsgEncodeError::FragHeader { err } => write!(f, "{}", err),
             LargeObjMsgEncodeError::TooShort => {
                 write!(f, "output buffer is too short")
             }
@@ -2804,9 +2839,9 @@ impl Display for LargeObjMsgDecodeError {
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjMsgDecodeError::Metadata { err } => err.fmt(f),
-            LargeObjMsgDecodeError::FragHeader { err } => err.fmt(f),
-            LargeObjMsgDecodeError::Hash { err } => err.fmt(f),
+            LargeObjMsgDecodeError::Metadata { err } => write!(f, "{}", err),
+            LargeObjMsgDecodeError::FragHeader { err } => write!(f, "{}", err),
+            LargeObjMsgDecodeError::Hash { err } => write!(f, "{}", err),
             LargeObjMsgDecodeError::TooShort => {
                 write!(f, "input buffer is too short")
             }

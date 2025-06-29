@@ -18,6 +18,7 @@
 
 //! Error-management utilities.
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io::ErrorKind;
@@ -47,7 +48,7 @@ use crate::stream::CompoundBatchID;
 /// This trait represents the splitting portion of this process.
 pub trait BatchError: Sized {
     /// Type of permanent errors.
-    type Permanent: Display + ScopedError;
+    type Permanent: Debug + Display + ScopedError;
     /// Type of errors that can be retried.
     type Completable;
 
@@ -108,6 +109,7 @@ pub struct PartiesBatchError<Parties, Err> {
 }
 
 /// Wrapper for errors that need to indicate no selection was made.
+#[derive(Debug)]
 pub enum SelectionsError<Inner, Info> {
     /// Underlying error type.
     Inner {
@@ -123,7 +125,7 @@ pub enum SelectionsError<Inner, Info> {
 
 impl<Encode, Write> BatchError for CodecStreamError<Encode, Write>
 where
-    Encode: Display,
+    Encode: Debug + Display,
     Write: BatchError
 {
     type Completable = CodecStreamError<Infallible, Write::Completable>;
@@ -175,7 +177,8 @@ where
 
 impl<Inner, Info> BatchError for SelectionsError<Inner, Info>
 where
-    Inner: BatchError
+    Inner: BatchError,
+    Info: Debug
 {
     type Completable = Inner::Completable;
     type Permanent = SelectionsError<Inner::Permanent, Info>;
@@ -310,8 +313,8 @@ where
 impl<Idx, Success, Err> BatchError for CompoundBatchError<Idx, Success, Err>
 where
     Err: BatchError,
-    Success: Clone,
-    Idx: Clone + Display
+    Success: Clone + Debug,
+    Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
     type Permanent = CompoundBatchError<Idx, Success, Err::Permanent>;
@@ -354,8 +357,8 @@ where
 impl<Idx, Success, Err> BatchError for ErrorSet<Idx, Success, Err>
 where
     Err: BatchError,
-    Success: Clone,
-    Idx: Clone + Display
+    Success: Clone + Debug,
+    Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
     type Permanent = ErrorSet<Idx, Success, Err::Permanent>;

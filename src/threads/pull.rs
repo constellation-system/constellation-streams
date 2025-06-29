@@ -77,7 +77,7 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg> {
     msg: PhantomData<Msg>,
     authn: AuthN,
     shutdown: ShutdownFlag,
@@ -98,7 +98,7 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg> {
     inner: Arc<PullStreams<Msg, Wrapper, Listener, AuthN, Recv>>
 }
 
@@ -108,7 +108,7 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
 {
 }
 
@@ -118,7 +118,7 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
 {
 }
 
@@ -128,7 +128,7 @@ where
     Listener: PullStreamListener<Wrapper>,
     Listener::Stream: ConcurrentStream + Credentials,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -294,7 +294,10 @@ where
         + Clone
         + MsgAuthN<Msg, Wrapper, SessionPrin = Listener::Prin>
         + Send,
-    Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Clone + Send,
+    Recv: 'static
+        + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
+        + Clone
+        + Send,
     AuthN::Prin: 'static + Send
 {
     type Prin = AuthN::SessionPrin;
@@ -368,7 +371,7 @@ where
     Listener::Prin: 'static + Send,
     Wrapper: 'static + Send,
     Msg: 'static + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     AuthN: Clone + MsgAuthN<Msg, Wrapper> + Send
 {
     fn create(

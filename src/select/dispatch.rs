@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -217,7 +218,7 @@ impl<Item> ScopedError for DispatchSelectorSelectError<Item> {
 
 impl<Item> BatchError for DispatchSelectorSelectError<Item>
 where
-    Item: Display
+    Item: Debug + Display
 {
     type Completable = Infallible;
     type Permanent = Self;
@@ -538,8 +539,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> StreamReporter
     for DispatchSelectorReporter<Epochs, StreamID, Stream, Reporter, Ctx>
 where
     Epochs: Create + Iterator,
-    Epochs::Item: Clone + Default + Display + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send
 {
@@ -575,8 +576,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamReporter
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: Clone + StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send
 {
@@ -736,8 +737,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStream<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send
 {
@@ -878,8 +879,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send
 {
@@ -903,8 +904,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx, Error>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
@@ -931,8 +932,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx, Error>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + Send
 {
@@ -955,8 +956,8 @@ impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx> PushStreamAdd<Msg, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStreamAdd<Msg, Ctx> + Send
 {
@@ -1026,10 +1027,11 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamShared<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
-    Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
+    Stream::PartyID: Debug
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -1509,8 +1511,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> PushStreamPrivate<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send
 {
@@ -1979,8 +1981,8 @@ impl<Epochs, StreamID, Stream, Reporter, Ctx> LargeObjStream<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + LargeObjStream<Ctx> + Send
 {
@@ -2121,8 +2123,8 @@ where
     H: HashID,
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + LargeObjOfferStream<H, Ctx> + Send
 {
@@ -2262,8 +2264,8 @@ impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
     Stream: Clone + PushStream<Ctx> + PushStreamPrivateSingle<Msg, Ctx> + Send
 {
@@ -2559,10 +2561,11 @@ impl<Msg, Epochs, StreamID, Stream, Reporter, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Display + Default + Eq,
-    StreamID: Clone + Display + Eq + Hash,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
     Reporter: StreamReporter<Src = StreamID, Stream = Stream>,
-    Stream: Clone + PushStream<Ctx> + PushStreamSharedSingle<Msg, Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + PushStreamSharedSingle<Msg, Ctx> + Send,
+    Stream::PartyID: Debug
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
@@ -2883,7 +2886,9 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            DispatchSelectorCreateError::Refresh { err } => err.fmt(f),
+            DispatchSelectorCreateError::Refresh { err } => {
+                write!(f, "{}", err)
+            }
             DispatchSelectorCreateError::Epochs { err } => err.fmt(f)
         }
     }
@@ -2898,7 +2903,7 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            DispatchSelectorSelectError::Select { err } => err.fmt(f),
+            DispatchSelectorSelectError::Select { err } => write!(f, "{}", err),
             DispatchSelectorSelectError::Report { err } => err.fmt(f),
             DispatchSelectorSelectError::MutexPoison => {
                 write!(f, "mutex poisoned")
@@ -2935,7 +2940,9 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            DispatchSelectorRefreshError::Refresh { err } => err.fmt(f),
+            DispatchSelectorRefreshError::Refresh { err } => {
+                write!(f, "{}", err)
+            }
             DispatchSelectorRefreshError::BadID { id } => {
                 write!(f, "bad ID {} in new assignment", id)
             }

@@ -93,9 +93,18 @@ where
 }
 
 /// Errors that can occur when sending an object fragment.
-pub enum DatagramCodecFragError<Codec> {
-    Frag { err: LargeObjDataError },
-    Stream { err: Codec }
+#[derive(Debug)]
+pub enum DatagramCodecFragError<Stream> {
+    /// An error occurred in the framgent logic.
+    Frag {
+        /// Error that occurred in the fragment logic.
+        err: LargeObjDataError
+    },
+    /// An error occurred in the lower-level stream.
+    Stream {
+        /// The error that occurred in the lower-level stream.
+        err: Stream
+    }
 }
 
 impl<Codec, T> ErrorReportInfo<T> for DatagramCodecFragError<Codec>

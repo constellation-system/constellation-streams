@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -32,7 +33,7 @@ use crate::generated::large_obj::LargeObjFragReq;
 
 pub trait Frags {
     type Param: Clone;
-    type RecvReqError: Display + ScopedError;
+    type RecvReqError: Debug + Display + ScopedError;
 
     fn param(retry: Retry) -> Self::Param;
 

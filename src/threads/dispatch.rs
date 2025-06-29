@@ -18,6 +18,7 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hash;
@@ -72,7 +73,7 @@ where
     /// Type of authenticated message receivers.
     ///
     /// This will be used to deliver incoming messages.
-    type Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg> + Send;
+    type Recv: 'static + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg> + Send;
     /// Type of errors that can occur during dispatch.
     type DispatchError: Display;
 
@@ -96,7 +97,7 @@ pub struct Dispatched<Msg, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash {
     msg: PhantomData<Msg>,
     shutdown: ShutdownFlag,
@@ -109,7 +110,7 @@ struct DispatchEntry<Msg, Addr, Stream, AuthN, Recv, Reporter>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Reporter: StreamReporter,
     Addr: Clone + Eq + Hash {
     inner: Dispatched<Msg, Addr, Stream, AuthN, Recv>,
@@ -171,7 +172,7 @@ pub struct DispatchEntryReporter<Msg, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash {
     inner: Dispatched<Msg, Addr, Stream, AuthN, Recv>
 }
@@ -188,7 +189,7 @@ unsafe impl<Msg, Addr, Stream, AuthN, Recv> Sync
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash
 {
 }
@@ -198,7 +199,7 @@ impl<Msg, Addr, Stream, AuthN, Recv> Clone
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash
 {
     fn clone(&self) -> Self {
@@ -217,7 +218,7 @@ impl<Msg, Addr, Stream, AuthN, Recv> Clone
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash
 {
     #[inline]
@@ -232,7 +233,7 @@ impl<Msg, Addr, Stream, AuthN, Recv> Dispatched<Msg, Addr, Stream, AuthN, Recv>
 where
     Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg>,
+    Recv: Clone + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
     Addr: Clone + Eq + Hash
 {
     pub fn new(
@@ -269,8 +270,11 @@ where
     Stream: 'static + ConcurrentStream + Credentials + PullStream<Msg> + Send,
     AuthN: 'static + Clone + MsgAuthN<Msg, Msg> + Send,
     AuthN::SessionPrin: Send,
-    Recv: 'static + Clone + AuthNMsgRecv<AuthN::Prin, Msg> + Send,
-    Addr: 'static + Clone + Display + Eq + Hash + Send
+    Recv: 'static
+        + Clone
+        + AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
+        + Send,
+    Addr: 'static + Clone + Debug + Display + Eq + Hash + Send
 {
     type Prin = AuthN::SessionPrin;
     type ReportError = WithMutexPoison<Error>;
@@ -585,7 +589,7 @@ where
     ) -> Result<(), std::fmt::Error> {
         match self {
             DispatchHandlerError::Dispatch { err } => err.fmt(f),
-            DispatchHandlerError::IO { err } => err.fmt(f),
+            DispatchHandlerError::IO { err } => write!(f, "{}", err),
             DispatchHandlerError::MutexPoison => write!(f, "mutex poisoned")
         }
     }

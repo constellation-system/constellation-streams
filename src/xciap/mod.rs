@@ -183,9 +183,13 @@ impl XciapHeader {
 }
 
 #[cfg(test)]
-use constellation_common::codec::Codec;
-#[cfg(test)]
 use constellation_common::codec::DatagramCodec;
+#[cfg(test)]
+use constellation_common::codec::Decoder;
+#[cfg(test)]
+use constellation_common::codec::Encoder;
+#[cfg(test)]
+use constellation_common::config::Create;
 
 #[test]
 fn test_xciap4header_codec() {

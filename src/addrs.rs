@@ -24,6 +24,7 @@
 //! serving as the origins.  `Addrs` provides basic functionality for
 //! periodically refreshing the resolution of addresses, obtaining the
 //! current set of addresses, and determining when next to refresh.
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::time::Instant;
@@ -44,14 +45,14 @@ pub trait Addrs {
     /// DNS example, this is the DNS name.
     type Origin;
     /// Type of addresses.
-    type Addr: Clone + Display + Eq + Hash;
+    type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of iterators for the results.
     ///
     /// This indicates the address, the source from which it
     /// originates, and when it was last cached.
     type AddrsIter: Iterator<Item = (Self::Addr, Self::Origin, Instant)>;
     /// Type of errors that can occur when resolving addresses.
-    type AddrsError: Display + ScopedError;
+    type AddrsError: Debug + Display + ScopedError;
 
     /// Get the earliest future time that addresses will be refreshed.
     ///
@@ -84,7 +85,7 @@ pub trait AddrsCreate<Ctx, Origins>: Sized + Addrs {
     /// Type of configurations from which this is created.
     type Config;
     /// Type of errors that can occur during creation.
-    type CreateError: Display;
+    type CreateError: Debug + Display;
 
     /// Create an instance of this `Addrs` from its configuration.
     fn create(

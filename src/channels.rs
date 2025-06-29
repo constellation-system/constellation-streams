@@ -27,6 +27,7 @@
 //! which can represent a combination of both shared (true multicast)
 //! and private (unicast) streams in a single type.
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -64,7 +65,7 @@ use crate::stream::StreamReporter;
 ///
 /// This is used in multiplexing to determine whether to pair off
 /// parameters and counterparty addresses.
-pub trait ChannelParam<Addr>: Clone + Display + Eq + Hash {
+pub trait ChannelParam<Addr>: Clone + Debug + Display + Eq + Hash {
     /// Check whether this parameter set can accept the address `addr`.
     fn accepts_addr(
         &self,
@@ -99,7 +100,7 @@ pub trait ChannelParam<Addr>: Clone + Display + Eq + Hash {
 ///     API depend on the details of the underlying channels.
 pub trait Channels<Ctx> {
     /// Type of channel IDs.
-    type ChannelID: Clone + Display + Eq + Hash;
+    type ChannelID: Clone + Debug + Display + Eq + Hash;
     /// Type of parameters for obtaining streams.
     ///
     /// Channel parameters are used to obtain individual streams from
@@ -112,13 +113,13 @@ pub trait Channels<Ctx> {
     /// channel parameter.
     type ParamIter: Iterator<Item = (Self::ChannelID, Self::Param)>;
     /// Type of errors that can occur when obtaining parameters.
-    type ParamError: Display + ScopedError;
+    type ParamError: Debug + Display + ScopedError;
     /// Type of counterparty addresses to which to connect.
-    type Addr: Clone + Display + Eq + Hash;
+    type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of raw streams obtained from parameters.
     type Stream;
     /// Type of errors that can occur when obtaining flows from a parameter.
-    type StreamError: Display + ScopedError;
+    type StreamError: Debug + Display + ScopedError;
 
     /// Obtain the current set of all channel parameters, and the time
     /// at which they will need to be refreshed.
@@ -161,7 +162,7 @@ pub trait ChannelsCreate<Ctx, Srcs>: Sized + Channels<Ctx> {
     /// [StreamReporter] to use for reporting new streams.
     type Reporter: StreamReporter;
     /// Type of errors that can occur during creation.
-    type CreateError: Display;
+    type CreateError: Debug + Display;
 
     /// Create an instance of this `Channels`.
     fn create(
@@ -260,6 +261,7 @@ pub struct SharedPrivateParamIter<
 }
 
 /// Param error for [SharedPrivateChannels].
+#[derive(Debug)]
 pub enum SharedPrivateError<Private, Shared> {
     /// Param error for the private channels.
     Private {
@@ -325,7 +327,7 @@ pub enum SharedPrivateStreamFrags<Private, Shared> {
 }
 
 /// Type of retry information for [SharedPrivateChannelStream].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SharedPrivateStreamRetry<Private, Shared> {
     /// Private channels need to be retried.
     Private {
@@ -340,6 +342,7 @@ pub enum SharedPrivateStreamRetry<Private, Shared> {
 }
 
 /// Stream error for [SharedPrivateChannels].
+#[derive(Debug)]
 pub enum SharedPrivateStreamError<Private, Shared> {
     /// Stream error for the private channels.
     Private {

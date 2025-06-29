@@ -47,6 +47,7 @@ use crate::stream::PullStream;
 use crate::stream::ThreadedStream;
 
 pub mod dispatch;
+pub mod poll;
 pub mod pull;
 pub mod push;
 
@@ -63,7 +64,7 @@ where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
     AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg> {
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg> {
     msg: PhantomData<Msg>,
     authn: AuthN,
     shutdown: ShutdownFlag,
@@ -86,7 +87,7 @@ where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
     AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
 {
     fn drop(&mut self) {
         if self.shutdown.is_live() {
@@ -114,7 +115,7 @@ where
     Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
     Addr: Display + Eq + Hash,
     AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg>
+    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>
 {
     fn handle_msg(
         &mut self,
@@ -126,13 +127,10 @@ where
         // ISSUE #10: future: unwrap XCIAP here and report successes.
 
         match self.authn.msg_authn(&self.session_prin, msg) {
-            Ok(AuthNResult::Accept(msg)) => {
-                let (prin, msg) = msg.take();
-
-                self.recv
-                    .recv_auth_msg(&prin, msg)
-                    .map_err(|_| RecvSendError::Shutdown)
-            }
+            Ok(AuthNResult::Accept(msg)) => self
+                .recv
+                .recv_auth_msg(msg)
+                .map_err(|_| RecvSendError::Shutdown),
             Ok(AuthNResult::Reject(_)) => {
                 warn!(target: "pull-streams-recv-thread",
                       "message from {} failed authentication, discarding",

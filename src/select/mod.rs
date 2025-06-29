@@ -31,6 +31,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -97,7 +98,7 @@ pub mod dispatch;
 mod sched;
 
 /// Newtype for the index for a set of connections.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ConnectionsIdx(usize);
 
 /// Newtype for the index for a set of streams.
@@ -106,7 +107,7 @@ pub struct StreamsIdx(usize);
 
 /// Newtype used to identify a specific channel from an element of the
 /// set of connection options.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ConnChannelID<ChannelID> {
     /// The specific channel.
     channel: ChannelID,
@@ -449,7 +450,7 @@ pub enum SelectorBatchSelectError<Select, Parties, Stream, Epoch> {
 }
 
 /// Retry information for starting batches for [StreamSelector].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SelectorStartRetry<PartyID> {
     when: Instant,
     parties: Vec<PartyID>
@@ -1583,7 +1584,7 @@ where
 
 impl<Epoch> BatchError for SelectorStreamError<Epoch>
 where
-    Epoch: Display
+    Epoch: Debug + Display
 {
     type Completable = Infallible;
     type Permanent = SelectorStreamError<Epoch>;
@@ -1636,7 +1637,7 @@ where
 impl<Epoch, Err> BatchError for SelectorBatchError<Epoch, Err>
 where
     Err: BatchError,
-    Epoch: Display
+    Epoch: Debug + Display
 {
     type Completable = Err::Completable;
     type Permanent = SelectorBatchError<Epoch, Err::Permanent>;
@@ -1686,7 +1687,7 @@ where
     Select: BatchError,
     Stream: BatchError,
     Parties: Clone,
-    Epoch: Clone
+    Epoch: Clone + Debug
 {
     type Completable = SelectorBatchSelectError<
         Select::Completable,
@@ -1823,9 +1824,9 @@ where
 impl<Addrs, Param, StreamID> BatchError
     for StreamSelectorSelectError<Addrs, Param, StreamID>
 where
-    Param: Display + ScopedError,
-    Addrs: Display + ScopedError,
-    StreamID: Display
+    Param: Debug + Display + ScopedError,
+    Addrs: Debug + Display + ScopedError,
+    StreamID: Debug + Display
 {
     type Completable = Infallible;
     type Permanent = Self;
@@ -1840,7 +1841,7 @@ impl<Epochs, Src, Resolve, Ctx> PushStream<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -2102,7 +2103,7 @@ impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamAdd<Msg, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -2187,13 +2188,14 @@ impl<Epochs, Src, Resolve, Ctx> PushStreamShared<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
     Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
+    <Src::Stream as PushStreamPartyID>::PartyID: Debug,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
@@ -2686,7 +2688,7 @@ impl<Epochs, Src, Resolve, Ctx> PushStreamPrivate<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -3171,7 +3173,7 @@ impl<Epochs, Src, Resolve, Ctx> LargeObjStream<Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -3324,7 +3326,7 @@ where
     H: HashID,
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -3475,7 +3477,7 @@ impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -3786,7 +3788,7 @@ impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamSharedSingle<Msg, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
@@ -3794,6 +3796,7 @@ where
     >,
     Src::Stream:
         Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send,
+    <Src::Stream as PushStreamPartyID>::PartyID: Debug,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
@@ -4175,7 +4178,7 @@ where
     ) -> Result<(), Error> {
         match self {
             StreamSelectorCreateError::Connection { err } => err.fmt(f),
-            StreamSelectorCreateError::Refresh { err } => err.fmt(f),
+            StreamSelectorCreateError::Refresh { err } => write!(f, "{}", err),
             StreamSelectorCreateError::Epochs { err } => err.fmt(f)
         }
     }
@@ -4193,7 +4196,7 @@ where
         match self {
             StreamSelectorError::Addrs { err } => err.fmt(f),
             StreamSelectorError::Param { err } => err.fmt(f),
-            StreamSelectorError::Refresh { err } => err.fmt(f)
+            StreamSelectorError::Refresh { err } => write!(f, "{}", err)
         }
     }
 }
@@ -4210,7 +4213,9 @@ where
         match self {
             ThreadedStreamSelectorError::Addrs { err } => err.fmt(f),
             ThreadedStreamSelectorError::Param { err } => err.fmt(f),
-            ThreadedStreamSelectorError::Refresh { err } => err.fmt(f),
+            ThreadedStreamSelectorError::Refresh { err } => {
+                write!(f, "{}", err)
+            }
             ThreadedStreamSelectorError::MutexPoison => {
                 write!(f, "mutex poisoned")
             }
@@ -4251,7 +4256,7 @@ where
     ) -> Result<(), Error> {
         match self {
             StreamSelectorSelectError::Selector { err } => err.fmt(f),
-            StreamSelectorSelectError::Select { err } => err.fmt(f),
+            StreamSelectorSelectError::Select { err } => write!(f, "{}", err),
             StreamSelectorSelectError::Report { err } => err.fmt(f),
             StreamSelectorSelectError::MutexPoison => {
                 write!(f, "mutex poisoned")
@@ -4286,7 +4291,7 @@ impl Display for StreamsIdx {
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
-        self.0.fmt(f)
+        write!(f, "{}", self.0)
     }
 }
 
@@ -4303,6 +4308,32 @@ where
         match self {
             SelectorBatchSelectError::Select { select, .. } => select.fmt(f),
             SelectorBatchSelectError::Stream { stream, .. } => stream.fmt(f)
+        }
+    }
+}
+
+impl<Select, Parties, Stream, Epoch> Debug
+    for SelectorBatchSelectError<Select, Parties, Stream, Epoch>
+where
+    Select: Debug,
+    Stream: Debug,
+    Epoch: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            SelectorBatchSelectError::Select { select, .. } => {
+                write!(f, "Select {{ select: {:?} }}", select)
+            }
+            SelectorBatchSelectError::Stream {
+                stream, selected, ..
+            } => write!(
+                f,
+                "Stream {{ stream: {:?}, selected: {:?} }}",
+                stream, selected
+            )
         }
     }
 }

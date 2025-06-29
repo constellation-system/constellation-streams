@@ -18,6 +18,7 @@
 
 //! Core traits and utilities for streams.
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -60,7 +61,7 @@ pub trait ConcurrentStream {
 pub trait PullStream<T> {
     /// Type of errors that can occur in a [pull](PullStream::pull)
     /// operation.
-    type PullError: Display + ScopedError;
+    type PullError: Debug + Display + ScopedError;
 
     /// Wait for an incoming message.
     fn pull(&mut self) -> Result<T, Self::PullError>;
@@ -74,11 +75,11 @@ pub trait StreamReporter {
     /// Type of streams being reported.
     type Stream: Send;
     /// Source address.
-    type Src: Clone + Display + Eq + Hash;
+    type Src: Clone + Debug + Display + Eq + Hash;
     /// Session principal from authenication.
-    type Prin: Clone + Display + Eq + Hash;
+    type Prin: Clone + Debug + Display + Eq + Hash;
     /// Type of errors that can happen reporting a stream.
-    type ReportError: Display + ScopedError;
+    type ReportError: Debug + Display + ScopedError;
 
     /// Report a new stream for a counterparty address.
     ///
@@ -102,11 +103,11 @@ pub trait PullStreamListener<T> {
     /// Type of streams being listened for.
     type Stream: PullStream<T> + Send;
     /// Type of counterparty addresses.
-    type Addr: Clone + Display + Eq + Hash;
+    type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of session principals.
-    type Prin: Clone + Display + Eq + Hash;
+    type Prin: Clone + Debug + Display + Eq + Hash;
     /// Type of errors that can occur listening.
-    type ListenError: Display;
+    type ListenError: Debug + Display;
 
     /// Listen for a new incoming stream.
     ///
@@ -146,17 +147,17 @@ pub trait PushStream<Ctx> {
     /// ID for batches.
     type BatchID: Clone;
     /// Type of errors that can occur when canceling a batch.
-    type CancelBatchError: BatchError;
+    type CancelBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for canceling a new batch.
-    type CancelBatchRetry: RetryWhen + Clone;
+    type CancelBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when sending a batch.
-    type FinishBatchError: BatchError;
+    type FinishBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for finishing a new batch.
-    type FinishBatchRetry: RetryWhen + Clone;
+    type FinishBatchRetry: RetryWhen + Clone + Debug;
     /// Type of stream flags used in [add](PushStreamAdd::add).
     type StreamFlags: Default;
     /// Type of error that can occur when reporting failures.
-    type ReportError: Display;
+    type ReportError: Debug + Display;
 
     /// Create an empty
     /// [StreamFlags](PushStream::StreamFlags).
@@ -277,7 +278,7 @@ pub trait PushStream<Ctx> {
 /// [StreamSelector](crate::select::StreamSelector).
 pub trait PushStreamReportError<Error> {
     /// Type of errors that can occur reporting the original error.
-    type ReportError: Display;
+    type ReportError: Debug + Display;
 
     /// Report an error that occurred during some stream operation.
     fn report_error(
@@ -303,7 +304,7 @@ pub trait PushStreamReportError<Error> {
 /// which are associated with
 /// [StreamMulticaster](crate::multicast::StreamMulticaster).
 pub trait PushStreamReportBatchError<Error, Batch> {
-    type ReportBatchError: Display;
+    type ReportBatchError: Debug + Display;
 
     fn report_error_with_batch(
         &mut self,
@@ -335,10 +336,10 @@ pub trait PushStreamReportBatchError<Error, Batch> {
 ///  called successfully.
 pub trait PushStreamAdd<T, Ctx>: PushStream<Ctx> {
     /// Type of errors that can occur when adding a message to a batch.
-    type AddError: BatchError;
+    type AddError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for adding a
     /// message to a batch.
-    type AddRetry: RetryWhen + Clone;
+    type AddRetry: RetryWhen + Clone + Debug;
 
     /// Add a message to a pending batch.
     ///
@@ -418,7 +419,7 @@ pub trait PushStreamParties: PushStreamPartyID {
     /// Detailed information about a party.
     type PartyInfo;
     /// Error that can occur obtaining parties.
-    type PartiesError: Display;
+    type PartiesError: Debug + Display;
 
     /// Get an iterator for all parties and their dense IDs.
     fn parties(&self) -> Result<Self::PartiesIter, Self::PartiesError>;
@@ -427,21 +428,21 @@ pub trait PushStreamParties: PushStreamPartyID {
 pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: BatchError;
+    type SelectError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Clone;
+    type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type CreateBatchError: BatchError;
+    type CreateBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type CreateBatchRetry: RetryWhen + Clone;
+    type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type StartBatchError: BatchError;
+    type StartBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type StartBatchRetry: RetryWhen + Clone;
+    type StartBatchRetry: RetryWhen + Clone + Debug;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
-    type AbortBatchRetry: RetryWhen + Clone;
+    type AbortBatchRetry: RetryWhen + Clone + Debug;
     /// Type of selection cache used in
     /// [select](PushStreamShared::select).
     type Selections: Clone + Default;
@@ -646,21 +647,21 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
 pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: BatchError;
+    type SelectError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Clone;
+    type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type CreateBatchError: BatchError;
+    type CreateBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type CreateBatchRetry: RetryWhen + Clone;
+    type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when starting a new batch.
-    type StartBatchError: BatchError;
+    type StartBatchError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for starting a new batch.
-    type StartBatchRetry: RetryWhen + Clone;
+    type StartBatchRetry: RetryWhen + Clone + Debug;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
-    type AbortBatchRetry: RetryWhen + Clone;
+    type AbortBatchRetry: RetryWhen + Clone + Debug;
     /// Type of selection cache used in
     /// [select](PushStreamPrivate::select).
     type Selections: Clone + Default;
@@ -701,6 +702,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections
     ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>;
+
     /// Retry a previous call to
     /// [start_batch](PushStreamPrivate::start_batch).
     ///
@@ -858,7 +860,7 @@ pub trait LargeObjStream<Ctx> {
     type PushFragError: BatchError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushFragRetry: RetryWhen + Clone;
+    type PushFragRetry: RetryWhen + Clone + Debug;
     /// Type of outbound fragment structures.
     type Frags: Frags;
 
@@ -899,10 +901,10 @@ pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
 where
     H: HashID {
     /// Type of errors that can occur when sending an offer.
-    type PushOfferError: BatchError;
+    type PushOfferError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for sending an
     /// offer.
-    type PushOfferRetry: RetryWhen + Clone;
+    type PushOfferRetry: RetryWhen + Clone + Debug;
 
     fn push_offer(
         &mut self,
@@ -948,16 +950,16 @@ where
 pub trait PushStreamSharedSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamShared<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: BatchError;
+    type PushError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen + Clone;
+    type PushRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: BatchError;
+    type CancelPushError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen + Clone;
+    type CancelPushRetry: RetryWhen + Clone + Debug;
 
     /// Push a single message into the stream.
     ///
@@ -1027,16 +1029,16 @@ pub trait PushStreamSharedSingle<T, Ctx>:
 pub trait PushStreamPrivateSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamPrivate<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: BatchError;
+    type PushError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen + Clone;
+    type PushRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: BatchError;
+    type CancelPushError: BatchError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen + Clone;
+    type CancelPushRetry: RetryWhen + Clone + Debug;
 
     /// Push a single message into the stream.
     ///
@@ -1094,7 +1096,7 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
 }
 
 /// Unique identifier for streams.
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct StreamID<Addr, ChannelID, Param> {
     /// Counterparty address.
     party_addr: Addr,
@@ -1304,8 +1306,8 @@ where
 impl<Addr, Prin, Stream> StreamReporter for PassthruReporter<Addr, Prin, Stream>
 where
     Stream: Send,
-    Prin: Clone + Display + Eq + Hash,
-    Addr: Clone + Display + Eq + Hash
+    Prin: Clone + Debug + Display + Eq + Hash,
+    Addr: Clone + Debug + Display + Eq + Hash
 {
     type Prin = Prin;
     type ReportError = Infallible;

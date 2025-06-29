@@ -24,6 +24,7 @@
 
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -193,6 +194,7 @@ pub enum StreamMulticasterStartError<Select, Create, Selections, Batches> {
 
 /// Errors that can occur when attempting to report another error that
 /// occurred while starting a batch.
+#[derive(Debug)]
 pub enum StreamMulticasterStartReportError<Select, Create> {
     /// Error reporting an error from the select phase.
     Select {
@@ -208,7 +210,7 @@ pub enum StreamMulticasterStartReportError<Select, Create> {
 
 /// Errors that can occur in a complete
 /// [push](PushStreamSharedSingle::push) implementation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StreamMulticasterPushError<Start, Add, Finish, BatchID> {
     /// Error occurred while starting the batch.
     Start {
@@ -233,6 +235,7 @@ pub enum StreamMulticasterPushError<Start, Add, Finish, BatchID> {
 
 /// Errors that can occur when attempting to report another error that
 /// occurred while performing a push.
+#[derive(Debug)]
 pub enum StreamMulticasterPushReportError<Start, Add, Finish> {
     /// Error reporting an error from the start phase.
     Start {
@@ -273,7 +276,7 @@ pub enum StreamMulticasterCancelPushRetry<Start, Cancel, Flags, BatchID> {
 }
 
 /// Retry information for an attempt to abort a batch.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StreamMulticasterAbortRetry<Idx, BatchID, Retry> {
     idx: Idx,
     batch: BatchID,
@@ -604,7 +607,7 @@ impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
     PushStreamReportError<ErrorSet<Idx, Success, Err>>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx> + PushStreamReportError<Err>,
@@ -650,7 +653,7 @@ impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
     PushStreamReportBatchError<ErrorSet<Idx, Success, Err>, CompoundBatchID>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx>
@@ -870,7 +873,7 @@ impl<Cancel, Flags, BatchID> BatchError
 where
     Cancel: BatchError,
     Flags: Clone,
-    BatchID: Clone
+    BatchID: Clone + Debug
 {
     type Completable =
         StreamMulticasterCancelPushError<Cancel::Completable, Flags, BatchID>;
@@ -980,7 +983,7 @@ where
     Start: BatchError,
     Add: BatchError,
     Finish: BatchError,
-    BatchID: Clone
+    BatchID: Clone + Debug
 {
     type Completable = StreamMulticasterPushError<
         Start::Completable,
@@ -1045,8 +1048,8 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx>
     StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
     Stream::BatchID: Clone
 {
@@ -1158,8 +1161,8 @@ impl<Party, Idx, H, Stream, Ctx>
         Ctx
     >
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: LargeObjStream<Ctx>
         + PushStream<Ctx>
         + PushStreamAdd<LargeObjMsg<H>, Ctx>,
@@ -1282,10 +1285,10 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx>
     StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
-    Stream::BatchID: Clone
+    Stream::BatchID: Clone + Debug
 {
     fn decide_select_result(
         &mut self,
@@ -1394,8 +1397,8 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStream<Ctx>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
     Stream::BatchID: Clone
 {
@@ -1964,8 +1967,8 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamAdd<Msg, Ctx>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx>,
     Stream::BatchID: Clone
 {
@@ -2146,10 +2149,10 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamShared<Ctx>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
-    Stream::BatchID: Clone
+    Stream::BatchID: Clone + Debug
 {
     type AbortBatchRetry = Vec<
         StreamMulticasterAbortRetry<
@@ -2800,7 +2803,7 @@ where
 
 impl<Idx, F> Frags for StreamMulticasterFrags<Idx, F>
 where
-    Idx: Clone + Display + From<usize> + Into<usize>,
+    Idx: Clone + Debug + Display + From<usize> + Into<usize>,
     F: Frags
 {
     type Param = Vec<F::Param>;
@@ -2882,8 +2885,8 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjStream<Ctx>
         Ctx
     >
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: LargeObjStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     H: Clone + HashID
 {
@@ -3040,8 +3043,8 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
         Ctx
     >
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: LargeObjOfferStream<H, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     H: Clone + HashID
 {
@@ -3190,11 +3193,11 @@ where
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamSharedSingle<Msg, Ctx>
     for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx> + PushStreamPrivate<Ctx>,
     Stream::StreamFlags: Clone,
-    Stream::BatchID: Clone
+    Stream::BatchID: Clone + Debug
 {
     type CancelPushError = StreamMulticasterCancelPushError<
         Self::CancelBatchError,
@@ -3615,6 +3618,51 @@ where
     }
 }
 
+impl<Start, Cancel, Flags, BatchID> Debug
+    for StreamMulticasterCancelPushRetry<Start, Cancel, Flags, BatchID>
+where
+    Start: Debug,
+    Cancel: Debug,
+    BatchID: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCancelPushRetry::Start { start, .. } => {
+                write!(f, "Start {{ start: {:?}, }}", start)
+            }
+            StreamMulticasterCancelPushRetry::Cancel {
+                cancel,
+                batch_id,
+                ..
+            } => write!(
+                f,
+                "Cancel {{ cancel: {:?}, batch_id: {:?} }}",
+                cancel, batch_id
+            )
+        }
+    }
+}
+
+impl<Cancel, Flags, BatchID> Debug
+    for StreamMulticasterCancelPushError<Cancel, Flags, BatchID>
+where
+    Cancel: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCancelPushError::Cancel { cancel, .. } => {
+                cancel.fmt(f)
+            }
+        }
+    }
+}
+
 impl<Cancel, Flags, BatchID> Display
     for StreamMulticasterCancelPushError<Cancel, Flags, BatchID>
 where
@@ -3628,6 +3676,23 @@ where
             StreamMulticasterCancelPushError::Cancel { cancel, .. } => {
                 cancel.fmt(f)
             }
+        }
+    }
+}
+
+impl<Select, Create, Selections, Batches> Debug
+    for StreamMulticasterStartError<Select, Create, Selections, Batches>
+where
+    Select: Debug,
+    Create: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterStartError::Select { select, .. } => select.fmt(f),
+            StreamMulticasterStartError::Create { create, .. } => create.fmt(f)
         }
     }
 }
