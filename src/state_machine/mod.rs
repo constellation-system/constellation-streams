@@ -17,9 +17,16 @@
 // <https://www.gnu.org/licenses/>.
 
 //! Raw protocol state machines.
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::io::Read;
 use std::io::Write;
 use std::ptr::read;
+
+use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
+use constellation_common::error::ScopedError;
 
 /// Discriminator used to indicate end and non-end states.
 ///
@@ -44,7 +51,7 @@ pub trait RawMachineState: Sized {
     /// Result value(s).
     type Value;
     /// Error type.
-    type Error;
+    type Error: RecoverableError;
 
     /// Get the starting state.
     fn start(params: &Self::Params) -> Self;
@@ -52,8 +59,17 @@ pub trait RawMachineState: Sized {
     /// Convert an error produced while writing into an error state.
     fn error(
         params: &Self::Params,
-        error: Self::Error
+        error: <Self::Error as RecoverableError>::Permanent
     ) -> Self;
+
+    /// Reset after a completable error.
+    #[inline]
+    fn complete(
+        self,
+        _error: <Self::Error as RecoverableError>::Completable
+    ) -> Self {
+        self
+    }
 
     /// Write the next protocol message to `stream`.
     ///
@@ -86,7 +102,10 @@ pub trait RawOnceMachineState: RawMachineState {
     fn end(
         self,
         params: &Self::Params
-    ) -> OnceMachineAction<Self, Result<Self::Value, Self::Error>>;
+    ) -> OnceMachineAction<
+        Self,
+        Result<Self::Value, <Self::Error as RecoverableError>::Permanent>
+    >;
 }
 
 pub trait RawStreamMachineState: RawMachineState {
@@ -96,6 +115,19 @@ pub trait RawStreamMachineState: RawMachineState {
 pub struct RawStateMachine<State: RawMachineState> {
     params: State::Params,
     state: State
+}
+
+pub enum RawStateMachineError<State>
+where
+    State: RawMachineState {
+    Completable {
+        err: <State::Error as RecoverableError>::Completable,
+        params: State::Params,
+        state: State
+    },
+    Permanent {
+        err: <State::Error as RecoverableError>::Permanent
+    }
 }
 
 impl<State> RawStateMachine<State>
@@ -113,27 +145,51 @@ where
         }
     }
 
-    /// Step the state machine once.
+    #[inline]
+    pub fn complete(
+        err: <RawStateMachineError<State> as RecoverableError>::Completable
+    ) -> Self {
+        let (err, state, params) = err;
+        let state = state.complete(err);
+
+        RawStateMachine {
+            params: params,
+            state: state
+        }
+    }
+
+    /// Step the state machine once with split streams.
     ///
-    /// This will first write a protocol message to `stream`, then
-    /// read a protocol message from `stream` and select the next state.
+    /// This will first write a protocol message to `send`, then
+    /// read a protocol message from `recv` and select the next state.
     #[inline]
     pub fn step<S>(
         &mut self,
         stream: &mut S
-    ) where
+    ) -> Result<(), <State::Error as RecoverableError>::Completable>
+    where
         S: Read + Write {
-        match self.state.write(&self.params, stream) {
-            Ok(()) => unsafe {
+        self.state
+            .write(&self.params, stream)
+            .and_then(|_| unsafe {
                 let state = read(&self.state);
 
-                match state.read_select(&self.params, stream) {
-                    Ok(newstate) => self.state = newstate,
-                    Err(err) => self.state = State::error(&self.params, err)
+                state.read_select(&self.params, stream).map(|newstate| {
+                    self.state = newstate;
+                })
+            })
+            .or_else(|err| {
+                let (completable, permanent) = err.split();
+
+                if let Some(permanent) = permanent {
+                    self.state = State::error(&self.params, permanent)
                 }
-            },
-            Err(err) => self.state = State::error(&self.params, err)
-        }
+
+                match completable {
+                    Some(err) => Err(err),
+                    None => Ok(())
+                }
+            })
     }
 
     /// Step the state machine once with split streams.
@@ -145,20 +201,31 @@ where
         &mut self,
         recv: &mut R,
         send: &mut W
-    ) where
+    ) -> Result<(), <State::Error as RecoverableError>::Completable>
+    where
         R: Read,
         W: Write {
-        match self.state.write(&self.params, send) {
-            Ok(()) => unsafe {
+        self.state
+            .write(&self.params, send)
+            .and_then(|_| unsafe {
                 let state = read(&self.state);
 
-                match state.read_select(&self.params, recv) {
-                    Ok(newstate) => self.state = newstate,
-                    Err(err) => self.state = State::error(&self.params, err)
+                state.read_select(&self.params, recv).map(|newstate| {
+                    self.state = newstate;
+                })
+            })
+            .or_else(|err| {
+                let (completable, permanent) = err.split();
+
+                if let Some(permanent) = permanent {
+                    self.state = State::error(&self.params, permanent)
                 }
-            },
-            Err(err) => self.state = State::error(&self.params, err)
-        }
+
+                match completable {
+                    Some(err) => Err(err),
+                    None => Ok(())
+                }
+            })
     }
 }
 
@@ -171,7 +238,10 @@ where
     #[inline]
     pub fn end(
         mut self
-    ) -> OnceMachineAction<Self, Result<State::Value, State::Error>> {
+    ) -> OnceMachineAction<
+        Self,
+        Result<State::Value, <State::Error as RecoverableError>::Permanent>
+    > {
         self.state = match self.state.end(&self.params) {
             OnceMachineAction::Continue(state) => state,
             OnceMachineAction::Stop(out) => return OnceMachineAction::Stop(out)
@@ -182,38 +252,209 @@ where
 
     /// Run the state machine to completion and return the result.
     pub fn run<S>(
-        mut self,
+        self,
         stream: &mut S
-    ) -> Result<State::Value, State::Error>
+    ) -> Result<State::Value, RawStateMachineError<State>>
     where
         S: Read + Write {
+        let RawStateMachine { mut state, params } = self;
+
         loop {
-            self.state = match self.state.end(&self.params) {
+            state = match state.end(&params) {
                 OnceMachineAction::Continue(state) => state,
-                OnceMachineAction::Stop(out) => return out
+                OnceMachineAction::Stop(out) => {
+                    return out.map_err(|err| RawStateMachineError::Permanent {
+                        err: err
+                    })
+                }
             };
 
-            self.step(stream)
+            match state.write(&params, stream) {
+                Ok(()) => unsafe {
+                    match read(&state).read_select(&params, stream) {
+                        Ok(newstate) => {
+                            state = newstate;
+                        }
+                        Err(err) => {
+                            let (completable, permanent) = err.split();
+
+                            if let Some(permanent) = permanent {
+                                state = State::error(&params, permanent)
+                            }
+
+                            if let Some(err) = completable {
+                                return Err(RawStateMachineError::Completable {
+                                    params: params,
+                                    state: state,
+                                    err: err
+                                });
+                            }
+                        }
+                    }
+                },
+                Err(err) => {
+                    let (completable, permanent) = err.split();
+
+                    if let Some(permanent) = permanent {
+                        state = State::error(&params, permanent)
+                    }
+
+                    if let Some(err) = completable {
+                        return Err(RawStateMachineError::Completable {
+                            params: params,
+                            state: state,
+                            err: err
+                        });
+                    }
+                }
+            }
         }
     }
 
     /// Run the state machine to completion with split streams and
     /// return the result.
     pub fn run_split<R, W>(
-        mut self,
+        self,
         recv: &mut R,
         send: &mut W
-    ) -> Result<State::Value, State::Error>
+    ) -> Result<State::Value, RawStateMachineError<State>>
     where
         R: Read,
         W: Write {
+        let RawStateMachine { mut state, params } = self;
+
         loop {
-            self.state = match self.state.end(&self.params) {
+            state = match state.end(&params) {
                 OnceMachineAction::Continue(state) => state,
-                OnceMachineAction::Stop(out) => return out
+                OnceMachineAction::Stop(out) => {
+                    return out.map_err(|err| RawStateMachineError::Permanent {
+                        err: err
+                    })
+                }
             };
 
-            self.step_split(recv, send)
+            match state.write(&params, send) {
+                Ok(()) => unsafe {
+                    match read(&state).read_select(&params, recv) {
+                        Ok(newstate) => {
+                            state = newstate;
+                        }
+                        Err(err) => {
+                            let (completable, permanent) = err.split();
+
+                            if let Some(permanent) = permanent {
+                                state = State::error(&params, permanent)
+                            }
+
+                            if let Some(err) = completable {
+                                return Err(RawStateMachineError::Completable {
+                                    params: params,
+                                    state: state,
+                                    err: err
+                                });
+                            }
+                        }
+                    }
+                },
+                Err(err) => {
+                    let (completable, permanent) = err.split();
+
+                    if let Some(permanent) = permanent {
+                        state = State::error(&params, permanent)
+                    }
+
+                    if let Some(err) = completable {
+                        return Err(RawStateMachineError::Completable {
+                            params: params,
+                            state: state,
+                            err: err
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<State> RawStateMachine<State>
+where
+    State: RawOnceMachineState,
+    State::Error: RecoverableError
+{
+}
+
+impl<State> RecoverableError for RawStateMachineError<State>
+where
+    State: RawMachineState
+{
+    type Completable = (
+        <State::Error as RecoverableError>::Completable,
+        State,
+        State::Params
+    );
+    type Permanent = <State::Error as RecoverableError>::Permanent;
+
+    fn split(
+        self
+    ) -> (
+        Option<(
+            <State::Error as RecoverableError>::Completable,
+            State,
+            State::Params
+        )>,
+        Option<<State::Error as RecoverableError>::Permanent>
+    ) {
+        match self {
+            RawStateMachineError::Completable { err, state, params } => {
+                (Some((err, state, params)), None)
+            }
+            RawStateMachineError::Permanent { err } => (None, Some(err))
+        }
+    }
+}
+
+impl<State> ScopedError for RawStateMachineError<State>
+where
+    State: RawMachineState
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            RawStateMachineError::Completable { .. } => ErrorScope::Retryable,
+            RawStateMachineError::Permanent { err } => err.scope()
+        }
+    }
+}
+
+impl<State> Display for RawStateMachineError<State>
+where
+    State: RawMachineState
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            RawStateMachineError::Completable { .. } => {
+                write!(f, "completable error")
+            }
+            RawStateMachineError::Permanent { err } => write!(f, "{}", err)
+        }
+    }
+}
+
+impl<State> Debug for RawStateMachineError<State>
+where
+    State: RawMachineState
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            RawStateMachineError::Completable { .. } => {
+                write!(f, "Completable {{ .. }}")
+            }
+            RawStateMachineError::Permanent { err } => write!(f, "{:?}", err)
         }
     }
 }
@@ -237,6 +478,46 @@ enum TestState {
 enum TestError {
     BadInput,
     IOError(Error)
+}
+
+#[cfg(test)]
+impl Display for TestError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            TestError::IOError(err) => write!(f, "{}", err),
+            TestError::BadInput => write!(f, "bad input")
+        }
+    }
+}
+
+#[cfg(test)]
+impl ScopedError for TestError {
+    fn scope(&self) -> ErrorScope {
+        match self {
+            TestError::IOError(err) => err.scope(),
+            TestError::BadInput => ErrorScope::Session
+        }
+    }
+}
+
+#[cfg(test)]
+impl RecoverableError for TestError {
+    type Completable = ();
+    type Permanent = TestError;
+
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            TestError::IOError(err) => {
+                let (completable, permanent) = err.split();
+
+                (completable, permanent.map(|err| TestError::IOError(err)))
+            }
+            TestError::BadInput => (None, Some(TestError::BadInput))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -458,7 +739,13 @@ fn run_scripted_test(
     let mut writer = TestWriter::new();
     let mut reader = TestReader::new(script);
     let machine: RawStateMachine<TestState> = RawStateMachine::new(());
-    let actual_result = machine.run_split(&mut reader, &mut writer);
+    let actual_result =
+        machine
+            .run_split(&mut reader, &mut writer)
+            .map_err(|err| match err {
+                RawStateMachineError::Permanent { err } => err,
+                _ => panic!("unexpected completable error")
+            });
     let actual_writes = writer.take();
 
     assert_eq!(actual_writes, expected_writes);
@@ -496,7 +783,7 @@ fn test_no_loop_eof() {
         "read script exhausted"
     ));
 
-    run_scripted_test(vec![Ok(&[2])], &[vec![0], vec![1]], Err(err))
+    run_scripted_test(vec![Ok(&[2])], &[vec![0], vec![1]], Err(err));
 }
 
 #[test]
@@ -506,7 +793,7 @@ fn test_loop_none_eof() {
         "read script exhausted"
     ));
 
-    run_scripted_test(vec![Ok(&[1])], &[vec![0]], Err(err))
+    run_scripted_test(vec![Ok(&[1])], &[vec![0]], Err(err));
 }
 
 #[test]
@@ -516,7 +803,7 @@ fn test_loop_once_eof() {
         "read script exhausted"
     ));
 
-    run_scripted_test(vec![Ok(&[1]), Ok(&[2])], &[vec![0]], Err(err))
+    run_scripted_test(vec![Ok(&[1]), Ok(&[2])], &[vec![0]], Err(err));
 }
 
 #[test]
@@ -526,12 +813,12 @@ fn test_loop_twice_eof() {
         "read script exhausted"
     ));
 
-    run_scripted_test(vec![Ok(&[1]), Ok(&[2]), Ok(&[2])], &[vec![0]], Err(err))
+    run_scripted_test(vec![Ok(&[1]), Ok(&[2]), Ok(&[2])], &[vec![0]], Err(err));
 }
 
 #[test]
 fn test_bad_input() {
-    run_scripted_test(vec![Ok(&[4])], &[vec![0]], Err(TestError::BadInput))
+    run_scripted_test(vec![Ok(&[4])], &[vec![0]], Err(TestError::BadInput));
 }
 
 #[test]
@@ -540,7 +827,7 @@ fn test_no_loop_bad_input() {
         vec![Ok(&[2]), Ok(&[4])],
         &[vec![0], vec![1]],
         Err(TestError::BadInput)
-    )
+    );
 }
 
 #[test]
@@ -575,10 +862,11 @@ fn test_bad_write() {
     let mut reader = TestReader::new(vec![Ok(&[2]), Ok(&[3])]);
     let machine: RawStateMachine<TestState> = RawStateMachine::new(());
     let actual_result = machine.run_split(&mut reader, &mut TestErrorWriter);
-    let expected_result = Err(TestError::IOError(Error::new(
-        ErrorKind::Other,
-        "test error"
-    )));
 
-    assert_eq!(actual_result, expected_result);
+    assert!(matches!(
+        actual_result,
+        Err(RawStateMachineError::Permanent {
+            err: TestError::IOError(_)
+        })
+    ));
 }
