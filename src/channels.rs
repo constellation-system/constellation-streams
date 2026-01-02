@@ -46,6 +46,7 @@ use constellation_common::net::IPEndpointAddr;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
+use constellation_common::unix::UnixSocketAddr;
 use log::error;
 
 use crate::error::ErrorReportInfo;
@@ -604,6 +605,16 @@ where
                 })),
             _ => Err(SharedPrivateStreamError::Mismatch)
         }
+    }
+}
+
+impl ChannelParam<UnixSocketAddr> for UnixSocketAddr {
+    #[inline]
+    fn accepts_addr(
+        &self,
+        _addr: &UnixSocketAddr
+    ) -> bool {
+        true
     }
 }
 
