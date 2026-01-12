@@ -27,6 +27,7 @@
 //! which can represent a combination of both shared (true multicast)
 //! and private (unicast) streams in a single type.
 use std::convert::Infallible;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -36,6 +37,7 @@ use std::iter::empty;
 use std::iter::once;
 use std::iter::Empty;
 use std::iter::FusedIterator;
+use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::time::Instant;
 
@@ -48,6 +50,8 @@ use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::unix::UnixSocketAddr;
 use log::error;
+use mio::Registry;
+use mio::Token;
 
 use crate::error::ErrorReportInfo;
 use crate::stream::PushStream;
@@ -113,42 +117,140 @@ pub trait Channels<Ctx> {
     /// This provides both the ID of the originating channel, and the
     /// channel parameter.
     type ParamIter: Iterator<Item = (Self::ChannelID, Self::Param)>;
+    type EndpointIter: Iterator<Item = (Self::ChannelID, Self::Param, Self::Addr)>;
+    type StreamIter: Iterator<Item = (Self::ChannelID, Self::Param, Self::Addr, Self::Stream)>;
     /// Type of errors that can occur when obtaining parameters.
     type ParamError: Debug + Display + ScopedError;
+    /// Outbound negotiator parameter.
+    ///
+    /// This usually corresponds to verify endpoints for TLS streams.
+    type OutNegoParam;
     /// Type of counterparty addresses to which to connect.
     type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of raw streams obtained from parameters.
     type Stream;
     /// Type of errors that can occur when obtaining flows from a parameter.
-    type StreamError: Debug + Display + ScopedError;
+    type ReqStreamError: Debug + Display + ScopedError;
+    type ListenError: Debug + Display + ScopedError;
+    type ShutdownStreamError: Debug + Display + ScopedError;
+    type ShutdownListenError: Debug + Display + ScopedError;
+    type ShutdownError: Debug + Display + ScopedError;
 
     /// Obtain the current set of all channel parameters, and the time
     /// at which they will need to be refreshed.
     ///
     /// If parameters never need to be refreshed again, `None` will be
     /// returned.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// # Return Value
+    ///
+    /// - `(params, Some(when))`: The current set of parameters is
+    ///   `params`, and will be refresh again at `when`.
+    ///
+    /// - `(params, None)`: The current set of parameters is
+    ///   `params`, and does not need to be refreshed.
     fn params(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>, Self::ParamError>;
+    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+                Self::ParamError>;
 
-    /// Get a raw stream from a channel.
+    /// Request a stream for a given endpoint.
     ///
-    /// This will obtain a `Stream` instance from `channel`, using
-    /// `param`, and with `party_addr` as the counterparty's address.
+    /// This will attempt any negotiations necessary to establish the
+    /// stream.  If negotiations conclude immediately, then the stream
+    /// will be returned.  Otherwise, it will be returned by a
+    /// subsequent call to [listen](Channels::listen).  Subsequent
+    /// calls to this function with the same `endpoint` will return an
+    /// error.
     ///
-    /// The `verify_endpoint` parameter exists to provide a name for
-    /// the purpose of TLS-like negatiations.  It should specify the
-    /// "name" of the counterparty for the purpose of any certificate
-    /// verification.
-    fn stream(
+    /// This may also attempt to refresh the set of addresses, and
+    /// will return a new set if this happens.
+    ///
+    /// Streams obtained from this function must eventually be shut
+    /// down with [shutdown_stream](Channels::shutdown_stream).
+    ///
+    /// # Parameter
+    ///
+    /// - `ctx`: The context.
+    ///
+    /// - `channel`: The channel ID on which to create the stream.
+    ///
+    /// - `param`: The channel parameter to use.  These are obtained
+    ///   from this fungtion, or from [params](Channels::params).
+    ///
+    /// - `endpoint`: The counterparty address.
+    ///
+    /// - `nego_param`: The outbound negotiation parameter to use.
+    ///
+    /// # Return Value
+    ///
+    /// A triple containing three values in order:
+    ///
+    /// 1. The authenticated session, if there is one.
+    ///
+    /// 1. If a refresh occurred, the new set of channel parameters.
+    ///
+    /// 1. When the next refresh occurs.
+    fn req_stream(
         &mut self,
         ctx: &mut Ctx,
+        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
-        party_addr: &Self::Addr,
-        verify_endpoint: Option<&IPEndpointAddr>
-    ) -> Result<RetryResult<Self::Stream>, Self::StreamError>;
+        endpoint: &Self::Addr,
+        nego_param: &Self::OutNegoParam
+    ) -> Result<
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Self::ParamIter>,
+            Option<Instant>
+        )>,
+        Self::ReqStreamError
+    >;
+
+    fn listen(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        tokens: &HashSet<Token>
+    ) -> Result<
+        RetryResult<(
+            Self::StreamIter,
+            Self::EndpointIter,
+            Self::ParamIter,
+            Option<Instant>
+        )>,
+        Self::ListenError
+    >;
+
+    fn shutdown_stream(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        session: Self::Stream
+    ) -> Result<
+        RetryResult<(Option<Self::ParamIter>, Option<Instant>)>,
+        Self::ShutdownStreamError
+    >;
+
+    fn shutdown(
+        &mut self,
+        registry: &Registry
+    ) -> Result<bool, Self::ShutdownError>;
+
+    fn shutdown_listen(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        tokens: &HashSet<Token>
+    ) -> Result<RetryResult<bool>, Self::ShutdownListenError>;
 }
 
 /// Trait for instances of `Channels` that can be created from a
@@ -213,34 +315,61 @@ pub struct SharedPrivateChannels<Private, Shared> {
     shared: Shared
 }
 
-/// ID for [SharedPrivateChannels].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SharedPrivateID<Private, Shared> {
+pub enum SharedPrivateValue<Private, Shared> {
     /// ID for the private channels.
     Private {
         /// Private ID.
-        id: Private
+        private: Private
     },
     /// ID for the shared channels.
     Shared {
         /// Shared ID.
-        id: Shared
+        shared: Shared
     }
 }
 
-/// Channel param for [SharedPrivateChannels].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SharedPrivateChannelParam<Private, Shared> {
-    /// Channel param for the private channels.
-    Private {
-        /// Private channel param.
-        param: Private
-    },
-    /// Channel param for the shared channels.
-    Shared {
-        /// Shared channel param.
-        param: Shared
-    }
+pub struct SharedPrivateStreamIter<
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateStream,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedStream,
+    SharedIter
+> where
+    SharedAddr: Clone,
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)> {
+    /// Param iterator for the private channels.
+    private: Option<PrivateIter>,
+    /// Param iterator for the shared channels.
+    shared: Option<SharedIter>
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct SharedPrivateEndpointIter<
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedIter
+> where
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr)> {
+    /// Param iterator for the private channels.
+    private: Option<PrivateIter>,
+    /// Param iterator for the shared channels.
+    shared: Option<SharedIter>
 }
 
 /// Param iterator for [SharedPrivateChannels].
@@ -258,7 +387,7 @@ pub struct SharedPrivateParamIter<
     /// Param iterator for the private channels.
     private: Option<PrivateIter>,
     /// Param iterator for the shared channels.
-    shared: SharedIter
+    shared: Option<SharedIter>
 }
 
 /// Param error for [SharedPrivateChannels].
@@ -273,21 +402,6 @@ pub enum SharedPrivateError<Private, Shared> {
     Shared {
         /// Shared channel param iterator.
         err: Shared
-    }
-}
-
-/// Channel address for [SharedPrivateChannels].
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub enum SharedPrivateChannelAddr<Private, Shared> {
-    /// Channel address for the private channels.
-    Private {
-        /// Private channel address.
-        addr: Private
-    },
-    /// Channel address for the shared channels.
-    Shared {
-        /// Shared channel address.
-        addr: Shared
     }
 }
 
@@ -342,9 +456,9 @@ pub enum SharedPrivateStreamRetry<Private, Shared> {
     }
 }
 
-/// Stream error for [SharedPrivateChannels].
+/// Error for [SharedPrivateChannels].
 #[derive(Debug)]
-pub enum SharedPrivateStreamError<Private, Shared> {
+pub enum SharedPrivateMatchError<Private, Shared> {
     /// Stream error for the private channels.
     Private {
         /// Private channel stream error.
@@ -383,7 +497,7 @@ where
     }
 }
 
-impl<Private, Shared> ScopedError for SharedPrivateStreamError<Private, Shared>
+impl<Private, Shared> ScopedError for SharedPrivateMatchError<Private, Shared>
 where
     Private: ScopedError,
     Shared: ScopedError
@@ -391,9 +505,9 @@ where
     #[inline]
     fn scope(&self) -> ErrorScope {
         match self {
-            SharedPrivateStreamError::Private { err } => err.scope(),
-            SharedPrivateStreamError::Shared { err } => err.scope(),
-            SharedPrivateStreamError::Mismatch => ErrorScope::Unrecoverable
+            SharedPrivateMatchError::Private { err } => err.scope(),
+            SharedPrivateMatchError::Shared { err } => err.scope(),
+            SharedPrivateMatchError::Mismatch => ErrorScope::Unrecoverable
         }
     }
 }
@@ -442,7 +556,7 @@ where
 }
 
 impl<Private, Shared, T> ErrorReportInfo<T>
-    for SharedPrivateStreamError<Private, Shared>
+    for SharedPrivateMatchError<Private, Shared>
 where
     Private: ErrorReportInfo<T>,
     Shared: ErrorReportInfo<T>
@@ -450,41 +564,107 @@ where
     #[inline]
     fn report_info(&self) -> Option<T> {
         match self {
-            SharedPrivateStreamError::Private { err } => err.report_info(),
-            SharedPrivateStreamError::Shared { err } => err.report_info(),
-            SharedPrivateStreamError::Mismatch => None
+            SharedPrivateMatchError::Private { err } => err.report_info(),
+            SharedPrivateMatchError::Shared { err } => err.report_info(),
+            SharedPrivateMatchError::Mismatch => None
         }
     }
 }
 
 impl<Ctx> Channels<Ctx> for NullChannels {
-    type Addr = NullChannelsAddr;
     type ChannelID = NullChannelsID;
     type Param = NullChannelsParam;
-    type ParamError = Infallible;
     type ParamIter = Empty<(NullChannelsID, NullChannelsParam)>;
+    type EndpointIter = Empty<(Self::ChannelID, Self::Param, Self::Addr)>;
+    type StreamIter =
+        Empty<(Self::ChannelID, Self::Param, Self::Addr, Self::Stream)>;
+    type ParamError = Infallible;
+    type OutNegoParam = ();
+    type Addr = NullChannelsAddr;
     type Stream = ();
-    type StreamError = Infallible;
+    type ReqStreamError = Infallible;
+    type ListenError = Infallible;
+    type ShutdownStreamError = Infallible;
+    type ShutdownListenError = Infallible;
+    type ShutdownError = Infallible;
 
     #[inline]
     fn params(
         &mut self,
         _ctx: &mut Ctx
-    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>, Self::ParamError>
-    {
+    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+                Self::ParamError> {
         Ok(RetryResult::Success((empty(), None)))
     }
 
     #[inline]
-    fn stream(
+    fn req_stream(
         &mut self,
         _ctx: &mut Ctx,
+        _registry: &Registry,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
-        _party_addr: &Self::Addr,
-        _endpoint: Option<&IPEndpointAddr>
-    ) -> Result<RetryResult<Self::Stream>, Self::StreamError> {
-        Ok(RetryResult::Success(()))
+        _endpoint: &Self::Addr,
+        _nego_param: &Self::OutNegoParam
+    ) -> Result<
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Self::ParamIter>,
+            Option<Instant>
+        )>,
+        Self::ReqStreamError
+    > {
+        Ok(RetryResult::Success((Some(()), None, None)))
+    }
+
+    #[inline]
+    fn listen(
+        &mut self,
+        _ctx: &mut Ctx,
+        _registry: &Registry,
+        _tokens: &HashSet<Token>
+    ) -> Result<
+        RetryResult<(
+            Self::StreamIter,
+            Self::EndpointIter,
+            Self::ParamIter,
+            Option<Instant>
+        )>,
+        Self::ListenError
+    > {
+        Ok(RetryResult::Success((empty(), empty(), empty(), None)))
+    }
+
+    #[inline]
+    fn shutdown_stream(
+        &mut self,
+        _ctx: &mut Ctx,
+        _registry: &Registry,
+        _channel: &Self::ChannelID,
+        _param: &Self::Param,
+        _session: Self::Stream
+    ) -> Result<
+        RetryResult<(Option<Self::ParamIter>, Option<Instant>)>,
+        Self::ShutdownStreamError
+    > {
+        Ok(RetryResult::Success((None, None)))
+    }
+
+    #[inline]
+    fn shutdown(
+        &mut self,
+        _registry: &Registry
+    ) -> Result<bool, Self::ShutdownError> {
+        Ok(true)
+    }
+
+    fn shutdown_listen(
+        &mut self,
+        _ctx: &mut Ctx,
+        _registry: &Registry,
+        _tokens: &HashSet<Token>
+    ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
+        Ok(RetryResult::Success(true))
     }
 }
 
@@ -506,13 +686,12 @@ impl<Private, Shared, Ctx> Channels<Ctx>
 where
     Private: Channels<Ctx>,
     Shared: Channels<Ctx>,
-    Private::ParamIter: FusedIterator
+    Private::ParamIter: FusedIterator,
+    Private::EndpointIter: FusedIterator,
+    Private::StreamIter: FusedIterator
 {
-    type Addr = SharedPrivateChannelAddr<Private::Addr, Shared::Addr>;
-    type ChannelID = SharedPrivateID<Private::ChannelID, Shared::ChannelID>;
-    type Param = SharedPrivateChannelParam<Private::Param, Shared::Param>;
-    type ParamError =
-        SharedPrivateError<Private::ParamError, Shared::ParamError>;
+    type ChannelID = SharedPrivateValue<Private::ChannelID, Shared::ChannelID>;
+    type Param = SharedPrivateValue<Private::Param, Shared::Param>;
     type ParamIter = SharedPrivateParamIter<
         Private::ChannelID,
         Private::Param,
@@ -521,20 +700,55 @@ where
         Shared::Param,
         Shared::ParamIter
     >;
+    type EndpointIter = SharedPrivateEndpointIter<
+        Private::ChannelID,
+        Private::Param,
+        Private::Addr,
+        Private::EndpointIter,
+        Shared::ChannelID,
+        Shared::Param,
+        Shared::Addr,
+        Shared::EndpointIter
+    >;
+    type StreamIter = SharedPrivateStreamIter<
+        Private::ChannelID,
+        Private::Param,
+        Private::Addr,
+        Private::Stream,
+        Private::StreamIter,
+        Shared::ChannelID,
+        Shared::Param,
+        Shared::Addr,
+        Shared::Stream,
+        Shared::StreamIter
+    >;
+    type ParamError =
+        SharedPrivateError<Private::ParamError, Shared::ParamError>;
+    type OutNegoParam = SharedPrivateValue<Private::OutNegoParam,
+                                           Shared::OutNegoParam>;
+    type Addr = SharedPrivateValue<Private::Addr, Shared::Addr>;
     type Stream = SharedPrivateChannelStream<
         Private::Stream,
         Shared::Stream,
         Shared::Addr
     >;
-    type StreamError =
-        SharedPrivateStreamError<Private::StreamError, Shared::StreamError>;
+    type ReqStreamError = SharedPrivateMatchError<Private::ReqStreamError,
+                                                   Shared::ReqStreamError>;
+    type ListenError = SharedPrivateError<Private::ListenError,
+                                          Shared::ListenError>;
+    type ShutdownStreamError =
+        SharedPrivateMatchError<Private::ShutdownStreamError,
+                                Shared::ShutdownStreamError>;
+    type ShutdownListenError = SharedPrivateError<Private::ShutdownListenError,
+                                                  Shared::ShutdownListenError>;
+    type ShutdownError = SharedPrivateError<Private::ShutdownError,
+                                            Shared::ShutdownError>;
 
-    #[inline]
     fn params(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>, Self::ParamError>
-    {
+    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+                Self::ParamError> {
         let (private, private_when) = match self
             .private
             .params(ctx)
@@ -564,47 +778,254 @@ where
         };
         let iter = SharedPrivateParamIter {
             private: Some(private),
-            shared: shared
+            shared: Some(shared)
         };
 
         Ok(RetryResult::Success((iter, refresh_when)))
     }
 
-    #[inline]
-    fn stream(
+    fn req_stream(
         &mut self,
         ctx: &mut Ctx,
+        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
-        party_addr: &Self::Addr,
-        endpoint: Option<&IPEndpointAddr>
-    ) -> Result<RetryResult<Self::Stream>, Self::StreamError> {
-        match (channel, param, party_addr) {
+        endpoint: &Self::Addr,
+        nego_param: &Self::OutNegoParam
+    ) -> Result<
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Self::ParamIter>,
+            Option<Instant>
+        )>,
+        Self::ReqStreamError
+    > {
+        match (channel, param, endpoint, nego_param) {
             (
-                SharedPrivateID::Private { id },
-                SharedPrivateChannelParam::Private { param },
-                SharedPrivateChannelAddr::Private { addr }
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateValue::Private { private: param },
+                SharedPrivateValue::Private { private: addr },
+                SharedPrivateValue::Private { private: nego_param }
             ) => Ok(self
                 .private
-                .stream(ctx, id, param, addr, endpoint)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
-                .map(|stream| SharedPrivateChannelStream::Private {
-                    stream: stream
+                .req_stream(ctx, registry, id, param, addr, nego_param)
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
+                .map(|(stream, params, when)| {
+                    let stream = stream
+                        .map(|stream| SharedPrivateChannelStream::Private {
+                            stream: stream
+                        });
+                    let params = params
+                        .map(|params| SharedPrivateParamIter {
+                            private: Some(params),
+                            shared: None
+                        });
+
+                    (stream, params, when)
                 })),
             (
-                SharedPrivateID::Shared { id },
-                SharedPrivateChannelParam::Shared { param },
-                SharedPrivateChannelAddr::Shared { addr }
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateValue::Shared { shared: param },
+                SharedPrivateValue::Shared { shared: addr },
+                SharedPrivateValue::Shared { shared: nego_param }
             ) => Ok(self
                 .shared
-                .stream(ctx, id, param, addr, endpoint)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
-                .map(|stream| SharedPrivateChannelStream::Shared {
-                    stream: stream,
-                    party: addr.clone()
+                .req_stream(ctx, registry, id, param, addr, nego_param)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
+                .map(|(stream, params, when)| {
+                    let stream = stream
+                        .map(|stream| SharedPrivateChannelStream::Shared {
+                            stream: stream,
+                            party: addr.clone()
+                        });
+                    let params = params
+                        .map(|params| SharedPrivateParamIter {
+                            private: None,
+                            shared: Some(params)
+                        });
+
+                    (stream, params, when)
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
+    }
+
+    fn listen(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        tokens: &HashSet<Token>
+    ) -> Result<
+        RetryResult<(
+            Self::StreamIter,
+            Self::EndpointIter,
+            Self::ParamIter,
+            Option<Instant>
+        )>,
+        Self::ListenError
+    > {
+        match (self.private.listen(ctx, registry, tokens)
+               .map_err(|err| SharedPrivateError::Private { err: err })?,
+               self.shared.listen(ctx, registry, tokens)
+               .map_err(|err| SharedPrivateError::Shared { err: err })?) {
+            (RetryResult::Success((private_streams, private_addrs,
+                                   private_params, private_when)),
+             RetryResult::Success((shared_streams, shared_addrs,
+                                   shared_params, shared_when))) => {
+                let streams = SharedPrivateStreamIter {
+                    private: Some(private_streams),
+                    shared: Some(shared_streams)
+                };
+                let addrs = SharedPrivateEndpointIter {
+                    private: Some(private_addrs),
+                    shared: Some(shared_addrs)
+                };
+                let params = SharedPrivateParamIter {
+                    private: Some(private_params),
+                    shared: Some(shared_params)
+                };
+                let when = private_when
+                    .map_or(shared_when,
+                            |private_when| Some(shared_when
+                                .map_or(private_when,
+                                        |shared_when|
+                                        shared_when.max(private_when))
+                            ));
+
+                Ok(RetryResult::Success((streams, addrs, params, when)))
+            }
+            // XXX these cases will break, because downstream will
+            // only see half the addresses.  Solution is probably to
+            // cache addresses on the channels.
+            (RetryResult::Success((private_streams, private_addrs,
+                                   private_params, private_when)),
+             RetryResult::Retry(shared_when)) => {
+                let streams = SharedPrivateStreamIter {
+                    private: Some(private_streams),
+                    shared: None
+                };
+                let addrs = SharedPrivateEndpointIter {
+                    private: Some(private_addrs),
+                    shared: None
+                };
+                let params = SharedPrivateParamIter {
+                    private: Some(private_params),
+                    shared: None
+                };
+                let when = Some(private_when
+                    .map_or(shared_when,
+                            |private_when| private_when.max(shared_when))
+                );
+
+                Ok(RetryResult::Success((streams, addrs, params, when)))
+            }
+            (RetryResult::Retry(private_when),
+             RetryResult::Success((shared_streams, shared_addrs,
+                                   shared_params, shared_when))) => {
+                let streams = SharedPrivateStreamIter {
+                    private: None,
+                    shared: Some(shared_streams)
+                };
+                let addrs = SharedPrivateEndpointIter {
+                    private: None,
+                    shared: Some(shared_addrs)
+                };
+                let params = SharedPrivateParamIter {
+                    private: None,
+                    shared: Some(shared_params)
+                };
+                let when = Some(shared_when
+                    .map_or(private_when, |shared_when|
+                            shared_when.max(private_when))
+                );
+
+                Ok(RetryResult::Success((streams, addrs, params, when)))
+            }
+            (RetryResult::Retry(private_when),
+             RetryResult::Retry(shared_when)) =>
+                Ok(RetryResult::Retry(private_when.max(shared_when)))
+        }
+    }
+
+    fn shutdown_stream(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        session: Self::Stream
+    ) -> Result<
+        RetryResult<(Option<Self::ParamIter>, Option<Instant>)>,
+        Self::ShutdownStreamError
+    > {
+        match (channel, param, session) {
+            (
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateValue::Private { private: param },
+                SharedPrivateChannelStream::Private { stream }
+            ) => Ok(self
+                .private
+                .shutdown_stream(ctx, registry, id, param, stream)
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
+                .map(|(params, when)| {
+                    let params = params
+                        .map(|params| SharedPrivateParamIter {
+                            private: Some(params),
+                            shared: None
+                        });
+
+                    (params, when)
+                })),
+            (
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateValue::Shared { shared: param },
+                SharedPrivateChannelStream::Shared { stream, .. }
+            ) => Ok(self
+                .shared
+                .shutdown_stream(ctx, registry, id, param, stream)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
+                .map(|(params, when)| {
+                    let params = params
+                        .map(|params| SharedPrivateParamIter {
+                            private: None,
+                            shared: Some(params)
+                        });
+
+                    (params, when)
+                })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+
+    fn shutdown(
+        &mut self,
+        registry: &Registry
+    ) -> Result<bool, Self::ShutdownError> {
+        let private = self.private.shutdown(registry)
+            .map_err(|err| SharedPrivateError::Private { err: err })?;
+        let shared = self.shared.shutdown(registry)
+            .map_err(|err| SharedPrivateError::Shared { err: err })?;
+
+        Ok(shared && private)
+    }
+
+    fn shutdown_listen(
+        &mut self,
+        ctx: &mut Ctx,
+        registry: &Registry,
+        tokens: &HashSet<Token>
+    ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
+        self.private.shutdown_listen(ctx, registry, tokens)
+            .map_err(|err| SharedPrivateError::Private { err: err })?
+            .flat_map_ok(|private| Ok(self.shared
+                             .shutdown_listen(ctx, registry, tokens)
+                             .map_err(|err| SharedPrivateError::Shared {
+                                 err: err
+                             })?
+                             .map(|shared| shared && private)
+                         )
+
+            )
     }
 }
 
@@ -639,8 +1060,8 @@ impl<T> ChannelParam<T> for NullChannelsParam {
 }
 
 impl<PrivateAddr, PrivateParam, SharedAddr, SharedParam>
-    ChannelParam<SharedPrivateChannelAddr<PrivateAddr, SharedAddr>>
-    for SharedPrivateChannelParam<PrivateParam, SharedParam>
+    ChannelParam<SharedPrivateValue<PrivateAddr, SharedAddr>>
+    for SharedPrivateValue<PrivateParam, SharedParam>
 where
     PrivateParam: ChannelParam<PrivateAddr>,
     SharedParam: ChannelParam<SharedAddr>
@@ -648,16 +1069,16 @@ where
     #[inline]
     fn accepts_addr(
         &self,
-        addr: &SharedPrivateChannelAddr<PrivateAddr, SharedAddr>
+        addr: &SharedPrivateValue<PrivateAddr, SharedAddr>
     ) -> bool {
         match (self, addr) {
             (
-                SharedPrivateChannelParam::Private { param },
-                SharedPrivateChannelAddr::Private { addr }
+                SharedPrivateValue::Private { private: param },
+                SharedPrivateValue::Private { private: addr }
             ) => param.accepts_addr(addr),
             (
-                SharedPrivateChannelParam::Shared { param },
-                SharedPrivateChannelAddr::Shared { addr }
+                SharedPrivateValue::Shared { shared: param },
+                SharedPrivateValue::Shared { shared: addr }
             ) => param.accepts_addr(addr),
             _ => false
         }
@@ -685,8 +1106,8 @@ where
     SharedIter: Iterator<Item = (SharedID, SharedParam)>
 {
     type Item = (
-        SharedPrivateID<PrivateID, SharedID>,
-        SharedPrivateChannelParam<PrivateParam, SharedParam>
+        SharedPrivateValue<PrivateID, SharedID>,
+        SharedPrivateValue<PrivateParam, SharedParam>
     );
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -699,40 +1120,44 @@ where
                 }
                 param => param.map(|(id, param)| {
                     (
-                        SharedPrivateID::Private { id: id },
-                        SharedPrivateChannelParam::Private { param: param }
+                        SharedPrivateValue::Private { private: id },
+                        SharedPrivateValue::Private { private: param }
                     )
                 })
             },
-            None => self.shared.next().map(|(id, param)| {
-                (
-                    SharedPrivateID::Shared { id: id },
-                    SharedPrivateChannelParam::Shared { param: param }
-                )
-            })
+            None => self.shared.as_mut()
+                .and_then(|shared| shared.next().map(|(id, param)| {
+                    (
+                        SharedPrivateValue::Shared { shared: id },
+                        SharedPrivateValue::Shared { shared: param }
+                    )
+                }))
         }
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        match &self.private {
-            Some(private) => {
-                match (private.size_hint(), self.shared.size_hint()) {
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) =>
+                match (private.size_hint(), shared.size_hint()) {
                     ((lo_a, Some(hi_a)), (lo_b, Some(hi_b))) => {
                         (lo_a + lo_b, Some(hi_a + hi_b))
                     }
                     ((a, _), (b, _)) => (a + b, None)
                 }
-            }
-            None => self.shared.size_hint()
+            (None, Some(shared)) => shared.size_hint(),
+            (Some(private), None) => private.size_hint(),
+            (None, None) => (0, Some(0))
         }
     }
 
     #[inline]
     fn count(self) -> usize {
-        match self.private {
-            Some(private) => private.count() + self.shared.count(),
-            None => self.shared.count()
+        match (self.private, self.shared) {
+            (Some(private), Some(shared)) => private.count() + shared.count(),
+            (None, Some(shared)) => shared.count(),
+            (Some(private), None) => private.count(),
+            (None, None) => 0
         }
     }
 }
@@ -761,9 +1186,11 @@ where
 {
     #[inline]
     fn len(&self) -> usize {
-        match &self.private {
-            Some(private) => private.len() + self.shared.len(),
-            None => self.shared.len()
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) => private.len() + shared.len(),
+            (None, Some(shared)) => shared.len(),
+            (Some(private), None) => private.len(),
+            (None, None) => 0
         }
     }
 }
@@ -790,46 +1217,367 @@ where
 {
 }
 
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    > Iterator
+    for SharedPrivateEndpointIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    >
+where
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+{
+    type Item = (
+        SharedPrivateValue<PrivateID, SharedID>,
+        SharedPrivateValue<PrivateParam, SharedParam>,
+        SharedPrivateValue<PrivateAddr, SharedAddr>
+    );
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.private {
+            Some(private) => match private.next() {
+                None => {
+                    self.private = None;
+
+                    self.next()
+                }
+                param => param.map(|(id, param, addr)| {
+                    (
+                        SharedPrivateValue::Private { private: id },
+                        SharedPrivateValue::Private { private: param },
+                        SharedPrivateValue::Private { private: addr }
+                    )
+                })
+            },
+            None => self.shared.as_mut()
+                .and_then(|shared| shared.next().map(|(id, param, addr)| {
+                    (
+                        SharedPrivateValue::Shared { shared: id },
+                        SharedPrivateValue::Shared { shared: param },
+                        SharedPrivateValue::Shared { shared: addr }
+                    )
+                }))
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) =>
+                match (private.size_hint(), shared.size_hint()) {
+                    ((lo_a, Some(hi_a)), (lo_b, Some(hi_b))) => {
+                        (lo_a + lo_b, Some(hi_a + hi_b))
+                    }
+                    ((a, _), (b, _)) => (a + b, None)
+                }
+            (None, Some(shared)) => shared.size_hint(),
+            (Some(private), None) => private.size_hint(),
+            (None, None) => (0, Some(0))
+        }
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        match (self.private, self.shared) {
+            (Some(private), Some(shared)) => private.count() + shared.count(),
+            (None, Some(shared)) => shared.count(),
+            (Some(private), None) => private.count(),
+            (None, None) => 0
+        }
+    }
+}
+
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    > ExactSizeIterator
+    for SharedPrivateEndpointIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    >
+where
+    PrivateIter: FusedIterator + ExactSizeIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+    SharedIter: ExactSizeIterator
+        + Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+{
+    #[inline]
+    fn len(&self) -> usize {
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) => private.len() + shared.len(),
+            (None, Some(shared)) => shared.len(),
+            (Some(private), None) => private.len(),
+            (None, None) => 0
+        }
+    }
+}
+
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    > FusedIterator
+    for SharedPrivateEndpointIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedIter
+    >
+where
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+    SharedIter: FusedIterator
+        + Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+{
+}
+
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    > Iterator
+    for SharedPrivateStreamIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    >
+where
+    SharedAddr: Clone,
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+{
+    type Item = (
+        SharedPrivateValue<PrivateID, SharedID>,
+        SharedPrivateValue<PrivateParam, SharedParam>,
+        SharedPrivateValue<PrivateAddr, SharedAddr>,
+        SharedPrivateChannelStream<PrivateStream, SharedStream, SharedAddr>
+    );
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.private {
+            Some(private) => match private.next() {
+                None => {
+                    self.private = None;
+
+                    self.next()
+                }
+                param => param.map(|(id, param, addr, stream)| {
+                    (
+                        SharedPrivateValue::Private { private: id },
+                        SharedPrivateValue::Private { private: param },
+                        SharedPrivateValue::Private { private: addr },
+                        SharedPrivateChannelStream::Private { stream: stream }
+                    )
+                })
+            },
+            None => self.shared.as_mut()
+                .and_then(|shared| shared.next().map(|(id, param, addr, stream)| {
+                    (
+                        SharedPrivateValue::Shared { shared: id },
+                        SharedPrivateValue::Shared { shared: param },
+                        SharedPrivateValue::Shared { shared: addr.clone() },
+                        SharedPrivateChannelStream::Shared {
+                            stream: stream,
+                            party: addr
+                        }
+                    )
+                }))
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) =>
+                match (private.size_hint(), shared.size_hint()) {
+                    ((lo_a, Some(hi_a)), (lo_b, Some(hi_b))) => {
+                        (lo_a + lo_b, Some(hi_a + hi_b))
+                    }
+                    ((a, _), (b, _)) => (a + b, None)
+                }
+            (None, Some(shared)) => shared.size_hint(),
+            (Some(private), None) => private.size_hint(),
+            (None, None) => (0, Some(0))
+        }
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        match (self.private, self.shared) {
+            (Some(private), Some(shared)) => private.count() + shared.count(),
+            (None, Some(shared)) => shared.count(),
+            (Some(private), None) => private.count(),
+            (None, None) => 0
+        }
+    }
+}
+
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    > ExactSizeIterator
+    for SharedPrivateStreamIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    >
+where
+    SharedAddr: Clone,
+    PrivateIter: FusedIterator + ExactSizeIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+    SharedIter: ExactSizeIterator
+        + Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+{
+    #[inline]
+    fn len(&self) -> usize {
+        match (&self.private, &self.shared) {
+            (Some(private), Some(shared)) => private.len() + shared.len(),
+            (None, Some(shared)) => shared.len(),
+            (Some(private), None) => private.len(),
+            (None, None) => 0
+        }
+    }
+}
+
+impl<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    > FusedIterator
+    for SharedPrivateStreamIter<
+        PrivateID,
+        PrivateParam,
+        PrivateAddr,
+        PrivateStream,
+        PrivateIter,
+        SharedID,
+        SharedParam,
+        SharedAddr,
+        SharedStream,
+        SharedIter
+    >
+where
+    SharedAddr: Clone,
+    PrivateIter: FusedIterator
+        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+    SharedIter: FusedIterator
+        + Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+{
+}
+
 impl<Private, Shared> RecoverableError
-    for SharedPrivateStreamError<Private, Shared>
+    for SharedPrivateMatchError<Private, Shared>
 where
     Private: RecoverableError,
     Shared: RecoverableError
 {
     type Completable =
-        SharedPrivateStreamError<Private::Completable, Shared::Completable>;
+        SharedPrivateMatchError<Private::Completable, Shared::Completable>;
     type Permanent =
-        SharedPrivateStreamError<Private::Permanent, Shared::Permanent>;
+        SharedPrivateMatchError<Private::Permanent, Shared::Permanent>;
 
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         match self {
-            SharedPrivateStreamError::Private { err } => {
+            SharedPrivateMatchError::Private { err } => {
                 let (completable, permanent) = err.split();
 
                 (
-                    completable.map(|err| SharedPrivateStreamError::Private {
+                    completable.map(|err| SharedPrivateMatchError::Private {
                         err: err
                     }),
-                    permanent.map(|err| SharedPrivateStreamError::Private {
+                    permanent.map(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
                 )
             }
-            SharedPrivateStreamError::Shared { err } => {
+            SharedPrivateMatchError::Shared { err } => {
                 let (completable, permanent) = err.split();
 
                 (
-                    completable.map(|err| SharedPrivateStreamError::Shared {
+                    completable.map(|err| SharedPrivateMatchError::Shared {
                         err: err
                     }),
-                    permanent.map(|err| SharedPrivateStreamError::Shared {
+                    permanent.map(|err| SharedPrivateMatchError::Shared {
                         err: err
                     })
                 )
             }
-            SharedPrivateStreamError::Mismatch => {
-                (None, Some(SharedPrivateStreamError::Mismatch))
+            SharedPrivateMatchError::Mismatch => {
+                (None, Some(SharedPrivateMatchError::Mismatch))
             }
         }
     }
@@ -841,8 +1589,8 @@ where
     Shared: PushStream<Ctx> + PushStreamPartyID,
     Private: PushStream<Ctx>
 {
-    type BatchID = SharedPrivateID<Private::BatchID, Shared::BatchID>;
-    type CancelBatchError = SharedPrivateStreamError<
+    type BatchID = SharedPrivateValue<Private::BatchID, Shared::BatchID>;
+    type CancelBatchError = SharedPrivateMatchError<
         Private::CancelBatchError,
         Shared::CancelBatchError
     >;
@@ -850,7 +1598,7 @@ where
         Private::CancelBatchRetry,
         Shared::CancelBatchRetry
     >;
-    type FinishBatchError = SharedPrivateStreamError<
+    type FinishBatchError = SharedPrivateMatchError<
         Private::FinishBatchError,
         Shared::FinishBatchError
     >;
@@ -859,7 +1607,7 @@ where
         Shared::FinishBatchRetry
     >;
     type ReportError =
-        SharedPrivateStreamError<Private::ReportError, Shared::ReportError>;
+        SharedPrivateMatchError<Private::ReportError, Shared::ReportError>;
     type StreamFlags =
         SharedPrivateStreamCaches<Private::StreamFlags, Shared::StreamFlags>;
 
@@ -897,23 +1645,23 @@ where
         match (self, batch) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id }
+                SharedPrivateValue::Private { private: id }
             ) => Ok(stream
                 .finish_batch(ctx, &mut flags.private, id)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id }
+                SharedPrivateValue::Shared { shared: id }
             ) => Ok(stream
                 .finish_batch(ctx, &mut flags.shared, id)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -928,25 +1676,25 @@ where
         match (self, batch, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
+                SharedPrivateValue::Private { private: id },
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_finish_batch(ctx, &mut flags.private, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
+                SharedPrivateValue::Shared { shared: id },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_finish_batch(ctx, &mut flags.shared, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -961,25 +1709,25 @@ where
         match (self, batch, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_finish_batch(ctx, &mut flags.private, id, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_finish_batch(ctx, &mut flags.shared, id, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -993,23 +1741,23 @@ where
         match (self, batch) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id }
+                SharedPrivateValue::Private { private: id }
             ) => Ok(stream
                 .cancel_batch(ctx, &mut flags.private, id)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id }
+                SharedPrivateValue::Shared { shared: id }
             ) => Ok(stream
                 .cancel_batch(ctx, &mut flags.shared, id)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1024,25 +1772,25 @@ where
         match (self, batch, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
+                SharedPrivateValue::Private { private: id },
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_cancel_batch(ctx, &mut flags.private, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
+                SharedPrivateValue::Shared { shared: id },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_cancel_batch(ctx, &mut flags.shared, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1057,25 +1805,25 @@ where
         match (self, batch, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_cancel_batch(ctx, &mut flags.private, id, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_cancel_batch(ctx, &mut flags.shared, id, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1097,17 +1845,17 @@ where
         match (self, batch) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id }
+                SharedPrivateValue::Private { private: id }
             ) => stream
                 .report_failure(id)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+                .map_err(|err| SharedPrivateMatchError::Private { err: err }),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id }
+                SharedPrivateValue::Shared { shared: id }
             ) => stream
                 .report_failure(id)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err }),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err }),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 }
@@ -1122,73 +1870,73 @@ impl<
         PartyID
     >
     PushStreamReportBatchError<
-        SharedPrivateStreamError<PrivateError, SharedError>,
-        SharedPrivateID<PrivateBatch, SharedBatch>
+        SharedPrivateMatchError<PrivateError, SharedError>,
+        SharedPrivateValue<PrivateBatch, SharedBatch>
     > for SharedPrivateChannelStream<Private, Shared, PartyID>
 where
     Private: PushStreamReportBatchError<PrivateError, PrivateBatch>,
     Shared: PushStreamReportBatchError<SharedError, SharedBatch>
 {
-    type ReportBatchError = SharedPrivateStreamError<
+    type ReportBatchError = SharedPrivateMatchError<
         <Private as PushStreamReportBatchError<PrivateError, PrivateBatch>>::ReportBatchError,
         <Shared as PushStreamReportBatchError<SharedError, SharedBatch>>::ReportBatchError
     >;
 
     fn report_error_with_batch(
         &mut self,
-        batch: &SharedPrivateID<PrivateBatch, SharedBatch>,
-        error: &SharedPrivateStreamError<PrivateError, SharedError>
+        batch: &SharedPrivateValue<PrivateBatch, SharedBatch>,
+        error: &SharedPrivateMatchError<PrivateError, SharedError>
     ) -> Result<(), Self::ReportBatchError> {
         match (self, batch, error) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateMatchError::Private { err }
             ) => stream
                 .report_error_with_batch(id, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+                .map_err(|err| SharedPrivateMatchError::Private { err: err }),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateMatchError::Shared { err }
             ) => stream
                 .report_error_with_batch(id, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err }),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err }),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 }
 
 impl<Shared, Private, SharedError, PrivateError, PartyID>
-    PushStreamReportError<SharedPrivateStreamError<PrivateError, SharedError>>
+    PushStreamReportError<SharedPrivateMatchError<PrivateError, SharedError>>
     for SharedPrivateChannelStream<Private, Shared, PartyID>
 where
     Private: PushStreamReportError<PrivateError>,
     Shared: PushStreamReportError<SharedError>
 {
-    type ReportError = SharedPrivateStreamError<
+    type ReportError = SharedPrivateMatchError<
         <Private as PushStreamReportError<PrivateError>>::ReportError,
         <Shared as PushStreamReportError<SharedError>>::ReportError
     >;
 
     fn report_error(
         &mut self,
-        error: &SharedPrivateStreamError<PrivateError, SharedError>
+        error: &SharedPrivateMatchError<PrivateError, SharedError>
     ) -> Result<(), Self::ReportError> {
         match (self, error) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => stream
                 .report_error(err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err }),
+                .map_err(|err| SharedPrivateMatchError::Private { err: err }),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => stream
                 .report_error(err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err }),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err }),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 }
@@ -1200,7 +1948,7 @@ where
     Private: PushStreamAdd<T, Ctx>
 {
     type AddError =
-        SharedPrivateStreamError<Private::AddError, Shared::AddError>;
+        SharedPrivateMatchError<Private::AddError, Shared::AddError>;
     type AddRetry =
         SharedPrivateStreamRetry<Private::AddRetry, Shared::AddRetry>;
 
@@ -1214,23 +1962,23 @@ where
         match (self, batch) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id }
+                SharedPrivateValue::Private { private: id }
             ) => Ok(stream
                 .add(ctx, &mut flags.private, msg, id)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id }
+                SharedPrivateValue::Shared { shared: id }
             ) => Ok(stream
                 .add(ctx, &mut flags.shared, msg, id)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1245,25 +1993,25 @@ where
         match (self, batch, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
+                SharedPrivateValue::Private { private: id },
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_add(ctx, &mut flags.private, msg, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
+                SharedPrivateValue::Shared { shared: id },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_add(ctx, &mut flags.shared, msg, id, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1278,25 +2026,25 @@ where
         match (self, batch, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateID::Private { id },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_add(ctx, &mut flags.private, msg, id, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateID::Shared { id },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_add(ctx, &mut flags.shared, msg, id, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 }
@@ -1319,7 +2067,7 @@ where
         Private::AbortBatchRetry,
         Shared::AbortBatchRetry
     >;
-    type CreateBatchError = SharedPrivateStreamError<
+    type CreateBatchError = SharedPrivateMatchError<
         Private::CreateBatchError,
         Shared::CreateBatchError
     >;
@@ -1328,12 +2076,12 @@ where
         Shared::CreateBatchRetry
     >;
     type SelectError =
-        SharedPrivateStreamError<Private::SelectError, Shared::SelectError>;
+        SharedPrivateMatchError<Private::SelectError, Shared::SelectError>;
     type SelectRetry =
         SharedPrivateStreamRetry<Private::SelectRetry, Shared::SelectRetry>;
     type Selections =
         SharedPrivateStreamCaches<Private::Selections, Shared::Selections>;
-    type StartBatchError = SharedPrivateStreamError<
+    type StartBatchError = SharedPrivateMatchError<
         Private::StartBatchError,
         Shared::StartBatchError
     >;
@@ -1404,13 +2152,13 @@ where
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
                 .select(ctx, &mut selections.private)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             SharedPrivateChannelStream::Shared { stream, party } => Ok(stream
                 .select(ctx, &mut selections.shared, once(&*party))
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 }))
@@ -1429,7 +2177,7 @@ where
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_select(ctx, &mut selections.private, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
@@ -1438,11 +2186,11 @@ where
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_select(ctx, &mut selections.shared, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1455,23 +2203,23 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_select(ctx, &mut selections.private, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_select(ctx, &mut selections.shared, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1487,18 +2235,18 @@ where
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
                 .create_batch(ctx, &mut batches.private, &selections.private)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
                 .create_batch(ctx, &mut batches.shared, &selections.shared)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id }))
+                .map(|id| SharedPrivateValue::Shared { shared: id }))
         }
     }
 
@@ -1523,11 +2271,11 @@ where
                     &selections.private,
                     retry
                 )
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
@@ -1538,12 +2286,12 @@ where
                     &selections.shared,
                     retry
                 )
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1560,7 +2308,7 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_create_batch(
                     ctx,
@@ -1568,14 +2316,14 @@ where
                     &selections.private,
                     err
                 )
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_create_batch(
                     ctx,
@@ -1583,12 +2331,12 @@ where
                     &selections.shared,
                     err
                 )
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1602,18 +2350,18 @@ where
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
                 .start_batch(ctx)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             SharedPrivateChannelStream::Shared { stream, party } => Ok(stream
                 .start_batch(ctx, once(&*party))
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id }))
+                .map(|id| SharedPrivateValue::Shared { shared: id }))
         }
     }
 
@@ -1631,22 +2379,22 @@ where
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_start_batch(ctx, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_start_batch(ctx, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1661,25 +2409,25 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_start_batch(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_start_batch(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1692,7 +2440,7 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => stream
                 .abort_start_batch(ctx, &mut flags.private, err)
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
@@ -1700,7 +2448,7 @@ where
                 }),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => stream
                 .abort_start_batch(ctx, &mut flags.shared, err)
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
@@ -1754,7 +2502,7 @@ where
     Shared: PushStreamSharedSingle<T, Ctx> + PushStreamPartyID,
     Private: PushStreamPrivateSingle<T, Ctx>
 {
-    type CancelPushError = SharedPrivateStreamError<
+    type CancelPushError = SharedPrivateMatchError<
         Private::CancelPushError,
         Shared::CancelPushError
     >;
@@ -1763,7 +2511,7 @@ where
         Shared::CancelPushRetry
     >;
     type PushError =
-        SharedPrivateStreamError<Private::PushError, Shared::PushError>;
+        SharedPrivateMatchError<Private::PushError, Shared::PushError>;
     type PushRetry =
         SharedPrivateStreamRetry<Private::PushRetry, Shared::PushRetry>;
 
@@ -1776,18 +2524,18 @@ where
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
                 .push(ctx, msg)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             SharedPrivateChannelStream::Shared { stream, party } => Ok(stream
                 .push(ctx, once(&*party), msg)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id }))
+                .map(|id| SharedPrivateValue::Shared { shared: id }))
         }
     }
 
@@ -1804,22 +2552,22 @@ where
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_push(ctx, msg, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_push(ctx, msg, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1833,25 +2581,25 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_push(ctx, msg, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Private { id: id })),
+                .map(|id| SharedPrivateValue::Private { private: id })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_push(ctx, msg, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
-                .map(|id| SharedPrivateID::Shared { id: id })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+                .map(|id| SharedPrivateValue::Shared { shared: id })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1864,23 +2612,23 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .cancel_push(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .cancel_push(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1896,7 +2644,7 @@ where
                 SharedPrivateStreamRetry::Private { retry }
             ) => Ok(stream
                 .retry_cancel_push(ctx, retry)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
@@ -1905,11 +2653,11 @@ where
                 SharedPrivateStreamRetry::Shared { retry }
             ) => Ok(stream
                 .retry_cancel_push(ctx, retry)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
@@ -1922,23 +2670,23 @@ where
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
-                SharedPrivateStreamError::Private { err }
+                SharedPrivateMatchError::Private { err }
             ) => Ok(stream
                 .complete_cancel_push(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Private { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Private {
                     retry: retry
                 })),
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
-                SharedPrivateStreamError::Shared { err }
+                SharedPrivateMatchError::Shared { err }
             ) => Ok(stream
                 .complete_cancel_push(ctx, err)
-                .map_err(|err| SharedPrivateStreamError::Shared { err: err })?
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })),
-            _ => Err(SharedPrivateStreamError::Mismatch)
+            _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 }
@@ -1973,40 +2721,6 @@ impl Display for NullChannelsAddr {
     }
 }
 
-impl<Private, Shared> Display for SharedPrivateID<Private, Shared>
-where
-    Private: Display,
-    Shared: Display
-{
-    #[inline]
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        match self {
-            SharedPrivateID::Private { id } => id.fmt(f),
-            SharedPrivateID::Shared { id } => id.fmt(f)
-        }
-    }
-}
-
-impl<Private, Shared> Display for SharedPrivateChannelParam<Private, Shared>
-where
-    Private: Display,
-    Shared: Display
-{
-    #[inline]
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        match self {
-            SharedPrivateChannelParam::Private { param } => param.fmt(f),
-            SharedPrivateChannelParam::Shared { param } => param.fmt(f)
-        }
-    }
-}
-
 impl<Private, Shared> Display for SharedPrivateError<Private, Shared>
 where
     Private: Display,
@@ -2024,7 +2738,7 @@ where
     }
 }
 
-impl<Private, Shared> Display for SharedPrivateStreamError<Private, Shared>
+impl<Private, Shared> Display for SharedPrivateMatchError<Private, Shared>
 where
     Private: Display,
     Shared: Display
@@ -2035,16 +2749,16 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            SharedPrivateStreamError::Private { err } => err.fmt(f),
-            SharedPrivateStreamError::Shared { err } => err.fmt(f),
-            SharedPrivateStreamError::Mismatch => {
+            SharedPrivateMatchError::Private { err } => err.fmt(f),
+            SharedPrivateMatchError::Shared { err } => err.fmt(f),
+            SharedPrivateMatchError::Mismatch => {
                 write!(f, "mismatched param and addr")
             }
         }
     }
 }
 
-impl<Private, Shared> Display for SharedPrivateChannelAddr<Private, Shared>
+impl<Private, Shared> Display for SharedPrivateValue<Private, Shared>
 where
     Private: Display,
     Shared: Display
@@ -2055,8 +2769,8 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            SharedPrivateChannelAddr::Private { addr } => addr.fmt(f),
-            SharedPrivateChannelAddr::Shared { addr } => addr.fmt(f)
+            SharedPrivateValue::Private { private } => private.fmt(f),
+            SharedPrivateValue::Shared { shared } => shared.fmt(f)
         }
     }
 }
