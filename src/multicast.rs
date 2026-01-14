@@ -38,6 +38,7 @@ use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::Retry;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use log::debug;
@@ -1294,13 +1295,16 @@ where
         &mut self,
         mut elems: Vec<(
             Idx,
-            RetryResult<(), <Stream as PushStreamPrivate<Ctx>>::SelectRetry>
+            RetryIndefResult<
+                (),
+                <Stream as PushStreamPrivate<Ctx>>::SelectRetry
+            >
         )>,
         errs: Option<
             Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::SelectError)>
         >
     ) -> Result<
-        RetryResult<(), <Self as PushStreamShared<Ctx>>::SelectRetry>,
+        RetryIndefResult<(), <Self as PushStreamShared<Ctx>>::SelectRetry>,
         <Self as PushStreamShared<Ctx>>::SelectError
     > {
         match errs {
@@ -1318,7 +1322,8 @@ where
                 let mut all_success = true;
 
                 for (_, res) in elems.into_iter() {
-                    if let RetryResult::Retry(_) = &res {
+                    if matches!(res, RetryIndefResult::Retry(_) |
+                                RetryIndefResult::Indef) {
                         all_success = false
                     }
 
@@ -2224,7 +2229,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     where
         I: Iterator<Item = &'a Idx>,
         Idx: 'a {
@@ -2271,7 +2276,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: Self::SelectRetry
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
@@ -2319,7 +2324,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
         let (mut results, retries) = retries.take();
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
         let len = retries.len();
@@ -2497,7 +2502,7 @@ where
         ctx: &mut Ctx,
         parties: I
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     >
     where
@@ -2505,35 +2510,40 @@ where
         Idx: 'a {
         let mut selections = self.empty_selections();
 
-        if let RetryResult::Retry(retry) = self
+        match self
             .select(ctx, &mut selections, parties)
             .map_err(|err| StreamMulticasterStartError::Select {
                 selections: selections.clone(),
                 select: err
-            })?
-        {
-            return Ok(RetryResult::Retry(
+            })? {
+            RetryIndefResult::Success(()) => {
+                let mut batches = self.empty_batches();
+
+                match self.create_batch(ctx, &mut batches, &selections) {
+                    Ok(res) => Ok(RetryIndefResult::from(
+                        res.map_retry(|retry| {
+                            StreamMulticasterStartError::Create {
+                                selections: selections,
+                                batches: batches,
+                                create: retry
+                            }
+                        })
+                    )),
+                    Err(err) => Err(StreamMulticasterStartError::Create {
+                        selections: selections.clone(),
+                        batches: batches.clone(),
+                        create: err
+                    })
+                }
+            }
+            RetryIndefResult::Retry(retry) => Ok(RetryIndefResult::Retry(
                 StreamMulticasterStartError::Select {
                     selections: selections,
                     select: retry
                 }
-            ));
-        };
-
-        let mut batches = self.empty_batches();
-
-        Ok(self
-            .create_batch(ctx, &mut batches, &selections)
-            .map_err(|err| StreamMulticasterStartError::Create {
-                selections: selections.clone(),
-                batches: batches.clone(),
-                create: err
-            })?
-            .map_retry(|retry| StreamMulticasterStartError::Create {
-                selections: selections,
-                batches: batches,
-                create: retry
-            }))
+            )),
+            RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+        }
     }
 
     fn retry_start_batch(
@@ -2541,60 +2551,68 @@ where
         ctx: &mut Ctx,
         retries: Self::StartBatchRetry
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match retries {
             StreamMulticasterStartError::Select {
                 select,
                 mut selections
-            } => {
-                if let RetryResult::Retry(retry) = self
-                    .retry_select(ctx, &mut selections, select)
-                    .map_err(|err| StreamMulticasterStartError::Select {
-                        selections: selections.clone(),
-                        select: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterStartError::Select {
-                            selections: selections,
-                            select: retry
-                        }
-                    ));
-                };
+            } => match self
+                .retry_select(ctx, &mut selections, select)
+                .map_err(|err| StreamMulticasterStartError::Select {
+                    selections: selections.clone(),
+                    select: err
+                })? {
+                RetryIndefResult::Success(()) => {
+                    let mut batches = self.empty_batches();
 
-                let mut batches = self.empty_batches();
-
-                Ok(self
-                    .create_batch(ctx, &mut batches, &selections)
-                    .map_err(|err| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches.clone(),
-                        create: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches,
-                        create: retry
-                    }))
+                    match self.create_batch(ctx, &mut batches, &selections) {
+                        Ok(res) => Ok(RetryIndefResult::from(
+                            res.map_retry(|retry| {
+                                StreamMulticasterStartError::Create {
+                                    selections: selections,
+                                    batches: batches,
+                                    create: retry
+                                }
+                            })
+                        )),
+                        Err(err) => Err(StreamMulticasterStartError::Create {
+                            selections: selections.clone(),
+                            batches: batches.clone(),
+                            create: err
+                        })
+                    }
+                }
+                RetryIndefResult::Retry(retry) => Ok(RetryIndefResult::Retry(
+                    StreamMulticasterStartError::Select {
+                        selections: selections,
+                        select: retry
+                    }
+                )),
+                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
             }
             StreamMulticasterStartError::Create {
                 selections,
                 mut batches,
                 create
-            } => Ok(self
-                .retry_create_batch(ctx, &mut batches, &selections, create)
-                .map_err(|err| StreamMulticasterStartError::Create {
+            } => match self
+                .retry_create_batch(ctx, &mut batches, &selections, create) {
+                Ok(res) => Ok(RetryIndefResult::from(
+                    res.map_retry(|retry| {
+                        StreamMulticasterStartError::Create {
+                            selections: selections,
+                            batches: batches,
+                            create: retry
+                        }
+                    })
+                )),
+                Err(err) => Err(StreamMulticasterStartError::Create {
                     selections: selections.clone(),
                     batches: batches.clone(),
                     create: err
-                })?
-                .map_retry(|retry| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches,
-                    create: retry
-                }))
+                })
+            }
         }
     }
 
@@ -2603,60 +2621,68 @@ where
         ctx: &mut Ctx,
         retries: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match retries {
             StreamMulticasterStartError::Select {
                 select,
                 mut selections
-            } => {
-                if let RetryResult::Retry(retry) = self
-                    .complete_select(ctx, &mut selections, select)
-                    .map_err(|err| StreamMulticasterStartError::Select {
-                        selections: selections.clone(),
-                        select: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterStartError::Select {
-                            selections: selections,
-                            select: retry
-                        }
-                    ));
-                };
+            } => match self
+                .complete_select(ctx, &mut selections, select)
+                .map_err(|err| StreamMulticasterStartError::Select {
+                    selections: selections.clone(),
+                    select: err
+                })? {
+                RetryIndefResult::Success(()) => {
+                    let mut batches = self.empty_batches();
 
-                let mut batches = self.empty_batches();
-
-                Ok(self
-                    .create_batch(ctx, &mut batches, &selections)
-                    .map_err(|err| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches.clone(),
-                        create: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches,
-                        create: retry
-                    }))
+                    match self.create_batch(ctx, &mut batches, &selections) {
+                        Ok(res) => Ok(RetryIndefResult::from(
+                            res.map_retry(|retry| {
+                                StreamMulticasterStartError::Create {
+                                    selections: selections,
+                                    batches: batches,
+                                    create: retry
+                                }
+                            })
+                        )),
+                        Err(err) => Err(StreamMulticasterStartError::Create {
+                            selections: selections.clone(),
+                            batches: batches.clone(),
+                            create: err
+                        })
+                    }
+                }
+                RetryIndefResult::Retry(retry) => Ok(RetryIndefResult::Retry(
+                    StreamMulticasterStartError::Select {
+                        selections: selections,
+                        select: retry
+                    }
+                )),
+                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
             }
             StreamMulticasterStartError::Create {
                 selections,
                 mut batches,
                 create
-            } => Ok(self
-                .complete_create_batch(ctx, &mut batches, &selections, create)
-                .map_err(|err| StreamMulticasterStartError::Create {
+            } => match self
+                .complete_create_batch(ctx, &mut batches, &selections, create) {
+                Ok(res) => Ok(RetryIndefResult::from(
+                    res.map_retry(|retry| {
+                        StreamMulticasterStartError::Create {
+                            selections: selections,
+                            batches: batches,
+                            create: retry
+                        }
+                    })
+                )),
+                Err(err) => Err(StreamMulticasterStartError::Create {
                     selections: selections.clone(),
                     batches: batches.clone(),
                     create: err
-                })?
-                .map_retry(|retry| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches,
-                    create: retry
-                }))
+                })
+            }
         }
     }
 
@@ -2906,7 +2932,7 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
         let len = self.rev_map.len();
@@ -2943,7 +2969,7 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushFragRetry
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
         // Decompose the error set into successes and retries.
@@ -2995,7 +3021,7 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
         Self::PushFragError
     > {
         let (mut results, retries) = retries.take();
@@ -3063,7 +3089,7 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         let len = self.rev_map.len();
@@ -3100,7 +3126,7 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushOfferRetry
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         // Decompose the error set into successes and retries.
@@ -3152,7 +3178,7 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         let (mut results, retries) = retries.take();
@@ -3228,53 +3254,48 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &Msg
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        // Create the batch.
-        let batch = match self
-            .start_batch(ctx, parties)
+        self.start_batch(ctx, parties)
             .map_err(|err| StreamMulticasterPushError::Start { start: err })?
-        {
-            RetryResult::Success(batch) => batch,
-            RetryResult::Retry(retry) => {
-                return Ok(RetryResult::Retry(
-                    StreamMulticasterPushError::Start { start: retry }
-                ))
-            }
-        };
-
-        // Add the message.
-        let mut flags = self.empty_flags();
-
-        if let RetryResult::Retry(retry) = self
-            .add(ctx, &mut flags, msg, &batch)
-            .map_err(|err| StreamMulticasterPushError::Add {
-                batch: batch,
-                add: err
-            })?
-        {
-            return Ok(RetryResult::Retry(StreamMulticasterPushError::Add {
-                batch: batch,
-                add: retry
-            }));
-        }
-
-        // Finish the batch.
-        let mut flags = self.empty_flags();
-
-        Ok(self
-            .finish_batch(ctx, &mut flags, &batch)
-            .map_err(|err| StreamMulticasterPushError::Finish {
-                batch: batch,
-                finish: err
-            })?
-            .map_retry(|retry| StreamMulticasterPushError::Finish {
-                batch: batch,
-                finish: retry
+            .map_retry(|retry| StreamMulticasterPushError::Start {
+                start: retry
             })
-            .map(|()| batch))
+            .flat_map_ok(|batch| {
+                // Add the message.
+                let mut flags = self.empty_flags();
+
+                self.add(ctx, &mut flags, msg, &batch)
+                    .map_err(|err| StreamMulticasterPushError::Add {
+                        batch: batch,
+                        add: err
+                    })?
+                    .map_retry(|retry| StreamMulticasterPushError::Add {
+                        batch: batch,
+                        add: retry
+                    })
+                    .flat_map_ok(|()| {
+                        // Finish the batch.
+                        let mut flags = self.empty_flags();
+
+                        Ok(self
+                           .finish_batch(ctx, &mut flags, &batch)
+                           .map_err(|err| StreamMulticasterPushError::Finish {
+                               batch: batch,
+                               finish: err
+                           })?
+                           .map_retry(|retry|
+                                      StreamMulticasterPushError::Finish {
+                                          batch: batch,
+                                          finish: retry
+                                      })
+                           .map(|()| batch))
+                    })
+                    .map(RetryIndefResult::from)
+            })
     }
 
     fn retry_push(
@@ -3282,91 +3303,85 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         retry: Self::PushRetry
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     {
         match retry {
-            StreamMulticasterPushError::Start { start: retry } => {
-                // Create the batch.
-                let batch =
-                    match self.retry_start_batch(ctx, retry).map_err(|err| {
-                        StreamMulticasterPushError::Start { start: err }
-                    })? {
-                        RetryResult::Success(batch) => batch,
-                        RetryResult::Retry(retry) => {
-                            return Ok(RetryResult::Retry(
-                                StreamMulticasterPushError::Start {
-                                    start: retry
-                                }
-                            ))
-                        }
-                    };
-
+            StreamMulticasterPushError::Start { start: retry } => self
+                .retry_start_batch(ctx, retry)
+                .map_err(|err| StreamMulticasterPushError::Start {
+                    start: err
+                })?
+                .map_retry(|retry| StreamMulticasterPushError::Start {
+                    start: retry
+                })
+                .flat_map_ok(|batch| {
                 // Add the message.
                 let mut flags = self.empty_flags();
 
-                if let RetryResult::Retry(retry) = self
-                    .add(ctx, &mut flags, msg, &batch)
+                self.add(ctx, &mut flags, msg, &batch)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
                     })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
+                    .map_retry(|retry| StreamMulticasterPushError::Add {
                         batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                        add: retry
                     })
-                    .map(|()| batch))
-            }
+                    .flat_map_ok(|()| {
+                        // Finish the batch.
+                        let mut flags = self.empty_flags();
+
+                        Ok(self
+                           .finish_batch(ctx, &mut flags, &batch)
+                           .map_err(|err| {
+                               StreamMulticasterPushError::Finish {
+                                   batch: batch,
+                                   finish: err
+                               }
+                           })?
+                           .map_retry(|retry|
+                                      StreamMulticasterPushError::Finish {
+                                          batch: batch,
+                                          finish: retry
+                                      })
+                           .map(|()| batch))
+                    })
+                    .map(RetryIndefResult::from)
+                }),
             StreamMulticasterPushError::Add { batch, add: retry } => {
-                // Add the message.
+                // Finish the batch.
                 let mut flags = self.empty_flags();
 
-                if let RetryResult::Retry(retry) = self
-                    .retry_add(ctx, &mut flags, msg, &batch, retry)
+                self.retry_add(ctx, &mut flags, msg, &batch, retry)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
                     })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
+                    .map_retry(|retry| StreamMulticasterPushError::Add {
                         batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                        add: retry
                     })
-                    .map(|()| batch))
+                    .flat_map_ok(|()| {
+                        // Finish the batch.
+                        let mut flags = self.empty_flags();
+
+                        Ok(self
+                           .finish_batch(ctx, &mut flags, &batch)
+                           .map_err(|err| {
+                               StreamMulticasterPushError::Finish {
+                                   batch: batch,
+                                   finish: err
+                               }
+                           })?
+                           .map_retry(|retry|
+                                      StreamMulticasterPushError::Finish {
+                                          batch: batch,
+                                          finish: retry
+                                      })
+                           .map(|()| batch))
+                    })
+                    .map(RetryIndefResult::from)
             }
             StreamMulticasterPushError::Finish {
                 batch,
@@ -3376,16 +3391,17 @@ where
                 let mut flags = self.empty_flags();
 
                 Ok(self
-                    .retry_finish_batch(ctx, &mut flags, &batch, retry)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
-                    })
-                    .map(|()| batch))
+                   .retry_finish_batch(ctx, &mut flags, &batch, retry)
+                   .map(RetryIndefResult::from)
+                   .map_err(|err| StreamMulticasterPushError::Finish {
+                       batch: batch,
+                       finish: err
+                   })?
+                   .map_retry(|retry| StreamMulticasterPushError::Finish {
+                       batch: batch,
+                       finish: retry
+                   })
+                   .map(|()| batch))
             }
         }
     }
@@ -3395,104 +3411,102 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     {
         match err {
-            StreamMulticasterPushError::Start { start: err } => {
-                // Create the batch.
-                let batch = match self.complete_start_batch(ctx, err).map_err(
-                    |err| StreamMulticasterPushError::Start { start: err }
-                )? {
-                    RetryResult::Success(batch) => batch,
-                    RetryResult::Retry(retry) => {
-                        return Ok(RetryResult::Retry(
-                            StreamMulticasterPushError::Start { start: retry }
-                        ))
-                    }
-                };
-
+            StreamMulticasterPushError::Start { start: err } => self
+                .complete_start_batch(ctx, err)
+                .map_err(|err| StreamMulticasterPushError::Start {
+                    start: err
+                })?
+                .map_retry(|retry| StreamMulticasterPushError::Start {
+                    start: retry
+                })
+                .flat_map_ok(|batch| {
                 // Add the message.
                 let mut flags = self.empty_flags();
 
-                if let RetryResult::Retry(retry) = self
-                    .add(ctx, &mut flags, msg, &batch)
+                self.add(ctx, &mut flags, msg, &batch)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
                     })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
+                    .map_retry(|retry| StreamMulticasterPushError::Add {
                         batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                        add: retry
                     })
-                    .map(|()| batch))
-            }
+                    .flat_map_ok(|()| {
+                        // Finish the batch.
+                        let mut flags = self.empty_flags();
+
+                        Ok(self
+                           .finish_batch(ctx, &mut flags, &batch)
+                           .map_err(|err| {
+                               StreamMulticasterPushError::Finish {
+                                   batch: batch,
+                                   finish: err
+                               }
+                           })?
+                           .map_retry(|retry|
+                                      StreamMulticasterPushError::Finish {
+                                          batch: batch,
+                                          finish: retry
+                                      })
+                           .map(|()| batch))
+                    })
+                    .map(RetryIndefResult::from)
+                }),
             StreamMulticasterPushError::Add { batch, add: err } => {
-                // Add the message.
+                // Finish the batch.
                 let mut flags = self.empty_flags();
 
-                if let RetryResult::Retry(retry) = self
-                    .complete_add(ctx, &mut flags, msg, &batch, err)
+                self.complete_add(ctx, &mut flags, msg, &batch, err)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
                     })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
+                    .map_retry(|retry| StreamMulticasterPushError::Add {
                         batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                        add: retry
                     })
-                    .map(|()| batch))
+                    .flat_map_ok(|()| {
+                        // Finish the batch.
+                        let mut flags = self.empty_flags();
+
+                        Ok(self
+                           .finish_batch(ctx, &mut flags, &batch)
+                           .map_err(|err| {
+                               StreamMulticasterPushError::Finish {
+                                   batch: batch,
+                                   finish: err
+                               }
+                           })?
+                           .map_retry(|retry|
+                                      StreamMulticasterPushError::Finish {
+                                          batch: batch,
+                                          finish: retry
+                                      })
+                           .map(|()| batch))
+                    })
+                    .map(RetryIndefResult::from)
             }
             StreamMulticasterPushError::Finish { batch, finish: err } => {
                 // Finish the batch.
                 let mut flags = self.empty_flags();
 
                 Ok(self
-                    .complete_finish_batch(ctx, &mut flags, &batch, err)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
-                    })
-                    .map(|()| batch))
+                   .complete_finish_batch(ctx, &mut flags, &batch, err)
+                   .map(RetryIndefResult::from)
+                   .map_err(|err| StreamMulticasterPushError::Finish {
+                       batch: batch,
+                       finish: err
+                   })?
+                   .map_retry(|retry| StreamMulticasterPushError::Finish {
+                       batch: batch,
+                       finish: retry
+                   })
+                   .map(|()| batch))
             }
         }
     }
