@@ -291,9 +291,9 @@ impl FailRecords {
 impl FarHistory {
     fn compute_score(
         &self,
-        config: &FarHistoryConfig
+        config: &FarHistoryConfig,
+        now: Instant
     ) -> f32 {
-        let now = Instant::now();
         let (goodness, goodness_when) = self.successes.score(
             config.success_decay_rate,
             config.success_max_decay_time,
@@ -357,28 +357,14 @@ impl History for FarHistory {
     }
 
     #[inline]
-    fn cache_score(
-        &mut self,
-        config: &FarHistoryConfig
-    ) {
-        if self.cached.is_none() {
-            self.cached = Some(self.compute_score(config))
-        }
-    }
-
-    #[inline]
-    fn clear_score_cache(&mut self) {
-        self.cached = None
-    }
-
-    #[inline]
     fn score(
         &self,
-        config: &FarHistoryConfig
+        config: &FarHistoryConfig,
+        now: Instant
     ) -> f32 {
         match self.cached {
             Some(score) => score,
-            None => self.compute_score(config)
+            None => self.compute_score(config, now)
         }
     }
 

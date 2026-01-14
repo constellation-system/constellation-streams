@@ -55,6 +55,7 @@ use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::Retry;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::sync::Notify;
@@ -1563,7 +1564,7 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream
     ) -> Result<
-        RetryResult<
+        RetryIndefResult<
             Option<Instant>,
             LargeObjPushRetry<
                 Types::HashID,
@@ -1607,105 +1608,97 @@ where
                 });
 
                 let hash = ents[0].0;
-                let ent = &mut ents[0].1;
+                let ents_len = ents.len();
 
-                match &ent.when {
-                    Some(when) if *when <= Instant::now() => {
-                        if let Some(id) = ent.id.clone() {
+                match ents[0].1.when {
+                    Some(when) if when <= Instant::now() => {
+                        if let Some(id) = ents[0].1.id.clone() {
                             trace!(target: "large-obj-proto",
                                    "pushing fragments for {}",
                                    id);
 
-                            match stream.push_frags(
+                            stream.push_frags(
                                 ctx,
                                 id.clone(),
-                                &mut ent.frags
-                            ) {
-                                Ok(RetryResult::Success(retry)) => {
-                                    ent.when = retry;
+                                &mut ents[0].1.frags
+                            )
+                            .map_err(|err| PushErr::Frags {
+                                id: id.clone(), err: err
+                            })
+                            .map(|res| res
+                                 .map_retry(|retry| LargeObjPushRetry::Frags {
+                                     retry: retry,
+                                     id: id.clone()
+                                 })
+                                 .map(|retry| {
+                                     ents[0].1.when = retry;
 
-                                    if ents.len() < 2 {
-                                        Ok(RetryResult::Success(retry))
-                                    } else {
-                                        let when = ents[1].1.when.map_or(
-                                            retry,
-                                            |when| {
-                                                retry.map(|retry| {
-                                                    when.min(retry)
-                                                })
-                                            }
-                                        );
+                                     if ents_len < 2 {
+                                         retry
+                                     } else {
+                                         let when = ents[1].1.when.map_or(
+                                             retry,
+                                             |when| {
+                                                 retry.map(|retry| {
+                                                     when.min(retry)
+                                                 })
+                                             }
+                                         );
 
-                                        Ok(RetryResult::Success(when))
-                                    }
-                                }
-                                Ok(RetryResult::Retry(retry)) => {
-                                    Ok(RetryResult::Retry(
-                                        LargeObjPushRetry::Frags {
-                                            retry: retry,
-                                            id: id.clone()
-                                        }
-                                    ))
-                                }
-                                Err(err) => {
-                                    Err(PushErr::Frags { id: id, err: err })
-                                }
-                            }
+                                         when
+                                     }
+                                 }))
                         } else {
                             trace!(target: "large-obj-proto",
                                    "pushing offer for {}",
                                    hash);
 
-                            match stream.push_offer(
+                            stream.push_offer(
                                 ctx,
                                 hash.clone(),
-                                &mut ent.frags
-                            ) {
-                                Ok(RetryResult::Success(retry)) => {
-                                    ent.when = retry;
+                                &mut ents[0].1.frags
+                            )
+                            .map_err(|err| PushErr::Offer {
+                                hash: hash.clone(),
+                                err: err
+                            })
+                            .map(|res| res
+                                 .map_retry(|retry| LargeObjPushRetry::Offer {
+                                     retry: retry,
+                                     hash: hash.clone()
+                                 })
+                                 .map(|retry| {
+                                     ents[0].1.when = retry;
 
-                                    if ents.len() < 2 {
-                                        Ok(RetryResult::Success(retry))
-                                    } else {
-                                        let when = ents[1].1.when.map_or(
-                                            retry,
-                                            |when| {
-                                                retry.map(|retry| {
-                                                    when.min(retry)
-                                                })
-                                            }
-                                        );
+                                     if ents_len < 2 {
+                                         retry
+                                     } else {
+                                         let when = ents[1].1.when.map_or(
+                                             retry,
+                                             |when| {
+                                                 retry.map(|retry| {
+                                                     when.min(retry)
+                                                 })
+                                             }
+                                         );
 
-                                        Ok(RetryResult::Success(when))
-                                    }
-                                }
-                                Ok(RetryResult::Retry(retry)) => {
-                                    Ok(RetryResult::Retry(
-                                        LargeObjPushRetry::Offer {
-                                            retry: retry,
-                                            hash: hash.clone()
-                                        }
-                                    ))
-                                }
-                                Err(err) => Err(PushErr::Offer {
-                                    hash: hash.clone(),
-                                    err: err
-                                })
-                            }
+                                         when
+                                     }
+                                 }))
                         }
                     }
                     Some(when) => {
-                        Ok(RetryResult::Retry(LargeObjPushRetry::Retry {
-                            when: *when
+                        Ok(RetryIndefResult::Retry(LargeObjPushRetry::Retry {
+                            when: when
                         }))
                     }
-                    None => Ok(RetryResult::Success(None))
+                    None => Ok(RetryIndefResult::Success(None))
                 }
             } else {
                 trace!(target: "large-obj-proto",
                        "no active entries");
 
-                Ok(RetryResult::Success(None))
+                Ok(RetryIndefResult::Success(None))
             }
         };
 
@@ -1738,7 +1731,7 @@ where
         id: LargeObjID,
         retry: Stream::PushFragRetry
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1780,7 +1773,7 @@ where
                            "stray frags for {}",
                            id);
 
-                    Ok(RetryResult::Success(None))
+                    Ok(RetryIndefResult::Success(None))
                 }
             }
         };
@@ -1799,7 +1792,7 @@ where
         hash: Types::HashID,
         retry: Stream::PushOfferRetry
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1846,7 +1839,7 @@ where
         id: LargeObjID,
         err: Stream::PushFragError
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1889,7 +1882,7 @@ where
                                "stray frags for {}",
                                id);
 
-                        Ok(RetryResult::Success(None))
+                        Ok(RetryIndefResult::Success(None))
                     }
                 }
             }
@@ -1906,13 +1899,13 @@ where
                            err);
                 }
 
-                Ok(RetryResult::Success(None))
+                Ok(RetryIndefResult::Success(None))
             }
             (None, None) => {
                 error!(target: "large-obj-entry",
                        "neither completable nor permanent errors reported");
 
-                Ok(RetryResult::Success(None))
+                Ok(RetryIndefResult::Success(None))
             }
         };
 
@@ -1930,7 +1923,7 @@ where
         hash: Types::HashID,
         err: Stream::PushOfferError
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1976,13 +1969,13 @@ where
                            err);
                 }
 
-                Ok(RetryResult::Success(None))
+                Ok(RetryIndefResult::Success(None))
             }
             (None, None) => {
                 error!(target: "large-obj-entry",
                        "neither completable nor permanent errors reported");
 
-                Ok(RetryResult::Success(None))
+                Ok(RetryIndefResult::Success(None))
             }
         };
 

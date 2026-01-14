@@ -37,14 +37,13 @@ use std::iter::empty;
 use std::iter::once;
 use std::iter::Empty;
 use std::iter::FusedIterator;
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::net::IPEndpointAddr;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -2148,7 +2147,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
                 .select(ctx, &mut selections.private)
@@ -2170,7 +2169,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -2199,7 +2198,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -2344,7 +2343,7 @@ where
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match self {
@@ -2370,7 +2369,7 @@ where
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match (self, retry) {
@@ -2403,7 +2402,7 @@ where
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match (self, err) {
@@ -2519,7 +2518,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     {
         match self {
             SharedPrivateChannelStream::Private { stream } => Ok(stream
@@ -2544,7 +2544,8 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     {
         match (self, retry) {
             (
@@ -2576,7 +2577,8 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                Self::PushError>
     {
         match (self, err) {
             (
