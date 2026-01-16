@@ -2160,7 +2160,8 @@ where
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                }))
+                })
+                .map(|_| ()))
         }
     }
 
@@ -2188,7 +2189,8 @@ where
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                })),
+                })
+                .map(|_| ())),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
@@ -2217,7 +2219,8 @@ where
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
-                })),
+                })
+                .map(|_| ())),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }

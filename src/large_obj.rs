@@ -1565,7 +1565,7 @@ where
         stream: &mut Stream
     ) -> Result<
         RetryIndefResult<
-            Option<Instant>,
+            (Option<Instant>, Stream::Parties),
             LargeObjPushRetry<
                 Types::HashID,
                 Stream::PushFragRetry,
@@ -1731,7 +1731,8 @@ where
         id: LargeObjID,
         retry: Stream::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties),
+                         Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1792,7 +1793,8 @@ where
         hash: Types::HashID,
         retry: Stream::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties),
+                         Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1839,7 +1841,8 @@ where
         id: LargeObjID,
         err: Stream::PushFragError
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties),
+                         Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,
@@ -1923,7 +1926,8 @@ where
         hash: Types::HashID,
         err: Stream::PushOfferError
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties),
+                         Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
             <Stream::PushFragError as RecoverableError>::Permanent,

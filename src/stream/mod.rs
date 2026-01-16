@@ -192,7 +192,8 @@ pub trait PushStream<Ctx> {
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>;
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>,
+                Self::FinishBatchError>;
 
     /// Retry a previous call to [finish_batch](PushStream::finish_batch).
     ///
@@ -217,7 +218,8 @@ pub trait PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         retry: Self::FinishBatchRetry
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>;
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>,
+                Self::FinishBatchError>;
 
     /// Retry a previously-failed call to
     /// [finish_batch](PushStream::finish_batch).
@@ -243,7 +245,8 @@ pub trait PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         err: <Self::FinishBatchError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>;
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>,
+                Self::FinishBatchError>;
 
     /// Cancel a pending batch and release any resources allocated to
     /// it.
@@ -268,7 +271,8 @@ pub trait PushStream<Ctx> {
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>;
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>,
+                Self::CancelBatchError>;
 
     /// Retry a previous call to [cancel_batch](PushStream::cancel_batch).
     ///
@@ -293,7 +297,8 @@ pub trait PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         retry: Self::CancelBatchRetry
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>;
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>,
+                Self::CancelBatchError>;
 
     /// Retry a previously-failed call to
     /// [cancel_batch](PushStream::cancel_batch).
@@ -319,7 +324,8 @@ pub trait PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         err: <Self::CancelBatchError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>;
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>,
+                Self::CancelBatchError>;
 
     /// Cancel all pending batches.
     ///
@@ -563,6 +569,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Type of batch cache used in
     /// [start_batch](PushStreamShared::start_batch).
     type StartBatchStreamBatches: Clone + Default;
+    /// Iterator for parties.
+    type BatchPartiesIter: Iterator<Item = Self::PartyID>;
+    type BatchPartiesError: Debug + Display + ScopedError;
 
     /// Create an empty
     /// [Selections](PushStreamShared::Selections).
@@ -588,6 +597,11 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         size: usize
     ) -> Self::StartBatchStreamBatches;
 
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError>;
+
     /// Select streams for a new batch.
     ///
     /// This will do any stream selection, and will record decisions
@@ -597,7 +611,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
@@ -613,7 +628,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>;
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>;
 
     /// Retry a previously-failed call to
     /// [select](PushStreamShared::select).
@@ -625,7 +641,8 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>;
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>;
 
     /// Create a new batch.
     ///
@@ -977,6 +994,7 @@ pub trait LargeObjStream<Ctx> {
     type PushFragRetry: RetryWhen + Clone + Debug;
     /// Type of outbound fragment structures.
     type Frags: Frags;
+    type Parties;
 
     fn push_frags(
         &mut self,
@@ -984,7 +1002,8 @@ pub trait LargeObjStream<Ctx> {
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     >;
 
@@ -995,7 +1014,8 @@ pub trait LargeObjStream<Ctx> {
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     >;
 
@@ -1006,7 +1026,8 @@ pub trait LargeObjStream<Ctx> {
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     >;
 }
@@ -1026,7 +1047,8 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     >;
 
@@ -1037,7 +1059,8 @@ where
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     >;
 
@@ -1048,7 +1071,8 @@ where
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     >;
 }
@@ -1971,6 +1995,8 @@ where
     type StartBatchError = ThreadedStreamError<Inner::StartBatchError>;
     type StartBatchRetry = Inner::StartBatchRetry;
     type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
+    type BatchPartiesIter = Inner::BatchPartiesIter;
+    type BatchPartiesError = ThreadedStreamError<Inner::BatchPartiesError>;
 
     #[inline]
     fn empty_selections_with_capacity(size: usize) -> Self::Selections {
@@ -1984,12 +2010,28 @@ where
         Inner::empty_batches_with_capacity(size)
     }
 
+    #[inline]
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?;
+
+        guard
+            .batch_parties(batch_id)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -2008,7 +2050,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -2024,7 +2067,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         let mut guard = self
             .inner
             .lock()
@@ -2471,6 +2515,7 @@ where
     type Frags = Inner::Frags;
     type PushFragError = ThreadedStreamError<Inner::PushFragError>;
     type PushFragRetry = Inner::PushFragRetry;
+    type Parties = Inner::Parties;
 
     fn push_frags(
         &mut self,
@@ -2478,7 +2523,8 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         self.inner
@@ -2495,7 +2541,8 @@ where
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         self.inner
@@ -2512,7 +2559,8 @@ where
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         self.inner
@@ -2537,7 +2585,8 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         self.inner
@@ -2554,7 +2603,8 @@ where
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         self.inner
@@ -2571,7 +2621,8 @@ where
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         self.inner

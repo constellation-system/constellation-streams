@@ -299,6 +299,13 @@ pub enum StreamMulticasterReportError<Report, Party> {
     }
 }
 
+#[derive(Debug)]
+pub enum StreamMulticasterBatchPartiesError {
+    NotFound {
+        batch_id: CompoundBatchID
+    }
+}
+
 impl<Inner> Default for StreamMulticasterSelections<Inner> {
     #[inline]
     fn default() -> Self {
@@ -409,6 +416,16 @@ where
         match self {
             StreamMulticasterReportError::Report { error } => error.scope(),
             StreamMulticasterReportError::NotFound { .. } => ErrorScope::System
+        }
+    }
+}
+
+impl ScopedError for StreamMulticasterBatchPartiesError {
+    #[inline]
+    fn scope(&self) -> ErrorScope {
+        match self {
+            StreamMulticasterBatchPartiesError::NotFound { .. } =>
+                ErrorScope::Unrecoverable
         }
     }
 }
@@ -1174,7 +1191,7 @@ where
         &mut self,
         mut elems: Vec<(
             Idx,
-            RetryResult<
+            RetryIndefResult<
                 Option<Instant>,
                 <Stream as LargeObjStream<Ctx>>::PushFragRetry
             >
@@ -1183,8 +1200,8 @@ where
             Vec<(Idx, <Stream as LargeObjStream<Ctx>>::PushFragError)>
         >
     ) -> Result<
-        RetryResult<
-            Option<Instant>,
+        RetryIndefResult<
+            (Option<Instant>, Vec<Idx>),
             <Self as LargeObjStream<Ctx>>::PushFragRetry
         >,
         <Self as LargeObjStream<Ctx>>::PushFragError
@@ -1201,26 +1218,38 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
+                let mut all_indef = true;
                 let mut when = None;
 
-                for (_, res) in elems.into_iter() {
-                    match &res {
-                        RetryResult::Success(retry) => {
-                            when = when.map_or(*retry, |when: Instant| {
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(retry) => {
+                            when = when.map_or(retry, |when: Instant| {
                                 retry.map(|retry| when.min(retry))
-                            })
-                        }
-                        RetryResult::Retry(_) => all_success = false
-                    }
+                            });
+                            ids.push(id);
 
-                    results.push(res);
+                            results.push(RetryResult::Success(retry));
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_success = false;
+
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef => {
+                            all_indef = false;
+                        }
+                    }
                 }
 
                 if all_success {
-                    Ok(RetryResult::Success(when))
+                    Ok(RetryIndefResult::Success((when, ids)))
+                } else if all_indef {
+                    Ok(RetryIndefResult::Indef)
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Retry(results))
                 }
             }
         }
@@ -1230,7 +1259,7 @@ where
         &mut self,
         mut elems: Vec<(
             Idx,
-            RetryResult<
+            RetryIndefResult<
                 Option<Instant>,
                 <Stream as LargeObjOfferStream<H, Ctx>>::PushOfferRetry
             >
@@ -1239,8 +1268,8 @@ where
             Vec<(Idx, <Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError)>
         >
     ) -> Result<
-        RetryResult<
-            Option<Instant>,
+        RetryIndefResult<
+            (Option<Instant>, Vec<Idx>),
             <Self as LargeObjOfferStream<H, Ctx>>::PushOfferRetry
         >,
         <Self as LargeObjOfferStream<H, Ctx>>::PushOfferError
@@ -1257,26 +1286,38 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
+                let mut all_indef = true;
                 let mut when = None;
 
-                for (_, res) in elems.into_iter() {
-                    match &res {
-                        RetryResult::Success(retry) => {
-                            when = when.map_or(*retry, |when: Instant| {
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(retry) => {
+                            when = when.map_or(retry, |when: Instant| {
                                 retry.map(|retry| when.min(retry))
-                            })
-                        }
-                        RetryResult::Retry(_) => all_success = false
-                    }
+                            });
+                            ids.push(id);
 
-                    results.push(res);
+                            results.push(RetryResult::Success(retry));
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_success = false;
+
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef => {
+                            all_indef = false;
+                        }
+                    }
                 }
 
                 if all_success {
-                    Ok(RetryResult::Success(when))
+                    Ok(RetryIndefResult::Success((when, ids)))
+                } else if all_indef {
+                    Ok(RetryIndefResult::Indef)
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Retry(results))
                 }
             }
         }
@@ -1304,7 +1345,8 @@ where
             Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::SelectError)>
         >
     ) -> Result<
-        RetryIndefResult<(), <Self as PushStreamShared<Ctx>>::SelectRetry>,
+        RetryIndefResult<Vec<Idx>,
+                         <Self as PushStreamShared<Ctx>>::SelectRetry>,
         <Self as PushStreamShared<Ctx>>::SelectError
     > {
         match errs {
@@ -1319,21 +1361,32 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
+                let mut all_indef = true;
 
-                for (_, res) in elems.into_iter() {
-                    if matches!(res, RetryIndefResult::Retry(_) |
-                                RetryIndefResult::Indef) {
-                        all_success = false
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(val) => {
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_success = false;
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef => {
+                            all_indef = false;
+                        }
                     }
-
-                    results.push(res);
                 }
 
                 if all_success {
-                    Ok(RetryResult::Success(()))
+                    Ok(RetryIndefResult::Success(ids))
+                } else if all_indef {
+                    Ok(RetryIndefResult::Indef)
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Retry(results))
                 }
             }
         }
@@ -2179,7 +2232,7 @@ where
     type SelectError = SelectionsError<
         ErrorSet<
             Idx,
-            RetryResult<(), Stream::SelectRetry>,
+            RetryIndefResult<(), Stream::SelectRetry>,
             Stream::SelectError
         >,
         usize
@@ -2199,6 +2252,8 @@ where
         Self::StartBatchStreamBatches
     >;
     type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
+    type BatchPartiesIter = IntoIter<Idx>;
+    type BatchPartiesError = StreamMulticasterBatchPartiesError;
 
     #[inline]
     fn empty_selections(&self) -> Self::Selections {
@@ -2224,12 +2279,30 @@ where
         Stream::empty_batches_with_capacity(size)
     }
 
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        let StreamMulticasterBatch { batch_ids } =
+            self.batches.get(batch_id)
+            .ok_or(StreamMulticasterBatchPartiesError::NotFound {
+                batch_id: *batch_id
+            })?;
+        let ids: Vec<Idx> = batch_ids.iter()
+            .enumerate()
+            .flat_map(|(i, batch_id)| batch_id.as_ref().map(|_| Idx::from(i)))
+            .collect();
+
+        Ok(ids.into_iter())
+    }
+
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>
     where
         I: Iterator<Item = &'a Idx>,
         Idx: 'a {
@@ -2276,7 +2349,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
@@ -2312,7 +2386,8 @@ where
                     }
                 },
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) =>
+                    results.push((idx, RetryIndefResult::Success(val)))
             }
         }
 
@@ -2324,7 +2399,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         let (mut results, retries) = retries.take();
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
         let len = retries.len();
@@ -2516,7 +2592,7 @@ where
                 selections: selections.clone(),
                 select: err
             })? {
-            RetryIndefResult::Success(()) => {
+            RetryIndefResult::Success(_) => {
                 let mut batches = self.empty_batches();
 
                 match self.create_batch(ctx, &mut batches, &selections) {
@@ -2564,7 +2640,7 @@ where
                     selections: selections.clone(),
                     select: err
                 })? {
-                RetryIndefResult::Success(()) => {
+                RetryIndefResult::Success(_) => {
                     let mut batches = self.empty_batches();
 
                     match self.create_batch(ctx, &mut batches, &selections) {
@@ -2634,7 +2710,7 @@ where
                     selections: selections.clone(),
                     select: err
                 })? {
-                RetryIndefResult::Success(()) => {
+                RetryIndefResult::Success(_) => {
                     let mut batches = self.empty_batches();
 
                     match self.create_batch(ctx, &mut batches, &selections) {
@@ -2920,11 +2996,12 @@ where
     type Frags = StreamMulticasterFrags<Idx, Stream::Frags>;
     type PushFragError = ErrorSet<
         Idx,
-        RetryResult<Option<Instant>, Stream::PushFragRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
         Stream::PushFragError
     >;
     type PushFragRetry =
         Vec<RetryResult<Option<Instant>, Stream::PushFragRetry>>;
+    type Parties = Vec<Idx>;
 
     fn push_frags(
         &mut self,
@@ -2932,7 +3009,7 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
         Self::PushFragError
     > {
         let len = self.rev_map.len();
@@ -2943,7 +3020,11 @@ where
         for (i, frag) in frags.frags.iter_mut().enumerate() {
             match self.rev_map[i].stream.push_frags(ctx, id.clone(), frag) {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res);
+
+                    results.push((Idx::from(i), res))
+                },
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
                 Err(err) => match &mut errs {
@@ -2969,7 +3050,7 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
         Self::PushFragError
     > {
         // Decompose the error set into successes and retries.
@@ -2991,7 +3072,12 @@ where
                         retry
                     ) {
                         // We're good; add this to the output.
-                        Ok(id) => results.push((Idx::from(i), id)),
+                        Ok(res) => {
+                            let res = res.map(|(res, _)| res);
+                            let res = RetryIndefResult::from(res);
+
+                            results.push((Idx::from(i), res))
+                        },
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
                         Err(err) => match &mut errs {
@@ -3007,7 +3093,8 @@ where
                     }
                 }
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) =>
+                    results.push((idx, RetryIndefResult::Success(val)))
             }
         }
 
@@ -3021,7 +3108,7 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
         Self::PushFragError
     > {
         let (mut results, retries) = retries.take();
@@ -3039,7 +3126,12 @@ where
                 err
             ) {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res);
+                    let res = RetryIndefResult::from(res);
+
+                    results.push((Idx::from(i), res))
+                },
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
                 Err(err) => match &mut errs {
@@ -3071,13 +3163,14 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjOfferStream<H, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Stream: LargeObjOfferStream<H, Ctx>
+        + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     H: Clone + HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
     type PushOfferError = ErrorSet<
         Idx,
-        RetryResult<Option<Instant>, Stream::PushOfferRetry>,
+        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
         Stream::PushOfferError
     >;
     type PushOfferRetry =
@@ -3089,7 +3182,7 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         let len = self.rev_map.len();
@@ -3100,7 +3193,11 @@ where
         for (i, frag) in frags.frags.iter_mut().enumerate() {
             match self.rev_map[i].stream.push_offer(ctx, hash.clone(), frag) {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res);
+
+                    results.push((Idx::from(i), res))
+                },
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
                 Err(err) => match &mut errs {
@@ -3126,7 +3223,7 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         // Decompose the error set into successes and retries.
@@ -3148,7 +3245,13 @@ where
                         retry
                     ) {
                         // We're good; add this to the output.
-                        Ok(id) => results.push((Idx::from(i), id)),
+                        // We're good; add this to the output.
+                        Ok(res) => {
+                            let res = res.map(|(res, _)| res);
+                            let res = RetryIndefResult::from(res);
+
+                            results.push((Idx::from(i), res))
+                        },
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
                         Err(err) => match &mut errs {
@@ -3164,7 +3267,8 @@ where
                     }
                 }
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) =>
+                    results.push((idx, RetryIndefResult::Success(val)))
             }
         }
 
@@ -3178,7 +3282,7 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         let (mut results, retries) = retries.take();
@@ -3196,7 +3300,12 @@ where
                 err
             ) {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res);
+                    let res = RetryIndefResult::from(res);
+
+                    results.push((Idx::from(i), res))
+                },
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
                 Err(err) => match &mut errs {
@@ -3627,6 +3736,20 @@ where
             StreamMulticasterReportError::Report { error } => error.fmt(f),
             StreamMulticasterReportError::NotFound { party } => {
                 write!(f, "no stream for party {}", party)
+            }
+        }
+    }
+}
+
+impl Display for StreamMulticasterBatchPartiesError
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterBatchPartiesError::NotFound { batch_id } => {
+                write!(f, "batch {} not found", batch_id)
             }
         }
     }

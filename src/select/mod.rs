@@ -821,7 +821,7 @@ where
         origin: Resolve::Origin,
         dense_id: DenseItemID<Epochs::Item>
     ) -> Result<
-        RetryResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
+        RetryIndefResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
         ReportError<
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >
@@ -2266,6 +2266,12 @@ where
     >;
     type StartBatchStreamBatches =
         <Src::Stream as PushStreamShared<Ctx>>::StartBatchStreamBatches;
+    type BatchPartiesIter =
+        <Src::Stream as PushStreamShared<Ctx>>::BatchPartiesIter;
+    type BatchPartiesError = SelectorBatchError<
+        Epochs::Item,
+        <Src::Stream as PushStreamShared<Ctx>>::BatchPartiesError
+    >;
 
     #[inline]
     fn empty_selections_with_capacity(size: usize) -> Self::Selections {
@@ -2282,12 +2288,23 @@ where
         Src::Stream::empty_batches_with_capacity(size)
     }
 
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        self.batch_stream(batch_id)
+            .map_err(|err| SelectorBatchError::Stream { err: err })?
+            .batch_parties(&batch_id.batch_id)
+            .map_err(|err| SelectorBatchError::Batch { batch: err })
+    }
+
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -2332,7 +2349,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { parties, .. } => {
@@ -2368,7 +2386,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+                Self::SelectError> {
         match err {
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
@@ -3162,6 +3181,7 @@ where
         <Src::Stream as LargeObjStream<Ctx>>::PushFragRetry,
         Epochs::Item
     >;
+    type Parties = <Src::Stream as LargeObjStream<Ctx>>::Parties;
 
     fn push_frags(
         &mut self,
@@ -3169,7 +3189,8 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         // Try to select a stream.
@@ -3207,7 +3228,8 @@ where
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         match retry {
@@ -3247,7 +3269,8 @@ where
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry>,
         Self::PushFragError
     > {
         match err {
@@ -3289,7 +3312,8 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
-    Src::Stream: Clone + LargeObjOfferStream<H, Ctx> + PushStream<Ctx> + Send,
+    Src::Stream: Clone + LargeObjOfferStream<H, Ctx>
+        + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
@@ -3321,7 +3345,8 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         // Try to select a stream.
@@ -3359,7 +3384,8 @@ where
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         match retry {
@@ -3399,7 +3425,8 @@ where
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         match err {

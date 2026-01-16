@@ -1142,6 +1142,7 @@ where
     type PushFragError =
         DatagramCodecFragError<CodecStreamError<LargeObjMsgEncodeError, Error>>;
     type PushFragRetry = Instant;
+    type Parties = ();
 
     fn push_frags(
         &mut self,
@@ -1149,7 +1150,7 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
         Self::PushFragError
     > {
         LargeObjMsg::frags(frags, id, 1024)
@@ -1160,10 +1161,11 @@ where
                         DatagramCodecFragError::Stream { err: err }
                     })?;
 
-                    Ok(Some(when))
+                    Ok((Some(when), ()))
                 }
-                None => Ok(None)
+                None => Ok((None, ()))
             })
+            .map(RetryIndefResult::from)
     }
 
     fn retry_push_frags(
@@ -1173,7 +1175,7 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1186,7 +1188,7 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1209,7 +1211,7 @@ where
         hash: H::HashID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         LargeObjMsg::offer(frags, hash, 1024)
@@ -1219,8 +1221,9 @@ where
                     DatagramCodecFragError::Stream { err: err }
                 })?;
 
-                Ok(Some(when))
+                Ok((Some(when), ()))
             })
+            .map(RetryIndefResult::from)
     }
 
     fn retry_push_offer(
@@ -1230,7 +1233,7 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)
@@ -1243,7 +1246,7 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Option<Instant>, Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)
