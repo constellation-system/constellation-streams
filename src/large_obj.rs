@@ -343,6 +343,7 @@ pub enum LargeObjPushError<H, Frags, Offer> {
     Frags { err: Frags },
     Offer { err: Offer },
     NoObjID { hash: H, id: LargeObjID },
+    NoID { id: LargeObjID },
     NoObj { hash: H },
     MutexPoison
 }
@@ -1574,8 +1575,8 @@ where
         >,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
@@ -1588,53 +1589,52 @@ where
         trace!(target: "large-obj-proto",
                "trying to push fragments");
 
-        let res = {
-            let mut outbound = self
-                .outbound
-                .lock()
-                .map_err(|_| LargeObjPushError::MutexPoison)?;
-            // XXX use a better data structure here.
-            let mut ents: Vec<(&Types::HashID, &mut SendEntry<F>)> =
-                outbound.objs.iter_mut().collect();
+        let mut outbound = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjPushError::MutexPoison)?;
+        // XXX use a better data structure here.
+        let mut ents: Vec<(&Types::HashID, &mut SendEntry<F>)> =
+            outbound.objs.iter_mut().collect();
 
-            if !ents.is_empty() {
-                ents.sort_unstable_by(|(_, a), (_, b)| {
-                    match (a.when, b.when) {
-                        (Some(a), Some(b)) => a.cmp(&b),
-                        (None, None) => Ordering::Equal,
-                        (None, _) => Ordering::Greater,
-                        (_, None) => Ordering::Less
-                    }
-                });
+        if !ents.is_empty() {
+            ents.sort_unstable_by(|(_, a), (_, b)| {
+                match (a.when, b.when) {
+                    (Some(a), Some(b)) => a.cmp(&b),
+                    (None, None) => Ordering::Equal,
+                    (None, _) => Ordering::Greater,
+                    (_, None) => Ordering::Less
+                }
+            });
 
-                let hash = ents[0].0;
-                let ents_len = ents.len();
+            let hash = ents[0].0;
+            let ents_len = ents.len();
 
-                match ents[0].1.when {
-                    Some(when) if when <= Instant::now() => {
-                        if let Some(id) = ents[0].1.id.clone() {
-                            trace!(target: "large-obj-proto",
-                                   "pushing fragments for {}",
-                                   id);
+            match ents[0].1.when {
+                Some(when) if when <= Instant::now() => {
+                    if let Some(id) = ents[0].1.id.clone() {
+                        trace!(target: "large-obj-proto",
+                               "pushing fragments for {}",
+                               id);
 
-                            stream.push_frags(
-                                ctx,
-                                id.clone(),
-                                &mut ents[0].1.frags
-                            )
-                            .map_err(|err| PushErr::Frags {
-                                id: id.clone(), err: err
+                        stream.push_frags(
+                            ctx,
+                            id.clone(),
+                            &mut ents[0].1.frags
+                        )
+                            .map_err(|err| LargeObjPushError::Frags {
+                                err: err
                             })
                             .map(|res| res
                                  .map_retry(|retry| LargeObjPushRetry::Frags {
                                      retry: retry,
                                      id: id.clone()
                                  })
-                                 .map(|retry| {
+                                 .map(|(retry, parties)| {
                                      ents[0].1.when = retry;
 
                                      if ents_len < 2 {
-                                         retry
+                                         (retry, parties)
                                      } else {
                                          let when = ents[1].1.when.map_or(
                                              retry,
@@ -1645,21 +1645,20 @@ where
                                              }
                                          );
 
-                                         when
+                                         (when, parties)
                                      }
                                  }))
-                        } else {
-                            trace!(target: "large-obj-proto",
-                                   "pushing offer for {}",
-                                   hash);
+                    } else {
+                        trace!(target: "large-obj-proto",
+                               "pushing offer for {}",
+                               hash);
 
-                            stream.push_offer(
-                                ctx,
-                                hash.clone(),
-                                &mut ents[0].1.frags
-                            )
-                            .map_err(|err| PushErr::Offer {
-                                hash: hash.clone(),
+                        stream.push_offer(
+                            ctx,
+                            hash.clone(),
+                            &mut ents[0].1.frags
+                        )
+                            .map_err(|err| LargeObjPushError::Offer {
                                 err: err
                             })
                             .map(|res| res
@@ -1667,11 +1666,11 @@ where
                                      retry: retry,
                                      hash: hash.clone()
                                  })
-                                 .map(|retry| {
+                                 .map(|(retry, parties)| {
                                      ents[0].1.when = retry;
 
                                      if ents_len < 2 {
-                                         retry
+                                         (retry, parties)
                                      } else {
                                          let when = ents[1].1.when.map_or(
                                              retry,
@@ -1682,45 +1681,23 @@ where
                                              }
                                          );
 
-                                         when
+                                         (when, parties)
                                      }
                                  }))
-                        }
                     }
-                    Some(when) => {
-                        Ok(RetryIndefResult::Retry(LargeObjPushRetry::Retry {
-                            when: when
-                        }))
-                    }
-                    None => Ok(RetryIndefResult::Success(None))
                 }
-            } else {
-                trace!(target: "large-obj-proto",
-                       "no active entries");
-
-                Ok(RetryIndefResult::Success(None))
+                Some(when) => {
+                    Ok(RetryIndefResult::Retry(LargeObjPushRetry::Retry {
+                        when: when
+                    }))
+                }
+                None => Ok(RetryIndefResult::Indef)
             }
-        };
+        } else {
+            trace!(target: "large-obj-proto",
+                   "no active entries");
 
-        match res {
-            // It succeeded.
-            Ok(out) => Ok(out),
-            Err(PushErr::Frags { id, err }) => self
-                .complete_push_frags(ctx, stream, id.clone(), err)
-                .map(|res| {
-                    res.map_retry(|retry| LargeObjPushRetry::Frags {
-                        retry: retry,
-                        id: id
-                    })
-                }),
-            Err(PushErr::Offer { hash, err }) => self
-                .complete_push_offer(ctx, stream, hash.clone(), err)
-                .map(|res| {
-                    res.map_retry(|retry| LargeObjPushRetry::Offer {
-                        retry: retry,
-                        hash: hash
-                    })
-                })
+            Ok(RetryIndefResult::Indef)
         }
     }
 
@@ -1735,8 +1712,8 @@ where
                          Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError,
         >
     >
     where
@@ -1748,42 +1725,22 @@ where
                "retrying pushing fragments for {}",
                id);
 
-        let res = {
-            let mut outbound = self
-                .outbound
-                .lock()
-                .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let mut outbound = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let hash = outbound.hashes.get(&id).cloned()
+            .ok_or(LargeObjPushError::NoID { id: id.clone() })?;
+        let ent = outbound.objs.get_mut(&hash)
+            .ok_or(LargeObjPushError::NoObjID {
+                hash: hash,
+                id: id.clone()
+            })?;
 
-            match outbound.hashes.get(&id).cloned() {
-                Some(hash) => match outbound.objs.get_mut(&hash) {
-                    Some(ent) => stream.retry_push_frags(
-                        ctx,
-                        id.clone(),
-                        &mut ent.frags,
-                        retry
-                    ),
-                    None => {
-                        return Err(LargeObjPushError::NoObjID {
-                            hash: hash,
-                            id: id.clone()
-                        })
-                    }
-                },
-                None => {
-                    trace!(target: "large-obj-proto",
-                           "stray frags for {}",
-                           id);
-
-                    Ok(RetryIndefResult::Success(None))
-                }
-            }
-        };
-
-        match res {
-            // It succeeded.
-            Ok(out) => Ok(out),
-            Err(err) => self.complete_push_frags(ctx, stream, id, err)
-        }
+        stream.retry_push_frags(ctx, id, &mut ent.frags, retry)
+            .map_err(|err| LargeObjPushError::Frags {
+                err: err
+            })
     }
 
     pub(crate) fn retry_push_offer<Stream, Ctx>(
@@ -1797,8 +1754,8 @@ where
                          Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
@@ -1810,28 +1767,17 @@ where
                "retrying pushing offer for {}",
                hash);
 
-        let res = {
-            let mut outbound = self
-                .outbound
-                .lock()
-                .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let mut outbound = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let ent = outbound.objs.get_mut(&hash)
+            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })?;
 
-            match outbound.objs.get_mut(&hash) {
-                Some(ent) => stream.retry_push_offer(
-                    ctx,
-                    hash.clone(),
-                    &mut ent.frags,
-                    retry
-                ),
-                None => return Err(LargeObjPushError::NoObj { hash: hash })
-            }
-        };
-
-        match res {
-            // It succeeded.
-            Ok(out) => Ok(out),
-            Err(err) => self.complete_push_offer(ctx, stream, hash, err)
-        }
+        stream.retry_push_offer(ctx, hash, &mut ent.frags, retry)
+            .map_err(|err| LargeObjPushError::Offer {
+                err: err
+            })
     }
 
     pub(crate) fn complete_push_frags<Stream, Ctx>(
@@ -1839,14 +1785,14 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         id: LargeObjID,
-        err: Stream::PushFragError
+        err: <Stream::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
                          Stream::PushFragRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
@@ -1858,65 +1804,22 @@ where
                "completing pushing fragments for {}",
                id);
 
-        let res = match err.split() {
-            (Some(completable), None) => {
-                let mut outbound = self
-                    .outbound
-                    .lock()
-                    .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let mut outbound = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let hash = outbound.hashes.get(&id).cloned()
+            .ok_or(LargeObjPushError::NoID {
+                id: id.clone()
+            })?;
+        let ent = outbound.objs.get_mut(&hash)
+            .ok_or(LargeObjPushError::NoObjID {
+                hash: hash,
+                id: id.clone()
+            })?;
 
-                match outbound.hashes.get(&id).cloned() {
-                    Some(hash) => match outbound.objs.get_mut(&hash) {
-                        Some(ent) => stream.complete_push_frags(
-                            ctx,
-                            id.clone(),
-                            &mut ent.frags,
-                            completable
-                        ),
-                        None => {
-                            return Err(LargeObjPushError::NoObjID {
-                                hash: hash,
-                                id: id.clone()
-                            })
-                        }
-                    },
-                    None => {
-                        trace!(target: "large-obj-proto",
-                               "stray frags for {}",
-                               id);
-
-                        Ok(RetryIndefResult::Success(None))
-                    }
-                }
-            }
-            (_, Some(permanent)) => {
-                // Unrecoverable errors occurred.
-                error!(target: "large-obj-entry",
-                       "unrecoverable error pushing fragments: {}",
-                       permanent);
-
-                // Report the failure
-                if let Err(err) = stream.report_error(&permanent) {
-                    error!(target: "large-obj-entry",
-                           "failed to report errors to stream: {}",
-                           err);
-                }
-
-                Ok(RetryIndefResult::Success(None))
-            }
-            (None, None) => {
-                error!(target: "large-obj-entry",
-                       "neither completable nor permanent errors reported");
-
-                Ok(RetryIndefResult::Success(None))
-            }
-        };
-
-        match res {
-            // It succeeded.
-            Ok(out) => Ok(out),
-            Err(err) => self.complete_push_frags(ctx, stream, id, err)
-        }
+        stream.complete_push_frags(ctx, id, &mut ent.frags, err)
+            .map_err(|err| LargeObjPushError::Frags { err: err })
     }
 
     pub(crate) fn complete_push_offer<Stream, Ctx>(
@@ -1924,14 +1827,14 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         hash: Types::HashID,
-        err: Stream::PushOfferError
+        err: <Stream::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
                          Stream::PushOfferRetry>,
         LargeObjPushError<
             Types::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
@@ -1943,51 +1846,15 @@ where
                "completing pushing offer for {}",
                hash);
 
-        let res = match err.split() {
-            (Some(completable), None) => {
-                let mut outbound = self
-                    .outbound
-                    .lock()
-                    .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let mut outbound = self
+            .outbound
+            .lock()
+            .map_err(|_| LargeObjPushError::MutexPoison)?;
+        let ent = outbound.objs.get_mut(&hash)
+            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })?;
 
-                match outbound.objs.get_mut(&hash) {
-                    Some(ent) => stream.complete_push_offer(
-                        ctx,
-                        hash.clone(),
-                        &mut ent.frags,
-                        completable
-                    ),
-                    None => return Err(LargeObjPushError::NoObj { hash: hash })
-                }
-            }
-            (_, Some(permanent)) => {
-                // Unrecoverable errors occurred.
-                error!(target: "large-obj-entry",
-                       "unrecoverable error pushing fragments: {}",
-                       permanent);
-
-                // Report the failure
-                if let Err(err) = stream.report_error(&permanent) {
-                    error!(target: "large-obj-entry",
-                           "failed to report errors to stream: {}",
-                           err);
-                }
-
-                Ok(RetryIndefResult::Success(None))
-            }
-            (None, None) => {
-                error!(target: "large-obj-entry",
-                       "neither completable nor permanent errors reported");
-
-                Ok(RetryIndefResult::Success(None))
-            }
-        };
-
-        match res {
-            // It succeeded.
-            Ok(out) => Ok(out),
-            Err(err) => self.complete_push_offer(ctx, stream, hash, err)
-        }
+        stream.complete_push_offer(ctx, hash, &mut ent.frags, err)
+            .map_err(|err| LargeObjPushError::Offer { err: err })
     }
 
     fn recv_offer_msg(
@@ -2704,6 +2571,7 @@ where
             LargeObjPushError::Offer { err } => err.scope(),
             LargeObjPushError::Frags { err } => err.scope(),
             LargeObjPushError::NoObjID { .. } |
+            LargeObjPushError::NoID { .. } |
             LargeObjPushError::NoObj { .. } |
             LargeObjPushError::MutexPoison => ErrorScope::Unrecoverable
         }
@@ -2866,6 +2734,9 @@ where
             ),
             LargeObjPushError::NoObj { hash } => {
                 write!(f, "no object entry found for {}", hash)
+            }
+            LargeObjPushError::NoID { id } => {
+                write!(f, "no object id {} found", id)
             }
             LargeObjPushError::MutexPoison => write!(f, "mutex poisoned")
         }

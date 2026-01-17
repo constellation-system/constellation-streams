@@ -366,7 +366,8 @@ where
         &mut self,
         stream_id: StreamID
     ) -> Result<(), StreamSelectorReportError<ReportError<StreamID>>> {
-        let idx = self.stream_ids.get(&stream_id)?;
+        let idx = self.stream_ids.get(&stream_id)
+            .ok_or(StreamSelectorReportError::NotFound)?;
         let id = DenseItemID::new(self.sched.epoch().clone(), idx.0);
 
         self.failure_id(&id).map_err(|err| {
