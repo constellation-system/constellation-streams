@@ -49,7 +49,6 @@ use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::unix::UnixSocketAddr;
 use log::error;
-use mio::Registry;
 use mio::Token;
 
 use crate::error::ErrorReportInfo;
@@ -198,7 +197,6 @@ pub trait Channels<Ctx> {
     fn req_stream(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
@@ -215,7 +213,6 @@ pub trait Channels<Ctx> {
     fn listen(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         tokens: &HashSet<Token>
     ) -> Result<
         RetryResult<(
@@ -230,7 +227,6 @@ pub trait Channels<Ctx> {
     fn shutdown_stream(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
         session: Self::Stream
@@ -241,13 +237,12 @@ pub trait Channels<Ctx> {
 
     fn shutdown(
         &mut self,
-        registry: &Registry
+        ctx: &mut Ctx,
     ) -> Result<bool, Self::ShutdownError>;
 
     fn shutdown_listen(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         tokens: &HashSet<Token>
     ) -> Result<RetryResult<bool>, Self::ShutdownListenError>;
 }
@@ -600,7 +595,6 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     fn req_stream(
         &mut self,
         _ctx: &mut Ctx,
-        _registry: &Registry,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
         _endpoint: &Self::Addr,
@@ -620,7 +614,6 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     fn listen(
         &mut self,
         _ctx: &mut Ctx,
-        _registry: &Registry,
         _tokens: &HashSet<Token>
     ) -> Result<
         RetryResult<(
@@ -638,7 +631,6 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     fn shutdown_stream(
         &mut self,
         _ctx: &mut Ctx,
-        _registry: &Registry,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
         _session: Self::Stream
@@ -652,7 +644,7 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     #[inline]
     fn shutdown(
         &mut self,
-        _registry: &Registry
+        _ctx: &mut Ctx,
     ) -> Result<bool, Self::ShutdownError> {
         Ok(true)
     }
@@ -660,7 +652,6 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     fn shutdown_listen(
         &mut self,
         _ctx: &mut Ctx,
-        _registry: &Registry,
         _tokens: &HashSet<Token>
     ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
         Ok(RetryResult::Success(true))
@@ -786,7 +777,6 @@ where
     fn req_stream(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
@@ -807,7 +797,7 @@ where
                 SharedPrivateValue::Private { private: nego_param }
             ) => Ok(self
                 .private
-                .req_stream(ctx, registry, id, param, addr, nego_param)
+                .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map(|(stream, params, when)| {
                     let stream = stream
@@ -829,7 +819,7 @@ where
                 SharedPrivateValue::Shared { shared: nego_param }
             ) => Ok(self
                 .shared
-                .req_stream(ctx, registry, id, param, addr, nego_param)
+                .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map(|(stream, params, when)| {
                     let stream = stream
@@ -852,7 +842,6 @@ where
     fn listen(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         tokens: &HashSet<Token>
     ) -> Result<
         RetryResult<(
@@ -863,9 +852,9 @@ where
         )>,
         Self::ListenError
     > {
-        match (self.private.listen(ctx, registry, tokens)
+        match (self.private.listen(ctx, tokens)
                .map_err(|err| SharedPrivateError::Private { err: err })?,
-               self.shared.listen(ctx, registry, tokens)
+               self.shared.listen(ctx, tokens)
                .map_err(|err| SharedPrivateError::Shared { err: err })?) {
             (RetryResult::Success((private_streams, private_addrs,
                                    private_params, private_when)),
@@ -949,7 +938,6 @@ where
     fn shutdown_stream(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         channel: &Self::ChannelID,
         param: &Self::Param,
         session: Self::Stream
@@ -964,7 +952,7 @@ where
                 SharedPrivateChannelStream::Private { stream }
             ) => Ok(self
                 .private
-                .shutdown_stream(ctx, registry, id, param, stream)
+                .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map(|(params, when)| {
                     let params = params
@@ -981,7 +969,7 @@ where
                 SharedPrivateChannelStream::Shared { stream, .. }
             ) => Ok(self
                 .shared
-                .shutdown_stream(ctx, registry, id, param, stream)
+                .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map(|(params, when)| {
                     let params = params
@@ -998,11 +986,11 @@ where
 
     fn shutdown(
         &mut self,
-        registry: &Registry
+        ctx: &mut Ctx,
     ) -> Result<bool, Self::ShutdownError> {
-        let private = self.private.shutdown(registry)
+        let private = self.private.shutdown(ctx)
             .map_err(|err| SharedPrivateError::Private { err: err })?;
-        let shared = self.shared.shutdown(registry)
+        let shared = self.shared.shutdown(ctx)
             .map_err(|err| SharedPrivateError::Shared { err: err })?;
 
         Ok(shared && private)
@@ -1011,13 +999,12 @@ where
     fn shutdown_listen(
         &mut self,
         ctx: &mut Ctx,
-        registry: &Registry,
         tokens: &HashSet<Token>
     ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
-        self.private.shutdown_listen(ctx, registry, tokens)
+        self.private.shutdown_listen(ctx, tokens)
             .map_err(|err| SharedPrivateError::Private { err: err })?
             .flat_map_ok(|private| Ok(self.shared
-                             .shutdown_listen(ctx, registry, tokens)
+                             .shutdown_listen(ctx, tokens)
                              .map_err(|err| SharedPrivateError::Shared {
                                  err: err
                              })?

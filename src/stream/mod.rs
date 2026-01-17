@@ -921,7 +921,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// [cancel_batch](PushStream::cancel_batch).
     fn start_batch(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
     ) -> Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError

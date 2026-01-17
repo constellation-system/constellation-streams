@@ -64,7 +64,6 @@ use log::debug;
 use log::error;
 use log::trace;
 use log::warn;
-use mio::Registry;
 
 use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
@@ -205,6 +204,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Default,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
@@ -232,6 +232,7 @@ where
     Epochs: Iterator,
     Resolve: Addrs<Addr = Src::Addr>,
     Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Reporter: StreamReporter<
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
@@ -247,6 +248,7 @@ where
     Epochs: Iterator,
     Src: Channels<Ctx>,
     Resolve: Addrs<Addr = Src::Addr>,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send {
     /// Scheduler to use for selecting a raw stream.
     sched: Scheduler<
@@ -255,7 +257,7 @@ where
         PassthruPolicy<
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >,
-        Resolve::Origin
+        Src::OutNegoParam
     >,
     /// A mapping from the endpoint address, channel, and parameter
     /// set to dense IDs for this epoch.
@@ -562,11 +564,10 @@ where
     fn stream(
         &self,
         ctx: &mut Ctx,
-        registry: &Registry,
         channel: &Src::ChannelID,
         addr: &Src::Addr,
         param: &Src::Param,
-        origin: Resolve::Origin
+        origin: &Src::OutNegoParam
     ) -> Result<
         RetryResult<(
             Option<Src::Stream>,
@@ -579,8 +580,7 @@ where
         self.channels
             .lock()
             .map_err(|_| ThreadedStreamError::MutexPoison)?
-            .req_stream(ctx, registry, channel, param, addr,
-                        origin.into().as_ref())
+            .req_stream(ctx, channel, param, addr, origin)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }
@@ -595,6 +595,7 @@ where
         Stream = Src::Stream
     >,
     Src::Config: Default,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
     Src::Stream: Clone + PushStream<Ctx> + Send
@@ -818,10 +819,15 @@ where
             ConnChannelID<Src::ChannelID>,
             Src::Param
         >,
-        origin: Resolve::Origin,
+        origin: Src::OutNegoParam,
         dense_id: DenseItemID<Epochs::Item>
     ) -> Result<
-        RetryIndefResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
+        RetryResult<(
+            DenseItemID<Epochs::Item>,
+            Option<Src::Stream>,
+            Option<Src::ParamIter>,
+            Option<Instant>
+        )>,
         ReportError<
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >
@@ -829,7 +835,7 @@ where
         let (party_addr, ConnChannelID { conn_idx, channel }, param) =
             stream_id.take();
 
-        match &mut self.streams[dense_id.idx()] {
+        let out = match &mut self.streams[dense_id.idx()] {
             // If the stream already exists, then just return it.
             StreamEntry {
                 stream: Some(stream),
@@ -839,44 +845,48 @@ where
                        "stream for {} over channel {} ({}) already exists",
                        party_addr, channel, param);
 
-                Ok(RetryResult::Success((stream.clone(), dense_id)))
+                Ok(RetryResult::Success((Some(stream.clone()), None, None)))
             }
             // If the stream does not exist, create it.
-            StreamEntry { stream, .. } => {
-                match connections[conn_idx.0].stream(
-                    ctx,
-                    &channel,
-                    &party_addr,
-                    &param,
-                    origin
-                ) {
-                    Ok(val) => Ok(val.flat_map(move |newstream| {
-                        *stream = Some(newstream.clone());
+            StreamEntry { stream, .. } => match connections[conn_idx.0].stream(
+                ctx,
+                &channel,
+                &party_addr,
+                &param,
+                &origin
+            ) {
+                Ok(val) => Ok(val.flat_map(move |(newstream, params, when)| {
+                    *stream = newstream.clone();
 
-                        RetryResult::Success((newstream, dense_id))
-                    })),
-                    // Errors here indicate stream negotiation
-                    // errors; they are logged and reported to the
-                    // scheduler, but do not result in hard
-                    // errors.
-                    Err(err) => {
-                        warn!(target: "stream-selector",
+                    RetryResult::Success((newstream, params, when))
+                })),
+                // Errors here indicate stream negotiation
+                // errors; they are logged and reported to the
+                // scheduler, but do not result in hard
+                // errors.
+                Err(err) => {
+                    warn!(target: "stream-selector",
                           "failed to establish stream: {}",
                           err);
 
-                        // Report the failure
-                        self.sched.failure_id(&dense_id)?;
+                    // Report the failure
+                    self.sched.failure_id(&dense_id)?;
 
-                        // It's ok to try again immediately here;
-                        // the scheduler will handle the retry for
-                        // this item, and will end up generating a
-                        // later retry if we run through all the
-                        // options.
-                        Ok(RetryResult::Retry(Instant::now()))
-                    }
+                    // It's ok to try again immediately here;
+                    // the scheduler will handle the retry for
+                    // this item, and will end up generating a
+                    // later retry if we run through all the
+                    // options.
+                    Ok(RetryResult::Retry(Instant::now()))
                 }
             }
+        }?;
+
+        if matches!(out, RetryResult::Success((None, _, _))) {
+            self.sched.set_active_id(&dense_id, false)?
         }
+
+        Ok(out.map(|(stream, params, when)| (dense_id, stream, params, when)))
     }
 
     fn do_select(
@@ -1034,6 +1044,7 @@ where
             Stream = Src::Stream
         > + Clone,
     Resolve: Addrs<Addr = Src::Addr>,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send
 {
     fn clone(&self) -> Self {
@@ -1056,6 +1067,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Resolve: Addrs<Addr = Src::Addr>,
@@ -1098,6 +1110,7 @@ where
             Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
             Stream = Src::Stream
         > + Clone,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Config: Default,
     Resolve: Addrs<Addr = Src::Addr>,
     Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
@@ -1124,6 +1137,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -1499,7 +1513,7 @@ where
     /// the stream and its dense index will be returned.
     pub fn select_stream(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
     ) -> Result<
         RetryIndefResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
         StreamSelectorSelectError<
@@ -1511,6 +1525,7 @@ where
         // First try to refresh, if needed.
         self
             .refresh(ctx)
+            .map(RetryIndefResult::from)
             .map_err(|err| StreamSelectorSelectError::Selector { err: err })?
             // If the refresh succeeds, call the scheduler to get the
             // selected item.
@@ -1858,6 +1873,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2008,6 +2024,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2043,6 +2060,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2085,6 +2103,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2120,6 +2139,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2185,6 +2205,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2205,6 +2226,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
     <Src::Stream as PushStreamPartyID>::PartyID: Debug,
     Src::Config: Default,
@@ -2580,14 +2602,15 @@ where
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
-                match stream.retry_start_batch(ctx, retry).map_err(|err| {
-                    SelectorBatchError::Batch {
-                        batch: SelectorBatchSelectError::Stream {
-                            selected: selected.clone(),
-                            stream: err
+                match stream.retry_start_batch(ctx, retry)
+                    .map_err(|err| {
+                        SelectorBatchError::Batch {
+                            batch: SelectorBatchSelectError::Stream {
+                                selected: selected.clone(),
+                                stream: err
+                            }
                         }
-                    }
-                })? {
+                    })? {
                     // We created the batch, wrap it up and return it.
                     RetryIndefResult::Success(batch_id) => {
                         Ok(RetryIndefResult::Success(StreamSelectorBatch {
@@ -2699,6 +2722,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -2979,7 +3003,7 @@ where
 
     fn start_batch(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
     ) -> Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
@@ -3026,7 +3050,8 @@ where
     > {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
-            SelectorBatchSelectError::Select { .. } => self.start_batch(ctx),
+            SelectorBatchSelectError::Select { .. } => self
+                .start_batch(ctx),
             // We got a retry once the stream was selected.
             SelectorBatchSelectError::Stream {
                 selected,
@@ -3036,14 +3061,15 @@ where
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
 
-                match stream.retry_start_batch(ctx, retry).map_err(|err| {
-                    SelectorBatchError::Batch {
-                        batch: SelectorBatchSelectError::Stream {
-                            selected: selected.clone(),
-                            stream: err
+                match stream.retry_start_batch(ctx, retry)
+                    .map_err(|err| {
+                        SelectorBatchError::Batch {
+                            batch: SelectorBatchSelectError::Stream {
+                                selected: selected.clone(),
+                                stream: err
+                            }
                         }
-                    }
-                })? {
+                    })? {
                     // We created the batch, wrap it up and return it.
                     RetryIndefResult::Success(batch_id) => {
                         Ok(RetryIndefResult::Success(StreamSelectorBatch {
@@ -3155,6 +3181,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -3312,6 +3339,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + LargeObjOfferStream<H, Ctx>
         + PushStream<Ctx> + Send,
     Src::Config: Default,
@@ -3467,6 +3495,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send,
     Src::Config: Default,
     Src::Reporter: Clone,
@@ -3773,6 +3802,7 @@ where
         Src = StreamID<Src::Addr, Src::ChannelID, Src::Param>,
         Stream = Src::Stream
     >,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream:
         Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send,
     <Src::Stream as PushStreamPartyID>::PartyID: Debug,
