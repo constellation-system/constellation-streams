@@ -98,6 +98,10 @@ use crate::stream::ThreadedStreamError;
 pub mod dispatch;
 mod sched;
 
+pub trait OutboundEndpointConfig<Endpoint, OutboundNego> {
+    fn take(self) -> (Endpoint, OutboundNego);
+}
+
 /// Newtype for the index for a set of connections.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct ConnectionsIdx(usize);
@@ -127,7 +131,9 @@ struct ThreadedStreamSelectorConnections<
     /// Source of counterparty addresses to use to get raw streams.
     addrs: Mutex<Resolve>,
     /// Sources of channels from which to get raw streams.
-    channels: Mutex<Src>
+    channels: Mutex<Src>,
+    /// Outbound negotiator parameters.
+    params: HashMap<Resolve::Origin, Src::OutNegoParam>
 }
 
 /// Type of batch ID's produce by [StreamSelector].
@@ -216,7 +222,7 @@ where
     /// This represents the sources of possible streams.
     connections: Arc<Vec<ThreadedStreamSelectorConnections<Src, Resolve, Ctx>>>,
     /// Mutable state.
-    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Resolve, Ctx>>>,
+    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Ctx>>>,
     /// When to next refresh the set of possible streams.
     refresh_when: Arc<RwLock<Option<Instant>>>,
     reporter: Src::Reporter
@@ -227,10 +233,9 @@ where
 ///
 /// This is primarily used to allow the pull side to install incoming
 /// sessions into a [StreamSelector].
-pub struct StreamSelectorReporter<Epochs, Src, Resolve, Ctx>
+pub struct StreamSelectorReporter<Epochs, Src, Ctx>
 where
     Epochs: Iterator,
-    Resolve: Addrs<Addr = Src::Addr>,
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::OutNegoParam: Clone + Eq + Hash,
     Src::Reporter: StreamReporter<
@@ -238,16 +243,15 @@ where
         Stream = Src::Stream
     >,
     Src::Stream: Clone + PushStream<Ctx> + Send {
-    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Resolve, Ctx>>>,
+    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Ctx>>>,
     reporter: Src::Reporter
 }
 
 /// Container for core mutable state.
-struct StreamSelectorState<Epochs, Src, Resolve, Ctx>
+struct StreamSelectorState<Epochs, Src, Ctx>
 where
     Epochs: Iterator,
     Src: Channels<Ctx>,
-    Resolve: Addrs<Addr = Src::Addr>,
     Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send {
     /// Scheduler to use for selecting a raw stream.
@@ -477,8 +481,9 @@ impl<Src, Resolve, Ctx> ThreadedStreamSelectorConnections<Src, Resolve, Ctx>
 where
     Src: ChannelsCreate<Ctx, Vec<String>>,
     Src::Config: Default,
+    Src::OutNegoParam: Clone + Eq + Hash,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     /// Create a single connections from its configuration objects.
     fn create<EndpointConfig>(
@@ -495,14 +500,22 @@ where
         >
     >
     where
-        Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
+        EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
+                                               Src::OutNegoParam>,
+        Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
         let (channels, srcs, endpoints) = config.take();
+        let params: HashMap<Resolve::Origin, Src::OutNegoParam> = endpoints
+            .into_iter()
+            .map(|endpoint| endpoint.take())
+            .collect();
+
         let channels = Src::create(ctx, shutdown, reporter, channels, srcs)
             .map_err(|err| StreamSelectorConnectionCreateError::Channels {
                 err: err
             })?;
-        let addrs = Resolve::create(ctx, addrs_config.clone(), endpoints)
+        let addrs = Resolve::create(ctx, addrs_config.clone(),
+                                    params.keys().cloned())
             .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
                 err: err
             })?;
@@ -510,16 +523,18 @@ where
         Ok(ThreadedStreamSelectorConnections {
             ctx: PhantomData,
             channels: Mutex::new(channels),
-            addrs: Mutex::new(addrs)
+            addrs: Mutex::new(addrs),
+            params: params
         })
     }
 
-    fn get_refresh(
+    fn handle_refresh_params(
         &self,
-        ctx: &mut Ctx
+        params: Vec<(Src::ChannelID, Src::Param)>,
+        refresh_channels_when: Option<Instant>
     ) -> Result<
         RetryResult<(
-            Vec<(Src::Addr, Resolve::Origin)>,
+            Vec<(Src::Addr, Src::OutNegoParam)>,
             Vec<(Src::ChannelID, Src::Param)>,
             Option<Instant>
         )>,
@@ -536,6 +551,40 @@ where
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
             RetryResult::Success(addrs) => addrs
         };
+        let addrs: Vec<(Resolve::Addr, Src::OutNegoParam)> = addrs
+            .flat_map(|(addr, endpoint, _)| {
+                if let Some(param) = self.params.get(&endpoint) {
+                    Some((addr, param.clone()))
+                } else {
+                    error!(target: "stream-selector-connections",
+                           "no parameter entry for {}",
+                           endpoint);
+
+                    None
+                }
+            })
+            .collect();
+
+        let refresh_when = match (refresh_channels_when, refresh_addrs_when) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (None, out) => out,
+            (out, None) => out
+        };
+
+        Ok(RetryResult::Success((addrs, params, refresh_when)))
+    }
+
+    fn get_refresh(
+        &self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<(
+            Vec<(Src::Addr, Src::OutNegoParam)>,
+            Vec<(Src::ChannelID, Src::Param)>,
+            Option<Instant>
+        )>,
+        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+    > {
         let (params, refresh_channels_when) = match self
             .channels
             .lock()
@@ -547,17 +596,9 @@ where
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
             RetryResult::Success(res) => res
         };
-        let addrs: Vec<(Resolve::Addr, Resolve::Origin)> =
-            addrs.map(|(addr, endpoint, _)| (addr, endpoint)).collect();
         let params: Vec<(Src::ChannelID, Src::Param)> = params.collect();
 
-        let refresh_when = match (refresh_channels_when, refresh_addrs_when) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (None, out) => out,
-            (out, None) => out
-        };
-
-        Ok(RetryResult::Success((addrs, params, refresh_when)))
+        self.handle_refresh_params(params, refresh_channels_when)
     }
 
     #[inline]
@@ -585,7 +626,7 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> StreamSelectorState<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Src, Ctx> StreamSelectorState<Epochs, Src, Ctx>
 where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
@@ -596,8 +637,6 @@ where
     >,
     Src::Config: Default,
     Src::OutNegoParam: Clone + Eq + Hash,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
     Src::Stream: Clone + PushStream<Ctx> + Send
 {
     fn create(
@@ -643,7 +682,7 @@ where
         epoch: EpochChange<
             Epochs::Item,
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-            Resolve::Origin
+            Src::OutNegoParam,
         >
     ) {
         let (_, dense_ids, _, _) = epoch.take();
@@ -705,7 +744,7 @@ where
         &mut self,
         mut pairs: Vec<(
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-            Resolve::Origin
+            Src::OutNegoParam,
         )>,
         refresh_when: Option<Instant>,
         now: Instant
@@ -810,7 +849,7 @@ where
         self.sched.failure_id(id)
     }
 
-    fn handle_selected(
+    fn handle_selected<Resolve>(
         &mut self,
         ctx: &mut Ctx,
         connections: &[ThreadedStreamSelectorConnections<Src, Resolve, Ctx>],
@@ -825,13 +864,17 @@ where
         RetryResult<(
             DenseItemID<Epochs::Item>,
             Option<Src::Stream>,
-            Option<Src::ParamIter>,
+            Option<(ConnectionsIdx, Src::ParamIter)>,
             Option<Instant>
         )>,
         ReportError<
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >
-    > {
+    >
+    where
+        Resolve: Addrs<Addr = Src::Addr>,
+        Resolve::Origin: Clone + Display + Eq + Hash
+    {
         let (party_addr, ConnChannelID { conn_idx, channel }, param) =
             stream_id.take();
 
@@ -856,6 +899,8 @@ where
                 &origin
             ) {
                 Ok(val) => Ok(val.flat_map(move |(newstream, params, when)| {
+                    let params = params.map(|params| (conn_idx, params));
+
                     *stream = newstream.clone();
 
                     RetryResult::Success((newstream, params, when))
@@ -889,18 +934,27 @@ where
         Ok(out.map(|(stream, params, when)| (dense_id, stream, params, when)))
     }
 
-    fn do_select(
+    fn do_select<Resolve>(
         &mut self,
         ctx: &mut Ctx,
         connections: &[ThreadedStreamSelectorConnections<Src, Resolve, Ctx>]
     ) -> Result<
-        RetryIndefResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
+        RetryIndefResult<(
+            DenseItemID<Epochs::Item>,
+            Option<Src::Stream>,
+            Option<(ConnectionsIdx, Src::ParamIter)>,
+            Option<Instant>
+        )>,
         StreamSelectorSelectError<
             Resolve::AddrsError,
             Src::ParamError,
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >
-    > {
+    >
+    where
+        Resolve: Addrs<Addr = Src::Addr>,
+        Resolve::Origin: Clone + Display + Eq + Hash
+    {
         self.sched
             .select()
             .map_err(|err| StreamSelectorSelectError::Select { err: err })?
@@ -912,7 +966,10 @@ where
                     origin,
                     dense_id
                 )
-                .map_err(|err| StreamSelectorSelectError::Report { err: err })
+                    .map_err(|err| StreamSelectorSelectError::Report {
+                        err: err
+                    })
+                    .map(RetryIndefResult::from)
             })
     }
 
@@ -1057,8 +1114,8 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> StreamReporter
-    for StreamSelectorReporter<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Src, Ctx> StreamReporter
+    for StreamSelectorReporter<Epochs, Src, Ctx>
 where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
@@ -1070,8 +1127,6 @@ where
     Src::OutNegoParam: Clone + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send,
     Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
 {
     type Prin = <Src::Reporter as StreamReporter>::Prin;
     type ReportError = StreamSelectorReportError<
@@ -1113,13 +1168,13 @@ where
     Src::OutNegoParam: Clone + Eq + Hash,
     Src::Config: Default,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Resolve::Origin: Clone + Display + Eq + Hash,
     Src::Stream: Clone + PushStream<Ctx> + Send
 {
-    type Reporter = StreamSelectorReporter<Epochs, Src, Resolve, Ctx>;
+    type Reporter = StreamSelectorReporter<Epochs, Src, Ctx>;
 
     #[inline]
-    fn reporter(&self) -> StreamSelectorReporter<Epochs, Src, Resolve, Ctx> {
+    fn reporter(&self) -> StreamSelectorReporter<Epochs, Src, Ctx> {
         StreamSelectorReporter {
             reporter: self.reporter.clone(),
             state: self.state.clone()
@@ -1142,7 +1197,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     /// Create a new [StreamSelector] from a configuration and other
     /// necessary objects.
@@ -1171,7 +1226,9 @@ where
         >
     >
     where
-        Resolve: AddrsCreate<Ctx, Vec<EndpointConfig>>,
+        EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
+                                               Src::OutNegoParam>,
+        Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone + Default {
         let (scheduler, resolver, epochs, retry, size_hint, connections) =
             config.take();
@@ -1212,12 +1269,17 @@ where
 
     fn get_refreshes(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
+        params: Option<(
+            ConnectionsIdx,
+            Vec<(Src::ChannelID, Src::Param)>,
+            Option<Instant>
+        )>,
     ) -> Result<
         (
             Vec<(
                 ConnectionsIdx,
-                Vec<(Src::Addr, Resolve::Origin)>,
+                Vec<(Src::Addr, Src::OutNegoParam)>,
                 Vec<(Src::ChannelID, Src::Param)>
             )>,
             Option<Instant>,
@@ -1231,9 +1293,9 @@ where
         let mut min_refresh: Option<Instant> = None;
         let mut size_hint = 0;
 
-        // Gather up all the refresh results.
-        for i in 0..self.connections.len() {
-            match self.connections[i].get_refresh(ctx)? {
+        let skip = params.map(|(target, params, when)| {
+            match self.connections[target.0]
+                .handle_refresh_params(params, when)? {
                 // Split retry results and
                 RetryResult::Retry(when) => {
                     min_retry =
@@ -1241,11 +1303,35 @@ where
                 }
                 RetryResult::Success((addrs, params, refresh_when)) => {
                     size_hint += addrs.len() * params.len();
-                    refreshes.push((ConnectionsIdx(i), addrs, params));
+                    refreshes.push((ConnectionsIdx(target.0), addrs, params));
                     min_refresh = match (min_refresh, refresh_when) {
                         (Some(a), Some(b)) => Some(a.min(b)),
                         (None, out) => out,
                         (out, None) => out
+                    }
+                }
+            };
+
+            Ok(target.0)
+        }).transpose()?;
+
+        // Gather up all the refresh results.
+        for i in 0..self.connections.len() {
+            if skip.map_or(false, |target| target == i) {
+                match self.connections[i].get_refresh(ctx)? {
+                    // Split retry results and
+                    RetryResult::Retry(when) => {
+                        min_retry =
+                            Some(min_retry.map_or(when, |curr| curr.min(when)));
+                    }
+                    RetryResult::Success((addrs, params, refresh_when)) => {
+                        size_hint += addrs.len() * params.len();
+                        refreshes.push((ConnectionsIdx(i), addrs, params));
+                        min_refresh = match (min_refresh, refresh_when) {
+                            (Some(a), Some(b)) => Some(a.min(b)),
+                            (None, out) => out,
+                            (out, None) => out
+                        }
                     }
                 }
             }
@@ -1257,13 +1343,13 @@ where
     fn refresh_pairs(
         refreshes: Vec<(
             ConnectionsIdx,
-            Vec<(Src::Addr, Resolve::Origin)>,
+            Vec<(Src::Addr, Src::OutNegoParam)>,
             Vec<(Src::ChannelID, Src::Param)>
         )>,
         size_hint: usize
     ) -> Vec<(
         StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-        Resolve::Origin
+        Src::OutNegoParam
     )> {
         let mut pairs = Vec::with_capacity(size_hint);
         let mut dedup = HashSet::with_capacity(size_hint);
@@ -1326,13 +1412,18 @@ where
     fn do_refresh(
         &mut self,
         ctx: &mut Ctx,
+        params: Option<(
+            ConnectionsIdx,
+            Vec<(Src::ChannelID, Src::Param)>,
+            Option<Instant>
+        )>,
         now: Instant
     ) -> Result<
         RetryResult<Option<Instant>>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
     > {
         let (refreshes, min_retry, min_refresh, size_hint) =
-            self.get_refreshes(ctx)?;
+            self.get_refreshes(ctx, params)?;
 
         if !refreshes.is_empty() {
             // We got at least one valid refresh.
@@ -1417,7 +1508,7 @@ where
 
         match when {
             Some(when) => Ok(RetryResult::Success(when)),
-            None => self.do_refresh(ctx, now)
+            None => self.do_refresh(ctx, None, now)
         }
     }
 
@@ -1522,17 +1613,33 @@ where
             StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
         >
     > {
-        // First try to refresh, if needed.
-        self
-            .refresh(ctx)
-            .map(RetryIndefResult::from)
-            .map_err(|err| StreamSelectorSelectError::Selector { err: err })?
-            // If the refresh succeeds, call the scheduler to get the
-            // selected item.
-            .flat_map_ok(move |_| match self.state.write() {
-                Ok(mut guard) => guard.do_select(ctx, &self.connections),
-                Err(_) => Err(StreamSelectorSelectError::MutexPoison)
-            })
+        let res = self.state.write()
+            .map_err(|_| StreamSelectorSelectError::MutexPoison)?
+            .do_select(ctx, &self.connections)?;
+
+        res.flat_map_ok(|(id, stream, params, when)| {
+            // XXX what should we do with this time?
+            let _ = if let Some((idx, params)) = params {
+                let now = Instant::now();
+                let params = params.collect();
+                let params = Some((idx, params, when));
+
+                match self.do_refresh(ctx, params, now)
+                    .map_err(|err| StreamSelectorSelectError::Selector {
+                        err: err
+                    })? {
+                        RetryResult::Success(when) => when,
+                        RetryResult::Retry(when) => Some(when)
+                    }
+            } else {
+                None
+            };
+
+            match stream {
+                Some(stream) => Ok(RetryIndefResult::Success((stream, id))),
+                    None => Ok(RetryIndefResult::Indef)
+            }
+        })
     }
 
     fn batch_stream(
@@ -1878,7 +1985,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type BatchID = StreamSelectorBatch<
         Epochs::Item,
@@ -2029,7 +2136,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type ReportError = StreamSelectorReportError<
         ReportError<
@@ -2065,7 +2172,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>,
+    Resolve::Origin: Clone + Display + Eq + Hash,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
 {
     type ReportError = StreamSelectorReportError<
@@ -2108,7 +2215,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash,
 {
     type ReportBatchError = StreamSelectorReportError<
         ReportError<
@@ -2144,7 +2251,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AddError = SelectorBatchError<
         Epochs::Item,
@@ -2210,7 +2317,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type PartyID = <Src::Stream as PushStreamPartyID>::PartyID;
 }
@@ -2232,7 +2339,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -2727,7 +2834,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -3186,7 +3293,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type Frags = <Src::Stream as LargeObjStream<Ctx>>::Frags;
     type PushFragError = SelectorBatchError<
@@ -3345,7 +3452,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type PushOfferError = SelectorBatchError<
         Epochs::Item,
@@ -3500,7 +3607,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
@@ -3809,7 +3916,7 @@ where
     Src::Config: Default,
     Src::Reporter: Clone,
     Resolve: Addrs<Addr = Src::Addr>,
-    Resolve::Origin: Clone + Eq + Hash + Into<Option<IPEndpointAddr>>
+    Resolve::Origin: Clone + Display + Eq + Hash
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,

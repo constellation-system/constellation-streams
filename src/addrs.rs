@@ -81,16 +81,18 @@ pub trait Addrs {
 }
 
 /// Sub-trait of [Addrs] that can be created from a configuration object.
-pub trait AddrsCreate<Ctx, Origins>: Sized + Addrs {
+pub trait AddrsCreate<Ctx>: Sized + Addrs {
     /// Type of configurations from which this is created.
     type Config;
     /// Type of errors that can occur during creation.
     type CreateError: Debug + Display;
 
     /// Create an instance of this `Addrs` from its configuration.
-    fn create(
+    fn create<I>(
         ctx: &mut Ctx,
         config: Self::Config,
-        origin: Origins
-    ) -> Result<Self, Self::CreateError>;
+        origin: I
+    ) -> Result<Self, Self::CreateError>
+    where
+        I: Iterator<Item = Self::Origin>;
 }
