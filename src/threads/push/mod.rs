@@ -49,11 +49,6 @@ use crate::stream::PushStreamReportError;
 pub mod private;
 pub mod shared;
 
-pub trait PushModeCreate {
-    type Config: Clone;
-
-    fn create(config: Self::Config) -> Self;
-}
 
 pub trait PushMode<Stream, Msgs, Ctx>: PushModeCreate {
     type SendError: Display + ScopedError;
@@ -75,19 +70,6 @@ pub trait PushMode<Stream, Msgs, Ctx>: PushModeCreate {
     ) -> Result<Option<Instant>, Self::RetryError>;
 }
 
-pub(crate) enum LargeObjEntry<Stream, H, Ctx>
-where
-    Stream: LargeObjOfferStream<H::HashID, Ctx>,
-    H: Clone + HashAlgo {
-    PushFrags {
-        id: LargeObjID,
-        retry: Stream::PushFragRetry
-    },
-    PushOffer {
-        hash: H::HashID,
-        retry: Stream::PushOfferRetry
-    }
-}
 
 pub struct PushStreamThread<Msgs, Stream, Mode, Ctx>
 where
@@ -105,102 +87,6 @@ where
     stream: Stream
 }
 
-impl<Stream, H, Ctx> RetryWhen for LargeObjEntry<Stream, H, Ctx>
-where
-    Stream: LargeObjOfferStream<H::HashID, Ctx>,
-    H: Clone + HashAlgo
-{
-    fn when(&self) -> Instant {
-        match self {
-            LargeObjEntry::PushFrags { retry, .. } => retry.when(),
-            LargeObjEntry::PushOffer { retry, .. } => retry.when()
-        }
-    }
-}
-
-impl<Stream, H, Ctx> LargeObjEntry<Stream, H, Ctx>
-where
-    Stream: LargeObjOfferStream<H::HashID, Ctx>
-        + PushStreamReportError<
-            <Stream::PushFragError as RecoverableError>::Permanent
-        > + PushStreamReportError<
-            <Stream::PushOfferError as RecoverableError>::Permanent
-        >,
-    H: Clone + HashAlgo,
-    H::HashID: Clone
-{
-    pub(crate) fn exec<InMsg, OutMsg, PartyID, Types>(
-        self,
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
-    ) -> Result<
-        RetryResult<Option<Instant>, Self>,
-        LargeObjPushError<
-            H::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
-        >
-    >
-    where
-        Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
-        PartyID: Clone {
-        match self {
-            LargeObjEntry::PushFrags { id, retry } => proto
-                .retry_push_frags(ctx, stream, id.clone(), retry)
-                .map(|out| {
-                    out.map_retry(|retry| LargeObjEntry::PushFrags {
-                        retry: retry,
-                        id: id.clone()
-                    })
-                }),
-            LargeObjEntry::PushOffer { hash, retry } => proto
-                .retry_push_offer(ctx, stream, hash.clone(), retry)
-                .map(|out| {
-                    out.map_retry(|retry| LargeObjEntry::PushOffer {
-                        retry: retry,
-                        hash: hash.clone()
-                    })
-                })
-        }
-    }
-
-    pub(crate) fn from_try_send<InMsg, OutMsg, PartyID, Types>(
-        ctx: &mut Ctx,
-        stream: &mut Stream,
-        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
-    ) -> Result<
-        RetryResult<Option<Instant>, Self>,
-        LargeObjPushError<
-            H::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
-        >
-    >
-    where
-        Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
-        PartyID: Clone {
-        Ok(proto
-            .try_push(ctx, stream)?
-            .flat_map_retry(|retry| match retry {
-                LargeObjPushRetry::Frags { retry, id } => {
-                    RetryResult::Retry(LargeObjEntry::PushFrags {
-                        retry: retry,
-                        id: id
-                    })
-                }
-                LargeObjPushRetry::Offer { retry, hash } => {
-                    RetryResult::Retry(LargeObjEntry::PushOffer {
-                        retry: retry,
-                        hash: hash
-                    })
-                }
-                LargeObjPushRetry::Retry { when } => {
-                    RetryResult::Success(Some(when))
-                }
-            }))
-    }
-}
 
 impl<Msgs, Stream, Mode, Ctx> PushStreamThread<Msgs, Stream, Mode, Ctx>
 where

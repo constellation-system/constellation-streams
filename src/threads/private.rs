@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -24,6 +25,7 @@ use std::hash::Hash;
 use std::time::Instant;
 
 use constellation_auth::authn::MsgAuthNTypes;
+use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -52,9 +54,8 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
-use crate::threads::push::LargeObjEntry;
-use crate::threads::push::PushMode;
-use crate::threads::push::PushModeCreate;
+use crate::threads::LargeObjEntry;
+use crate::threads::PushMode;
 
 pub trait PrivateLargeObjPushModeTypes<Ctx> {
     type Frags: Frags;
@@ -693,7 +694,7 @@ where
     }
 }
 
-impl<Msg, Stream, Ctx> PushModeCreate
+impl<Msg, Stream, Ctx> Create
     for PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
@@ -831,13 +832,14 @@ where
     }
 }
 
-impl<Types, Ctx> PushModeCreate for PrivateLargeObjPushMode<Types, Ctx>
+impl<Types, Ctx> Create for PrivateLargeObjPushMode<Types, Ctx>
 where
     Types: PrivateLargeObjPushModeTypes<Ctx>
 {
     type Config = PrivateLargeObjModeConfig;
+    type CreateError = Infallible;
 
-    fn create(config: Self::Config) -> Self {
+    fn create(config: Self::Config) -> Result<Self, Self::CreateError> {
         let (msg_retries_hint, frag_retries_hint) = config.take();
         let pending_msgs = match msg_retries_hint {
             Some(hint) => Vec::with_capacity(hint),
@@ -848,10 +850,10 @@ where
             None => Vec::new()
         };
 
-        PrivateLargeObjPushMode {
+        Ok(PrivateLargeObjPushMode {
             pending_msgs: pending_msgs,
             pending_frags: pending_frags
-        }
+        })
     }
 }
 

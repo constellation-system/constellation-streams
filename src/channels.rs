@@ -115,8 +115,8 @@ pub trait Channels<Ctx> {
     /// This provides both the ID of the originating channel, and the
     /// channel parameter.
     type ParamIter: Iterator<Item = (Self::ChannelID, Self::Param)>;
-    type EndpointIter: Iterator<Item = (Self::ChannelID, Self::Param, Self::Addr)>;
-    type StreamIter: Iterator<Item = (Self::ChannelID, Self::Param, Self::Addr, Self::Stream)>;
+    type EndpointIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param)>;
+    type StreamIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
     /// Type of errors that can occur when obtaining parameters.
     type ParamError: Debug + Display + ScopedError;
     /// Outbound negotiator parameter.
@@ -256,16 +256,12 @@ pub trait ChannelsCreate<Ctx, Srcs>: Sized + Channels<Ctx> {
     /// provide a set of channels.  This configuration type is assumed
     /// to carry any additional information.
     type Config;
-    /// [StreamReporter] to use for reporting new streams.
-    type Reporter: StreamReporter;
     /// Type of errors that can occur during creation.
     type CreateError: Debug + Display;
 
     /// Create an instance of this `Channels`.
     fn create(
         ctx: &mut Ctx,
-        shutdown: ShutdownFlag,
-        reporter: Self::Reporter,
         config: Self::Config,
         srcs: Srcs
     ) -> Result<Self, Self::CreateError>;

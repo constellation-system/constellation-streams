@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -24,6 +25,7 @@ use std::hash::Hash;
 use std::time::Instant;
 
 use constellation_auth::authn::MsgAuthNTypes;
+use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -55,9 +57,8 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::threads::push::LargeObjEntry;
-use crate::threads::push::PushMode;
-use crate::threads::push::PushModeCreate;
+use crate::threads::LargeObjEntry;
+use crate::threads::PushMode;
 
 pub trait SharedLargeObjPushModeTypes<Ctx> {
     type Frags: Frags;
@@ -705,7 +706,7 @@ where
     }
 }
 
-impl<Msg, Stream, Ctx> PushModeCreate
+impl<Msg, Stream, Ctx> Create
     for SharedDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
@@ -727,17 +728,18 @@ where
     Msg: 'static + Clone + Send
 {
     type Config = SharedDatagramModeConfig;
+    type CreateError = Infallible;
 
-    fn create(config: Self::Config) -> Self {
+    fn create(config: Self::Config) -> Result<Self, Self::CreateError> {
         let retries_hint = config.take();
 
         match retries_hint {
-            Some(hint) => SharedDatagramPushMode {
+            Some(hint) => Ok(SharedDatagramPushMode {
                 pending: Vec::with_capacity(hint)
-            },
-            None => SharedDatagramPushMode {
+            }),
+            None => Ok(SharedDatagramPushMode {
                 pending: Vec::new()
-            }
+            })
         }
     }
 }
@@ -780,7 +782,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         msgs: &mut Msgs,
-        stream: &mut Stream
+        stream: &mut Stream,
+        live: &HashSet<Token>
     ) -> Result<Option<Instant>, Self::SendError> {
         debug!(target: "shared-small-obj-push-mode",
                "fetching new outbound messages");
@@ -807,6 +810,7 @@ where
         ctx: &mut Ctx,
         _msgs: &mut Msgs,
         stream: &mut Stream,
+        live: &HashSet<Token>,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
         debug!(target: "shared-small-obj-push-mode",
@@ -856,13 +860,14 @@ where
     }
 }
 
-impl<Types, Ctx> PushModeCreate for SharedLargeObjPushMode<Types, Ctx>
+impl<Types, Ctx> Create for SharedLargeObjPushMode<Types, Ctx>
 where
     Types: SharedLargeObjPushModeTypes<Ctx>
 {
     type Config = SharedLargeObjModeConfig;
+    type CreateError = Infallible;
 
-    fn create(config: Self::Config) -> Self {
+    fn create(config: Self::Config) -> Result<Self, Self::CreateError> {
         let (msg_retries_hint, frag_retries_hint) = config.take();
         let pending_msgs = match msg_retries_hint {
             Some(hint) => Vec::with_capacity(hint),
@@ -873,10 +878,10 @@ where
             None => Vec::new()
         };
 
-        SharedLargeObjPushMode {
+        Ok(SharedLargeObjPushMode {
             pending_msgs: pending_msgs,
             pending_frags: pending_frags
-        }
+        })
     }
 }
 
