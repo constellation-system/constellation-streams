@@ -53,6 +53,7 @@ use crate::frags::Frags;
 use crate::generated::large_obj::LargeObjFragReq;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
+use crate::stream::ChannelsReporter;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
 use crate::stream::LargeObjOfferStream;
@@ -64,7 +65,6 @@ use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
-use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamFinishCancel;
@@ -144,17 +144,6 @@ where
     F: Frags {
     idx: PhantomData<Idx>,
     frags: Vec<F>
-}
-
-/// [StreamReporter] instance for [StreamMulticaster].
-pub struct StreamMulticasterReporter<
-    Idx: Clone + Into<usize>,
-    Reporter: StreamReporter
-> {
-    /// Map from the `Party` type to a dense index type.
-    fwd_map: HashMap<Reporter::Prin, Idx>,
-    /// Map from dense index types to party and stream data.
-    rev_map: Vec<Reporter>
 }
 
 /// Errors that can occur while canceling a push operation.
@@ -310,40 +299,6 @@ impl<Inner> Default for StreamMulticasterSelections<Inner> {
     #[inline]
     fn default() -> Self {
         StreamMulticasterSelections { inner: Vec::new() }
-    }
-}
-
-impl<Idx, Reporter> StreamReporter for StreamMulticasterReporter<Idx, Reporter>
-where
-    Idx: Clone + Into<usize>,
-    Reporter: StreamReporter
-{
-    type Prin = Reporter::Prin;
-    type ReportError =
-        StreamMulticasterReportError<Reporter::ReportError, Reporter::Prin>;
-    type Src = Reporter::Src;
-    type Stream = Reporter::Stream;
-
-    fn report(
-        &mut self,
-        src: Self::Src,
-        prin: Self::Prin,
-        stream: Self::Stream
-    ) -> Result<Option<Self::Stream>, Self::ReportError> {
-        debug!(target: "stream-multicaster",
-               "reporting stream {} for {}",
-               src, prin);
-
-        match self.fwd_map.get(&prin) {
-            Some(idx) => {
-                let idx: usize = idx.clone().into();
-
-                self.rev_map[idx].report(src, prin, stream).map_err(|err| {
-                    StreamMulticasterReportError::Report { error: err }
-                })
-            }
-            None => Err(StreamMulticasterReportError::NotFound { party: prin })
-        }
     }
 }
 
@@ -515,33 +470,6 @@ where
             StreamMulticasterPushError::Start { start } => start.when(),
             StreamMulticasterPushError::Add { add, .. } => add.when(),
             StreamMulticasterPushError::Finish { finish, .. } => finish.when()
-        }
-    }
-}
-
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamReporter
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
-where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReporter,
-    Stream::Reporter: StreamReporter<Prin = Party>
-{
-    type Reporter = StreamMulticasterReporter<Idx, Stream::Reporter>;
-
-    #[inline]
-    fn reporter(&self) -> StreamMulticasterReporter<Idx, Stream::Reporter> {
-        let fwd_map = self.fwd_map.clone();
-        let rev_map = self
-            .rev_map
-            .iter()
-            .map(|party| party.stream.reporter())
-            .collect();
-
-        StreamMulticasterReporter {
-            fwd_map: fwd_map,
-            rev_map: rev_map
         }
     }
 }
@@ -1448,6 +1376,94 @@ where
                     Ok(RetryResult::Retry(results))
                 }
             }
+        }
+    }
+}
+
+impl<Party, Idx, Msg, Stream, Frags, ChannelID, Chan, Ctx>
+    StreamReporter<Party, ChannelID, Chan, Ctx>
+    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+where
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
+    ChannelID: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>
+        + StreamReporter<Party, ChannelID, Chan, Ctx>,
+    Stream::BatchID: Clone
+{
+    type ReportStreamError =
+        StreamMulticasterReportError<Stream::ReportStreamError, Party>;
+
+    fn report_stream(
+        &mut self,
+        ctx: &mut Ctx,
+        party: &Party,
+        id: ChannelID,
+        stream: Chan
+    ) -> Result<Option<Chan>, Self::ReportStreamError> {
+        debug!(target: "stream-multicaster",
+               "reporting stream {} for {}",
+               id, party);
+
+        match self.fwd_map.get(party) {
+            Some(idx) => {
+                let idx: usize = idx.clone().into();
+
+                self.rev_map[idx]
+                    .stream
+                    .report_stream(ctx, party, id, stream)
+                    .map_err(|err| {
+                        StreamMulticasterReportError::Report { error: err }
+                    })
+            }
+            None => Err(StreamMulticasterReportError::NotFound {
+                party: party.clone()
+            })
+        }
+    }
+}
+
+impl<Party, Idx, Msg, Stream, Frags, ChannelID, Param, Ctx>
+    ChannelsReporter<ChannelID, Param, Ctx>
+    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+where
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
+    ChannelID: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>
+        + ChannelsReporter<ChannelID, Param, Ctx>,
+    Stream::BatchID: Clone,
+    Param: Clone
+{
+    type ReportChannelsError = ErrorSet<Idx, (), Stream::ReportChannelsError>;
+
+    fn report_channels(
+        &mut self,
+        ctx: &mut Ctx,
+        channels: &[(ChannelID, Option<Vec<Param>>, Option<Instant>)]
+    ) -> Result<(), Self::ReportChannelsError> {
+        let len = self.rev_map.len();
+        let mut errs: Option<Vec<(Idx, Stream::ReportChannelsError)>> = None;
+
+        for (i, entry) in self.rev_map.iter_mut().enumerate() {
+            if let Err(err) = entry.stream.report_channels(ctx, channels) {
+                match &mut errs {
+                    Some(errs) => {
+                        errs.push((Idx::from(i), err))
+                    },
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((Idx::from(i), err));
+                        errs = Some(vec);
+                    }
+                }
+            }
+        }
+
+        match errs {
+            Some(errs) => Err(ErrorSet::create(vec![], errs)),
+            None => Ok(())
         }
     }
 }

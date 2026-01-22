@@ -50,6 +50,7 @@ use mio::Waker;
 
 use crate::channels::Channels;
 use crate::channels::ChannelsCreate;
+use crate::stream::ChannelsReporter;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::threads::PushMode;
@@ -57,15 +58,15 @@ use crate::threads::RegistryCtx;
 
 pub trait PollThreadTypes<Ctx> {
     type Addr: Clone + Display + Eq + Hash;
-    type Param: Clone + Display + Eq + Hash;
-    type ChannelID: Clone + Display + Eq + Hash;
+    type ChannelParam: Clone + Display + Eq + Hash;
+    type ChannelID: Clone + Debug + Display + Eq + Hash;
     type MsgPrin: Clone + Display + Eq + Hash;
     type SessionPrin: Display;
     type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
     type Chan: PullStream<Self::Wrapper,
                           PullError = Self::PullError>;
     type PullError: Debug + Display + ScopedError;
-    type Stream;
+    type Stream: ChannelsReporter<Self::ChannelID, Self::ChannelParam>;
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type Wrapper;
@@ -76,9 +77,9 @@ pub trait PollThreadTypes<Ctx> {
     type Chans: ChannelsCreate<Ctx, Self::ChansSrcs,
                                Config = Self::ChansConfig,
                                CreateError = Self::ChansCreateError>
-        + Channels<PollThreadCtx<Ctx>,
+        + Channels<Ctx,
                    Addr = Self::Addr,
-                   Param = Self::Param,
+                   Param = Self::ChannelParam,
                    Stream = Self::AuthNChan,
                    ChannelID = Self::ChannelID>;
     type MsgAuthConfig;
@@ -98,10 +99,13 @@ pub trait PollThreadTypes<Ctx> {
     type ModeCreateError: Debug + Display;
     type Mode: Create<Config = Self::ModeConfig,
                       CreateError = Self::ModeCreateError>
-        + PushMode<Self::Stream, Self::Msgs, PollThreadCtx<Ctx>>;
+        + PushMode<Self::Stream, Self::Msgs, Ctx>;
 }
 
-pub struct PollThreadCtx<Ctx> {
+pub struct PollThreadCtx<ID, Chan, Ctx>
+where ID: Clone + Display + Eq + Hash
+{
+    pull_streams: HashMap<ID, Chan>,
     ctx: Ctx,
     poll: Poll,
     nevents: usize
@@ -111,7 +115,11 @@ pub struct PollThread<Ctx, Types>
 where
     Types: PollThreadTypes<Ctx>
 {
-    ctx: PollThreadCtx<Ctx>,
+    ctx: PollThreadCtx<
+        StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        Types::AuthNChan,
+        Ctx
+    >,
     channels: Types::Chans,
     authn: Types::MsgAuth,
     recv: Types::Recv,
@@ -123,11 +131,11 @@ where
     shutdown: ShutdownFlag,
     /// Stream to use to send.
     stream: Types::Stream,
-    pull_streams: HashMap<StreamID<Types::Addr, Types::ChannelID, Types::Param>,
-                          Types::AuthNChan>
 }
 
-impl<Ctx> RegistryCtx for PollThreadCtx<Ctx> {
+impl<ID, Chan, Ctx> RegistryCtx for PollThreadCtx<ID, Chan, Ctx>
+where ID: Clone + Display + Eq + Hash
+{
     #[inline]
     fn registry(&self) -> &Registry {
         self.poll.registry()
@@ -163,6 +171,40 @@ pub enum PollThreadRecvError<Pull, AuthN, Recv> {
     }
 }
 
+impl<ID, Chan, Ctx> PollThreadCtx<ID, Chan, Ctx>
+where ID: Clone + Display + Eq + Hash
+{
+    pub fn new(
+        ctx: Ctx,
+        nevents: usize
+    ) -> Result<Self, Error> {
+        let poll = Poll::new()?;
+
+        PollThreadCtx {
+            pull_streams: HashMap::new(),
+            ctx: ctx,
+            poll: poll,
+            nevents: nevents
+        }
+    }
+
+    pub fn with_capacity(
+        ctx: Ctx,
+        nevents: usize,
+        nsessions: usize
+    ) -> Result<Self, Error> {
+        let poll = Poll::new()?;
+
+        PollThreadCtx {
+            pull_streams: HashMap::with_capacity(nsessions),
+            ctx: ctx,
+            poll: poll,
+            nevents: nevents
+        }
+    }
+}
+
+
 impl<Ctx, Types> PollThread<Ctx, Types>
 where
     Types: PollThreadTypes<Ctx>
@@ -197,13 +239,8 @@ where
             ctx: ctx,
             nevents: nevents
         };
-        let pull_streams = match nstreams {
-            Some(size) => HashMap::with_capacity(size),
-            None => HashMap::new()
-        };
 
         Ok(PollThread {
-            pull_streams: pull_streams,
             channels: channels,
             authn: authn,
             mode: mode,
@@ -227,7 +264,7 @@ where
     Types::Mode: 'static + Send,
     Types::Msgs: 'static + Send,
     Types::MsgAuth: 'static + Send,
-    Types::Param: 'static + Send,
+    Types::ChannelParam: 'static + Send,
     Types::Recv: 'static + Send,
     Types::Stream: 'static + Send,
     Types::ChannelID: 'static + Send
@@ -242,7 +279,7 @@ where
     fn handle_msg(
         authn: &mut Types::MsgAuth,
         recv: &mut Types::Recv,
-        id: &StreamID<Types::Addr, Types::ChannelID, Types::Param>,
+        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
         session_prin: &Types::SessionPrin,
         msg: Types::Wrapper
     ) -> Result<
@@ -286,7 +323,7 @@ where
 
     fn recv_stream(
         &mut self,
-        id: &StreamID<Types::Addr, Types::ChannelID, Types::Param>,
+        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
         stream: Types::AuthNChan
     ) {
         debug!(target: "poll-thread",
@@ -302,19 +339,9 @@ where
         // Report up to the stream.
     }
 
-    fn recv_param(
-        &mut self,
-        channel_id: Types::ChannelID,
-        param: Types::Param,
-    ) {
-        debug!(target: "poll-thread",
-               "receiving parameter {} for {}",
-               param, channel_id);
-    }
-
     fn pull_msgs(
         &mut self,
-        id: &StreamID<Types::Addr, Types::ChannelID, Types::Param>
+        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>
     ) -> Result<
         (),
         PollThreadRecvError<
@@ -445,16 +472,25 @@ where
                                              params, when))) => {
                         next_listen = when;
 
+                        let params = params.collect();
+
+                        // Report new channels.
+                        if let Err(err) = self.stream.report_channels(&params) {
+                            error!(target: "poll-thread",
+                                   "error reporting new channels: {}",
+                                   err);
+
+                            valid = false;
+                        }
+
+                        // Report new streams.
                         for (addr, channel_id, param, stream) in streams {
                             let id = StreamID::new(addr, channel_id, param);
 
                             self.recv_stream(&id, stream)
                         }
 
-                        for (channel_id, param) in params {
-                            self.recv_param(channel_id, param)
-                        }
-
+                        // Pull in messages from all active streams.
                         for (addr, channel_id, param) in endpoints {
                             let id = StreamID::new(addr, channel_id, param);
 

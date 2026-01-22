@@ -17,7 +17,6 @@
 // <https://www.gnu.org/licenses/>.
 
 //! Core traits and utilities for streams.
-use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -34,6 +33,7 @@ use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -72,15 +72,11 @@ pub trait PullStream<T> {
 ///
 /// This is primarily intended to allow the push-side and the
 /// pull-side to report streams to one another.
-pub trait StreamReporter {
-    /// Type of streams being reported.
-    type Stream: Send;
-    /// Source address.
-    type Src: Clone + Debug + Display + Eq + Hash;
-    /// Session principal from authenication.
-    type Prin: Clone + Debug + Display + Eq + Hash;
+pub trait StreamReporter<Party, ID, Stream, Ctx>
+where ID: Clone + Debug + Display + Eq + Hash
+{
     /// Type of errors that can happen reporting a stream.
-    type ReportError: Debug + Display + ScopedError;
+    type ReportStreamError: Debug + Display + ScopedError;
 
     /// Report a new stream for a counterparty address.
     ///
@@ -89,36 +85,27 @@ pub trait StreamReporter {
     /// that stream into its own data structures in place of the
     /// argument stream.  If `None` is returned, then the argument
     /// stream was accepted.
-    fn report(
+    fn report_stream(
         &mut self,
-        src: Self::Src,
-        prin: Self::Prin,
-        stream: Self::Stream
-    ) -> Result<Option<Self::Stream>, Self::ReportError>;
+        ctx: &mut Ctx,
+        party: &Party,
+        id: ID,
+        stream: Stream
+    ) -> Result<Option<Stream>, Self::ReportStreamError>;
 }
 
-/// Trait for types that produce new [PullStream]s.
-///
-/// This is used to allow the pull side to acquire incoming sessions.
-pub trait PullStreamListener<T> {
-    /// Type of streams being listened for.
-    type Stream: PullStream<T> + Send;
-    /// Type of counterparty addresses.
-    type Addr: Clone + Debug + Display + Eq + Hash;
-    /// Type of session principals.
-    type Prin: Clone + Debug + Display + Eq + Hash;
-    /// Type of errors that can occur listening.
-    type ListenError: Debug + Display;
+pub trait ChannelsReporter<ID, Param, Ctx>
+where ID: Clone + Debug + Display + Eq + Hash,
+      Param: Clone
+{
+    /// Type of errors that can happen reporting a channel.
+    type ReportChannelsError: Debug + Display + ScopedError;
 
-    /// Listen for a new incoming stream.
-    ///
-    /// This call will generally block the calling thread.
-    fn listen(
-        &mut self
-    ) -> Result<
-        RetryResult<(Self::Stream, Self::Addr, Self::Prin)>,
-        Self::ListenError
-    >;
+    fn report_channels(
+        &mut self,
+        ctx: &mut Ctx,
+        channels: &[(ID, Option<Vec<Param>>, Option<Instant>)]
+    ) -> Result<(), Self::ReportChannelsError>;
 }
 
 /// Basic interface for a push stream.
@@ -509,19 +496,6 @@ pub trait PushStreamAdd<T, Ctx>: PushStream<Ctx> {
         batch: &Self::BatchID,
         err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError>;
-}
-
-/// Trait for obtaining a reporter for new [PushStream]s.
-pub trait PushStreamReporter {
-    /// Type of [StreamReporter] instance provided by
-    /// [reporter](PushStreamReporter::reporter).
-    type Reporter: StreamReporter;
-
-    /// Obtain a [StreamReporter] for new streams.
-    ///
-    /// The `inner` parameter is an inner reporter that will also be
-    /// called when new streams are reported.
-    fn reporter(&self) -> Self::Reporter;
 }
 
 pub trait PushStreamPartyID {
@@ -1447,25 +1421,54 @@ where
     }
 }
 
-impl<Addr, Prin, Stream> StreamReporter for PassthruReporter<Addr, Prin, Stream>
+impl<Party, ID, Stream, Ctx, Inner> StreamReporter<Party, ID, Stream, Ctx>
+    for ThreadedStream<Inner>
 where
-    Stream: Send,
-    Prin: Clone + Debug + Display + Eq + Hash,
-    Addr: Clone + Debug + Display + Eq + Hash
+    ID: Clone + Debug + Display + Eq + Hash,
+    Inner: StreamReporter<Party, ID, Stream, Ctx>
 {
-    type Prin = Prin;
-    type ReportError = Infallible;
-    type Src = Addr;
-    type Stream = Stream;
+    type ReportStreamError = WithMutexPoison<Inner::ReportStreamError>;
 
-    #[inline]
-    fn report(
+    fn report_stream(
         &mut self,
-        _src: Self::Src,
-        _prin: Self::Prin,
-        _stream: Self::Stream
-    ) -> Result<Option<Self::Stream>, Self::ReportError> {
-        Ok(None)
+        ctx: &mut Ctx,
+        party: &Party,
+        id: ID,
+        stream: Stream
+    ) -> Result<Option<Stream>, Self::ReportStreamError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| WithMutexPoison::MutexPoison)?;
+
+        guard
+            .report_stream(ctx, party, id, stream)
+            .map_err(|err| WithMutexPoison::Inner { err: err })
+    }
+}
+
+impl<ID, Param, Ctx, Inner> ChannelsReporter<ID, Param, Ctx>
+    for ThreadedStream<Inner>
+where
+    ID: Clone + Debug + Display + Eq + Hash,
+    Param: Clone,
+    Inner: ChannelsReporter<ID, Param, Ctx>
+{
+    type ReportChannelsError = WithMutexPoison<Inner::ReportChannelsError>;
+
+    fn report_channels(
+        &mut self,
+        ctx: &mut Ctx,
+        channels: &[(ID, Option<Vec<Param>>, Option<Instant>)]
+    ) -> Result<(), Self::ReportChannelsError> {
+        let mut guard = self
+            .inner
+            .lock()
+            .map_err(|_| WithMutexPoison::MutexPoison)?;
+
+        guard
+            .report_channels(ctx, channels)
+            .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }
 

@@ -46,7 +46,6 @@ use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
-use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::unix::UnixSocketAddr;
 use log::error;
 use mio::Token;
@@ -204,7 +203,7 @@ pub trait Channels<Ctx> {
     ) -> Result<
         RetryResult<(
             Option<Self::Stream>,
-            Option<Self::ParamIter>,
+            bool,
             Option<Instant>
         )>,
         Self::ReqStreamError
@@ -218,7 +217,7 @@ pub trait Channels<Ctx> {
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            Self::ParamIter,
+            bool,
             Option<Instant>
         )>,
         Self::ListenError
@@ -334,8 +333,8 @@ pub struct SharedPrivateStreamIter<
 > where
     SharedAddr: Clone,
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
-    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)> {
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam, PrivateStream)>,
+    SharedIter: Iterator<Item = (SharedAddr, SharedID, SharedParam, SharedStream)> {
     /// Param iterator for the private channels.
     private: Option<PrivateIter>,
     /// Param iterator for the shared channels.
@@ -354,8 +353,8 @@ pub struct SharedPrivateEndpointIter<
     SharedIter
 > where
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
-    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr)> {
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam)>,
+    SharedIter: Iterator<Item = (SharedAddr, SharedID, SharedParam)> {
     /// Param iterator for the private channels.
     private: Option<PrivateIter>,
     /// Param iterator for the shared channels.
@@ -565,9 +564,9 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     type ChannelID = NullChannelsID;
     type Param = NullChannelsParam;
     type ParamIter = Empty<(NullChannelsID, NullChannelsParam)>;
-    type EndpointIter = Empty<(Self::ChannelID, Self::Param, Self::Addr)>;
+    type EndpointIter = Empty<(Self::Addr, Self::ChannelID, Self::Param)>;
     type StreamIter =
-        Empty<(Self::ChannelID, Self::Param, Self::Addr, Self::Stream)>;
+        Empty<(Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
     type ParamError = Infallible;
     type OutNegoParam = ();
     type Addr = NullChannelsAddr;
@@ -598,12 +597,12 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     ) -> Result<
         RetryResult<(
             Option<Self::Stream>,
-            Option<Self::ParamIter>,
+            bool,
             Option<Instant>
         )>,
         Self::ReqStreamError
     > {
-        Ok(RetryResult::Success((Some(()), None, None)))
+        Ok(RetryResult::Success((Some(()), false, None)))
     }
 
     #[inline]
@@ -615,12 +614,12 @@ impl<Ctx> Channels<Ctx> for NullChannels {
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            Self::ParamIter,
+            bool,
             Option<Instant>
         )>,
         Self::ListenError
     > {
-        Ok(RetryResult::Success((empty(), empty(), empty(), None)))
+        Ok(RetryResult::Success((empty(), empty(), false, None)))
     }
 
     #[inline]
@@ -780,7 +779,7 @@ where
     ) -> Result<
         RetryResult<(
             Option<Self::Stream>,
-            Option<Self::ParamIter>,
+            bool,
             Option<Instant>
         )>,
         Self::ReqStreamError
@@ -795,18 +794,13 @@ where
                 .private
                 .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
-                .map(|(stream, params, when)| {
+                .map(|(stream, refresh, when)| {
                     let stream = stream
                         .map(|stream| SharedPrivateChannelStream::Private {
                             stream: stream
                         });
-                    let params = params
-                        .map(|params| SharedPrivateParamIter {
-                            private: Some(params),
-                            shared: None
-                        });
 
-                    (stream, params, when)
+                    (stream, refresh, when)
                 })),
             (
                 SharedPrivateValue::Shared { shared: id },
@@ -817,19 +811,14 @@ where
                 .shared
                 .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
-                .map(|(stream, params, when)| {
+                .map(|(stream, refresh, when)| {
                     let stream = stream
                         .map(|stream| SharedPrivateChannelStream::Shared {
                             stream: stream,
                             party: addr.clone()
                         });
-                    let params = params
-                        .map(|params| SharedPrivateParamIter {
-                            private: None,
-                            shared: Some(params)
-                        });
 
-                    (stream, params, when)
+                    (stream, refresh, when)
                 })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -843,7 +832,7 @@ where
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            Self::ParamIter,
+            bool,
             Option<Instant>
         )>,
         Self::ListenError
@@ -853,9 +842,9 @@ where
                self.shared.listen(ctx, tokens)
                .map_err(|err| SharedPrivateError::Shared { err: err })?) {
             (RetryResult::Success((private_streams, private_addrs,
-                                   private_params, private_when)),
+                                   private_refresh, private_when)),
              RetryResult::Success((shared_streams, shared_addrs,
-                                   shared_params, shared_when))) => {
+                                   shared_refresh, shared_when))) => {
                 let streams = SharedPrivateStreamIter {
                     private: Some(private_streams),
                     shared: Some(shared_streams)
@@ -864,10 +853,7 @@ where
                     private: Some(private_addrs),
                     shared: Some(shared_addrs)
                 };
-                let params = SharedPrivateParamIter {
-                    private: Some(private_params),
-                    shared: Some(shared_params)
-                };
+                let refresh = private_refresh || shared_refresh;
                 let when = private_when
                     .map_or(shared_when,
                             |private_when| Some(shared_when
@@ -876,13 +862,13 @@ where
                                         shared_when.max(private_when))
                             ));
 
-                Ok(RetryResult::Success((streams, addrs, params, when)))
+                Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }
             // XXX these cases will break, because downstream will
             // only see half the addresses.  Solution is probably to
             // cache addresses on the channels.
             (RetryResult::Success((private_streams, private_addrs,
-                                   private_params, private_when)),
+                                   refresh, private_when)),
              RetryResult::Retry(shared_when)) => {
                 let streams = SharedPrivateStreamIter {
                     private: Some(private_streams),
@@ -892,20 +878,16 @@ where
                     private: Some(private_addrs),
                     shared: None
                 };
-                let params = SharedPrivateParamIter {
-                    private: Some(private_params),
-                    shared: None
-                };
                 let when = Some(private_when
                     .map_or(shared_when,
                             |private_when| private_when.max(shared_when))
                 );
 
-                Ok(RetryResult::Success((streams, addrs, params, when)))
+                Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }
             (RetryResult::Retry(private_when),
              RetryResult::Success((shared_streams, shared_addrs,
-                                   shared_params, shared_when))) => {
+                                   refresh, shared_when))) => {
                 let streams = SharedPrivateStreamIter {
                     private: None,
                     shared: Some(shared_streams)
@@ -914,16 +896,12 @@ where
                     private: None,
                     shared: Some(shared_addrs)
                 };
-                let params = SharedPrivateParamIter {
-                    private: None,
-                    shared: Some(shared_params)
-                };
                 let when = Some(shared_when
                     .map_or(private_when, |shared_when|
                             shared_when.max(private_when))
                 );
 
-                Ok(RetryResult::Success((streams, addrs, params, when)))
+                Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }
             (RetryResult::Retry(private_when),
              RetryResult::Retry(shared_when)) =>
@@ -1221,13 +1199,13 @@ impl<
     >
 where
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
-    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam)>,
+    SharedIter: Iterator<Item = (SharedAddr, SharedID, SharedParam)>
 {
     type Item = (
+        SharedPrivateValue<PrivateAddr, SharedAddr>,
         SharedPrivateValue<PrivateID, SharedID>,
-        SharedPrivateValue<PrivateParam, SharedParam>,
-        SharedPrivateValue<PrivateAddr, SharedAddr>
+        SharedPrivateValue<PrivateParam, SharedParam>
     );
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1238,20 +1216,20 @@ where
 
                     self.next()
                 }
-                param => param.map(|(id, param, addr)| {
+                param => param.map(|(addr, id, param)| {
                     (
+                        SharedPrivateValue::Private { private: addr },
                         SharedPrivateValue::Private { private: id },
                         SharedPrivateValue::Private { private: param },
-                        SharedPrivateValue::Private { private: addr }
                     )
                 })
             },
             None => self.shared.as_mut()
-                .and_then(|shared| shared.next().map(|(id, param, addr)| {
+                .and_then(|shared| shared.next().map(|(addr, id, param)| {
                     (
+                        SharedPrivateValue::Shared { shared: addr },
                         SharedPrivateValue::Shared { shared: id },
                         SharedPrivateValue::Shared { shared: param },
-                        SharedPrivateValue::Shared { shared: addr }
                     )
                 }))
         }
@@ -1306,9 +1284,9 @@ impl<
     >
 where
     PrivateIter: FusedIterator + ExactSizeIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam)>,
     SharedIter: ExactSizeIterator
-        + Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+        + Iterator<Item = (SharedAddr, SharedID, SharedParam)>
 {
     #[inline]
     fn len(&self) -> usize {
@@ -1343,9 +1321,9 @@ impl<
     >
 where
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr)>,
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam)>,
     SharedIter: FusedIterator
-        + Iterator<Item = (SharedID, SharedParam, SharedAddr)>
+        + Iterator<Item = (SharedAddr, SharedID, SharedParam)>
 {
 }
 
@@ -1376,13 +1354,13 @@ impl<
 where
     SharedAddr: Clone,
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
-    SharedIter: Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam, PrivateStream)>,
+    SharedIter: Iterator<Item = (SharedAddr, SharedID, SharedParam, SharedStream)>
 {
     type Item = (
+        SharedPrivateValue<PrivateAddr, SharedAddr>,
         SharedPrivateValue<PrivateID, SharedID>,
         SharedPrivateValue<PrivateParam, SharedParam>,
-        SharedPrivateValue<PrivateAddr, SharedAddr>,
         SharedPrivateChannelStream<PrivateStream, SharedStream, SharedAddr>
     );
 
@@ -1394,21 +1372,21 @@ where
 
                     self.next()
                 }
-                param => param.map(|(id, param, addr, stream)| {
+                param => param.map(|(addr, id, param, stream)| {
                     (
+                        SharedPrivateValue::Private { private: addr },
                         SharedPrivateValue::Private { private: id },
                         SharedPrivateValue::Private { private: param },
-                        SharedPrivateValue::Private { private: addr },
                         SharedPrivateChannelStream::Private { stream: stream }
                     )
                 })
             },
             None => self.shared.as_mut()
-                .and_then(|shared| shared.next().map(|(id, param, addr, stream)| {
+                .and_then(|shared| shared.next().map(|(addr, id, param, stream)| {
                     (
+                        SharedPrivateValue::Shared { shared: addr.clone() },
                         SharedPrivateValue::Shared { shared: id },
                         SharedPrivateValue::Shared { shared: param },
-                        SharedPrivateValue::Shared { shared: addr.clone() },
                         SharedPrivateChannelStream::Shared {
                             stream: stream,
                             party: addr
@@ -1472,9 +1450,9 @@ impl<
 where
     SharedAddr: Clone,
     PrivateIter: FusedIterator + ExactSizeIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam, PrivateStream)>,
     SharedIter: ExactSizeIterator
-        + Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+        + Iterator<Item = (SharedAddr, SharedID, SharedParam, SharedStream)>
 {
     #[inline]
     fn len(&self) -> usize {
@@ -1514,9 +1492,9 @@ impl<
 where
     SharedAddr: Clone,
     PrivateIter: FusedIterator
-        + Iterator<Item = (PrivateID, PrivateParam, PrivateAddr, PrivateStream)>,
+        + Iterator<Item = (PrivateAddr, PrivateID, PrivateParam, PrivateStream)>,
     SharedIter: FusedIterator
-        + Iterator<Item = (SharedID, SharedParam, SharedAddr, SharedStream)>
+        + Iterator<Item = (SharedAddr, SharedID, SharedParam, SharedStream)>
 {
 }
 

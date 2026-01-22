@@ -93,7 +93,7 @@ pub mod multicast;
 pub mod select;
 pub mod state_machine;
 pub mod stream;
-pub mod threads;
+//pub mod threads;
 pub mod xciap;
 
 #[allow(clippy::all)]
