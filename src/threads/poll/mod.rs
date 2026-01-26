@@ -18,6 +18,7 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -55,6 +56,7 @@ use crate::channels::ChannelsCreate;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
+use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::RegistryCtx;
 
@@ -65,8 +67,9 @@ pub trait PollThreadTypes<Ctx> {
     type MsgPrin: Clone + Display + Eq + Hash;
     type SessionPrin: Display;
     type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
-    type Chan: PullStream<Self::Wrapper,
-                          PullError = Self::PullError>;
+    type Chan: Clone
+        + PullStream<Self::Wrapper,
+                     PullError = Self::PullError>;
     type PullError: Debug + Display + ScopedError;
     type RefreshRetry: RetryWhen;
     type RefreshCompletableError;
@@ -74,9 +77,15 @@ pub trait PollThreadTypes<Ctx> {
     type RefreshError: Debug
         + RecoverableError<Completable = Self::RefreshCompletableError,
                            Permanent = Self::RefreshPermanentError>;
-    type Stream: StreamRefresh<Ctx,
-                               RefreshRetry = Self::RefreshRetry,
-                               RefreshError = Self::RefreshError>;
+    type Stream: StreamRefresh<
+        PollThreadCtx<
+            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+            Self::AuthNChan,
+            Ctx
+        >,
+        RefreshRetry = Self::RefreshRetry,
+        RefreshError = Self::RefreshError
+    >;
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type Wrapper;
@@ -109,7 +118,15 @@ pub trait PollThreadTypes<Ctx> {
     type ModeCreateError: Debug + Display;
     type Mode: Create<Config = Self::ModeConfig,
                       CreateError = Self::ModeCreateError>
-        + PushMode<Self::Stream, Self::Msgs, Ctx>;
+        + PushMode<
+            Self::Stream,
+            Self::Msgs,
+            PollThreadCtx<
+                StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+                Self::AuthNChan,
+                Ctx
+            >
+        >;
 }
 
 pub struct PollThreadCtx<ID, Chan, Ctx>
@@ -149,6 +166,33 @@ where ID: Clone + Display + Eq + Hash
     #[inline]
     fn registry(&self) -> &Registry {
         self.poll.registry()
+    }
+}
+
+impl <Party, ID, Chan, Ctx> StreamReporter<Party, ID, Chan, ()>
+    for PollThreadCtx<ID, Chan, Ctx>
+where ID: Clone + Debug + Display + Eq + Hash,
+      Chan: Clone {
+    type ReportStreamError = Infallible;
+
+    fn report_stream(
+        &mut self,
+        _ctx: &mut (),
+        _party: &Party,
+        stream_id: ID,
+        stream: Chan
+    ) -> Result<Option<Chan>, Self::ReportStreamError> {
+        match self.pull_streams.get(&stream_id) {
+            Some(out) => Ok(Some(out.clone())),
+            None => {
+                if self.pull_streams.insert(stream_id, stream).is_some() {
+                    error!(target: "poll-thread-context",
+                           "insert should not return Some");
+                }
+
+                Ok(None)
+            }
+        }
     }
 }
 
@@ -482,7 +526,7 @@ where
         let mut next_outbound = None;
         let mut next_listen = None;
         let mut next_refresh = None;
-        let mut retry_refresh = None;
+        let mut retry_refresh: Option<Types::RefreshRetry> = None;
         let mut valid = true;
         let mut now;
 
@@ -549,7 +593,7 @@ where
             // Do pulls before pushing new messages.
             let need_refresh = if next_listen
                 .map_or(false, |when| when <= now) {
-                match self.channels.listen(&mut self.ctx, &live) {
+                match self.channels.listen(&mut self.ctx.ctx, &live) {
                     Ok(RetryResult::Success((streams, endpoints,
                                              refresh, when))) => {
                         next_listen = when;
