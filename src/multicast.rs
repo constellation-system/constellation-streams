@@ -53,7 +53,6 @@ use crate::frags::Frags;
 use crate::generated::large_obj::LargeObjFragReq;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
-use crate::stream::ChannelsReporter;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
 use crate::stream::LargeObjOfferStream;
@@ -69,13 +68,10 @@ use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamFinishCancel;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRefresh;
 
 /// Information about counterparty streams.
-struct StreamMulticasterParty<Msg, Party, Stream, Frags, Ctx>
-where
-    Stream: PushStreamAdd<Msg, Ctx> {
-    msg: PhantomData<Msg>,
-    ctx: PhantomData<Ctx>,
+struct StreamMulticasterParty<Party, Stream, Frags> {
     /// The counterparty for this stream.
     party: Party,
     /// The lower-level stream to use.
@@ -97,14 +93,13 @@ pub struct StreamMulticasterSelections<Inner> {
     inner: Vec<Option<Inner>>
 }
 
-pub type DatagramStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
-    StreamMulticaster<Party, Idx, Msg, Stream, (), Ctx>;
+pub type DatagramStreamMulticaster<Party, Idx, Stream, Ctx> =
+    StreamMulticaster<Party, Idx, Stream, (), Ctx>;
 
-pub type LargeObjStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
+pub type LargeObjStreamMulticaster<Party, Idx, Stream, Ctx> =
     StreamMulticaster<
         Party,
         Idx,
-        Msg,
         Stream,
         <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
         Ctx
@@ -125,15 +120,15 @@ pub type LargeObjStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
 pub struct StreamMulticaster<
     Party: Clone + Display + Eq + Hash,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Msg,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Frags,
     Ctx
 > {
+    ctx: PhantomData<Ctx>,
     /// Map from the `Party` type to a dense index type.
     fwd_map: HashMap<Party, Idx>,
     /// Map from dense index types to party and stream data.
-    rev_map: Vec<StreamMulticasterParty<Msg, Party, Stream, Frags, Ctx>>,
+    rev_map: Vec<StreamMulticasterParty<Party, Stream, Frags>>,
     /// Currently-live batches.
     batches: CompoundBatches<StreamMulticasterBatch<Stream::BatchID>>
 }
@@ -474,14 +469,14 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Inner, Info>
+impl<Party, Idx, Stream, Frags, Ctx, Inner, Info>
     PushStreamReportError<SelectionsError<Inner, Info>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
         PushStreamReportError<Inner>
 {
     type ReportError = <Self as PushStreamReportError<Inner>>::ReportError;
@@ -501,7 +496,6 @@ where
 impl<
         Party,
         Idx,
-        Msg,
         Stream,
         Frags,
         Ctx,
@@ -512,12 +506,12 @@ impl<
     >
     PushStreamReportError<
         StreamMulticasterStartError<Select, Create, Selections, Batches>
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
         PushStreamReportError<Select> + PushStreamReportError<Create>
 {
     type ReportError = StreamMulticasterStartReportError<
@@ -549,14 +543,14 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
     PushStreamReportError<ErrorSet<Idx, Success, Err>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReportError<Err>,
+    Stream: PushStream<Ctx> + PushStreamReportError<Err>,
     Err: Display
 {
     type ReportError =
@@ -595,14 +589,14 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
     PushStreamReportBatchError<ErrorSet<Idx, Success, Err>, CompoundBatchID>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>
+    Stream: PushStream<Ctx>
 {
     type ReportBatchError = CompoundBatchError<Idx, (), Stream::ReportError>;
 
@@ -654,17 +648,17 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
     PushStreamReportBatchError<
         CompoundBatchError<Idx, Success, Err>,
         CompoundBatchID
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
         PushStreamReportBatchError<
             ErrorSet<Idx, Success, Err>,
             CompoundBatchID
@@ -688,15 +682,15 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Start, Add, Finish, BatchID>
+impl<Party, Idx, Stream, Frags, Ctx, Start, Add, Finish, BatchID>
     PushStreamReportError<
         StreamMulticasterPushError<Start, Add, Finish, BatchID>
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
         PushStreamReportError<Start>
             + PushStreamReportBatchError<Add, BatchID>
             + PushStreamReportBatchError<Finish, BatchID>
@@ -731,13 +725,13 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, F, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, F, Ctx>
+impl<Party, Idx, Stream, F, Ctx>
+    StreamMulticaster<Party, Idx, Stream, F, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>
+    Stream: PushStream<Ctx>
 {
     /// Create a `StreamMulticaster` from an iterator over the
     /// counterparties.
@@ -748,10 +742,8 @@ where
     ) -> Self
     where
         I: Iterator<Item = (Party, F, Stream)> {
-        let rev_map: Vec<StreamMulticasterParty<Msg, Party, Stream, F, Ctx>> =
+        let rev_map: Vec<StreamMulticasterParty<Party, Stream, F>> =
             iter.map(|(party, param, stream)| StreamMulticasterParty {
-                msg: PhantomData,
-                ctx: PhantomData,
                 party: party,
                 stream: stream,
                 frags: param
@@ -764,6 +756,7 @@ where
         }
 
         StreamMulticaster {
+            ctx: PhantomData,
             batches: CompoundBatches::create(config),
             fwd_map: fwd_map,
             rev_map: rev_map
@@ -799,13 +792,13 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx>
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Frags: Clone
 {
     #[inline]
@@ -991,12 +984,12 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx>
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     fn complete_abort(
@@ -1097,11 +1090,10 @@ where
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx>
+impl<Party, Idx, Stream, Ctx>
     StreamMulticaster<
         Party,
         Idx,
-        LargeObjMsg<H>,
         Stream,
         <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
         Ctx
@@ -1110,11 +1102,8 @@ where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
     Stream: LargeObjStream<Ctx>
-        + PushStream<Ctx>
-        + PushStreamAdd<LargeObjMsg<H>, Ctx>,
-    Stream::BatchID: Clone,
-    H: Clone + HashID
-{
+        + PushStream<Ctx>,
+    Stream::BatchID: Clone {
     fn decide_push_frag_result(
         &mut self,
         mut elems: Vec<(
@@ -1133,9 +1122,7 @@ where
             <Self as LargeObjStream<Ctx>>::PushFragRetry
         >,
         <Self as LargeObjStream<Ctx>>::PushFragError
-    >
-    where
-        Stream: LargeObjStream<Ctx> {
+    > {
         match errs {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(elems, errs)),
@@ -1183,7 +1170,7 @@ where
         }
     }
 
-    fn decide_push_offer_result(
+    fn decide_push_offer_result<H>(
         &mut self,
         mut elems: Vec<(
             Idx,
@@ -1203,7 +1190,9 @@ where
         <Self as LargeObjOfferStream<H, Ctx>>::PushOfferError
     >
     where
-        Stream: LargeObjOfferStream<H, Ctx> {
+        Stream: LargeObjOfferStream<H, Ctx>
+            + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+        H: Clone + HashID {
         match errs {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(elems, errs)),
@@ -1252,12 +1241,12 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx>
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Stream: PushStreamPrivate<Ctx> + PushStream<Ctx>,
     Stream::BatchID: Clone + Debug
 {
     fn decide_select_result(
@@ -1380,15 +1369,69 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, ChannelID, Chan, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx>
+    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+where
+    Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + StreamRefresh<Ctx>,
+    Stream::BatchID: Clone
+{
+    fn decide_refresh_outcome<Retry, Err>(
+        &mut self,
+        mut elems: Vec<(Idx, RetryResult<Option<Instant>, Retry>)>,
+        errs: Option<Vec<(Idx, Err)>>
+    ) -> Result<
+        RetryResult<Option<Instant>, Vec<RetryResult<Option<Instant>, Retry>>>,
+        ErrorSet<Idx, RetryResult<Option<Instant>, Retry>, Err>
+    >
+    where
+        Retry: RetryWhen {
+        match errs {
+            // There were errors
+            Some(errs) => Err(ErrorSet::create(elems, errs)),
+            // No errors, check if there are retries.
+            None => {
+                elems.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut min = None;
+                let mut results = Vec::with_capacity(len);
+                let mut all_success = true;
+
+                for (_, res) in elems.into_iter() {
+                    if let RetryResult::Success(when) = &res {
+                        min = min
+                            .map_or(*when,
+                                    |curr|
+                                    Some(when.map_or(curr,
+                                                     |when| when.min(curr))));
+                    } else {
+                        all_success = false
+                    }
+
+                    results.push(res);
+                }
+
+                if all_success {
+                    Ok(RetryResult::Success(min))
+                } else {
+                    Ok(RetryResult::Retry(results))
+                }
+            }
+        }
+    }
+}
+
+impl<Party, Idx, Stream, Frags, ChannelID, Chan, Ctx>
     StreamReporter<Party, ChannelID, Chan, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
     ChannelID: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>
-        + StreamReporter<Party, ChannelID, Chan, Ctx>,
+    Stream: PushStream<Ctx> + StreamReporter<Party, ChannelID, Chan, Ctx>,
     Stream::BatchID: Clone
 {
     type ReportStreamError =
@@ -1423,57 +1466,130 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, ChannelID, Param, Ctx>
-    ChannelsReporter<ChannelID, Param, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx> StreamRefresh<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    ChannelID: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>
-        + ChannelsReporter<ChannelID, Param, Ctx>,
-    Stream::BatchID: Clone,
-    Param: Clone
+    Stream: PushStream<Ctx> + StreamRefresh<Ctx>,
+    Stream::BatchID: Clone
 {
-    type ReportChannelsError = ErrorSet<Idx, (), Stream::ReportChannelsError>;
+    type RefreshRetry = Vec<RetryResult<Option<Instant>, Stream::RefreshRetry>>;
+    type RefreshError = ErrorSet<
+        Idx,
+        RetryResult<Option<Instant>, Stream::RefreshRetry>,
+        Stream::RefreshError
+    >;
 
-    fn report_channels(
+    fn refresh(
         &mut self,
         ctx: &mut Ctx,
-        channels: &[(ChannelID, Option<Vec<Param>>, Option<Instant>)]
-    ) -> Result<(), Self::ReportChannelsError> {
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
         let len = self.rev_map.len();
-        let mut errs: Option<Vec<(Idx, Stream::ReportChannelsError)>> = None;
+        let mut results = Vec::with_capacity(len);
+        let mut errs: Option<Vec<(Idx, Stream::RefreshError)>> = None;
 
-        for (i, entry) in self.rev_map.iter_mut().enumerate() {
-            if let Err(err) = entry.stream.report_channels(ctx, channels) {
-                match &mut errs {
-                    Some(errs) => {
-                        errs.push((Idx::from(i), err))
-                    },
+        // Run through each party and try to add the message.
+        for (i, party) in self.rev_map.iter_mut().enumerate() {
+            let idx = Idx::from(i);
+
+            match party.stream.refresh(ctx) {
+                Ok(res) => results.push((idx, res)),
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((idx.clone(), err)),
                     None => {
                         let mut vec = Vec::with_capacity(len);
 
-                        vec.push((Idx::from(i), err));
-                        errs = Some(vec);
+                        vec.push((idx.clone(), err));
+
+                        errs = Some(vec)
                     }
                 }
             }
         }
 
-        match errs {
-            Some(errs) => Err(ErrorSet::create(vec![], errs)),
-            None => Ok(())
+        self.decide_refresh_outcome(results, errs)
+    }
+
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        retries: Self::RefreshRetry
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        let len = self.rev_map.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs: Option<Vec<(Idx, Stream::RefreshError)>> = None;
+
+        for (i, retry) in retries.into_iter().enumerate() {
+            let idx = Idx::from(i);
+
+            match retry {
+                RetryResult::Success(when) => {
+                    results.push((idx, RetryResult::Success(when)))
+                }
+                RetryResult::Retry(retry) => match self.rev_map[i]
+                    .stream
+                    .retry_refresh(ctx, retry)
+                {
+                    Ok(res) => results.push((idx, res)),
+                    Err(err) => match &mut errs {
+                        Some(errs) => errs.push((idx.clone(), err)),
+                        None => {
+                            let mut vec = Vec::with_capacity(len);
+
+                            vec.push((idx.clone(), err));
+
+                            errs = Some(vec)
+                        }
+                    }
+                }
+            }
         }
+
+        self.decide_refresh_outcome(results, errs)
+    }
+
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        let len = self.rev_map.len();
+        let (mut results, retries) = errs.take();
+        let mut errs: Option<Vec<(Idx, Stream::RefreshError)>> = None;
+
+        for (idx, err) in retries {
+            let i: usize = idx.clone().into();
+
+            match self.rev_map[i].stream.complete_refresh(ctx, err) {
+                Ok(res) => results.push((idx, res)),
+                Err(err) => match &mut errs {
+                    Some(errs) => errs.push((idx.clone(), err)),
+                    None => {
+                        let mut vec = Vec::with_capacity(len);
+
+                        vec.push((idx.clone(), err));
+
+                        errs = Some(vec)
+                    }
+                }
+            }
+        }
+
+        self.decide_refresh_outcome(results, errs)
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStream<Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+
+impl<Party, Idx, Stream, Frags, Ctx> PushStream<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     type BatchID = CompoundBatchID;
@@ -2039,7 +2155,7 @@ where
 }
 
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamAdd<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -2185,23 +2301,23 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamPartyID
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx> PushStreamPartyID
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     type PartyID = Idx;
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamParties
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx> PushStreamParties
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     type PartiesError = Infallible;
@@ -2220,12 +2336,12 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamShared<Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Frags, Ctx> PushStreamShared<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Stream: PushStreamPrivate<Ctx> + PushStream<Ctx>,
     Stream::BatchID: Clone + Debug
 {
     type AbortBatchRetry = Vec<
@@ -2993,11 +3109,10 @@ where
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx> LargeObjStream<Ctx>
+impl<Party, Idx, Stream, Ctx> LargeObjStream<Ctx>
     for StreamMulticaster<
         Party,
         Idx,
-        LargeObjMsg<H>,
         Stream,
         <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
         Ctx
@@ -3005,8 +3120,7 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjStream<Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
-    H: Clone + HashID
+    Stream: LargeObjStream<Ctx> + PushStream<Ctx>,
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
     type Frags = StreamMulticasterFrags<Idx, Stream::Frags>;
@@ -3171,7 +3285,6 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
     for StreamMulticaster<
         Party,
         Idx,
-        LargeObjMsg<H>,
         Stream,
         <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
         Ctx
@@ -3342,7 +3455,7 @@ where
 }
 
 impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamSharedSingle<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,

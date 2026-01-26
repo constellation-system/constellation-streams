@@ -94,18 +94,30 @@ where ID: Clone + Debug + Display + Eq + Hash
     ) -> Result<Option<Stream>, Self::ReportStreamError>;
 }
 
-pub trait ChannelsReporter<ID, Param, Ctx>
-where ID: Clone + Debug + Display + Eq + Hash,
-      Param: Clone
+pub trait StreamRefresh<Ctx>
 {
-    /// Type of errors that can happen reporting a channel.
-    type ReportChannelsError: Debug + Display + ScopedError;
+    type RefreshRetry: RetryWhen + Clone + Debug;
+    type RefreshError: RecoverableError + Debug;
 
-    fn report_channels(
+    fn refresh(
         &mut self,
         ctx: &mut Ctx,
-        channels: &[(ID, Option<Vec<Param>>, Option<Instant>)]
-    ) -> Result<(), Self::ReportChannelsError>;
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError>;
+
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::RefreshRetry
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError>;
+
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError>;
 }
 
 /// Basic interface for a push stream.
@@ -1447,31 +1459,6 @@ where
     }
 }
 
-impl<ID, Param, Ctx, Inner> ChannelsReporter<ID, Param, Ctx>
-    for ThreadedStream<Inner>
-where
-    ID: Clone + Debug + Display + Eq + Hash,
-    Param: Clone,
-    Inner: ChannelsReporter<ID, Param, Ctx>
-{
-    type ReportChannelsError = WithMutexPoison<Inner::ReportChannelsError>;
-
-    fn report_channels(
-        &mut self,
-        ctx: &mut Ctx,
-        channels: &[(ID, Option<Vec<Param>>, Option<Instant>)]
-    ) -> Result<(), Self::ReportChannelsError> {
-        let mut guard = self
-            .inner
-            .lock()
-            .map_err(|_| WithMutexPoison::MutexPoison)?;
-
-        guard
-            .report_channels(ctx, channels)
-            .map_err(|err| WithMutexPoison::Inner { err: err })
-    }
-}
-
 impl<Ctx, Inner> PushStream<Ctx> for ThreadedStream<Inner>
 where
     Inner: PushStream<Ctx>
@@ -1616,6 +1603,52 @@ where
 
         guard
             .report_failure(batch)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+}
+
+impl<Ctx, Inner> StreamRefresh<Ctx> for ThreadedStream<Inner>
+where
+    Inner: StreamRefresh<Ctx>
+{
+    type RefreshRetry = Inner::RefreshRetry;
+    type RefreshError = ThreadedStreamError<Inner::RefreshError>;
+
+    fn refresh(
+        &mut self,
+        ctx: &mut Ctx,
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .refresh(ctx)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::RefreshRetry
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .retry_refresh(ctx, retry)
+            .map_err(|err| ThreadedStreamError::Inner { error: err })
+    }
+
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        self.inner
+            .lock()
+            .map_err(|_| ThreadedStreamError::MutexPoison)?
+            .complete_refresh(ctx, errs)
             .map_err(|err| ThreadedStreamError::Inner { error: err })
     }
 }

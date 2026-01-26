@@ -35,7 +35,9 @@ use constellation_auth::authn::MsgAuthN;
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::error::RecoverableError;
 use constellation_common::retry::RetryResult;
+use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
@@ -50,9 +52,9 @@ use mio::Waker;
 
 use crate::channels::Channels;
 use crate::channels::ChannelsCreate;
-use crate::stream::ChannelsReporter;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
+use crate::stream::StreamRefresh;
 use crate::threads::PushMode;
 use crate::threads::RegistryCtx;
 
@@ -66,7 +68,15 @@ pub trait PollThreadTypes<Ctx> {
     type Chan: PullStream<Self::Wrapper,
                           PullError = Self::PullError>;
     type PullError: Debug + Display + ScopedError;
-    type Stream: ChannelsReporter<Self::ChannelID, Self::ChannelParam>;
+    type RefreshRetry: RetryWhen;
+    type RefreshCompletableError;
+    type RefreshPermanentError: Debug + Display + ScopedError;
+    type RefreshError: Debug
+        + RecoverableError<Completable = Self::RefreshCompletableError,
+                           Permanent = Self::RefreshPermanentError>;
+    type Stream: StreamRefresh<Ctx,
+                               RefreshRetry = Self::RefreshRetry,
+                               RefreshError = Self::RefreshError>;
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type Wrapper;
@@ -180,12 +190,12 @@ where ID: Clone + Display + Eq + Hash
     ) -> Result<Self, Error> {
         let poll = Poll::new()?;
 
-        PollThreadCtx {
+        Ok(PollThreadCtx {
             pull_streams: HashMap::new(),
             ctx: ctx,
             poll: poll,
             nevents: nevents
-        }
+        })
     }
 
     pub fn with_capacity(
@@ -195,12 +205,12 @@ where ID: Clone + Display + Eq + Hash
     ) -> Result<Self, Error> {
         let poll = Poll::new()?;
 
-        PollThreadCtx {
+        Ok(PollThreadCtx {
             pull_streams: HashMap::with_capacity(nsessions),
             ctx: ctx,
             poll: poll,
             nevents: nevents
-        }
+        })
     }
 }
 
@@ -221,7 +231,7 @@ where
         stream: Types::Stream,
         shutdown: ShutdownFlag,
         nevents: usize,
-        nstreams: Option<usize>
+        nsessions: Option<usize>
     ) -> Result<Self, PollThreadCreateError<Types::ModeCreateError,
                                             Types::ChansCreateError,
                                             Types::MsgAuthCreateError>>
@@ -232,13 +242,11 @@ where
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
-        let poll = Poll::new()
-            .map_err(|err| PollThreadCreateError::IO { err: err })?;
-        let ctx = PollThreadCtx {
-            poll: poll,
-            ctx: ctx,
-            nevents: nevents
-        };
+        let ctx = match nsessions {
+            Some(nsessions) =>
+                PollThreadCtx::with_capacity(ctx, nevents, nsessions),
+            None => PollThreadCtx::new(ctx, nevents),
+        }.map_err(|err| PollThreadCreateError::IO { err: err })?;
 
         Ok(PollThread {
             channels: channels,
@@ -330,7 +338,7 @@ where
                "receiving stream from {}",
                id);
 
-        if self.pull_streams.insert(id.clone(), stream.clone()).is_some() {
+        if self.ctx.pull_streams.insert(id.clone(), stream.clone()).is_some() {
             error!(target: "poll-thread",
                    "stream was already present for {}",
                    id);
@@ -354,7 +362,7 @@ where
                "pulling messages from {}",
                id);
 
-        if let Some(stream) = self.pull_streams.get_mut(&id) {
+        if let Some(stream) = self.ctx.pull_streams.get_mut(&id) {
             let mut valid = true;
 
             while self.shutdown.is_live() && valid {
@@ -400,11 +408,81 @@ where
         Ok(())
     }
 
+    fn complete_refresh_stream(
+        &mut self,
+        err: Types::RefreshCompletableError
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        self.stream.complete_refresh(&mut self.ctx, err)
+            .unwrap_or_else(|err| match err.split() {
+                (_, Some(err)) => {
+                    error!(target: "poll-thread",
+                           "unrecoverable error refreshing stream: {}",
+                           err);
+
+                    RetryResult::Success(None)
+                }
+                (Some(err), _) => self.complete_refresh_stream(err),
+                (None, None) => {
+                    error!(target: "poll-thread",
+                           "refresh error split produced no results");
+
+                    RetryResult::Success(None)
+                }
+            })
+    }
+
+    fn retry_refresh_stream(
+        &mut self,
+        retry: Types::RefreshRetry
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        self.stream.retry_refresh(&mut self.ctx, retry)
+            .unwrap_or_else(|err| match err.split() {
+                (_, Some(err)) => {
+                    error!(target: "poll-thread",
+                           "unrecoverable error refreshing stream: {}",
+                           err);
+
+                    RetryResult::Success(None)
+                }
+                (Some(err), _) => self.complete_refresh_stream(err),
+                (None, None) => {
+                    error!(target: "poll-thread",
+                           "refresh error split produced no results");
+
+                    RetryResult::Success(None)
+                }
+            })
+    }
+
+    fn refresh_stream(
+        &mut self
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        self.stream.refresh(&mut self.ctx)
+            .unwrap_or_else(|err| match err.split() {
+                (_, Some(err)) => {
+                    error!(target: "poll-thread",
+                           "unrecoverable error refreshing stream: {}",
+                           err);
+
+                    RetryResult::Success(None)
+                }
+                (Some(err), _) => self.complete_refresh_stream(err),
+                (None, None) => {
+                    error!(target: "poll-thread",
+                           "refresh error split produced no results");
+
+                    RetryResult::Success(None)
+                }
+            })
+    }
+
     fn run(mut self) {
         let mut events = Events::with_capacity(self.ctx.nevents);
         let mut next_pending = None;
         let mut next_outbound = None;
         let mut next_listen = None;
+        let mut next_refresh = None;
+        let mut retry_refresh = None;
         let mut valid = true;
         let mut now;
 
@@ -418,6 +496,9 @@ where
             });
             let next = next.map_or(next_listen, |next| {
                 next_listen.map(|when: Instant| when.max(next))
+            });
+            let next = next.map_or(next_refresh, |next| {
+                next_refresh.map(|when: Instant| when.max(next))
             });
 
             now = Instant::now();
@@ -466,22 +547,12 @@ where
             }
 
             // Do pulls before pushing new messages.
-            if next_listen.map_or(false, |when| when <= now) {
+            let need_refresh = if next_listen
+                .map_or(false, |when| when <= now) {
                 match self.channels.listen(&mut self.ctx, &live) {
                     Ok(RetryResult::Success((streams, endpoints,
-                                             params, when))) => {
+                                             refresh, when))) => {
                         next_listen = when;
-
-                        let params = params.collect();
-
-                        // Report new channels.
-                        if let Err(err) = self.stream.report_channels(&params) {
-                            error!(target: "poll-thread",
-                                   "error reporting new channels: {}",
-                                   err);
-
-                            valid = false;
-                        }
 
                         // Report new streams.
                         for (addr, channel_id, param, stream) in streams {
@@ -502,14 +573,48 @@ where
                                 valid = false;
                             }
                         }
+
+                        refresh
                     },
                     Ok(RetryResult::Retry(when)) => {
                         next_listen = Some(when);
+
+                        false
                     }
                     Err(err) => {
                         error!(target: "poll-thread",
                                "error listening: {}",
                                err);
+
+                        false
+                    }
+                }
+            } else {
+                false
+            };
+
+            // Refresh the stream if needed.
+            if let Some(retry) = retry_refresh.take() {
+                if retry.when() < now {
+                    match self.retry_refresh_stream(retry) {
+                        RetryResult::Success(when) => {
+                            next_refresh = when
+                        }
+                        RetryResult::Retry(retry) => {
+                            retry_refresh = Some(retry)
+                        }
+                    }
+                } else {
+                    retry_refresh = Some(retry)
+                }
+            } else if need_refresh || next_refresh
+                .map_or(false, |when| when <= now)  {
+                match self.refresh_stream() {
+                    RetryResult::Success(when) => {
+                        next_refresh = when
+                    }
+                    RetryResult::Retry(retry) => {
+                        retry_refresh = Some(retry)
                     }
                 }
             }

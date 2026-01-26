@@ -78,7 +78,6 @@ use crate::error::SelectionsError;
 use crate::large_obj::LargeObjID;
 use crate::select::sched::FarHistory;
 use crate::select::sched::FarHistoryConfig;
-use crate::stream::ChannelsReporter;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
@@ -91,6 +90,7 @@ use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamID;
+use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::ThreadedStreamError;
 
@@ -1370,44 +1370,6 @@ where
         }
     }
 
-    /// Refresh all eligible connection options, and possibly move to
-    /// a new epoch.
-    ///
-    /// This will scan all connection options that are ready for
-    /// refresh, obtain a fresh set of addresses, and then compile a
-    /// new set of possible streams by comparing them against the
-    /// available channels.  If the total set of possible streams has
-    /// not changed, then the current epoch will continue.  However,
-    /// if there is any change, then the possible streams will be
-    /// re-indexed, and a new epoch will begin.
-    pub fn refresh(
-        &mut self,
-        ctx: &mut Ctx
-    ) -> Result<
-        RetryResult<Option<Instant>>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
-    > {
-        let now = Instant::now();
-
-        let when = match self.refresh_when.read() {
-            Ok(guard) => {
-                if let Some(when) = *guard &&
-                    when <= now
-                {
-                    Ok(None)
-                } else {
-                    Ok(Some(*guard))
-                }
-            }
-            Err(_) => Err(ThreadedStreamSelectorError::MutexPoison)
-        }?;
-
-        match when {
-            Some(when) => Ok(RetryResult::Success(when)),
-            None => self.do_refresh(ctx, now)
-        }
-    }
-
     /// Report a success for a given stream.
     #[inline]
     pub fn success(
@@ -1606,6 +1568,19 @@ where
             SelectorReportFailureError::Report { err } => err.scope(),
             SelectorReportFailureError::Stream { err } => err.scope()
         }
+    }
+}
+
+impl<Addrs, Param> RecoverableError
+    for ThreadedStreamSelectorError<Addrs, Param>
+where Addrs: Debug + Display + ScopedError,
+      Param: Debug + Display + ScopedError
+{
+    type Completable = Infallible;
+    type Permanent = ThreadedStreamSelectorError<Addrs, Param>;
+
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        (None, Some(self))
     }
 }
 
@@ -2106,6 +2081,76 @@ where
         _error: &Error
     ) -> Result<(), Self::ReportBatchError> {
         self.report_error(&batch.stream)
+    }
+}
+
+impl<Epochs, Src, Resolve, Ctx> StreamRefresh<Ctx>
+    for StreamSelector<Epochs, Src, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
+    Src: ChannelsCreate<Ctx, Vec<String>>,
+    Src::OutNegoParam: Clone + Eq + Hash,
+    Src::Stream: Clone + PushStream<Ctx> + StreamRefresh<Ctx> + Send,
+    Src::Config: Default,
+    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve::Origin: Clone + Display + Eq + Hash
+{
+    type RefreshRetry = Instant;
+    type RefreshError = ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>;
+
+    fn refresh(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Option<Instant>>,
+        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+    > {
+        let now = Instant::now();
+
+        let when = match self.refresh_when.read() {
+            Ok(guard) => {
+                if let Some(when) = *guard &&
+                    when <= now
+                {
+                    Ok(None)
+                } else {
+                    Ok(Some(*guard))
+                }
+            }
+            Err(_) => Err(ThreadedStreamSelectorError::MutexPoison)
+        }?;
+
+        match when {
+            Some(when) => Ok(RetryResult::Success(when)),
+            None => self.do_refresh(ctx, now)
+        }
+    }
+
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        when: Self::RefreshRetry
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        if when < Instant::now() {
+            self.refresh(ctx)
+        } else {
+            Ok(RetryResult::Retry(when))
+        }
+    }
+
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        _errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<RetryResult<Option<Instant>, Self::RefreshRetry>,
+                Self::RefreshError> {
+        error!(target: "stream-selector",
+               "should never call complete_refresh");
+
+        self.refresh(ctx)
     }
 }
 
