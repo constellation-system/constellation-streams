@@ -52,6 +52,7 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
+use crate::channels::ChannelsListen;
 use crate::channels::ChannelsCreate;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
@@ -79,8 +80,7 @@ pub trait PollThreadTypes<Ctx> {
                            Permanent = Self::RefreshPermanentError>;
     type Stream: StreamRefresh<
         PollThreadCtx<
-            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
-            Self::AuthNChan,
+            Self::Chans,
             Ctx
         >,
         RefreshRetry = Self::RefreshRetry,
@@ -100,7 +100,8 @@ pub trait PollThreadTypes<Ctx> {
                    Addr = Self::Addr,
                    Param = Self::ChannelParam,
                    Stream = Self::AuthNChan,
-                   ChannelID = Self::ChannelID>;
+                   ChannelID = Self::ChannelID>
+        + ChannelsListen<Ctx>;
     type MsgAuthConfig;
     type MsgAuth: Create<Config = Self::MsgAuthConfig,
                          CreateError = Self::MsgAuthCreateError>
@@ -122,17 +123,20 @@ pub trait PollThreadTypes<Ctx> {
             Self::Stream,
             Self::Msgs,
             PollThreadCtx<
-                StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
-                Self::AuthNChan,
+                Self::Chans,
                 Ctx
             >
         >;
 }
 
-pub struct PollThreadCtx<ID, Chan, Ctx>
-where ID: Clone + Display + Eq + Hash
+pub struct PollThreadCtx<Chans, Ctx>
+where Chans: Channels<Ctx>
 {
-    pull_streams: HashMap<ID, Chan>,
+    pull_streams: HashMap<
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream
+    >,
+    channels: Chans,
     ctx: Ctx,
     poll: Poll,
     nevents: usize
@@ -142,12 +146,7 @@ pub struct PollThread<Ctx, Types>
 where
     Types: PollThreadTypes<Ctx>
 {
-    ctx: PollThreadCtx<
-        StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-        Types::AuthNChan,
-        Ctx
-    >,
-    channels: Types::Chans,
+    ctx: PollThreadCtx<Types::Chans, Ctx>,
     authn: Types::MsgAuth,
     recv: Types::Recv,
     mode: Types::Mode,
@@ -160,8 +159,61 @@ where
     stream: Types::Stream,
 }
 
-impl<ID, Chan, Ctx> RegistryCtx for PollThreadCtx<ID, Chan, Ctx>
-where ID: Clone + Display + Eq + Hash
+impl<Chans, Ctx> Channels<()> for PollThreadCtx<Chans, Ctx>
+where Chans: Channels<Ctx>
+{
+    type ChannelID = Chans::ChannelID;
+    type Param = Chans::Param;
+    type ParamIter = Chans::ParamIter;
+    type ParamError = Chans::ParamError;
+    type OutNegoParam = Chans::OutNegoParam;
+    type Addr = Chans::Addr;
+    type Stream = Chans::Stream;
+    type ReqStreamError = Chans::ReqStreamError;
+
+    #[inline]
+    fn req_stream(
+        &mut self,
+        _ctx: &mut (),
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        endpoint: &Self::Addr,
+        nego_param: &Self::OutNegoParam
+    ) -> Result<
+        RetryResult<(
+            Option<Self::Stream>,
+            bool,
+            Option<Instant>
+        )>,
+        Self::ReqStreamError
+    > {
+        self.channels.req_stream(&mut self.ctx, channel, param,
+                                 endpoint, nego_param)
+    }
+
+    #[inline]
+    fn params<I>(
+        &mut self,
+        _ctx: &mut (),
+        channels: I
+    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+                Self::ParamError>
+    where I: Iterator<Item = Self::ChannelID> {
+        self.channels.params(&mut self.ctx, channels)
+    }
+
+    #[inline]
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        self.channels.channel_id(name)
+    }
+}
+
+
+impl<Chans, Ctx> RegistryCtx for PollThreadCtx<Chans, Ctx>
+where Chans: Channels<Ctx>
 {
     #[inline]
     fn registry(&self) -> &Registry {
@@ -169,19 +221,25 @@ where ID: Clone + Display + Eq + Hash
     }
 }
 
-impl <Party, ID, Chan, Ctx> StreamReporter<Party, ID, Chan, ()>
-    for PollThreadCtx<ID, Chan, Ctx>
-where ID: Clone + Debug + Display + Eq + Hash,
-      Chan: Clone {
+impl <Party, Chans, Ctx>
+    StreamReporter<
+        Party,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+        ()
+    >
+    for PollThreadCtx<Chans, Ctx>
+where Chans: Channels<Ctx>,
+      Chans::Stream: Clone {
     type ReportStreamError = Infallible;
 
     fn report_stream(
         &mut self,
         _ctx: &mut (),
         _party: &Party,
-        stream_id: ID,
-        stream: Chan
-    ) -> Result<Option<Chan>, Self::ReportStreamError> {
+        stream_id: StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        stream: Chans::Stream
+    ) -> Result<Option<Chans::Stream>, Self::ReportStreamError> {
         match self.pull_streams.get(&stream_id) {
             Some(out) => Ok(Some(out.clone())),
             None => {
@@ -225,17 +283,19 @@ pub enum PollThreadRecvError<Pull, AuthN, Recv> {
     }
 }
 
-impl<ID, Chan, Ctx> PollThreadCtx<ID, Chan, Ctx>
-where ID: Clone + Display + Eq + Hash
+impl<Chans, Ctx> PollThreadCtx<Chans, Ctx>
+where Chans: Channels<Ctx>
 {
     pub fn new(
         ctx: Ctx,
+        channels: Chans,
         nevents: usize
     ) -> Result<Self, Error> {
         let poll = Poll::new()?;
 
         Ok(PollThreadCtx {
             pull_streams: HashMap::new(),
+            channels: channels,
             ctx: ctx,
             poll: poll,
             nevents: nevents
@@ -244,6 +304,7 @@ where ID: Clone + Display + Eq + Hash
 
     pub fn with_capacity(
         ctx: Ctx,
+        channels: Chans,
         nevents: usize,
         nsessions: usize
     ) -> Result<Self, Error> {
@@ -251,6 +312,7 @@ where ID: Clone + Display + Eq + Hash
 
         Ok(PollThreadCtx {
             pull_streams: HashMap::with_capacity(nsessions),
+            channels: channels,
             ctx: ctx,
             poll: poll,
             nevents: nevents
@@ -288,12 +350,11 @@ where
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
         let ctx = match nsessions {
             Some(nsessions) =>
-                PollThreadCtx::with_capacity(ctx, nevents, nsessions),
-            None => PollThreadCtx::new(ctx, nevents),
+                PollThreadCtx::with_capacity(ctx, channels, nevents, nsessions),
+            None => PollThreadCtx::new(ctx, channels, nevents),
         }.map_err(|err| PollThreadCreateError::IO { err: err })?;
 
         Ok(PollThread {
-            channels: channels,
             authn: authn,
             mode: mode,
             msgs: msgs,
@@ -593,7 +654,7 @@ where
             // Do pulls before pushing new messages.
             let need_refresh = if next_listen
                 .map_or(false, |when| when <= now) {
-                match self.channels.listen(&mut self.ctx.ctx, &live) {
+                match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
                     Ok(RetryResult::Success((streams, endpoints,
                                              refresh, when))) => {
                         next_listen = when;

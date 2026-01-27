@@ -60,7 +60,6 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::stream::StreamReporter;
 
 /// Trait for determining whether a given channel parameter can pair
 /// with a given endpoint address.
@@ -114,8 +113,6 @@ pub trait Channels<Ctx> {
     /// This provides both the ID of the originating channel, and the
     /// channel parameter.
     type ParamIter: Iterator<Item = (Self::ChannelID, Self::Param)>;
-    type EndpointIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param)>;
-    type StreamIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
     /// Type of errors that can occur when obtaining parameters.
     type ParamError: Debug + Display + ScopedError;
     /// Outbound negotiator parameter.
@@ -128,33 +125,6 @@ pub trait Channels<Ctx> {
     type Stream;
     /// Type of errors that can occur when obtaining flows from a parameter.
     type ReqStreamError: Debug + Display + ScopedError;
-    type ListenError: Debug + Display + ScopedError;
-    type ShutdownStreamError: Debug + Display + ScopedError;
-    type ShutdownListenError: Debug + Display + ScopedError;
-    type ShutdownError: Debug + Display + ScopedError;
-
-    /// Obtain the current set of all channel parameters, and the time
-    /// at which they will need to be refreshed.
-    ///
-    /// If parameters never need to be refreshed again, `None` will be
-    /// returned.
-    ///
-    /// # Parameters
-    ///
-    /// - `ctx`: The context to use.
-    ///
-    /// # Return Value
-    ///
-    /// - `(params, Some(when))`: The current set of parameters is
-    ///   `params`, and will be refresh again at `when`.
-    ///
-    /// - `(params, None)`: The current set of parameters is
-    ///   `params`, and does not need to be refreshed.
-    fn params(
-        &mut self,
-        ctx: &mut Ctx
-    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
-                Self::ParamError>;
 
     /// Request a stream for a given endpoint.
     ///
@@ -209,6 +179,54 @@ pub trait Channels<Ctx> {
         Self::ReqStreamError
     >;
 
+    /// Obtain the current set of all channel parameters, and the time
+    /// at which they will need to be refreshed.
+    ///
+    /// If parameters never need to be refreshed again, `None` will be
+    /// returned.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `channels`: [Iterator] for channel IDs for which to get
+    ///   parameters.
+    ///
+    /// # Return Value
+    ///
+    /// - `(params, Some(when))`: The current set of parameters is
+    ///   `params`, and will be refresh again at `when`.
+    ///
+    /// - `(params, None)`: The current set of parameters is
+    ///   `params`, and does not need to be refreshed.
+    fn params<I>(
+        &mut self,
+        ctx: &mut Ctx,
+        channels: I
+    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+                Self::ParamError>
+    where I: Iterator<Item = Self::ChannelID>;
+
+    /// Get a channel's ID from its name.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: The channel's text name.
+    ///
+    /// # Return Value
+    ///
+    /// The channel's ID, or `None` if no such channel exists.
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID>;
+}
+
+pub trait ChannelsListen<Ctx>: Channels<Ctx> {
+    type EndpointIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param)>;
+    type StreamIter: Iterator<Item = (Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
+    type ListenError: Debug + Display + ScopedError;
+
     fn listen(
         &mut self,
         ctx: &mut Ctx,
@@ -222,6 +240,12 @@ pub trait Channels<Ctx> {
         )>,
         Self::ListenError
     >;
+}
+
+pub trait ChannelsShutdown<Ctx>: Channels<Ctx> {
+    type ShutdownStreamError: Debug + Display + ScopedError;
+    type ShutdownListenError: Debug + Display + ScopedError;
+    type ShutdownError: Debug + Display + ScopedError;
 
     fn shutdown_stream(
         &mut self,
@@ -564,25 +588,20 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     type ChannelID = NullChannelsID;
     type Param = NullChannelsParam;
     type ParamIter = Empty<(NullChannelsID, NullChannelsParam)>;
-    type EndpointIter = Empty<(Self::Addr, Self::ChannelID, Self::Param)>;
-    type StreamIter =
-        Empty<(Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
     type ParamError = Infallible;
     type OutNegoParam = ();
     type Addr = NullChannelsAddr;
     type Stream = ();
     type ReqStreamError = Infallible;
-    type ListenError = Infallible;
-    type ShutdownStreamError = Infallible;
-    type ShutdownListenError = Infallible;
-    type ShutdownError = Infallible;
 
     #[inline]
-    fn params(
+    fn params<I>(
         &mut self,
-        _ctx: &mut Ctx
+        _ctx: &mut Ctx,
+        _channels: I
     ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
-                Self::ParamError> {
+                Self::ParamError>
+    where I: Iterator<Item = Self::ChannelID> {
         Ok(RetryResult::Success((empty(), None)))
     }
 
@@ -606,6 +625,21 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     }
 
     #[inline]
+    fn channel_id(
+        &self,
+        _name: &str
+    ) -> Option<Self::ChannelID> {
+        None
+    }
+}
+
+impl<Ctx> ChannelsListen<Ctx> for NullChannels {
+    type EndpointIter = Empty<(Self::Addr, Self::ChannelID, Self::Param)>;
+    type StreamIter =
+        Empty<(Self::Addr, Self::ChannelID, Self::Param, Self::Stream)>;
+    type ListenError = Infallible;
+
+    #[inline]
     fn listen(
         &mut self,
         _ctx: &mut Ctx,
@@ -621,6 +655,12 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     > {
         Ok(RetryResult::Success((empty(), empty(), false, None)))
     }
+}
+
+impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
+    type ShutdownStreamError = Infallible;
+    type ShutdownListenError = Infallible;
+    type ShutdownError = Infallible;
 
     #[inline]
     fn shutdown_stream(
@@ -672,8 +712,6 @@ where
     Private: Channels<Ctx>,
     Shared: Channels<Ctx>,
     Private::ParamIter: FusedIterator,
-    Private::EndpointIter: FusedIterator,
-    Private::StreamIter: FusedIterator
 {
     type ChannelID = SharedPrivateValue<Private::ChannelID, Shared::ChannelID>;
     type Param = SharedPrivateValue<Private::Param, Shared::Param>;
@@ -684,28 +722,6 @@ where
         Shared::ChannelID,
         Shared::Param,
         Shared::ParamIter
-    >;
-    type EndpointIter = SharedPrivateEndpointIter<
-        Private::ChannelID,
-        Private::Param,
-        Private::Addr,
-        Private::EndpointIter,
-        Shared::ChannelID,
-        Shared::Param,
-        Shared::Addr,
-        Shared::EndpointIter
-    >;
-    type StreamIter = SharedPrivateStreamIter<
-        Private::ChannelID,
-        Private::Param,
-        Private::Addr,
-        Private::Stream,
-        Private::StreamIter,
-        Shared::ChannelID,
-        Shared::Param,
-        Shared::Addr,
-        Shared::Stream,
-        Shared::StreamIter
     >;
     type ParamError =
         SharedPrivateError<Private::ParamError, Shared::ParamError>;
@@ -719,24 +735,38 @@ where
     >;
     type ReqStreamError = SharedPrivateMatchError<Private::ReqStreamError,
                                                    Shared::ReqStreamError>;
-    type ListenError = SharedPrivateError<Private::ListenError,
-                                          Shared::ListenError>;
-    type ShutdownStreamError =
-        SharedPrivateMatchError<Private::ShutdownStreamError,
-                                Shared::ShutdownStreamError>;
-    type ShutdownListenError = SharedPrivateError<Private::ShutdownListenError,
-                                                  Shared::ShutdownListenError>;
-    type ShutdownError = SharedPrivateError<Private::ShutdownError,
-                                            Shared::ShutdownError>;
 
-    fn params(
+    fn params<I>(
         &mut self,
-        ctx: &mut Ctx
+        ctx: &mut Ctx,
+        channels: I
     ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
-                Self::ParamError> {
+                Self::ParamError>
+    where I: Iterator<Item = Self::ChannelID> {
+        let (_, hint) = channels.size_hint();
+        let mut private_channels = match hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
+        };
+        let mut shared_channels = match hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
+        };
+
+        for channel in channels {
+            match channel {
+                SharedPrivateValue::Shared { shared } => {
+                    shared_channels.push(shared)
+                }
+                SharedPrivateValue::Private { private } => {
+                    private_channels.push(private)
+                }
+            }
+        }
+
         let (private, private_when) = match self
             .private
-            .params(ctx)
+            .params(ctx, private_channels.into_iter())
             .map_err(|err| SharedPrivateError::Private { err: err })?
         {
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
@@ -744,7 +774,7 @@ where
         };
         let (shared, shared_when) = match self
             .shared
-            .params(ctx)
+            .params(ctx, shared_channels.into_iter())
             .map_err(|err| SharedPrivateError::Shared { err: err })?
         {
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
@@ -823,6 +853,52 @@ where
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
+
+    #[inline]
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        self.private.channel_id(name)
+            .map(|id| SharedPrivateValue::Private { private: id })
+            .or_else(|| self.shared.channel_id(name)
+                     .map(|id| SharedPrivateValue::Shared { shared: id }))
+    }
+}
+
+impl<Private, Shared, Ctx> ChannelsListen<Ctx>
+    for SharedPrivateChannels<Private, Shared>
+where
+    Private: ChannelsListen<Ctx>,
+    Shared: ChannelsListen<Ctx>,
+    Private::ParamIter: FusedIterator,
+    Private::EndpointIter: FusedIterator,
+    Private::StreamIter: FusedIterator
+{
+    type ListenError = SharedPrivateError<Private::ListenError,
+                                          Shared::ListenError>;
+    type EndpointIter = SharedPrivateEndpointIter<
+        Private::ChannelID,
+        Private::Param,
+        Private::Addr,
+        Private::EndpointIter,
+        Shared::ChannelID,
+        Shared::Param,
+        Shared::Addr,
+        Shared::EndpointIter
+    >;
+    type StreamIter = SharedPrivateStreamIter<
+        Private::ChannelID,
+        Private::Param,
+        Private::Addr,
+        Private::Stream,
+        Private::StreamIter,
+        Shared::ChannelID,
+        Shared::Param,
+        Shared::Addr,
+        Shared::Stream,
+        Shared::StreamIter
+    >;
 
     fn listen(
         &mut self,
@@ -908,6 +984,22 @@ where
                 Ok(RetryResult::Retry(private_when.max(shared_when)))
         }
     }
+}
+
+impl<Private, Shared, Ctx> ChannelsShutdown<Ctx>
+    for SharedPrivateChannels<Private, Shared>
+where
+    Private: ChannelsShutdown<Ctx>,
+    Shared: ChannelsShutdown<Ctx>,
+    Private::ParamIter: FusedIterator,
+{
+    type ShutdownStreamError =
+        SharedPrivateMatchError<Private::ShutdownStreamError,
+                                Shared::ShutdownStreamError>;
+    type ShutdownListenError = SharedPrivateError<Private::ShutdownListenError,
+                                                  Shared::ShutdownListenError>;
+    type ShutdownError = SharedPrivateError<Private::ShutdownError,
+                                            Shared::ShutdownError>;
 
     fn shutdown_stream(
         &mut self,

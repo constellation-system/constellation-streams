@@ -97,10 +97,7 @@ pub struct BatchSlotsConfig {
 ///
 /// # YAML Format
 ///
-/// The YAML format has three fields, two of which are mandatory:
-///
-/// * `channels`: Extra configuration information for the channels. This type
-///   must have a [Default] instance, and this field is optional.
+/// The YAML format has two fields, both of which are mandatory:
 ///
 /// * `channel-names`: An array of names of channels (defined elsewhere) that
 ///   can be used to reach the endpoints.
@@ -110,10 +107,7 @@ pub struct BatchSlotsConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "connections-config")]
-pub struct ConnectionConfig<Channels: Default, Channel, Endpoint> {
-    /// Configuration for channels as a whole.
-    #[serde(default)]
-    channels: Channels,
+pub struct ConnectionConfig<Channel, Endpoint> {
     /// Names of channels over which to connect.
     channel_names: Vec<Channel>,
     /// Endpoints to which to connect.
@@ -271,10 +265,9 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
+pub struct PartyConfig<Resolver, Epochs, Channel, Endpoint>
 where
     Resolver: Default,
-    Channels: Default,
     Epochs: Default {
     /// Scheduler configuration.
     #[serde(default)]
@@ -289,7 +282,7 @@ where
     #[serde(default)]
     retry: Retry,
     /// Possible ways to form connections to the party.
-    connections: Vec<ConnectionConfig<Channels, Channel, Endpoint>>,
+    connections: Vec<ConnectionConfig<Channel, Endpoint>>,
     #[serde(default)]
     size_hint: Option<usize>
 }
@@ -669,9 +662,7 @@ impl Default for FarSchedulerConfig {
     }
 }
 
-impl<Channels, Channel, Endpoint> ConnectionConfig<Channels, Channel, Endpoint>
-where
-    Channels: Default
+impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint>
 {
     /// Create a new `ConnectionConfig` from its components.
     ///
@@ -679,21 +670,13 @@ where
     /// fields in the YAML format.  See documentation for details.
     #[inline]
     pub fn new(
-        channels: Channels,
         channel_names: Vec<Channel>,
         endpoints: Vec<Endpoint>
     ) -> Self {
         ConnectionConfig {
-            channels: channels,
             channel_names: channel_names,
             endpoints: endpoints
         }
-    }
-
-    /// Get the channel configuration information.
-    #[inline]
-    pub fn channels(&self) -> &Channels {
-        &self.channels
     }
 
     /// Get the array of channel names.
@@ -711,8 +694,8 @@ where
     /// Deconstruct this into the channel configuration, channel
     /// names, and endpoints.
     #[inline]
-    pub fn take(self) -> (Channels, Vec<Channel>, Vec<Endpoint>) {
-        (self.channels, self.channel_names, self.endpoints)
+    pub fn take(self) -> (Vec<Channel>, Vec<Endpoint>) {
+        (self.channel_names, self.endpoints)
     }
 }
 
@@ -832,11 +815,10 @@ where
     }
 }
 
-impl<Resolver, Channels, Epochs, Channel, Endpoint>
-    PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
+impl<Resolver, Epochs, Channel, Endpoint>
+    PartyConfig<Resolver, Epochs, Channel, Endpoint>
 where
     Resolver: Default,
-    Channels: Default,
     Epochs: Default
 {
     /// Get the scheduler configuration.
@@ -867,7 +849,7 @@ where
     #[inline]
     pub fn connections(
         &self
-    ) -> &[ConnectionConfig<Channels, Channel, Endpoint>] {
+    ) -> &[ConnectionConfig<Channel, Endpoint>] {
         &self.connections
     }
 
@@ -889,7 +871,7 @@ where
         Epochs,
         Retry,
         Option<usize>,
-        Vec<ConnectionConfig<Channels, Channel, Endpoint>>
+        Vec<ConnectionConfig<Channel, Endpoint>>
     ) {
         (
             self.scheduler,
@@ -954,7 +936,7 @@ fn test_connection_config() {
     let addr: SocketAddr = "10.10.10.10:10000".parse().unwrap();
     let channames = vec!["chan-1", "chan-2"];
     let endpoints = vec![addr];
-    let expected = ConnectionConfig::new((), channames, endpoints);
+    let expected = ConnectionConfig::new(channames, endpoints);
     let actual = serde_yaml::from_str(yaml).unwrap();
 
     assert_eq!(expected, actual);

@@ -68,7 +68,6 @@ use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
-use crate::channels::ChannelsCreate;
 use crate::config::ConnectionConfig;
 use crate::config::FarSchedulerConfig;
 use crate::config::PartyConfig;
@@ -92,7 +91,6 @@ use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
-use crate::stream::ThreadedStreamError;
 
 pub mod dispatch;
 mod sched;
@@ -121,18 +119,17 @@ pub struct ConnChannelID<ChannelID> {
 
 /// Threaded version of [StreamSelectorConnections]
 struct ThreadedStreamSelectorConnections<
-    Src: Channels<Ctx>,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Ctx
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Ctx: Channels<()>
 > {
     ctx: PhantomData<Ctx>,
+    /// Channel IDs to use for getting new parameters.
+    channels: Vec<Ctx::ChannelID>,
     // ISSUE #12: try to make these into RwLocks
     /// Source of counterparty addresses to use to get raw streams.
     addrs: Mutex<Resolve>,
-    /// Sources of channels from which to get raw streams.
-    channels: Mutex<Src>,
     /// Outbound negotiator parameters.
-    params: HashMap<Resolve::Origin, Src::OutNegoParam>
+    params: HashMap<Resolve::Origin, Ctx::OutNegoParam>
 }
 
 /// Type of batch ID's produce by [StreamSelector].
@@ -203,52 +200,52 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// be cancelled, and all subsequent operations will report an error.
 /// Note that this is allowed by the overall stream abstraction, which
 /// is based on unreliable datagram protocols.
-pub struct StreamSelector<Epochs, Src, Resolve, Ctx>
+pub struct StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Default,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Resolve: Addrs<Addr = Src::Addr> {
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr> {
     /// The set of connection options.
     ///
     /// This represents the sources of possible streams.
-    connections: Arc<Vec<ThreadedStreamSelectorConnections<Src, Resolve, Ctx>>>,
+    connections: Arc<Vec<ThreadedStreamSelectorConnections<Resolve, Ctx>>>,
     /// Mutable state.
-    state: Arc<RwLock<StreamSelectorState<Epochs, Src, Ctx>>>,
+    state: Arc<RwLock<StreamSelectorState<Epochs, Ctx>>>,
     /// When to next refresh the set of possible streams.
     refresh_when: Arc<RwLock<Option<Instant>>>,
 }
 
 /// Container for core mutable state.
-struct StreamSelectorState<Epochs, Src, Ctx>
+struct StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
-    Src: Channels<Ctx>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send {
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send {
     /// Scheduler to use for selecting a raw stream.
     sched: Scheduler<
         Epochs,
         FarHistory,
         PassthruPolicy<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >,
-        Src::OutNegoParam
+        Ctx::OutNegoParam
     >,
     /// A mapping from the endpoint address, channel, and parameter
     /// set to dense IDs for this epoch.
     ///
     /// This is regenerated at the start of each epoch.
     stream_ids:
-        HashMap<StreamID<Src::Addr, Src::ChannelID, Src::Param>, StreamsIdx>,
+        HashMap<StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>, StreamsIdx>,
     /// The current set of possible streams, and any active stream objects.
     ///
     /// This is regenerated at the start of each epoch.
     streams:
-        Vec<StreamEntry<Src::Addr, Src::ChannelID, Src::Param, Src::Stream>>
+        Vec<StreamEntry<Ctx::Addr, Ctx::ChannelID, Ctx::Param, Ctx::Stream>>
 }
 
 /// Entry in the streams array, representing a possible stream.
@@ -293,19 +290,18 @@ pub enum ThreadedStreamSelectorError<Addrs, Param> {
 
 /// Errors that can occur when setting up a connection.
 #[derive(Debug)]
-pub enum StreamSelectorConnectionCreateError<Channels, Addrs> {
-    /// Error occurred while obtaining a low-level channel.
-    Channels { err: Channels },
+pub enum StreamSelectorConnectionCreateError<Addrs> {
     /// Error occurred while obtaining addresses.
-    Addrs { err: Addrs }
+    Addrs { err: Addrs },
+    BadName { name: String }
 }
 
 /// Errors that can occur when creating a [StreamSelector].
 #[derive(Debug)]
-pub enum StreamSelectorCreateError<Src, Addrs, Epochs> {
+pub enum StreamSelectorCreateError<Addrs, Epochs> {
     /// Error occurred creating the connection options.
     Connection {
-        err: StreamSelectorConnectionCreateError<Src, Addrs>
+        err: StreamSelectorConnectionCreateError<Addrs>
     },
     /// Error occurred during the initial refresh.
     Refresh { err: RefreshError },
@@ -452,50 +448,51 @@ where
     }
 }
 
-impl<Src, Resolve, Ctx> ThreadedStreamSelectorConnections<Src, Resolve, Ctx>
+impl<Resolve, Ctx> ThreadedStreamSelectorConnections<Resolve, Ctx>
 where
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::Config: Default,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     /// Create a single connections from its configuration objects.
     fn create<EndpointConfig>(
         ctx: &mut Ctx,
         addrs_config: &Resolve::Config,
-        config: ConnectionConfig<Src::Config, String, EndpointConfig>
+        config: ConnectionConfig<String, EndpointConfig>
     ) -> Result<
         Self,
-        StreamSelectorConnectionCreateError<
-            Src::CreateError,
-            Resolve::CreateError
-        >
+        StreamSelectorConnectionCreateError<Resolve::CreateError>
     >
     where
         EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
-                                               Src::OutNegoParam>,
+                                               Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
-        let (channels, srcs, endpoints) = config.take();
-        let params: HashMap<Resolve::Origin, Src::OutNegoParam> = endpoints
+        let (srcs, endpoints) = config.take();
+        let params: HashMap<Resolve::Origin, Ctx::OutNegoParam> = endpoints
             .into_iter()
             .map(|endpoint| endpoint.take())
             .collect();
-
-        let channels = Src::create(ctx, channels, srcs)
-            .map_err(|err| StreamSelectorConnectionCreateError::Channels {
-                err: err
-            })?;
         let addrs = Resolve::create(ctx, addrs_config.clone(),
                                     params.keys().cloned())
             .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
                 err: err
             })?;
+        let mut channels = Vec::with_capacity(srcs.len());
+
+        for src in srcs {
+            let id = ctx.channel_id(&src)
+                .ok_or(StreamSelectorConnectionCreateError::BadName {
+                    name: src
+                })?;
+
+            channels.push(id);
+        }
 
         Ok(ThreadedStreamSelectorConnections {
             ctx: PhantomData,
-            channels: Mutex::new(channels),
+            channels: channels,
             addrs: Mutex::new(addrs),
             params: params
         })
@@ -503,15 +500,15 @@ where
 
     fn handle_refresh_params(
         &self,
-        params: Vec<(Src::ChannelID, Src::Param)>,
+        params: Vec<(Ctx::ChannelID, Ctx::Param)>,
         refresh_channels_when: Option<Instant>
     ) -> Result<
         RetryResult<(
-            Vec<(Src::Addr, Src::OutNegoParam)>,
-            Vec<(Src::ChannelID, Src::Param)>,
+            Vec<(Ctx::Addr, Ctx::OutNegoParam)>,
+            Vec<(Ctx::ChannelID, Ctx::Param)>,
             Option<Instant>
         )>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
         let (addrs, refresh_addrs_when) = match self
             .addrs
@@ -524,7 +521,7 @@ where
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
             RetryResult::Success(addrs) => addrs
         };
-        let addrs: Vec<(Resolve::Addr, Src::OutNegoParam)> = addrs
+        let addrs: Vec<(Resolve::Addr, Ctx::OutNegoParam)> = addrs
             .flat_map(|(addr, endpoint, _)| {
                 if let Some(param) = self.params.get(&endpoint) {
                     Some((addr, param.clone()))
@@ -552,24 +549,21 @@ where
         ctx: &mut Ctx
     ) -> Result<
         RetryResult<(
-            Vec<(Src::Addr, Src::OutNegoParam)>,
-            Vec<(Src::ChannelID, Src::Param)>,
+            Vec<(Ctx::Addr, Ctx::OutNegoParam)>,
+            Vec<(Ctx::ChannelID, Ctx::Param)>,
             Option<Instant>
         )>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
-        let (params, refresh_channels_when) = match self
-            .channels
-            .lock()
-            .map_err(|_| ThreadedStreamSelectorError::MutexPoison)?
-            .params(ctx)
+        let (params, refresh_channels_when) = match ctx
+            .params(&mut (), self.channels.iter().cloned())
             .map_err(|err| ThreadedStreamSelectorError::Param { err: err })?
         {
             // Pass through retries.
             RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
             RetryResult::Success(res) => res
         };
-        let params: Vec<(Src::ChannelID, Src::Param)> = params.collect();
+        let params: Vec<(Ctx::ChannelID, Ctx::Param)> = params.collect();
 
         self.handle_refresh_params(params, refresh_channels_when)
     }
@@ -578,35 +572,30 @@ where
     fn stream(
         &self,
         ctx: &mut Ctx,
-        channel: &Src::ChannelID,
-        addr: &Src::Addr,
-        param: &Src::Param,
-        origin: &Src::OutNegoParam
+        channel: &Ctx::ChannelID,
+        addr: &Ctx::Addr,
+        param: &Ctx::Param,
+        origin: &Ctx::OutNegoParam
     ) -> Result<
         RetryResult<(
-            Option<Src::Stream>,
+            Option<Ctx::Stream>,
             bool,
             Option<Instant>
         )>,
-        ThreadedStreamError<Src::ReqStreamError>
+        Ctx::ReqStreamError
     >
     {
-        self.channels
-            .lock()
-            .map_err(|_| ThreadedStreamError::MutexPoison)?
-            .req_stream(ctx, channel, param, addr, origin)
-            .map_err(|err| ThreadedStreamError::Inner { error: err })
+        ctx.req_stream(&mut (), channel, param, addr, origin)
     }
 }
 
-impl<Epochs, Src, Ctx> StreamSelectorState<Epochs, Src, Ctx>
+impl<Epochs, Ctx> StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::Config: Default,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send
 {
     fn create(
         config: FarSchedulerConfig,
@@ -650,8 +639,8 @@ where
         &mut self,
         epoch: EpochChange<
             Epochs::Item,
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-            Src::OutNegoParam,
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::OutNegoParam,
         >
     ) {
         let (_, dense_ids, _, _) = epoch.take();
@@ -712,8 +701,8 @@ where
     fn refresh_update(
         &mut self,
         mut pairs: Vec<(
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-            Src::OutNegoParam,
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::OutNegoParam,
         )>,
         refresh_when: Option<Instant>,
         now: Instant
@@ -734,14 +723,14 @@ where
     /// Report a success for a given stream.
     fn success(
         &mut self,
-        channel: Src::ChannelID,
-        param: Src::Param,
-        party_addr: Src::Addr
+        channel: Ctx::ChannelID,
+        param: Ctx::Param,
+        party_addr: Ctx::Addr
     ) -> Result<
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -767,7 +756,7 @@ where
     ) -> Result<
         (),
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     > {
         self.sched.success_id(id)
@@ -779,14 +768,14 @@ where
     /// Report a success for a given stream.
     fn failure(
         &mut self,
-        channel: Src::ChannelID,
-        param: Src::Param,
-        party_addr: Src::Addr
+        channel: Ctx::ChannelID,
+        param: Ctx::Param,
+        party_addr: Ctx::Addr
     ) -> Result<
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -812,7 +801,7 @@ where
     ) -> Result<
         (),
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     > {
         self.sched.failure_id(id)
@@ -821,26 +810,26 @@ where
     fn handle_selected<Resolve>(
         &mut self,
         ctx: &mut Ctx,
-        connections: &[ThreadedStreamSelectorConnections<Src, Resolve, Ctx>],
+        connections: &[ThreadedStreamSelectorConnections<Resolve, Ctx>],
         stream_id: StreamID<
-            Src::Addr,
-            ConnChannelID<Src::ChannelID>,
-            Src::Param
+            Ctx::Addr,
+            ConnChannelID<Ctx::ChannelID>,
+            Ctx::Param
         >,
-        origin: Src::OutNegoParam,
+        origin: Ctx::OutNegoParam,
         dense_id: DenseItemID<Epochs::Item>
     ) -> Result<
         RetryResult<(
             DenseItemID<Epochs::Item>,
             bool,
-            Option<Src::Stream>,
+            Option<Ctx::Stream>,
         )>,
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     >
     where
-        Resolve: Addrs<Addr = Src::Addr>,
+        Resolve: Addrs<Addr = Ctx::Addr>,
         Resolve::Origin: Clone + Display + Eq + Hash
     {
         let (party_addr, ConnChannelID { conn_idx, channel }, param) =
@@ -903,21 +892,21 @@ where
     fn do_select<Resolve>(
         &mut self,
         ctx: &mut Ctx,
-        connections: &[ThreadedStreamSelectorConnections<Src, Resolve, Ctx>]
+        connections: &[ThreadedStreamSelectorConnections<Resolve, Ctx>]
     ) -> Result<
         RetryIndefResult<(
             DenseItemID<Epochs::Item>,
             bool,
-            Option<Src::Stream>,
+            Option<Ctx::Stream>,
         )>,
         StreamSelectorSelectError<
             Resolve::AddrsError,
-            Src::ParamError,
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            Ctx::ParamError,
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     >
     where
-        Resolve: Addrs<Addr = Src::Addr>,
+        Resolve: Addrs<Addr = Ctx::Addr>,
         Resolve::Origin: Clone + Display + Eq + Hash
     {
         self.sched
@@ -942,9 +931,9 @@ where
         &self,
         batch: &StreamSelectorBatch<
             Epochs::Item,
-            <Src::Stream as PushStream<Ctx>>::BatchID
+            <Ctx::Stream as PushStream<Ctx>>::BatchID
         >
-    ) -> Result<Src::Stream, SelectorStreamError<Epochs::Item>> {
+    ) -> Result<Ctx::Stream, SelectorStreamError<Epochs::Item>> {
         // Check that the epochs match.
         let curr_epoch = self.epoch();
 
@@ -967,7 +956,7 @@ where
     fn dense_id_stream(
         &self,
         id: &DenseItemID<Epochs::Item>
-    ) -> Result<Src::Stream, SelectorStreamError<Epochs::Item>> {
+    ) -> Result<Ctx::Stream, SelectorStreamError<Epochs::Item>> {
         // Check that the epochs match.
         let curr_epoch = self.epoch();
 
@@ -998,19 +987,18 @@ where
     }
 }
 
-impl<Epochs, Src, Party, Ctx>
-    StreamReporter<Party, StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-                   Src::Stream, Ctx>
-    for StreamSelectorState<Epochs, Src, Ctx>
+impl<Epochs, Party, Ctx>
+    StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+                   Ctx::Stream, Ctx>
+    for StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::Config: Default,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Ctx: StreamReporter<Party, StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-                        Src::Stream, ()>
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx: StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+                        Ctx::Stream, ()>
 {
     type ReportStreamError = StreamSelectorReportError<Ctx::ReportStreamError>;
 
@@ -1018,9 +1006,9 @@ where
         &mut self,
         ctx: &mut Ctx,
         party: &Party,
-        stream_id: StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        stream: Src::Stream
-    ) -> Result<Option<Src::Stream>, Self::ReportStreamError> {
+        stream_id: StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+        stream: Ctx::Stream
+    ) -> Result<Option<Ctx::Stream>, Self::ReportStreamError> {
         match self.stream_ids.get(&stream_id) {
             Some(idx) => match &self.streams[idx.0].stream {
                 Some(stream) => {
@@ -1067,22 +1055,21 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Party, Ctx>
-    StreamReporter<Party, StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-                   Src::Stream, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Party, Ctx>
+    StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+                   Ctx::Stream, Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
-    Ctx: StreamReporter<Party, StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-                        Src::Stream, ()>
+    Ctx: StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+                        Ctx::Stream, ()>
 {
     type ReportStreamError =
         WithMutexPoison<StreamSelectorReportError<Ctx::ReportStreamError>>;
@@ -1091,9 +1078,9 @@ where
         &mut self,
         ctx: &mut Ctx,
         party: &Party,
-        id: StreamID<Src::Addr, Src::ChannelID, Src::Param>,
-        stream: Src::Stream
-    ) -> Result<Option<Src::Stream>, Self::ReportStreamError> {
+        id: StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+        stream: Ctx::Stream
+    ) -> Result<Option<Ctx::Stream>, Self::ReportStreamError> {
         self.state
             .write()
             .map_err(|_| WithMutexPoison::MutexPoison)?
@@ -1102,16 +1089,16 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> Clone
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> Clone
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Default,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Resolve: Addrs<Addr = Src::Addr>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send
+    Ctx: Channels<()>,
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send
 {
     fn clone(&self) -> Self {
         StreamSelector {
@@ -1122,16 +1109,15 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     /// Create a new [StreamSelector] from a configuration and other
@@ -1145,7 +1131,6 @@ where
         ctx: &mut Ctx,
         config: PartyConfig<
             Resolve::Config,
-            Src::Config,
             Epochs::Config,
             String,
             EndpointConfig
@@ -1153,14 +1138,13 @@ where
     ) -> Result<
         Self,
         StreamSelectorCreateError<
-            Src::CreateError,
             Resolve::CreateError,
             Epochs::CreateError
         >
     >
     where
         EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
-                                               Src::OutNegoParam>,
+                                               Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone + Default {
         let (scheduler, resolver, epochs, retry, size_hint, connections) =
@@ -1204,14 +1188,14 @@ where
         (
             Vec<(
                 ConnectionsIdx,
-                Vec<(Src::Addr, Src::OutNegoParam)>,
-                Vec<(Src::ChannelID, Src::Param)>
+                Vec<(Ctx::Addr, Ctx::OutNegoParam)>,
+                Vec<(Ctx::ChannelID, Ctx::Param)>
             )>,
             Option<Instant>,
             Option<Instant>,
             usize
         ),
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
         let mut refreshes = Vec::with_capacity(self.connections.len());
         let mut min_retry: Option<Instant> = None;
@@ -1244,13 +1228,13 @@ where
     fn refresh_pairs(
         refreshes: Vec<(
             ConnectionsIdx,
-            Vec<(Src::Addr, Src::OutNegoParam)>,
-            Vec<(Src::ChannelID, Src::Param)>
+            Vec<(Ctx::Addr, Ctx::OutNegoParam)>,
+            Vec<(Ctx::ChannelID, Ctx::Param)>
         )>,
         size_hint: usize
     ) -> Vec<(
-        StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-        Src::OutNegoParam
+        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        Ctx::OutNegoParam
     )> {
         let mut pairs = Vec::with_capacity(size_hint);
         let mut dedup = HashSet::with_capacity(size_hint);
@@ -1316,7 +1300,7 @@ where
         now: Instant
     ) -> Result<
         RetryResult<Option<Instant>>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
         let (refreshes, min_retry, min_refresh, size_hint) =
             self.get_refreshes(ctx)?;
@@ -1374,14 +1358,14 @@ where
     #[inline]
     pub fn success(
         &mut self,
-        channel: Src::ChannelID,
-        param: Src::Param,
-        party_addr: Src::Addr
+        channel: Ctx::ChannelID,
+        param: Ctx::Param,
+        party_addr: Ctx::Addr
     ) -> Result<
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -1400,7 +1384,7 @@ where
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -1416,14 +1400,14 @@ where
     #[inline]
     pub fn failure(
         &mut self,
-        channel: Src::ChannelID,
-        param: Src::Param,
-        party_addr: Src::Addr
+        channel: Ctx::ChannelID,
+        param: Ctx::Param,
+        party_addr: Ctx::Addr
     ) -> Result<
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -1442,7 +1426,7 @@ where
         (),
         StreamSelectorReportError<
             ReportError<
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >
         >
     > {
@@ -1464,11 +1448,11 @@ where
         &mut self,
         ctx: &mut Ctx,
     ) -> Result<
-        RetryIndefResult<(Src::Stream, DenseItemID<Epochs::Item>)>,
+        RetryIndefResult<(Ctx::Stream, DenseItemID<Epochs::Item>)>,
         StreamSelectorSelectError<
             Resolve::AddrsError,
-            Src::ParamError,
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            Ctx::ParamError,
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     > {
         let res = self.state.write()
@@ -1502,9 +1486,9 @@ where
         &self,
         batch: &StreamSelectorBatch<
             Epochs::Item,
-            <Src::Stream as PushStream<Ctx>>::BatchID
+            <Ctx::Stream as PushStream<Ctx>>::BatchID
         >
-    ) -> Result<Src::Stream, SelectorStreamError<Epochs::Item>> {
+    ) -> Result<Ctx::Stream, SelectorStreamError<Epochs::Item>> {
         match self.state.read() {
             Ok(guard) => guard.batch_stream(batch),
             Err(_) => Err(SelectorStreamError::MutexPoison)
@@ -1514,7 +1498,7 @@ where
     fn dense_id_stream(
         &self,
         id: &DenseItemID<Epochs::Item>
-    ) -> Result<Src::Stream, SelectorStreamError<Epochs::Item>> {
+    ) -> Result<Ctx::Stream, SelectorStreamError<Epochs::Item>> {
         match self.state.read() {
             Ok(guard) => guard.dense_id_stream(id),
             Err(_) => Err(SelectorStreamError::MutexPoison)
@@ -1838,43 +1822,42 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStream<Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> PushStream<Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type BatchID = StreamSelectorBatch<
         Epochs::Item,
-        <Src::Stream as PushStream<Ctx>>::BatchID
+        <Ctx::Stream as PushStream<Ctx>>::BatchID
     >;
     type CancelBatchError = SelectorBatchError<
         Epochs::Item,
-        <Src::Stream as PushStream<Ctx>>::CancelBatchError
+        <Ctx::Stream as PushStream<Ctx>>::CancelBatchError
     >;
-    type CancelBatchRetry = <Src::Stream as PushStream<Ctx>>::CancelBatchRetry;
+    type CancelBatchRetry = <Ctx::Stream as PushStream<Ctx>>::CancelBatchRetry;
     type FinishBatchError = SelectorBatchError<
         Epochs::Item,
-        <Src::Stream as PushStream<Ctx>>::FinishBatchError
+        <Ctx::Stream as PushStream<Ctx>>::FinishBatchError
     >;
-    type FinishBatchRetry = <Src::Stream as PushStream<Ctx>>::FinishBatchRetry;
+    type FinishBatchRetry = <Ctx::Stream as PushStream<Ctx>>::FinishBatchRetry;
     type ReportError = SelectorReportFailureError<
         Epochs::Item,
-        StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>,
-        <Src::Stream as PushStream<Ctx>>::ReportError
+        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        <Ctx::Stream as PushStream<Ctx>>::ReportError
     >;
-    type StreamFlags = <Src::Stream as PushStream<Ctx>>::StreamFlags;
+    type StreamFlags = <Ctx::Stream as PushStream<Ctx>>::StreamFlags;
 
     #[inline]
     fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags {
-        Src::Stream::empty_flags_with_capacity(size)
+        Ctx::Stream::empty_flags_with_capacity(size)
     }
 
     fn finish_batch(
@@ -1984,22 +1967,21 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamReportError<DenseItemID<Epochs::Item>>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> PushStreamReportError<DenseItemID<Epochs::Item>>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type ReportError = StreamSelectorReportError<
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     >;
 
@@ -2015,23 +1997,22 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx, Error> PushStreamReportError<Error>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx, Error> PushStreamReportError<Error>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
 {
     type ReportError = StreamSelectorReportError<
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     >;
 
@@ -2047,28 +2028,27 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx, Error>
+impl<Epochs, Resolve, Ctx, Error>
     PushStreamReportBatchError<
         Error,
         StreamSelectorBatch<
             Epochs::Item,
-            <Src::Stream as PushStream<Ctx>>::BatchID
+            <Ctx::Stream as PushStream<Ctx>>::BatchID
         >
-    > for StreamSelector<Epochs, Src, Resolve, Ctx>
+    > for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
 {
     type ReportBatchError = StreamSelectorReportError<
         ReportError<
-            StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     >;
 
@@ -2076,7 +2056,7 @@ where
         &mut self,
         batch: &StreamSelectorBatch<
             Epochs::Item,
-            <Src::Stream as PushStream<Ctx>>::BatchID
+            <Ctx::Stream as PushStream<Ctx>>::BatchID
         >,
         _error: &Error
     ) -> Result<(), Self::ReportBatchError> {
@@ -2084,28 +2064,27 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> StreamRefresh<Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> StreamRefresh<Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + StreamRefresh<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type RefreshRetry = Instant;
-    type RefreshError = ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>;
+    type RefreshError = ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>;
 
     fn refresh(
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
         RetryResult<Option<Instant>>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Src::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
         let now = Instant::now();
 
@@ -2154,24 +2133,23 @@ where
     }
 }
 
-impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamAdd<Msg, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Msg, Epochs, Resolve, Ctx> PushStreamAdd<Msg, Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AddError = SelectorBatchError<
         Epochs::Item,
-        <Src::Stream as PushStreamAdd<Msg, Ctx>>::AddError
+        <Ctx::Stream as PushStreamAdd<Msg, Ctx>>::AddError
     >;
-    type AddRetry = <Src::Stream as PushStreamAdd<Msg, Ctx>>::AddRetry;
+    type AddRetry = <Ctx::Stream as PushStreamAdd<Msg, Ctx>>::AddRetry;
 
     fn add(
         &mut self,
@@ -2215,101 +2193,99 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamPartyID
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> PushStreamPartyID
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
-    type PartyID = <Src::Stream as PushStreamPartyID>::PartyID;
+    type PartyID = <Ctx::Stream as PushStreamPartyID>::PartyID;
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamShared<Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> PushStreamShared<Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
-    <Src::Stream as PushStreamPartyID>::PartyID: Debug,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
+    <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
         SelectorBatchError<
             Epochs::Item,
-            <Src::Stream as PushStreamShared<Ctx>>::CreateBatchError
+            <Ctx::Stream as PushStreamShared<Ctx>>::CreateBatchError
         >,
         ()
     >;
     type CreateBatchRetry =
-        <Src::Stream as PushStreamShared<Ctx>>::CreateBatchRetry;
+        <Ctx::Stream as PushStreamShared<Ctx>>::CreateBatchRetry;
     type SelectError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
-            Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
-            <Src::Stream as PushStreamShared<Ctx>>::SelectError,
+            Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
+            <Ctx::Stream as PushStreamShared<Ctx>>::SelectError,
             Epochs::Item
         >
     >;
     type SelectRetry = SelectorBatchSelectError<
         Instant,
-        Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
-        <Src::Stream as PushStreamShared<Ctx>>::SelectRetry,
+        Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
+        <Ctx::Stream as PushStreamShared<Ctx>>::SelectRetry,
         Epochs::Item
     >;
     type Selections = SelectorSelections<
         DenseItemID<Epochs::Item>,
-        <Src::Stream as PushStreamShared<Ctx>>::Selections
+        <Ctx::Stream as PushStreamShared<Ctx>>::Selections
     >;
     type StartBatchError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
-            Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
-            <Src::Stream as PushStreamShared<Ctx>>::StartBatchError,
+            Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
+            <Ctx::Stream as PushStreamShared<Ctx>>::StartBatchError,
             Epochs::Item
         >
     >;
     type StartBatchRetry = SelectorBatchSelectError<
         Instant,
-        Vec<<Src::Stream as PushStreamPartyID>::PartyID>,
-        <Src::Stream as PushStreamShared<Ctx>>::StartBatchRetry,
+        Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
+        <Ctx::Stream as PushStreamShared<Ctx>>::StartBatchRetry,
         Epochs::Item
     >;
     type StartBatchStreamBatches =
-        <Src::Stream as PushStreamShared<Ctx>>::StartBatchStreamBatches;
+        <Ctx::Stream as PushStreamShared<Ctx>>::StartBatchStreamBatches;
     type BatchPartiesIter =
-        <Src::Stream as PushStreamShared<Ctx>>::BatchPartiesIter;
+        <Ctx::Stream as PushStreamShared<Ctx>>::BatchPartiesIter;
     type BatchPartiesError = SelectorBatchError<
         Epochs::Item,
-        <Src::Stream as PushStreamShared<Ctx>>::BatchPartiesError
+        <Ctx::Stream as PushStreamShared<Ctx>>::BatchPartiesError
     >;
 
     #[inline]
     fn empty_selections_with_capacity(size: usize) -> Self::Selections {
         SelectorSelections {
-            inner: Src::Stream::empty_selections_with_capacity(size),
+            inner: Ctx::Stream::empty_selections_with_capacity(size),
             id: None
         }
     }
@@ -2318,7 +2294,7 @@ where
     fn empty_batches_with_capacity(
         size: usize
     ) -> Self::StartBatchStreamBatches {
-        Src::Stream::empty_batches_with_capacity(size)
+        Ctx::Stream::empty_batches_with_capacity(size)
     }
 
     fn batch_parties(
@@ -2722,78 +2698,77 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> PushStreamPrivate<Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> PushStreamPrivate<Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
         SelectorBatchError<
             Epochs::Item,
-            <Src::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
         >,
         ()
     >;
     type CreateBatchRetry =
-        <Src::Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry;
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry;
     type SelectError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as PushStreamPrivate<Ctx>>::SelectError,
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError,
             Epochs::Item
         >
     >;
     type SelectRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
         Epochs::Item
     >;
     type Selections = SelectorSelections<
         DenseItemID<Epochs::Item>,
-        <Src::Stream as PushStreamPrivate<Ctx>>::Selections
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::Selections
     >;
     type StartBatchError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
             Epochs::Item
         >
     >;
     type StartBatchRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchRetry,
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchRetry,
         Epochs::Item
     >;
     type StartBatchStreamBatches =
-        <Src::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches;
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches;
 
     #[inline]
     fn empty_selections_with_capacity(size: usize) -> Self::Selections {
         SelectorSelections {
-            inner: Src::Stream::empty_selections_with_capacity(size),
+            inner: Ctx::Stream::empty_selections_with_capacity(size),
             id: None
         }
     }
@@ -2802,7 +2777,7 @@ where
     fn empty_batches_with_capacity(
         size: usize
     ) -> Self::StartBatchStreamBatches {
-        Src::Stream::empty_batches_with_capacity(size)
+        Ctx::Stream::empty_batches_with_capacity(size)
     }
 
     fn select(
@@ -3176,40 +3151,39 @@ where
     }
 }
 
-impl<Epochs, Src, Resolve, Ctx> LargeObjStream<Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> LargeObjStream<Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
-    type Frags = <Src::Stream as LargeObjStream<Ctx>>::Frags;
+    type Frags = <Ctx::Stream as LargeObjStream<Ctx>>::Frags;
     type PushFragError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as LargeObjStream<Ctx>>::PushFragError,
+            <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
             Epochs::Item
         >
     >;
     type PushFragRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as LargeObjStream<Ctx>>::PushFragRetry,
+        <Ctx::Stream as LargeObjStream<Ctx>>::PushFragRetry,
         Epochs::Item
     >;
-    type Parties = <Src::Stream as LargeObjStream<Ctx>>::Parties;
+    type Parties = <Ctx::Stream as LargeObjStream<Ctx>>::Parties;
 
     fn push_frags(
         &mut self,
@@ -3328,19 +3302,18 @@ where
     }
 }
 
-impl<H, Epochs, Src, Resolve, Ctx> LargeObjOfferStream<H, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<H, Epochs, Resolve, Ctx> LargeObjOfferStream<H, Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     H: HashID,
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + LargeObjOfferStream<H, Ctx>
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjOfferStream<H, Ctx>
         + PushStream<Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type PushOfferError = SelectorBatchError<
@@ -3348,18 +3321,18 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError,
+            <Ctx::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError,
             Epochs::Item
         >
     >;
     type PushOfferRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferRetry,
+        <Ctx::Stream as LargeObjOfferStream<H, Ctx>>::PushOfferRetry,
         Epochs::Item
     >;
 
@@ -3480,17 +3453,16 @@ where
     }
 }
 
-impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Msg, Epochs, Resolve, Ctx> PushStreamPrivateSingle<Msg, Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type CancelPushError = SelectorBatchError<
@@ -3498,18 +3470,18 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushError,
+            <Ctx::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushError,
             Epochs::Item
         >
     >;
     type CancelPushRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushRetry,
+        <Ctx::Stream as PushStreamPrivateSingle<Msg, Ctx>>::CancelPushRetry,
         Epochs::Item
     >;
     type PushError = SelectorBatchError<
@@ -3517,18 +3489,18 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectError<
                 Resolve::AddrsError,
-                Src::ParamError,
-                StreamID<Src::Addr, ConnChannelID<Src::ChannelID>, Src::Param>
+                Ctx::ParamError,
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
-            <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushError,
+            <Ctx::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushError,
             Epochs::Item
         >
     >;
     type PushRetry = SelectorBatchSelectError<
         Instant,
         (),
-        <Src::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushRetry,
+        <Ctx::Stream as PushStreamPrivateSingle<Msg, Ctx>>::PushRetry,
         Epochs::Item
     >;
 
@@ -3782,19 +3754,18 @@ where
     }
 }
 
-impl<Msg, Epochs, Src, Resolve, Ctx> PushStreamSharedSingle<Msg, Ctx>
-    for StreamSelector<Epochs, Src, Resolve, Ctx>
+impl<Msg, Epochs, Resolve, Ctx> PushStreamSharedSingle<Msg, Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Src: ChannelsCreate<Ctx, Vec<String>>,
-    Src::OutNegoParam: Clone + Eq + Hash,
-    Src::Stream:
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream:
         Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send,
-    <Src::Stream as PushStreamPartyID>::PartyID: Debug,
-    Src::Config: Default,
-    Resolve: Addrs<Addr = Src::Addr>,
+    <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
+    Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type CancelPushError = SelectorBatchError<
@@ -3804,23 +3775,23 @@ where
                 Vec<Self::PartyID>,
                 StreamSelectorSelectError<
                     Resolve::AddrsError,
-                    Src::ParamError,
+                    Ctx::ParamError,
                     StreamID<
-                        Src::Addr,
-                        ConnChannelID<Src::ChannelID>,
-                        Src::Param
+                        Ctx::Addr,
+                        ConnChannelID<Ctx::ChannelID>,
+                        Ctx::Param
                     >
                 >
             >,
             (),
-            <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushError,
+            <Ctx::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushError,
             Epochs::Item
         >
     >;
     type CancelPushRetry = SelectorBatchSelectError<
         SelectorStartRetry<Self::PartyID>,
         (),
-        <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushRetry,
+        <Ctx::Stream as PushStreamSharedSingle<Msg, Ctx>>::CancelPushRetry,
         Epochs::Item
     >;
     type PushError = SelectorBatchError<
@@ -3830,23 +3801,23 @@ where
                 Vec<Self::PartyID>,
                 StreamSelectorSelectError<
                     Resolve::AddrsError,
-                    Src::ParamError,
+                    Ctx::ParamError,
                     StreamID<
-                        Src::Addr,
-                        ConnChannelID<Src::ChannelID>,
-                        Src::Param
+                        Ctx::Addr,
+                        ConnChannelID<Ctx::ChannelID>,
+                        Ctx::Param
                     >
                 >
             >,
             (),
-            <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushError,
+            <Ctx::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushError,
             Epochs::Item
         >
     >;
     type PushRetry = SelectorBatchSelectError<
         SelectorStartRetry<Self::PartyID>,
         (),
-        <Src::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushRetry,
+        <Ctx::Stream as PushStreamSharedSingle<Msg, Ctx>>::PushRetry,
         Epochs::Item
     >;
 
@@ -4141,9 +4112,8 @@ where
     }
 }
 
-impl<Src, Addrs> Display for StreamSelectorConnectionCreateError<Src, Addrs>
+impl<Addrs> Display for StreamSelectorConnectionCreateError<Addrs>
 where
-    Src: Display,
     Addrs: Display
 {
     fn fmt(
@@ -4151,16 +4121,16 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            StreamSelectorConnectionCreateError::Channels { err } => err.fmt(f),
-            StreamSelectorConnectionCreateError::Addrs { err } => err.fmt(f)
+            StreamSelectorConnectionCreateError::Addrs { err } => err.fmt(f),
+            StreamSelectorConnectionCreateError::BadName { name } =>
+                write!(f, "no such channel {}", name)
         }
     }
 }
 
-impl<Src, Addrs, Epochs> Display
-    for StreamSelectorCreateError<Src, Addrs, Epochs>
+impl<Addrs, Epochs> Display
+    for StreamSelectorCreateError<Addrs, Epochs>
 where
-    Src: Display,
     Addrs: Display,
     Epochs: Display
 {

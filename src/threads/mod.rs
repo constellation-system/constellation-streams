@@ -20,6 +20,7 @@
 
 use std::collections::HashSet;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -68,8 +69,8 @@ pub mod poll;
 //pub mod shared;
 
 pub trait PushMode<Stream, Msgs, Ctx> {
-    type SendError: Display + ScopedError;
-    type RetryError: Display + ScopedError;
+    type SendError: Debug + Display + ScopedError;
+    type RetryError: Debug + Display + ScopedError;
 
     fn send_from_outbound(
         &mut self,
@@ -87,6 +88,15 @@ pub trait PushMode<Stream, Msgs, Ctx> {
         live: &HashSet<Token>,
         now: Instant,
     ) -> Result<Option<Instant>, Self::RetryError>;
+}
+
+pub trait PullMode {
+    type RefreshError: Debug + Display + ScopedError;
+
+    fn refresh(
+        &mut self,
+        now: Instant
+    ) -> Result<Option<Instant>, Self::RefreshError>;
 }
 
 pub trait RegistryCtx {
