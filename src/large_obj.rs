@@ -303,35 +303,6 @@ where
     hash: Types::Hash
 }
 
-impl<InMsg, OutMsg, PartyID, F, Types> Clone
-    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
-where
-    Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    PartyID: Clone,
-    F: Frags
-{
-    fn clone(&self) -> Self {
-        LargeObjProto {
-            out_msg: PhantomData,
-            in_msg: PhantomData,
-            tombstone_duration: self.tombstone_duration,
-            inbound: self.inbound.clone(),
-            outbound: self.outbound.clone(),
-            upstream: self.upstream.clone(),
-            parties: self.parties.clone(),
-            encoder: self.encoder.clone(),
-            decoder: self.decoder.clone(),
-            notify: self.notify.clone(),
-            param: self.param.clone(),
-            retry: self.retry.clone(),
-            auth: self.auth.clone(),
-            hash: self.hash.clone(),
-            msgs: self.msgs.clone(),
-            ids: self.ids.clone()
-        }
-    }
-}
-
 pub enum LargeObjPushRetry<H, Frags, Offer> {
     Frags { retry: Frags, id: LargeObjID },
     Offer { retry: Offer, hash: H },
@@ -441,9 +412,39 @@ pub enum LargeObjDataError {
     OutOfBounds
 }
 
-enum PushErr<H, Frags, Offer> {
-    Frags { err: Frags, id: LargeObjID },
-    Offer { err: Offer, hash: H }
+pub enum FragsOrOffer<Frags, Offer> {
+    Frags { err: Frags },
+    Offer { err: Offer }
+}
+
+
+impl<InMsg, OutMsg, PartyID, F, Types> Clone
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
+where
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
+    PartyID: Clone,
+    F: Frags
+{
+    fn clone(&self) -> Self {
+        LargeObjProto {
+            out_msg: PhantomData,
+            in_msg: PhantomData,
+            tombstone_duration: self.tombstone_duration,
+            inbound: self.inbound.clone(),
+            outbound: self.outbound.clone(),
+            upstream: self.upstream.clone(),
+            parties: self.parties.clone(),
+            encoder: self.encoder.clone(),
+            decoder: self.decoder.clone(),
+            notify: self.notify.clone(),
+            param: self.param.clone(),
+            retry: self.retry.clone(),
+            auth: self.auth.clone(),
+            hash: self.hash.clone(),
+            msgs: self.msgs.clone(),
+            ids: self.ids.clone()
+        }
+    }
 }
 
 impl From<usize> for LargeObjID {
@@ -1691,13 +1692,13 @@ where
                         when: when
                     }))
                 }
-                None => Ok(RetryIndefResult::Indef)
+                None => Ok(RetryIndefResult::Indef(()))
             }
         } else {
             trace!(target: "large-obj-proto",
                    "no active entries");
 
-            Ok(RetryIndefResult::Indef)
+            Ok(RetryIndefResult::Indef(()))
         }
     }
 
@@ -2509,6 +2510,40 @@ impl RecoverableError for LargeObjMsgEncodeError {
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         (None, Some(self))
+    }
+}
+
+impl<H, Frags, Offer> RecoverableError for LargeObjPushError<H, Frags, Offer>
+where Frags: RecoverableError,
+      Offer: RecoverableError,
+      H: Clone + Debug + Display + Eq + Hash + HashID {
+    type Completable = FragsOrOffer<Frags::Completable, Offer::Completable>;
+    type Permanent = LargeObjPushError<H, Frags::Permanent, Offer::Permanent>;
+
+    #[inline]
+    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
+        match self {
+            LargeObjPushError::Frags { err } => {
+                let (completable, permanent) = err.split();
+
+                (completable.map(|err| FragsOrOffer::Frags { err: err }),
+                 permanent.map(|err| LargeObjPushError::Frags { err: err }))
+            }
+            LargeObjPushError::Offer { err } => {
+                let (completable, permanent) = err.split();
+
+                (completable.map(|err| FragsOrOffer::Offer { err: err }),
+                 permanent.map(|err| LargeObjPushError::Offer { err: err }))
+            }
+            LargeObjPushError::NoObjID { hash, id } =>
+                (None, Some(LargeObjPushError::NoObjID { hash: hash, id: id })),
+            LargeObjPushError::NoID { id } =>
+                (None, Some(LargeObjPushError::NoID { id: id })),
+            LargeObjPushError::NoObj { hash } =>
+                (None, Some(LargeObjPushError::NoObj { hash: hash })),
+            LargeObjPushError::MutexPoison =>
+                (None, Some(LargeObjPushError::MutexPoison))
+        }
     }
 }
 

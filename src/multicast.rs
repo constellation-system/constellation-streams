@@ -1223,7 +1223,7 @@ where
 
                             results.push(RetryResult::Retry(when));
                         }
-                        RetryIndefResult::Indef => {
+                        RetryIndefResult::Indef(()) => {
                             all_indef = false;
                         }
                     }
@@ -1232,7 +1232,7 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success((when, ids)))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef)
+                    Ok(RetryIndefResult::Indef(()))
                 } else {
                     Ok(RetryIndefResult::Retry(results))
                 }
@@ -1292,7 +1292,7 @@ where
                             all_success = false;
                             results.push(RetryResult::Retry(when));
                         }
-                        RetryIndefResult::Indef => {
+                        RetryIndefResult::Indef(()) => {
                             all_indef = false;
                         }
                     }
@@ -1301,7 +1301,7 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success(ids))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef)
+                    Ok(RetryIndefResult::Indef(()))
                 } else {
                     Ok(RetryIndefResult::Retry(results))
                 }
@@ -2750,7 +2750,7 @@ where
                     select: retry
                 }
             )),
-            RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+            RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
         }
     }
 
@@ -2798,7 +2798,7 @@ where
                         select: retry
                     }
                 )),
-                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
             }
             StreamMulticasterStartError::Create {
                 selections,
@@ -2868,7 +2868,7 @@ where
                         select: retry
                     }
                 )),
-                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
             }
             StreamMulticasterStartError::Create {
                 selections,

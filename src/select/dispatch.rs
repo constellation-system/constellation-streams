@@ -1070,7 +1070,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
                 }
             }
             // We got a retry for selecting the stream.
@@ -1080,7 +1080,7 @@ where
                     select: retry
                 }))
             }
-            Ok(RetryIndefResult::Indef) => Ok(RetryIndefResult::Indef),
+            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -1286,7 +1286,7 @@ where
                     select: retry
                 }))
             }
-            Ok(RetryIndefResult::Indef) => Ok(RetryIndefResult::Indef),
+            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -1338,7 +1338,7 @@ where
                             stream: retry
                         }
                     )),
-                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
             }
         }
     }
@@ -1386,7 +1386,7 @@ where
                             stream: retry
                         }
                     )),
-                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
             }
         }
     }
@@ -1757,7 +1757,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
                 }
         }
     }
@@ -1805,7 +1805,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
                 }
         }
     }
@@ -2244,7 +2244,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
                 }
         }
     }
@@ -2286,7 +2286,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef)
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
                 }
         }
     }
@@ -2495,7 +2495,7 @@ where
                     parties: ()
                 }))
             }
-            Ok(RetryIndefResult::Indef) => Ok(RetryIndefResult::Indef),
+            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     select: PartiesBatchError::new(
@@ -2551,7 +2551,7 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
                 }
         }
     }
@@ -2600,7 +2600,7 @@ where
                             stream: retry
                         }
                     )),
-                RetryIndefResult::Indef => Ok(RetryIndefResult::Indef),
+                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
             }
         }
     }

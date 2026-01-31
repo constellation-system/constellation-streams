@@ -32,11 +32,13 @@ use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::SharedMsgs;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use log::debug;
 use log::error;
 use log::trace;
+use mio::Token;
 
 use crate::config::SharedDatagramModeConfig;
 use crate::config::SharedLargeObjModeConfig;
@@ -61,6 +63,7 @@ use crate::threads::LargeObjEntry;
 use crate::threads::PushMode;
 
 pub trait SharedLargeObjPushModeTypes<Ctx> {
+    type Parties;
     type Frags: Frags;
     type BatchID: Clone;
     type PartyID: Clone + Display + From<usize> + Eq + Hash + Ord;
@@ -87,6 +90,7 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
         + LargeObjStream<
             Ctx,
             Frags = Self::Frags,
+            Parties = Self::Parties,
             PushFragError = Self::PushFragError
         > + LargeObjOfferStream<
             Self::HashID,
@@ -583,19 +587,20 @@ where
         stream: &mut Stream,
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
-    ) -> RetryResult<(), Self> {
+    ) -> RetryIndefResult<(), Self> {
         match stream.start_batch(ctx, parties.iter()) {
             // It succeeded.
-            Ok(RetryResult::Success(batch_id)) => {
+            Ok(RetryIndefResult::Success(batch_id)) => {
                 Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
-            Ok(RetryResult::Retry(retry)) => {
-                RetryResult::Retry(PushEntry::Batch {
+            Ok(RetryIndefResult::Retry(retry)) => {
+                RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
                 })
             }
+            Ok(RetryIndefResult::Indef) => RetryIndefResult::Indef,
             Err(err) => Self::complete_start_batch(ctx, stream, msgs, err)
         }
     }
@@ -701,7 +706,7 @@ where
         stream: &mut Stream,
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
-    ) -> RetryResult<(), Self> {
+    ) -> RetryIndefResult<(), Self> {
         Self::try_start_batch(ctx, stream, parties, msgs)
     }
 }
@@ -934,8 +939,9 @@ where
             Types::Frags,
             LargeObjTypes
         >,
-        stream: &mut Types::Stream
-    ) -> Result<Option<Instant>, Self::SendError> {
+        stream: &mut Types::Stream,
+        live: &HashSet<Token>
+    ) -> Result<(Option<Instant>, Option<Types::Parties>), Self::SendError> {
         debug!(target: "shared-small-obj-push-mode",
                "fetching new outbound messages");
 
@@ -958,22 +964,23 @@ where
         debug!(target: "shared-large-obj-push-mode",
                "sending data fragments");
 
-        let frags_next = match LargeObjEntry::from_try_send(ctx, stream, proto)
+        let (frags_next, parties) = match LargeObjEntry::from_try_send(ctx, stream, proto)
             .map_err(|err| SharedLargeObjPushModeSendError::Frags {
                 err: err
             })? {
-            RetryResult::Success(next) => next,
-            RetryResult::Retry(retry) => {
+            RetryIndefResult::Success(next) => next,
+            RetryIndefResult::Retry(retry) => {
                 self.pending_frags.push(retry);
 
-                None
+                (None, None)
             }
+            RetryIndefResult::Indef => (None, None)
         };
         let next = msgs_next.map_or(frags_next, |msgs| {
             Some(frags_next.map_or(msgs, |frags| msgs.min(frags)))
         });
 
-        Ok(next)
+        Ok((next, parties))
     }
 
     fn retry_pending(
@@ -987,6 +994,7 @@ where
             LargeObjTypes
         >,
         stream: &mut Types::Stream,
+        live: &HashSet<Token>,
         now: Instant
     ) -> Result<Option<Instant>, Self::RetryError> {
         debug!(target: "shared-large-obj-push-mode",

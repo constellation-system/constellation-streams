@@ -19,35 +19,15 @@
 //! Manager threads for various kinds of push and pull streams.
 
 use std::collections::HashSet;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt::Display;
-use std::fmt::Error;
-use std::fmt::Formatter;
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread::JoinHandle;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNMsgRecv;
-use constellation_auth::authn::AuthNResult;
-use constellation_auth::authn::AuthNed;
-use constellation_auth::authn::MsgAuthN;
-use constellation_auth::cred::Credentials;
-use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
-use constellation_common::retry::RetryResult;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryWhen;
-use constellation_common::shutdown::ShutdownFlag;
-use log::debug;
-use log::error;
-use log::info;
-use log::trace;
-use log::warn;
 use mio::Registry;
 use mio::Token;
 
@@ -56,21 +36,18 @@ use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjPushRetry;
-use crate::stream::ConcurrentStream;
-use crate::stream::PullStream;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamReportError;
-use crate::stream::ThreadedStream;
-
 
 //pub mod dispatch;
 pub mod poll;
-//pub mod private;
-//pub mod shared;
+pub mod private;
+pub mod shared;
 
 pub trait PushMode<Stream, Msgs, Ctx> {
     type SendError: Debug + Display + ScopedError;
     type RetryError: Debug + Display + ScopedError;
+    type RetryIndefError: Debug + Display + ScopedError;
 
     fn send_from_outbound(
         &mut self,
@@ -88,15 +65,12 @@ pub trait PushMode<Stream, Msgs, Ctx> {
         live: &HashSet<Token>,
         now: Instant,
     ) -> Result<Option<Instant>, Self::RetryError>;
-}
 
-pub trait PullMode {
-    type RefreshError: Debug + Display + ScopedError;
-
-    fn refresh(
+    fn retry_indefs(
         &mut self,
-        now: Instant
-    ) -> Result<Option<Instant>, Self::RefreshError>;
+        ctx: &mut Ctx,
+        stream: &mut Stream
+    ) -> Result<Option<Instant>, Self::RetryIndefError>;
 }
 
 pub trait RegistryCtx {
@@ -115,36 +89,6 @@ where
         hash: H::HashID,
         retry: Stream::PushOfferRetry
     }
-}
-
-pub(crate) struct RecvThreadEntry<Msg, Stream>
-where
-    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send {
-    msg: PhantomData<Msg>,
-    join: JoinHandle<()>,
-    stream: ThreadedStream<Stream>
-}
-
-pub(crate) struct RecvThread<Msg, Wrapper, Addr, Stream, AuthN, Recv>
-where
-    Stream: ConcurrentStream + Credentials + PullStream<Wrapper> + Send,
-    Addr: Display + Eq + Hash,
-    AuthN: Clone + MsgAuthN<Msg, Wrapper>,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg> {
-    msg: PhantomData<Msg>,
-    authn: AuthN,
-    shutdown: ShutdownFlag,
-    stream: ThreadedStream<Stream>,
-    recv: Recv,
-    addr: Addr,
-    session_prin: AuthN::SessionPrin,
-    recvs: Arc<Mutex<HashMap<Addr, RecvThreadEntry<Wrapper, Stream>>>>
-}
-
-#[derive(Debug)]
-enum RecvSendError<AuthN> {
-    AuthN { err: AuthN },
-    Shutdown
 }
 
 impl<Stream, H, Ctx> RetryWhen for LargeObjEntry<Stream, H, Ctx>
@@ -177,11 +121,11 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryResult<Option<Instant>, Self>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties), Self>,
         LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
@@ -212,62 +156,35 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryResult<Option<Instant>, Self>,
+        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>), Self>,
         LargeObjPushError<
             H::HashID,
-            <Stream::PushFragError as RecoverableError>::Permanent,
-            <Stream::PushOfferError as RecoverableError>::Permanent
+            Stream::PushFragError,
+            Stream::PushOfferError
         >
     >
     where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         Ok(proto
-            .try_push(ctx, stream)?
-            .flat_map_retry(|retry| match retry {
-                LargeObjPushRetry::Frags { retry, id } => {
-                    RetryResult::Retry(LargeObjEntry::PushFrags {
-                        retry: retry,
-                        id: id
-                    })
-                }
-                LargeObjPushRetry::Offer { retry, hash } => {
-                    RetryResult::Retry(LargeObjEntry::PushOffer {
-                        retry: retry,
-                        hash: hash
-                    })
-                }
-                LargeObjPushRetry::Retry { when } => {
-                    RetryResult::Success(Some(when))
-                }
-            }))
-    }
-}
-
-impl<AuthN> ScopedError for RecvSendError<AuthN>
-where
-    AuthN: ScopedError
-{
-    #[inline]
-    fn scope(&self) -> ErrorScope {
-        match self {
-            RecvSendError::AuthN { err } => err.scope(),
-            RecvSendError::Shutdown => ErrorScope::Shutdown
-        }
-    }
-}
-
-impl<AuthN> Display for RecvSendError<AuthN>
-where
-    AuthN: Display
-{
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        match self {
-            RecvSendError::AuthN { err } => err.fmt(f),
-            RecvSendError::Shutdown => write!(f, "upstream channel shut down")
-        }
+           .try_push(ctx, stream)?
+           .map(|(when, parties)| (when, Some(parties)))
+           .flat_map_retry(|retry| match retry {
+               LargeObjPushRetry::Frags { retry, id } => {
+                   RetryIndefResult::Retry(LargeObjEntry::PushFrags {
+                       retry: retry,
+                       id: id
+                   })
+               }
+               LargeObjPushRetry::Offer { retry, hash } => {
+                   RetryIndefResult::Retry(LargeObjEntry::PushOffer {
+                       retry: retry,
+                       hash: hash
+                   })
+               }
+               LargeObjPushRetry::Retry { when } => {
+                   RetryIndefResult::Success((Some(when), None))
+               }
+           }))
     }
 }

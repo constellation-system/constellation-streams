@@ -434,24 +434,6 @@ where
         }
     }
 
-    fn recv_stream(
-        &mut self,
-        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-        stream: Types::AuthNChan
-    ) {
-        debug!(target: "poll-thread",
-               "receiving stream from {}",
-               id);
-
-        if self.ctx.pull_streams.insert(id.clone(), stream.clone()).is_some() {
-            error!(target: "poll-thread",
-                   "stream was already present for {}",
-                   id);
-        }
-
-        // Report up to the stream.
-    }
-
     fn pull_msgs(
         &mut self,
         id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>
@@ -511,6 +493,24 @@ where
         }
 
         Ok(())
+    }
+
+    fn recv_stream(
+        &mut self,
+        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        stream: Types::AuthNChan
+    ) {
+        debug!(target: "poll-thread",
+               "receiving stream from {}",
+               id);
+
+        if self.ctx.pull_streams.insert(id.clone(), stream.clone()).is_some() {
+            error!(target: "poll-thread",
+                   "stream was already present for {}",
+                   id);
+        }
+
+        // Report up to the stream.
     }
 
     fn complete_refresh_stream(
@@ -597,13 +597,13 @@ where
         // Loop until told to shut down.
         while {
             let next = next_pending.map_or(next_outbound, |next| {
-                next_outbound.map(|when: Instant| when.max(next))
+                Some(next_outbound.map_or(next, |when: Instant| when.min(next)))
             });
             let next = next.map_or(next_listen, |next| {
-                next_listen.map(|when: Instant| when.max(next))
+                Some(next_listen.map_or(next, |when: Instant| when.min(next)))
             });
             let next = next.map_or(next_refresh, |next| {
-                next_refresh.map(|when: Instant| when.max(next))
+                Some(next_refresh.map_or(next, |when: Instant| when.min(next)))
             });
 
             now = Instant::now();
@@ -613,6 +613,15 @@ where
                 next.is_some_and(|next: Instant| next < now) ||
                 {
                     let duration = next.map(|next| next - now);
+
+                    if let Some(duration) = &duration {
+                        trace!(target: "poll-thread",
+                               "waiting for poll for {}.{:03}",
+                               duration.as_secs(), duration.subsec_millis());
+                    } else {
+                        trace!(target: "poll-thread",
+                               "waiting for poll indefinitely");
+                    }
 
                     self.ctx
                         .poll
@@ -633,6 +642,9 @@ where
 
             // First push all pending messages.
             if next_pending.map_or(false, |when| when <= now) {
+                trace!(target: "poll-thread",
+                       "retrying pending messages");
+
                 match self.mode.retry_pending(
                     &mut self.ctx,
                     &mut self.msgs,
@@ -654,6 +666,9 @@ where
             // Do pulls before pushing new messages.
             let need_refresh = if next_listen
                 .map_or(false, |when| when <= now) {
+                trace!(target: "poll-thread",
+                       "listening");
+
                 match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
                     Ok(RetryResult::Success((streams, endpoints,
                                              refresh, when))) => {
@@ -701,9 +716,22 @@ where
             // Refresh the stream if needed.
             if let Some(retry) = retry_refresh.take() {
                 if retry.when() < now {
+                    trace!(target: "poll-thread",
+                           "retrying stream refresh");
+
                     match self.retry_refresh_stream(retry) {
                         RetryResult::Success(when) => {
-                            next_refresh = when
+                            next_refresh = when;
+
+                            if let Err(err) = self.mode.retry_indefs(
+                                &mut self.ctx,
+                                &mut self.msgs,
+                                &mut self.stream,
+                            ) {
+                                error!(target: "poll-thread",
+                                       "error retrying indefinite delays: {}",
+                                       err)
+                            }
                         }
                         RetryResult::Retry(retry) => {
                             retry_refresh = Some(retry)
@@ -712,11 +740,24 @@ where
                 } else {
                     retry_refresh = Some(retry)
                 }
-            } else if need_refresh || next_refresh
-                .map_or(false, |when| when <= now)  {
+            } else if next_refresh.map_or(false, |when| when <= now) ||
+                need_refresh {
+                trace!(target: "poll-thread",
+                       "refreshing stream");
+
                 match self.refresh_stream() {
                     RetryResult::Success(when) => {
-                        next_refresh = when
+                        next_refresh = when;
+
+                        if let Err(err) = self.mode.retry_indefs(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream,
+                        ) {
+                            error!(target: "poll-thread",
+                                   "error retrying indefinite delays: {}",
+                                   err)
+                        }
                     }
                     RetryResult::Retry(retry) => {
                         retry_refresh = Some(retry)
@@ -726,6 +767,9 @@ where
 
             // Push new messages.
             if next_outbound.map_or(false, |when| when <= now) {
+                trace!(target: "poll-thread",
+                       "pushing messages");
+
                 match self.mode.send_from_outbound(
                     &mut self.ctx,
                     &mut self.msgs,
