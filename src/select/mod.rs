@@ -2312,7 +2312,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2358,7 +2360,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
@@ -2395,7 +2399,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         match err {
             // This is here as a placeholder; this type is
@@ -2525,7 +2531,9 @@ where
         ctx: &mut Ctx,
         parties: I
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     >
     where
@@ -2572,7 +2580,9 @@ where
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     > {
         match retry {
@@ -2613,7 +2623,8 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
+                    RetryIndefResult::Indef(parties) =>
+                        Ok(RetryIndefResult::Indef(parties))
                 }
             }
         }
@@ -2624,7 +2635,9 @@ where
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     > {
         match err {
@@ -2665,7 +2678,8 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(()))
+                    RetryIndefResult::Indef(parties) =>
+                        Ok(RetryIndefResult::Indef(parties))
                 }
             }
         }

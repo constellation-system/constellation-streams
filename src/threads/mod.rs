@@ -44,10 +44,17 @@ pub mod poll;
 pub mod private;
 pub mod shared;
 
-pub trait PushMode<Stream, Msgs, Ctx> {
+pub trait PushMode<Stream, Msgs, Ctx>: Sized {
+    type Config;
+    type CreateError: Debug + Display + ScopedError;
     type SendError: Debug + Display + ScopedError;
     type RetryError: Debug + Display + ScopedError;
     type RetryIndefError: Debug + Display + ScopedError;
+
+    fn create(
+        stream: &Stream,
+        config: Self::Config,
+    ) -> Result<Self, Self::CreateError>;
 
     fn send_from_outbound(
         &mut self,

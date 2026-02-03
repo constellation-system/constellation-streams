@@ -22,6 +22,7 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::iter::IntoIterator;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::sync::Condvar;
@@ -558,6 +559,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Iterator for parties.
     type BatchPartiesIter: Iterator<Item = Self::PartyID>;
     type BatchPartiesError: Debug + Display + ScopedError;
+    type IndefParties: IntoIterator<Item = Self::PartyID>;
 
     /// Create an empty
     /// [Selections](PushStreamShared::Selections).
@@ -597,7 +599,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -614,7 +618,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>;
 
     /// Retry a previously-failed call to
@@ -627,7 +633,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>;
 
     /// Create a new batch.
@@ -695,7 +703,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         parties: I
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     >
     where
@@ -713,7 +723,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     >;
 
@@ -728,7 +740,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     >;
 
@@ -2033,6 +2047,7 @@ where
     type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
     type BatchPartiesIter = Inner::BatchPartiesIter;
     type BatchPartiesError = ThreadedStreamError<Inner::BatchPartiesError>;
+    type IndefParties = Inner::IndefParties;
 
     #[inline]
     fn empty_selections_with_capacity(size: usize) -> Self::Selections {
@@ -2066,7 +2081,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2086,7 +2103,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         let mut guard = self
             .inner
@@ -2103,7 +2122,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         let mut guard = self
             .inner
@@ -2178,10 +2199,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::StartBatchRetry,
+                                 Self::IndefParties>,
+                Self::StartBatchError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -2199,10 +2220,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::StartBatchRetry,
+                                 Self::IndefParties>,
+                Self::StartBatchError> {
         let mut guard = self
             .inner
             .lock()
@@ -2217,10 +2238,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::StartBatchRetry,
+                                 Self::IndefParties>,
+                Self::StartBatchError> {
         let mut guard = self
             .inner
             .lock()

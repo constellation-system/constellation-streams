@@ -33,6 +33,8 @@ use std::marker::PhantomData;
 use std::time::Instant;
 use std::vec::IntoIter;
 
+use bitvec::bitvec;
+use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -1153,7 +1155,7 @@ where
 
                             results.push(RetryResult::Retry(when));
                         }
-                        RetryIndefResult::Indef => {
+                        RetryIndefResult::Indef(()) => {
                             all_indef = false;
                         }
                     }

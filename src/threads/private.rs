@@ -145,6 +145,13 @@ where
     }
 }
 
+struct IndefEntry<Msg> {
+    /// When the messages were originally sent; used for timeouts.
+    origin: Instant,
+    /// The messages to send.
+    msgs: Vec<Msg>
+}
+
 pub struct PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: PushStreamReportBatchError<
@@ -172,7 +179,7 @@ where
         <Stream::FinishBatchError as RecoverableError>::Completable
     >>,
     /// Pending operations that produced indefinite waits.
-    indefs: Option<Vec<(Instant, Vec<Msg>)>>
+    indefs: Option<Vec<IndefEntry<Msg>>>
 }
 
 pub struct PrivateLargeObjPushMode<Types, Ctx>
@@ -193,7 +200,7 @@ pub enum PrivateLargeObjPushModeSendError<Frags, Msgs> {
     Msgs { err: Msgs }
 }
 
-pub enum PushEntryRecoverableError<Msgs, ID, Flags, Msg, Batch, Add, Finish> {
+enum PushEntryRecoverableError<Msgs, ID, Flags, Msg, Batch, Add, Finish> {
     Batch {
         /// Messages to be sent.
         msgs: Msgs,
@@ -823,47 +830,6 @@ where
     }
 }
 
-impl<Msg, Stream, Ctx> Create
-    for PrivateDatagramPushMode<Msg, Stream, Ctx>
-where
-    Stream: 'static
-        + PushStreamReportBatchError<
-            <Stream::FinishBatchError as RecoverableError>::Permanent,
-            Stream::BatchID
-        >
-        + PushStreamReportError<
-            <Stream::StartBatchError as RecoverableError>::Permanent
-        >
-        + PushStreamReportBatchError<
-            <Stream::AddError as RecoverableError>::Permanent,
-            Stream::BatchID
-        >
-        + PushStreamAdd<Msg, Ctx>
-        + PushStreamPrivate<Ctx>
-        + Send,
-    Msg: 'static + Clone + Send
-{
-    type Config = PrivateDatagramModeConfig;
-    type CreateError = Infallible;
-
-    fn create(config: Self::Config) -> Result<Self, Infallible> {
-        let retries_hint = config.take();
-
-        match retries_hint {
-            Some(hint) => Ok(PrivateDatagramPushMode {
-                pending: Vec::with_capacity(hint),
-                completes: Vec::with_capacity(hint),
-                indefs: None
-            }),
-            None => Ok(PrivateDatagramPushMode {
-                pending: Vec::new(),
-                completes: Vec::new(),
-                indefs: None
-            })
-        }
-    }
-}
-
 impl<Msg, Stream, Ctx> PrivateDatagramPushMode<Msg, Stream, Ctx>
 where
     Stream: 'static
@@ -927,13 +893,18 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            msgs: msgs
+                        };
+
                         if let Some(indefs) = &mut self.indefs {
                             error!(target: "private-datagram-push-mode",
                                    "indefs should be empty");
 
-                            indefs.push((Instant::now(), msgs))
+                            indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![(Instant::now(), msgs)])
+                            self.indefs = Some(vec![ent])
                         }
 
                         None
@@ -976,9 +947,31 @@ where
     Msgs: 'static + PrivateMsgs<Msg> + Send,
     Msg: 'static + Clone + Send
 {
+    type Config = PrivateDatagramModeConfig;
+    type CreateError = Infallible;
     type RetryError = Infallible;
     type SendError = Msgs::MsgsError;
     type RetryIndefError = Infallible;
+
+    fn create(
+        _stream: &Stream,
+        config: Self::Config
+    ) -> Result<Self, Self::CreateError> {
+        let retries_hint = config.take();
+
+        match retries_hint {
+            Some(hint) => Ok(PrivateDatagramPushMode {
+                pending: Vec::with_capacity(hint),
+                completes: Vec::with_capacity(hint),
+                indefs: None
+            }),
+            None => Ok(PrivateDatagramPushMode {
+                pending: Vec::new(),
+                completes: Vec::new(),
+                indefs: None
+            })
+        }
+    }
 
     fn send_from_outbound(
         &mut self,
@@ -1007,13 +1000,18 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            msgs: msgs
+                        };
+
                         if let Some(indefs) = &mut self.indefs {
                             error!(target: "private-datagram-push-mode",
                                    "indefs should be empty");
 
-                            indefs.push((Instant::now(), msgs))
+                            indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![(Instant::now(), msgs)])
+                            self.indefs = Some(vec![ent])
                         }
 
                         None
@@ -1092,13 +1090,18 @@ where
                 },
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(msgs)) => {
+                    let ent = IndefEntry {
+                        origin: Instant::now(),
+                        msgs: msgs
+                    };
+
                     if let Some(indefs) = &mut self.indefs {
                         error!(target: "private-datagram-push-mode",
                                "indefs should be empty");
 
-                        indefs.push((Instant::now(), msgs))
+                        indefs.push(ent)
                     } else {
-                        self.indefs = Some(vec![(Instant::now(), msgs)])
+                        self.indefs = Some(vec![ent])
                     }
                 }
                 // Error occurred.
@@ -1123,7 +1126,7 @@ where
         let mut out = None;
 
         if let Some(indefs) = self.indefs.take() {
-            for (_, msgs) in indefs.into_iter() {
+            for IndefEntry { msgs, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => {},
@@ -1138,13 +1141,18 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        let ent = IndefEntry {
+                            origin: origin,
+                            msgs: msgs
+                        };
+
                         if let Some(indefs) = &mut self.indefs {
                             error!(target: "private-datagram-push-mode",
                                    "indefs should be empty");
 
-                            indefs.push((Instant::now(), msgs))
+                            indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![(Instant::now(), msgs)])
+                            self.indefs = Some(vec![ent])
                         }
                     }
                     // Error occurred.

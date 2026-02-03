@@ -117,16 +117,16 @@ pub trait PollThreadTypes<Ctx> {
                             RecvError = Self::RecvError>;
     type ModeConfig;
     type ModeCreateError: Debug + Display;
-    type Mode: Create<Config = Self::ModeConfig,
-                      CreateError = Self::ModeCreateError>
-        + PushMode<
-            Self::Stream,
-            Self::Msgs,
-            PollThreadCtx<
-                Self::Chans,
-                Ctx
-            >
-        >;
+    type Mode: PushMode<
+        Self::Stream,
+        Self::Msgs,
+        PollThreadCtx<
+            Self::Chans,
+            Ctx
+        >,
+        Config = Self::ModeConfig,
+        CreateError = Self::ModeCreateError
+    >;
 }
 
 pub struct PollThreadCtx<Chans, Ctx>
@@ -344,7 +344,7 @@ where
     {
         let channels = Types::Chans::create(&mut ctx, chans_config, srcs)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
-        let mode = Types::Mode::create(mode_config)
+        let mode = Types::Mode::create(&stream, mode_config)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
@@ -725,7 +725,6 @@ where
 
                             if let Err(err) = self.mode.retry_indefs(
                                 &mut self.ctx,
-                                &mut self.msgs,
                                 &mut self.stream,
                             ) {
                                 error!(target: "poll-thread",
@@ -751,7 +750,6 @@ where
 
                         if let Err(err) = self.mode.retry_indefs(
                             &mut self.ctx,
-                            &mut self.msgs,
                             &mut self.stream,
                         ) {
                             error!(target: "poll-thread",
