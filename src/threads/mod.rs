@@ -31,6 +31,7 @@ use constellation_common::retry::RetryWhen;
 use mio::Registry;
 use mio::Token;
 
+use crate::large_obj::FragsOrOffer;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
@@ -45,12 +46,23 @@ pub mod private;
 pub mod shared;
 
 pub trait PushMode<Stream, Msgs, Ctx>: Sized {
+    /// Type of configuration objects used in [create](PushMode::create).
     type Config;
+    /// Type of errors that can happen in [create](PushMode::create).
     type CreateError: Debug + Display + ScopedError;
     type SendError: Debug + Display + ScopedError;
     type RetryError: Debug + Display + ScopedError;
     type RetryIndefError: Debug + Display + ScopedError;
 
+    /// Create an instance from a stream and a configuration object.
+    ///
+    /// # Parameters
+    ///
+    /// - `stream`: Reference to the [PushStream] that will be used to
+    ///   send messages.  This allows the `PushMode` to gather
+    ///   information from the stream.
+    ///
+    /// - `config`: The configuratiot object.
     fn create(
         stream: &Stream,
         config: Self::Config,
@@ -76,6 +88,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,
+        msgs: &mut Msgs,
         stream: &mut Stream
     ) -> Result<Option<Instant>, Self::RetryIndefError>;
 }
@@ -158,7 +171,45 @@ where
         }
     }
 
-    pub(crate) fn from_try_send<InMsg, OutMsg, PartyID, Types>(
+    pub(crate) fn complete_send<InMsg, OutMsg, PartyID, Types>(
+        ctx: &mut Ctx,
+        stream: &mut Stream,
+        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>,
+        err: FragsOrOffer<
+            H::HashID,
+            <Stream::PushFragError as RecoverableError>::Completable,
+            <Stream::PushOfferError as RecoverableError>::Completable
+        >
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>), Self>,
+        LargeObjPushError<
+            H::HashID,
+            Stream::PushFragError,
+            Stream::PushOfferError
+        >
+    >
+    where
+        Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
+        PartyID: Clone {
+        match err {
+            FragsOrOffer::Frags { err, id } => Ok(proto
+               .complete_push_frags(ctx, stream, id.clone(), err)?
+               .map(|(when, parties)| (when, Some(parties)))
+               .map_retry(|retry| LargeObjEntry::PushFrags {
+                   retry: retry,
+                   id: id
+               })),
+            FragsOrOffer::Offer { err, hash } => Ok(proto
+               .complete_push_offer(ctx, stream, hash.clone(), err)?
+               .map(|(when, parties)| (when, Some(parties)))
+               .map_retry(|retry| LargeObjEntry::PushOffer {
+                   retry: retry,
+                   hash: hash
+               }))
+        }
+    }
+
+    pub(crate) fn try_send<InMsg, OutMsg, PartyID, Types>(
         ctx: &mut Ctx,
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>

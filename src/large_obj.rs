@@ -311,8 +311,8 @@ pub enum LargeObjPushRetry<H, Frags, Offer> {
 
 #[derive(Debug)]
 pub enum LargeObjPushError<H, Frags, Offer> {
-    Frags { err: Frags },
-    Offer { err: Offer },
+    Frags { err: Frags, id: LargeObjID },
+    Offer { err: Offer, hash: H },
     NoObjID { hash: H, id: LargeObjID },
     NoID { id: LargeObjID },
     NoObj { hash: H },
@@ -412,11 +412,16 @@ pub enum LargeObjDataError {
     OutOfBounds
 }
 
-pub enum FragsOrOffer<Frags, Offer> {
-    Frags { err: Frags },
-    Offer { err: Offer }
+pub enum FragsOrOffer<HashID, Frags, Offer> {
+    Frags {
+        id: LargeObjID,
+        err: Frags
+    },
+    Offer {
+        hash: HashID,
+        err: Offer
+    }
 }
-
 
 impl<InMsg, OutMsg, PartyID, F, Types> Clone
     for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
@@ -1624,7 +1629,8 @@ where
                             &mut ents[0].1.frags
                         )
                             .map_err(|err| LargeObjPushError::Frags {
-                                err: err
+                                err: err,
+                                id: id
                             })
                             .map(|res| res
                                  .map_retry(|retry| LargeObjPushRetry::Frags {
@@ -1660,6 +1666,7 @@ where
                             &mut ents[0].1.frags
                         )
                             .map_err(|err| LargeObjPushError::Offer {
+                                hash: hash,
                                 err: err
                             })
                             .map(|res| res
@@ -1738,8 +1745,9 @@ where
                 id: id.clone()
             })?;
 
-        stream.retry_push_frags(ctx, id, &mut ent.frags, retry)
+        stream.retry_push_frags(ctx, id.clone(), &mut ent.frags, retry)
             .map_err(|err| LargeObjPushError::Frags {
+                id: id,
                 err: err
             })
     }
@@ -1775,8 +1783,9 @@ where
         let ent = outbound.objs.get_mut(&hash)
             .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })?;
 
-        stream.retry_push_offer(ctx, hash, &mut ent.frags, retry)
+        stream.retry_push_offer(ctx, hash.clone(), &mut ent.frags, retry)
             .map_err(|err| LargeObjPushError::Offer {
+                hash: hash,
                 err: err
             })
     }
@@ -1819,8 +1828,11 @@ where
                 id: id.clone()
             })?;
 
-        stream.complete_push_frags(ctx, id, &mut ent.frags, err)
-            .map_err(|err| LargeObjPushError::Frags { err: err })
+        stream.complete_push_frags(ctx, id.clone(), &mut ent.frags, err)
+            .map_err(|err| LargeObjPushError::Frags {
+                err: err,
+                id: id
+            })
     }
 
     pub(crate) fn complete_push_offer<Stream, Ctx>(
@@ -1854,8 +1866,11 @@ where
         let ent = outbound.objs.get_mut(&hash)
             .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })?;
 
-        stream.complete_push_offer(ctx, hash, &mut ent.frags, err)
-            .map_err(|err| LargeObjPushError::Offer { err: err })
+        stream.complete_push_offer(ctx, hash.clone(), &mut ent.frags, err)
+            .map_err(|err| LargeObjPushError::Offer {
+                hash: hash,
+                err: err
+            })
     }
 
     fn recv_offer_msg(
@@ -2517,23 +2532,35 @@ impl<H, Frags, Offer> RecoverableError for LargeObjPushError<H, Frags, Offer>
 where Frags: RecoverableError,
       Offer: RecoverableError,
       H: Clone + Debug + Display + Eq + Hash + HashID {
-    type Completable = FragsOrOffer<Frags::Completable, Offer::Completable>;
+    type Completable = FragsOrOffer<H, Frags::Completable, Offer::Completable>;
     type Permanent = LargeObjPushError<H, Frags::Permanent, Offer::Permanent>;
 
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         match self {
-            LargeObjPushError::Frags { err } => {
+            LargeObjPushError::Frags { err, id } => {
                 let (completable, permanent) = err.split();
 
-                (completable.map(|err| FragsOrOffer::Frags { err: err }),
-                 permanent.map(|err| LargeObjPushError::Frags { err: err }))
+                (completable.map(|err| FragsOrOffer::Frags {
+                    err: err,
+                    id: id.clone()
+                }),
+                 permanent.map(|err| LargeObjPushError::Frags {
+                     err: err,
+                     id: id
+                 }))
             }
-            LargeObjPushError::Offer { err } => {
+            LargeObjPushError::Offer { err, hash } => {
                 let (completable, permanent) = err.split();
 
-                (completable.map(|err| FragsOrOffer::Offer { err: err }),
-                 permanent.map(|err| LargeObjPushError::Offer { err: err }))
+                (completable.map(|err| FragsOrOffer::Offer {
+                    hash: hash.clone(),
+                    err: err
+                }),
+                 permanent.map(|err| LargeObjPushError::Offer {
+                     hash: hash,
+                     err: err
+                 }))
             }
             LargeObjPushError::NoObjID { hash, id } =>
                 (None, Some(LargeObjPushError::NoObjID { hash: hash, id: id })),
@@ -2565,6 +2592,19 @@ where
             LargeObjProtoAddOutboundError::MutexPoison => {
                 ErrorScope::Unrecoverable
             }
+        }
+    }
+}
+
+impl<H, Frags, Offer> ScopedError for FragsOrOffer<H, Frags, Offer>
+where
+    Frags: ScopedError,
+    Offer: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            FragsOrOffer::Frags { err, .. } => err.scope(),
+            FragsOrOffer::Offer { err, .. } => err.scope(),
         }
     }
 }
@@ -2603,8 +2643,8 @@ where
 {
     fn scope(&self) -> ErrorScope {
         match self {
-            LargeObjPushError::Offer { err } => err.scope(),
-            LargeObjPushError::Frags { err } => err.scope(),
+            LargeObjPushError::Offer { err, .. } => err.scope(),
+            LargeObjPushError::Frags { err, .. } => err.scope(),
             LargeObjPushError::NoObjID { .. } |
             LargeObjPushError::NoID { .. } |
             LargeObjPushError::NoObj { .. } |
@@ -2760,8 +2800,8 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            LargeObjPushError::Offer { err } => err.fmt(f),
-            LargeObjPushError::Frags { err } => err.fmt(f),
+            LargeObjPushError::Offer { err, .. } => err.fmt(f),
+            LargeObjPushError::Frags { err, .. } => err.fmt(f),
             LargeObjPushError::NoObjID { hash, id } => write!(
                 f,
                 "ID {} exists for {}, but no object entry found",

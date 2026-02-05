@@ -725,6 +725,7 @@ where
 
                             if let Err(err) = self.mode.retry_indefs(
                                 &mut self.ctx,
+                                &mut self.msgs,
                                 &mut self.stream,
                             ) {
                                 error!(target: "poll-thread",
@@ -750,6 +751,7 @@ where
 
                         if let Err(err) = self.mode.retry_indefs(
                             &mut self.ctx,
+                            &mut self.msgs,
                             &mut self.stream,
                         ) {
                             error!(target: "poll-thread",
