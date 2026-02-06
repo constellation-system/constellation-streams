@@ -45,6 +45,7 @@ use mio::Token;
 use crate::config::SharedDatagramModeConfig;
 use crate::config::SharedLargeObjModeConfig;
 use crate::frags::Frags;
+use crate::large_obj::FragsOrOffer;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgs;
 use crate::large_obj::LargeObjProto;
@@ -71,11 +72,18 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
     type PartyID: Clone + Debug + Display + From<usize> + Eq + Hash + Ord;
     type HashID: Clone + Debug + Display + Hash + HashID + Eq + Send;
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
-    type AddError: RecoverableError;
-    type StartBatchError: RecoverableError;
-    type FinishBatchError: RecoverableError;
-    type PushFragError: RecoverableError;
-    type PushOfferError: RecoverableError;
+    type AddErrorCompletable: ScopedError;
+    type AddError: RecoverableError<Completable = Self::AddErrorCompletable>;
+    type FinishBatchErrorCompletable: ScopedError;
+    type FinishBatchError: RecoverableError<Completable = Self::FinishBatchErrorCompletable>;
+    type StartBatchErrorCompletable: ScopedError;
+    type StartBatchError: RecoverableError<Completable = Self::StartBatchErrorCompletable>;
+    type PushFragErrorCompletable: ScopedError;
+    type PushFragError: RecoverableError<Completable = Self::PushFragErrorCompletable>;
+    type PushOfferErrorCompletable: ScopedError;
+    type PushOfferError: RecoverableError<Completable = Self::PushOfferErrorCompletable>;
+    type PartiesError: Debug + Display + ScopedError;
+    type StreamFlags: Default;
     type Stream: PushStreamReportBatchError<
             <Self::FinishBatchError as RecoverableError>::Permanent,
             Self::BatchID
@@ -100,11 +108,12 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
             PushOfferError = Self::PushOfferError
         > + PushStreamShared<Ctx, StartBatchError = Self::StartBatchError>
         + PushStreamPartyID<PartyID = Self::PartyID>
-        + PushStreamParties
+        + PushStreamParties<PartiesError = Self::PartiesError>
         + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx, AddError = Self::AddError>
         + PushStream<
             Ctx,
             BatchID = Self::BatchID,
+            StreamFlags = Self::StreamFlags,
             FinishBatchError = Self::FinishBatchError
         > + Send;
 }
@@ -191,9 +200,9 @@ where
     // XXX figure out a way to ensure dense IDs, so we don't have to
     // use HashSets here..
 
-    // All currently-live parties.
+    /// All currently-live parties.
     live: HashSet<Stream::PartyID>,
-    // Indefinitely-delayed messages.
+    /// Indefinitely-delayed messages.
     indefs: Option<Vec<IndefEntry<Msg, Stream::PartyID>>>
 }
 
@@ -201,9 +210,30 @@ pub struct SharedLargeObjPushMode<Types, Ctx>
 where
     Types: SharedLargeObjPushModeTypes<Ctx> {
     /// Buffer for sends in progress.
-    pending_msgs:
+    msgs_pending:
         Vec<PushEntry<LargeObjMsg<Types::HashID>, Types::Stream, Ctx>>,
-    pending_frags: Vec<LargeObjEntry<Types::Stream, Types::Hash, Ctx>>
+    /// Pending message sends that stalled with `WouldBlock`
+    msgs_completes: Vec<PushEntryRecoverableError<
+        Vec<LargeObjMsg<Types::HashID>>,
+        Types::BatchID,
+        Types::StreamFlags,
+        LargeObjMsg<Types::HashID>,
+        Types::StartBatchErrorCompletable,
+        Types::AddErrorCompletable,
+        Types::FinishBatchErrorCompletable,
+    >>,
+    frags_pending: Vec<LargeObjEntry<Types::Stream, Types::Hash, Ctx>>,
+    frags_completes: Vec<FragsOrOffer<
+        Types::HashID,
+        Types::PushFragErrorCompletable,
+        Types::PushOfferErrorCompletable
+    >>,
+    /// Pending message sends that produced indefinite waits.
+    msgs_indefs: Option<Vec<IndefEntry<LargeObjMsg<Types::HashID>,
+                                       Types::PartyID>>>,
+    frags_indef: HashSet<Types::PartyID>,
+    /// All currently-live parties.
+    live: HashSet<Types::PartyID>,
 }
 
 #[derive(Debug)]
@@ -281,8 +311,7 @@ where
 
 impl<Msg, Stream, Ctx> PushEntry<Msg, Stream, Ctx>
 where
-    Stream: 'static
-        + PushStreamReportBatchError<
+    Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
@@ -297,7 +326,7 @@ where
         + PushStreamShared<Ctx>
         + Send,
     Stream::PartyID: From<usize>,
-    Msg: 'static + Clone + Send
+    Msg: Clone + Send
 {
     fn complete_cancel_batch(
         ctx: &mut Ctx,
@@ -849,8 +878,7 @@ where
 
 impl<Msg, Stream, Ctx> SharedDatagramPushMode<Msg, Stream, Ctx>
 where
-    Stream: 'static
-        + PushStreamReportBatchError<
+    Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
@@ -877,7 +905,7 @@ where
     Stream::StreamFlags: Send,
     Stream::PartyID: Display + From<usize> + Send,
     Stream::BatchID: Send,
-    Msg: 'static + Clone + Send
+    Msg: Clone + Send
 {
     fn handle_error(
         &mut self,
@@ -967,8 +995,7 @@ where
 impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
     for SharedDatagramPushMode<Msg, Stream, Ctx>
 where
-    Stream: 'static
-        + PushStreamReportBatchError<
+    Stream: PushStreamReportBatchError<
             <Stream::FinishBatchError as RecoverableError>::Permanent,
             Stream::BatchID
         >
@@ -995,13 +1022,14 @@ where
     Stream::StreamFlags: Send,
     Stream::PartyID: Display + From<usize> + Send,
     Stream::BatchID: Send,
-    Msgs: 'static + SharedMsgs<Stream::PartyID, Msg> + Send,
-    Msg: 'static + Clone + Send
+    Msgs: SharedMsgs<Stream::PartyID, Msg> + Send,
+    Msg: Clone + Send
 {
     type Config = SharedDatagramModeConfig;
     type RetryError = Infallible;
     type SendError = Msgs::MsgsError;
     type RetryIndefError = Infallible;
+    type CreateError = Stream::PartiesError;
 
     fn create(
         stream: &Stream,
@@ -1010,7 +1038,6 @@ where
         let retries_hint = config.take();
         let all_parties: HashSet<Stream::PartyID> = stream.parties()?
             .map(|(id, _)| id).collect();
-        let indef_blocked = HashSet::with_capacity(all_parties.len());
 
         match retries_hint {
             Some(hint) => Ok(SharedDatagramPushMode {
@@ -1207,6 +1234,7 @@ where
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,
+        _msgs: &mut Msgs,
         stream: &mut Stream
     ) -> Result<Option<Instant>, Self::RetryIndefError> {
         let mut out = None;
@@ -1271,28 +1299,168 @@ where
     }
 }
 
-impl<Types, Ctx> Create for SharedLargeObjPushMode<Types, Ctx>
+impl<Types, Ctx> SharedLargeObjPushMode<Types, Ctx>
 where
-    Types: SharedLargeObjPushModeTypes<Ctx>
+    Types: SharedLargeObjPushModeTypes<Ctx>,
 {
-    type Config = SharedLargeObjModeConfig;
-    type CreateError = Infallible;
+    fn handle_msg_error<InMsg, OutMsg, LargeObjTypes>(
+        &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Types::Stream,
+        err: PushEntryRecoverableError<
+            Vec<LargeObjMsg<Types::HashID>>,
+            Types::BatchID,
+            Types::StreamFlags,
+            LargeObjMsg<Types::HashID>,
+            Types::StartBatchError,
+            Types::AddError,
+            Types::FinishBatchError
+        >
+    ) -> Option<Instant>
+    where
+        LargeObjTypes: LargeObjProtoTypes<
+            InMsg,
+            OutMsg,
+            Hash = Types::Hash,
+            HashID = Types::HashID
+        >
+    {
+        let (completable, permanent) = err.split();
 
-    fn create(config: Self::Config) -> Result<Self, Self::CreateError> {
-        let (msg_retries_hint, frag_retries_hint) = config.take();
-        let pending_msgs = match msg_retries_hint {
-            Some(hint) => Vec::with_capacity(hint),
-            None => Vec::new()
-        };
-        let pending_frags = match frag_retries_hint {
-            Some(hint) => Vec::with_capacity(hint),
-            None => Vec::new()
-        };
+        if let Some(permanent) = permanent {
+            error!(target: "shared-large-obj-push-mode",
+                   "unrecoverable error sending batch: {}",
+                   permanent);
+        }
 
-        Ok(SharedLargeObjPushMode {
-            pending_msgs: pending_msgs,
-            pending_frags: pending_frags
-        })
+        if let Some(completable) = completable {
+            if completable.scope() == ErrorScope::WouldBlock {
+                self.msgs_completes.push(completable);
+
+                None
+            } else {
+                match PushEntry::complete(ctx, stream, completable) {
+                    // Send succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success(())) => None,
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        let when = retry.when();
+
+                        self.msgs_pending.push(retry);
+
+                        Some(when)
+                    },
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        let parties: Vec<Types::PartyID> =
+                            parties.into_iter().collect();
+
+                        // Add to the set of blocked parties.
+                        for party in parties.iter() {
+                            if self.live.remove(party) {
+                                warn!(target: "shared-datagram-push-mode",
+                                      "party {} was not in live set",
+                                      party)
+                            }
+                        }
+
+                        // Record the indefinite wait.
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            parties: parties,
+                            msgs: msgs
+                        };
+
+                        if let Some(indefs) = &mut self.msgs_indefs {
+                            error!(target: "shared-datagram-push-mode",
+                                   "indefs should be empty");
+
+                            indefs.push(ent)
+                        } else {
+                            self.msgs_indefs = Some(vec![ent])
+                        }
+
+                        None
+                    }
+                    // Error occurred.
+                    Err(err) => {
+                        self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err);
+
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    fn handle_frags_error<InMsg, OutMsg, LargeObjTypes>(
+        &mut self,
+        ctx: &mut Ctx,
+        stream: &mut Types::Stream,
+        proto: &mut LargeObjProto<
+            InMsg,
+            OutMsg,
+            Types::PartyID,
+            Types::Frags,
+            LargeObjTypes
+        >,
+        err: LargeObjPushError<
+            Types::HashID,
+            Types::PushFragError,
+            Types::PushOfferError
+        >
+    ) -> Option<Instant>
+    where
+        LargeObjTypes: LargeObjProtoTypes<
+            InMsg,
+            OutMsg,
+            Hash = Types::Hash,
+            HashID = Types::HashID
+        >
+    {
+        let (completable, permanent) = err.split();
+
+        if let Some(permanent) = permanent {
+            error!(target: "private-large-obj-push-mode",
+                   "unrecoverable error sending batch: {}",
+                   permanent);
+        }
+
+        if let Some(completable) = completable {
+            if completable.scope() == ErrorScope::WouldBlock {
+                self.frags_completes.push(completable);
+
+                None
+            } else {
+                match LargeObjEntry::complete_send(ctx, stream, proto,
+                                                   completable) {
+                    // Succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success((next, _))) => next,
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        self.frags_pending.push(retry);
+
+                        None
+                    }
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef(())) => {
+                        self.frags_indef = true;
+
+                        None
+                    }
+                    // Error occurred.
+                    Err(err) => {
+                        self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        }
     }
 }
 
@@ -1316,9 +1484,8 @@ where
         HashID = Types::HashID
     >,
     Types: SharedLargeObjPushModeTypes<Ctx>,
-    LargeObjTypes::HashID: 'static,
-    Types::Stream: 'static
 {
+    type Config = SharedLargeObjModeConfig;
     type RetryError = Infallible;
     type SendError = SharedLargeObjPushModeSendError<
         LargeObjPushError<
@@ -1333,6 +1500,36 @@ where
              >::AddMsgsError<LargeObjTypes::EncodeError>
         >
     >;
+    type CreateError = Types::PartiesError;
+    type RetryIndefError = Infallible;
+
+    fn create(
+        stream: &Types::Stream,
+        config: Self::Config
+    ) -> Result<Self, Self::CreateError> {
+        let (msg_retries_hint, frag_retries_hint) = config.take();
+        let (msgs_pending, msgs_completes) = match msg_retries_hint {
+            Some(hint) => (Vec::with_capacity(hint), Vec::with_capacity(hint)),
+            None => (Vec::new(), Vec::new())
+        };
+        let (frags_pending, frags_completes) = match frag_retries_hint {
+            Some(hint) => (Vec::with_capacity(hint), Vec::with_capacity(hint)),
+            None => (Vec::new(), Vec::new())
+        };
+        let all_parties: HashSet<Types::PartyID> = stream.parties()?
+            .map(|(id, _)| id).collect();
+        let frags_indefs = HashSet::with_capacity(all_parties.len());
+
+        Ok(SharedLargeObjPushMode {
+            msgs_pending: msgs_pending,
+            msgs_completes: msgs_completes,
+            msgs_indefs: None,
+            frags_pending: frags_pending,
+            frags_completes: frags_completes,
+            frags_indef: frags_indefs,
+            live: all_parties,
+        })
+    }
 
     fn send_from_outbound(
         &mut self,
@@ -1346,46 +1543,110 @@ where
         >,
         stream: &mut Types::Stream,
         live: &HashSet<Token>
-    ) -> Result<(Option<Instant>, Option<Types::Parties>), Self::SendError> {
-        debug!(target: "shared-small-obj-push-mode",
-               "fetching new outbound messages");
+    ) -> Result<Option<Instant>, Self::SendError> {
+        if self.msgs_indefs.is_none() {
+            debug!(target: "shared-large-obj-push-mode",
+                   "fetching new outbound protocol messages");
 
-        let (groups, msgs_next) = proto.msgs().map_err(|err| {
-            SharedLargeObjPushModeSendError::Msgs { err: err }
-        })?;
+            // Send the low-level protocol messages.
+            let (groups, msgs_next) = proto.msgs(&self.live).map_err(|err| {
+                SharedLargeObjPushModeSendError::Msgs { err: err }
+            })?;
 
-        if let Some(groups) = groups {
-            // Go through each group and try sending it
-            for (parties, msgs) in groups {
-                if let RetryResult::Retry(retry) =
-                    PushEntry::from_try_send(ctx, stream, parties, msgs)
-                {
-                    // We got a retry somewhere along the process, store it.
-                    self.pending_msgs.push(retry)
+            let mut next = None;
+
+            if let Some(groups) = groups {
+                // Go through each group and try sending it
+                for (parties, msgs) in groups {
+                    let retry = match PushEntry::try_send(ctx, stream,
+                                                          parties, msgs) {
+                        // Send succeeded; nothing to do.
+                        Ok(RetryIndefResult::Success(())) => None,
+                        // Retry delay; store to pending.
+                        Ok(RetryIndefResult::Retry(retry)) => {
+                            let when = retry.when();
+
+                            self.msgs_pending.push(retry);
+
+                            Some(when)
+                        },
+                        // Indefinite delay; store to indefs.
+                        Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                            let parties: Vec<Types::PartyID> =
+                                parties.into_iter().collect();
+
+                            // Add to the set of blocked parties.
+                            for party in parties.iter() {
+                                if self.live.remove(party) {
+                                    warn!(target: "shared-large-obj-push-mode",
+                                          "party {} was not in live set",
+                                          party)
+                                }
+                            }
+
+                            let ent = IndefEntry {
+                                origin: Instant::now(),
+                                parties: parties,
+                                msgs: msgs
+                            };
+
+                            if let Some(indefs) = &mut self.msgs_indefs {
+                                error!(target: "shared-large-obj-push-mode",
+                                       "indefs should be empty");
+
+                                indefs.push(ent)
+                            } else {
+                                self.msgs_indefs = Some(vec![ent])
+                            }
+
+                            None
+                        }
+                        // Error occurred.
+                        Err(err) => self
+                            .handle_msg_error::<_, _, LargeObjTypes>(
+                                ctx, stream, err
+                            )
+                    };
+
+                    next = next.map_or(retry, |next| {
+                        Some(retry.map_or(next, |retry: Instant|
+                                          retry.min(next)))
+                    });
                 }
             }
+
+            debug!(target: "shared-large-obj-push-mode",
+                   "sending data fragments");
+
+            match LargeObjEntry::try_send(ctx, stream, proto) {
+                // Succeeded; nothing to do.
+                Ok(RetryIndefResult::Success((next, _))) => {
+                    next = next.map_or(next, |msgs| {
+                        Some(next.map_or(msgs, |frags| msgs.min(frags)))
+                    });
+                }
+                // Retry delay; store to pending.
+                Ok(RetryIndefResult::Retry(retry)) => {
+                    self.frags_pending.push(retry);
+                }
+                // Indefinite delay; store to indefs.
+                Ok(RetryIndefResult::Indef(())) => {
+                    self.frags_indef = true;
+                }
+                // Error occurred.
+                Err(err) => {
+                    let next = self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+
+                    next = next.map_or(next, |msgs| {
+                        Some(next.map_or(msgs, |frags| msgs.min(frags)))
+                    });
+                }
+            };
+
+            Ok(next)
+        } else {
+            Ok(None)
         }
-
-        debug!(target: "shared-large-obj-push-mode",
-               "sending data fragments");
-
-        let (frags_next, parties) = match LargeObjEntry::from_try_send(ctx, stream, proto)
-            .map_err(|err| SharedLargeObjPushModeSendError::Frags {
-                err: err
-            })? {
-            RetryIndefResult::Success(next) => next,
-            RetryIndefResult::Retry(retry) => {
-                self.pending_frags.push(retry);
-
-                (None, None)
-            }
-            RetryIndefResult::Indef => (None, None)
-        };
-        let next = msgs_next.map_or(frags_next, |msgs| {
-            Some(frags_next.map_or(msgs, |frags| msgs.min(frags)))
-        });
-
-        Ok((next, parties))
     }
 
     fn retry_pending(
@@ -1405,23 +1666,23 @@ where
         debug!(target: "shared-large-obj-push-mode",
                "retrying pending operations");
 
-        let mut curr = Vec::with_capacity(self.pending_msgs.len());
+        let mut curr = Vec::with_capacity(self.msgs_pending.len());
 
         // ISSUE #29: Use a better data structure to avoid sorting
         // this array over and over.
 
         // First, sort the array by times, but reverse the order so we
         // can pop the earliest.
-        self.pending_msgs
+        self.msgs_pending
             .sort_unstable_by_key(|b| std::cmp::Reverse(b.when()));
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.pending_msgs.last().is_some_and(|ent| now > ent.when()) {
+        while self.msgs_pending.last().is_some_and(|ent| now > ent.when()) {
             debug!(target: "shared-large-obj-push-mode",
                    "retrying pending operation");
 
-            match self.pending_msgs.pop() {
+            match self.msgs_pending.pop() {
                 Some(ent) => {
                     curr.push(ent);
                 }
@@ -1435,36 +1696,81 @@ where
         }
 
         // The last entry should now be the first time past the present.
-        let msgs_next = self.pending_msgs.last().map(|ent| ent.when());
+        let mut out = self.msgs_pending.last().map(|ent| ent.when());
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
-            if let RetryResult::Retry(retry) = ent.exec(ctx, stream) {
-                // We got a retry somewhere along the process, store it.
-                self.pending_msgs.push(retry)
+            match ent.exec(ctx, stream) {
+                // Send succeeded; nothing to do.
+                Ok(RetryIndefResult::Success(())) => {},
+                // Retry delay; store to pending.
+                Ok(RetryIndefResult::Retry(retry)) => {
+                    let when = retry.when();
+
+                    self.msgs_pending.push(retry);
+                    out = Some(out.map_or(when, |curr| curr.max(when)));
+                },
+                // Indefinite delay; store to indefs.
+                Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                    let parties: Vec<Types::PartyID> =
+                        parties.into_iter().collect();
+
+                    // Add to the set of blocked parties.
+                    for party in parties.iter() {
+                        if self.live.remove(party) {
+                            warn!(target: "shared-large-obj-push-mode",
+                                  "party {} was not in live set",
+                                  party)
+                        }
+                    }
+
+                    let ent = IndefEntry {
+                        origin: Instant::now(),
+                        parties: parties,
+                        msgs: msgs
+                    };
+
+                    if let Some(indefs) = &mut self.msgs_indefs {
+                        error!(target: "shared-large-obj-push-mode",
+                               "indefs should be empty");
+
+                        indefs.push(ent)
+                    } else {
+                        self.msgs_indefs = Some(vec![ent])
+                    }
+                }
+                // Error occurred.
+                Err(err) => {
+                    let when = self
+                        .handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err);
+
+                    out = out.map_or(when, |curr| {
+                        Some(when.map_or(curr, |when| curr.max(when)))
+                    });
+                }
             }
         }
 
         // Now do the fragments.
 
-        let mut curr = Vec::with_capacity(self.pending_frags.len());
+        let mut curr = Vec::with_capacity(self.frags_pending.len());
 
         // First, sort the array by times, but reverse the order so we
         // can pop the earliest.
-        self.pending_frags
+        self.frags_pending
             .sort_unstable_by_key(|b| std::cmp::Reverse(b.when()));
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
         while self
-            .pending_frags
+            .frags_pending
             .last()
             .is_some_and(|ent| now > ent.when())
         {
             debug!(target: "shared-large-obj-push-mode",
                    "retrying pending fragment");
 
-            match self.pending_frags.pop() {
+            match self.frags_pending.pop() {
                 Some(ent) => {
                     curr.push(ent);
                 }
@@ -1478,35 +1784,138 @@ where
         }
 
         // The last entry should now be the first time past the present.
-        let mut frags_next = self.pending_frags.last().map(|ent| ent.when());
+        out = self
+            .frags_pending.last()
+            .map(|ent| ent.when())
+            .map_or(out, |frags| {
+                Some(out.map_or(frags, |next| frags.min(next)))
+            });
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
             match ent.exec(ctx, stream, proto) {
-                Ok(RetryResult::Success(retry)) => {
-                    frags_next = frags_next.map_or(retry, |next| {
-                        retry.map(|retry| retry.min(next))
+                // Succeeded; nothing to do.
+                Ok(RetryIndefResult::Success((next, _))) => {
+                    next = next.map_or(next, |msgs| {
+                        Some(next.map_or(msgs, |frags| msgs.min(frags)))
                     });
                 }
-                Ok(RetryResult::Retry(retry)) => {
-                    frags_next =
-                        Some(frags_next.map_or(retry.when(), |next| {
-                            next.min(retry.when())
-                        }));
-
-                    self.pending_frags.push(retry)
+                // Retry delay; store to pending.
+                Ok(RetryIndefResult::Retry(retry)) => {
+                    self.frags_pending.push(retry);
                 }
+                // Indefinite delay; store to indefs.
+                Ok(RetryIndefResult::Indef(())) => {
+                    self.frags_indef = true;
+                }
+                // Error occurred.
                 Err(err) => {
-                    error!(target: "shared-large-obj-push-mode",
-                           "unrecoverable error retrying push frags: {}",
-                           err);
+                    let next = self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+
+                    next = next.map_or(next, |msgs| {
+                        Some(next.map_or(msgs, |frags| msgs.min(frags)))
+                    });
                 }
             }
         }
 
-        let out = msgs_next.map_or(frags_next, |msgs| {
-            Some(frags_next.map_or(msgs, |frags| frags.min(msgs)))
-        });
+        Ok(out)
+    }
+
+    fn retry_indefs(
+        &mut self,
+        ctx: &mut Ctx,
+        proto: &mut LargeObjProto<
+            InMsg,
+            OutMsg,
+            Types::PartyID,
+            Types::Frags,
+            LargeObjTypes
+        >,
+        stream: &mut Types::Stream,
+    ) -> Result<Option<Instant>, Self::RetryIndefError> {
+        let mut out = None;
+
+        if let Some(indefs) = self.msgs_indefs.take() {
+            for IndefEntry { msgs, parties, origin } in indefs.into_iter() {
+                match PushEntry::try_send(ctx, stream, parties, msgs) {
+                    // Send succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success(())) => {},
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        let when = retry.when();
+
+                        self.msgs_pending.push(retry);
+
+                        out = Some(out.map_or(when, |curr| curr.max(when)));
+                    },
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        let parties: Vec<Types::PartyID> =
+                            parties.into_iter().collect();
+
+                        // Add to the set of blocked parties.
+                        for party in parties.iter() {
+                            if self.live.remove(party) {
+                                warn!(target: "shared-large-obj-push-mode",
+                                      "party {} was not in live set",
+                                      party)
+                            }
+                        }
+
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            parties: parties,
+                            msgs: msgs
+                        };
+
+                        if let Some(indefs) = &mut self.msgs_indefs {
+                            error!(target: "shared-large-obj-push-mode",
+                                   "indefs should be empty");
+
+                            indefs.push(ent)
+                        } else {
+                            self.msgs_indefs = Some(vec![ent])
+                        }
+                    }
+                    // Error occurred.
+                    Err(err) => {
+                        let when = self.handle_msg_error::<_, _, LargeObjTypes>(
+                            ctx, stream, err
+                        );
+
+                        out = out.map_or(when, |curr| {
+                            Some(when.map_or(curr, |when| curr.max(when)))
+                        });
+                    }
+                }
+            }
+        }
+
+        if !self.frags_indef.is_empty() {
+            match LargeObjEntry::try_send(ctx, stream, proto) {
+                // Succeeded; nothing to do.
+                Ok(RetryIndefResult::Success((when, _))) => {
+                    out = out.map_or(when, |curr| {
+                        Some(when.map_or(curr, |when| curr.max(when)))
+                    });
+                },
+                // Retry delay; store to pending.
+                Ok(RetryIndefResult::Retry(retry)) => {
+                    self.frags_pending.push(retry);
+                }
+                // Indefinite delay; store to indefs.
+                Ok(RetryIndefResult::Indef(())) => {
+                    self.frags_indef = true;
+                }
+                // Error occurred.
+                Err(err) => {
+                    self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+                }
+            }
+
+            self.frags_indef.clear()
+        }
 
         Ok(out)
     }

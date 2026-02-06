@@ -1220,7 +1220,7 @@ where
         let (completable, permanent) = err.split();
 
         if let Some(permanent) = permanent {
-            error!(target: "private-datagram-push-mode",
+            error!(target: "private-large-obj-push-mode",
                    "unrecoverable error sending batch: {}",
                    permanent);
         }
@@ -1250,7 +1250,7 @@ where
                         };
 
                         if let Some(indefs) = &mut self.msgs_indefs {
-                            error!(target: "private-datagram-push-mode",
+                            error!(target: "private-large-obj-push-mode",
                                    "indefs should be empty");
 
                             indefs.push(ent)
@@ -1301,7 +1301,7 @@ where
         let (completable, permanent) = err.split();
 
         if let Some(permanent) = permanent {
-            error!(target: "private-datagram-push-mode",
+            error!(target: "private-large-obj-push-mode",
                    "unrecoverable error sending batch: {}",
                    permanent);
         }
@@ -1441,7 +1441,7 @@ where
                         };
 
                         if let Some(indefs) = &mut self.msgs_indefs {
-                            error!(target: "private-datagram-push-mode",
+                            error!(target: "private-large-obj-push-mode",
                                    "indefs should be empty");
 
                             indefs.push(ent)
@@ -1483,11 +1483,7 @@ where
                     None
                 }
                 // Error occurred.
-                Err(err) => {
-                    self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
-
-                    None
-                }
+                Err(err) => self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err)
             };
 
             let next = next.map_or(frags_next, |msgs| {
@@ -1646,7 +1642,11 @@ where
                 }
                 // Error occurred.
                 Err(err) => {
-                    self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+                    let next = self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
+
+                    out = out.map_or(next, |out| {
+                        Some(next.map_or(out, |next| next.min(out)))
+                    });
                 }
             }
         }
@@ -1690,7 +1690,7 @@ where
                         };
 
                         if let Some(indefs) = &mut self.msgs_indefs {
-                            error!(target: "private-datagram-push-mode",
+                            error!(target: "private-large-obj-push-mode",
                                    "indefs should be empty");
 
                             indefs.push(ent)

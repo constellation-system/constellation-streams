@@ -526,7 +526,7 @@ pub trait PushStreamParties: PushStreamPartyID {
     /// Detailed information about a party.
     type PartyInfo;
     /// Error that can occur obtaining parties.
-    type PartiesError: Debug + Display;
+    type PartiesError: Debug + Display + ScopedError;
 
     /// Get an iterator for all parties and their dense IDs.
     fn parties(&self) -> Result<Self::PartiesIter, Self::PartiesError>;
