@@ -25,7 +25,6 @@ use std::hash::Hash;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::sync::Condvar;
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -49,12 +48,6 @@ use crate::config::BatchSlotsConfig;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
 use crate::large_obj::LargeObjID;
-
-// This is a workaround for an OpenSSL implementation issue.
-
-pub trait ConcurrentStream {
-    fn condvar(&self) -> Arc<Condvar>;
-}
 
 /// Core trait for "pull" streams.
 ///
@@ -2535,7 +2528,7 @@ where
 
 impl<T, Inner> PullStream<T> for ThreadedStream<Inner>
 where
-    Inner: PullStream<T> + ConcurrentStream
+    Inner: PullStream<T>
 {
     type PullError = ThreadedStreamError<Inner::PullError>;
 
@@ -2553,11 +2546,6 @@ where
                         return Err(ThreadedStreamError::Inner { error: err });
                     }
                 }
-            }
-
-            match guard.condvar().wait(guard) {
-                Ok(newguard) => guard = newguard,
-                Err(_) => return Err(ThreadedStreamError::MutexPoison)
             }
         }
 

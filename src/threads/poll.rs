@@ -61,13 +61,16 @@ use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::RegistryCtx;
 
-pub trait PollThreadTypes<Ctx> {
-    type Addr: Clone + Display + Eq + Hash;
-    type ChannelParam: Clone + Display + Eq + Hash;
-    type ChannelID: Clone + Debug + Display + Eq + Hash;
+pub trait PollThreadTypes<Ctx>
+where Ctx: 'static + Send
+{
+    type Addr: 'static + Clone + Display + Eq + Hash + Send;
+    type ChannelParam: 'static + Clone + Display + Eq + Hash + Send;
+    type ChannelID: 'static + Clone + Debug + Display + Eq + Hash + Send;
     type MsgPrin: Clone + Display + Eq + Hash;
     type SessionPrin: Display;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
+    type AuthNChan: 'static
+        + Clone + AuthNed<Self::SessionPrin, Self::Chan> + Send;
     type Chan: Clone
         + PullStream<Self::Wrapper,
                      PullError = Self::PullError>;
@@ -78,55 +81,60 @@ pub trait PollThreadTypes<Ctx> {
     type RefreshError: Debug
         + RecoverableError<Completable = Self::RefreshCompletableError,
                            Permanent = Self::RefreshPermanentError>;
-    type Stream: StreamRefresh<
-        PollThreadCtx<
-            Self::Chans,
-            Ctx
-        >,
-        RefreshRetry = Self::RefreshRetry,
-        RefreshError = Self::RefreshError
-    >;
+    type Stream: 'static
+        + StreamRefresh<
+            PollThreadCtx<
+                Self::Chans,
+                Ctx
+            >,
+            RefreshRetry = Self::RefreshRetry,
+            RefreshError = Self::RefreshError
+        > + Send;
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type Wrapper;
-    type Msgs;
+    type Msgs: 'static + Send;
     type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
-    type Chans: ChannelsCreate<Ctx, Self::ChansSrcs,
-                               Config = Self::ChansConfig,
-                               CreateError = Self::ChansCreateError>
+    type Chans: 'static
+        + ChannelsCreate<Ctx, Self::ChansSrcs,
+                         Config = Self::ChansConfig,
+                         CreateError = Self::ChansCreateError>
         + Channels<Ctx,
                    Addr = Self::Addr,
                    Param = Self::ChannelParam,
                    Stream = Self::AuthNChan,
                    ChannelID = Self::ChannelID>
-        + ChannelsListen<Ctx>;
+        + ChannelsListen<Ctx> + Send;
     type MsgAuthConfig;
-    type MsgAuth: Create<Config = Self::MsgAuthConfig,
-                         CreateError = Self::MsgAuthCreateError>
+    type MsgAuth: 'static
+        + Create<Config = Self::MsgAuthConfig,
+                 CreateError = Self::MsgAuthCreateError>
         + MsgAuthN<Self::InMsg, Self::Wrapper,
                    Prin = Self::MsgPrin,
                    AuthNMsg = Self::AuthNMsg,
                    SessionPrin = Self::SessionPrin,
-                   Error = Self::MsgAuthError>;
+                   Error = Self::MsgAuthError> + Send;
     type MsgAuthCreateError: Debug + Display;
     type MsgAuthError: Debug + Display + ScopedError;
     type RecvError: Debug + Display + ScopedError;
-    type Recv: AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg,
-                            RecvError = Self::RecvError>;
+    type Recv: 'static
+        + AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg,
+                       RecvError = Self::RecvError> + Send;
     type ModeConfig;
     type ModeCreateError: Debug + Display;
-    type Mode: PushMode<
-        Self::Stream,
-        Self::Msgs,
-        PollThreadCtx<
-            Self::Chans,
-            Ctx
-        >,
-        Config = Self::ModeConfig,
-        CreateError = Self::ModeCreateError
-    >;
+    type Mode: 'static +
+        PushMode<
+            Self::Stream,
+            Self::Msgs,
+            PollThreadCtx<
+                Self::Chans,
+                Ctx
+            >,
+            Config = Self::ModeConfig,
+            CreateError = Self::ModeCreateError
+        > + Send;
 }
 
 pub struct PollThreadCtx<Chans, Ctx>
@@ -144,7 +152,8 @@ where Chans: Channels<Ctx>
 
 pub struct PollThread<Ctx, Types>
 where
-    Types: PollThreadTypes<Ctx>
+    Types: PollThreadTypes<Ctx>,
+    Ctx: 'static + Send
 {
     ctx: PollThreadCtx<Types::Chans, Ctx>,
     authn: Types::MsgAuth,
@@ -210,7 +219,6 @@ where Chans: Channels<Ctx>
         self.channels.channel_id(name)
     }
 }
-
 
 impl<Chans, Ctx> RegistryCtx for PollThreadCtx<Chans, Ctx>
 where Chans: Channels<Ctx>
@@ -323,7 +331,8 @@ where Chans: Channels<Ctx>
 
 impl<Ctx, Types> PollThread<Ctx, Types>
 where
-    Types: PollThreadTypes<Ctx>
+    Types: PollThreadTypes<Ctx>,
+    Ctx: 'static + Send
 {
     pub fn create(
         mode_config: Types::ModeConfig,
@@ -371,16 +380,6 @@ impl<Ctx, Types> PollThread<Ctx, Types>
 where
     Ctx: 'static + Send,
     Types: 'static + PollThreadTypes<Ctx>,
-    Types::Addr: 'static + Send,
-    Types::AuthNChan: 'static + Send,
-    Types::Chans: 'static + Send,
-    Types::Mode: 'static + Send,
-    Types::Msgs: 'static + Send,
-    Types::MsgAuth: 'static + Send,
-    Types::ChannelParam: 'static + Send,
-    Types::Recv: 'static + Send,
-    Types::Stream: 'static + Send,
-    Types::ChannelID: 'static + Send
 {
     /// Get the [Waker] used to signal availability of new messages
     /// to this thread.
@@ -390,6 +389,7 @@ where
     }
 
     fn handle_msg(
+        _stream: &mut Types::Stream,
         authn: &mut Types::MsgAuth,
         recv: &mut Types::Recv,
         id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,

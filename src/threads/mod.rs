@@ -40,7 +40,7 @@ use crate::large_obj::LargeObjPushRetry;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::PushStreamReportError;
 
-//pub mod dispatch;
+pub mod dispatch;
 pub mod poll;
 pub mod private;
 pub mod shared;

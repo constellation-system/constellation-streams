@@ -55,7 +55,6 @@ use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjMsgCodec;
 use crate::large_obj::LargeObjMsgEncodeError;
-use crate::stream::ConcurrentStream;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::PullStream;
@@ -119,17 +118,6 @@ where
         } else {
             None
         }
-    }
-}
-
-impl<Msg, IO, Codec> ConcurrentStream for DatagramCodecStream<Msg, IO, Codec>
-where
-    Codec: Send,
-    IO: ConcurrentStream
-{
-    #[inline]
-    fn condvar(&self) -> Arc<Condvar> {
-        self.io.condvar()
     }
 }
 
