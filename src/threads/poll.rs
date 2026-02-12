@@ -140,10 +140,6 @@ where Ctx: 'static + Send
 pub struct PollThreadCtx<Chans, Ctx>
 where Chans: Channels<Ctx>
 {
-    pull_streams: HashMap<
-        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        Chans::Stream
-    >,
     channels: Chans,
     ctx: Ctx,
     poll: Poll,
@@ -155,6 +151,10 @@ where
     Types: PollThreadTypes<Ctx>,
     Ctx: 'static + Send
 {
+    pull_streams: HashMap<
+        StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        Types::AuthNChan
+    >,
     ctx: PollThreadCtx<Types::Chans, Ctx>,
     authn: Types::MsgAuth,
     recv: Types::Recv,
@@ -229,39 +229,6 @@ where Chans: Channels<Ctx>
     }
 }
 
-impl <Party, Chans, Ctx>
-    StreamReporter<
-        Party,
-        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        Chans::Stream,
-        ()
-    >
-    for PollThreadCtx<Chans, Ctx>
-where Chans: Channels<Ctx>,
-      Chans::Stream: Clone {
-    type ReportStreamError = Infallible;
-
-    fn report_stream(
-        &mut self,
-        _ctx: &mut (),
-        _party: &Party,
-        stream_id: StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        stream: Chans::Stream
-    ) -> Result<Option<Chans::Stream>, Self::ReportStreamError> {
-        match self.pull_streams.get(&stream_id) {
-            Some(out) => Ok(Some(out.clone())),
-            None => {
-                if self.pull_streams.insert(stream_id, stream).is_some() {
-                    error!(target: "poll-thread-context",
-                           "insert should not return Some");
-                }
-
-                Ok(None)
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum PollThreadCreateError<Mode, Channels, AuthN> {
     Mode {
@@ -294,7 +261,7 @@ pub enum PollThreadRecvError<Pull, AuthN, Recv> {
 impl<Chans, Ctx> PollThreadCtx<Chans, Ctx>
 where Chans: Channels<Ctx>
 {
-    pub fn new(
+    fn new(
         ctx: Ctx,
         channels: Chans,
         nevents: usize
@@ -302,24 +269,6 @@ where Chans: Channels<Ctx>
         let poll = Poll::new()?;
 
         Ok(PollThreadCtx {
-            pull_streams: HashMap::new(),
-            channels: channels,
-            ctx: ctx,
-            poll: poll,
-            nevents: nevents
-        })
-    }
-
-    pub fn with_capacity(
-        ctx: Ctx,
-        channels: Chans,
-        nevents: usize,
-        nsessions: usize
-    ) -> Result<Self, Error> {
-        let poll = Poll::new()?;
-
-        Ok(PollThreadCtx {
-            pull_streams: HashMap::with_capacity(nsessions),
             channels: channels,
             ctx: ctx,
             poll: poll,
@@ -357,13 +306,15 @@ where
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
-        let ctx = match nsessions {
-            Some(nsessions) =>
-                PollThreadCtx::with_capacity(ctx, channels, nevents, nsessions),
-            None => PollThreadCtx::new(ctx, channels, nevents),
-        }.map_err(|err| PollThreadCreateError::IO { err: err })?;
+        let ctx = PollThreadCtx::new(ctx, channels, nevents)
+            .map_err(|err| PollThreadCreateError::IO { err: err })?;
+        let pull_streams = match nsessions {
+            Some(nsessions) => HashMap::with_capacity(nsessions),
+            None => HashMap::new()
+        };
 
         Ok(PollThread {
+            pull_streams: pull_streams,
             authn: authn,
             mode: mode,
             msgs: msgs,
@@ -449,7 +400,7 @@ where
                "pulling messages from {}",
                id);
 
-        if let Some(stream) = self.ctx.pull_streams.get_mut(&id) {
+        if let Some(stream) = self.pull_streams.get_mut(&id) {
             let mut valid = true;
 
             while self.shutdown.is_live() && valid {
@@ -458,7 +409,8 @@ where
                        id);
 
                 match stream.get_mut().pull() {
-                    Ok(msg) => Self::handle_msg(&mut self.authn, &mut self.recv,
+                    Ok(msg) => Self::handle_msg(&mut self.stream,
+                                                &mut self.authn, &mut self.recv,
                                                 id, stream.prin(), msg)?,
                     Err(err) => match err.scope() {
                         ErrorScope::Retryable => {
@@ -504,7 +456,7 @@ where
                "receiving stream from {}",
                id);
 
-        if self.ctx.pull_streams.insert(id.clone(), stream.clone()).is_some() {
+        if self.pull_streams.insert(id.clone(), stream.clone()).is_some() {
             error!(target: "poll-thread",
                    "stream was already present for {}",
                    id);

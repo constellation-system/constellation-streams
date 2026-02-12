@@ -48,15 +48,18 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
+use crate::channels::ChannelParam;
+use crate::channels::ChannelsCreate;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamReporter;
+use crate::threads::PushMode;
 use crate::threads::RegistryCtx;
 
 pub trait DispatchInboundTypes {
     type InMsg;
     type Wrapper;
-    type Chan: Clone + Credentials + PullStream<Self::Wrapper>;
+    type OutMsg;
     type SessionPrin: Clone + Display + Eq + Hash;
     type MsgPrin: Clone + Display + Eq + Hash;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
@@ -68,9 +71,68 @@ pub trait DispatchInboundTypes {
                                    Error = Self::MsgAuthError>;
 }
 
-pub trait Dispatch<ID, Types, OutMsg, Ctx>
+pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
+    type Stream;
+    type Msgs: PrivateMsgs<Self::OutMsg>;
+    type Recv: AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg>;
+    type Chan: Credentials + PullStream<Self::Wrapper>;
+    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
+    type ModeConfig;
+    type ModeCreateError: Debug + Display;
+    type Mode: PushMode<
+        Self::Stream,
+        Self::Msgs,
+        Ctx,
+        Config = Self::ModeConfig,
+        CreateError = Self::ModeCreateError
+    >;
+}
+
+pub trait DispatchCtxTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
+    type Addr: Clone + Debug + Display + Eq + Hash;
+    type ChannelParam: Clone + Debug + Display + Eq + Hash
+        + ChannelParam<Self::Addr>;
+    type ChannelID: Clone + Debug + Display + Eq + Hash;
+    type DispatchError: Debug + Display + ScopedError;
+    type Disp: Dispatch<
+        Self, Ctx,
+        Msgs = Self::Msgs,
+        Recv = Self::Recv,
+        PushStream = Self::Stream,
+        DispatchError = Self::DispatchError
+    >;
+}
+
+pub trait DispatchTypes<Ctx>: DispatchCtxTypes<Ctx> {
+    type ChansSrcs;
+    type ChansConfig;
+    type ChansCreateError: Debug + Display;
+    type Chans:
+        ChannelsCreate<Ctx, Self::ChansSrcs,
+                       Config = Self::ChansConfig,
+                       CreateError = Self::ChansCreateError>
+        + Channels<Ctx,
+                   Addr = Self::Addr,
+                   Param = Self::ChannelParam,
+                   Stream = Self::AuthNChan,
+                   ChannelID = Self::ChannelID>;
+}
+
+/// Trait for session dispatchers.
+///
+/// Instances of this respond to new incoming session principals by
+/// setting up whatever application-layer handling is needed, then
+/// returning information needed to complete the setup of stream-level
+/// communications.
+///
+/// # Type Parameters
+///
+/// - `Ctx`: Type of context objects.
+///
+/// - `Types`: [DispatchInboundTypes] type trait defining the message
+///   and authentication types.
+pub trait Dispatch<Types, Ctx>
 where
-    ID: Clone + Display + Debug + Eq + Hash,
     Types: DispatchInboundTypes {
     /// Type of top-level push-side streams to be returned from
     /// dispatch.
@@ -80,7 +142,7 @@ where
     /// This will be used by the created [PushStreamPrivateThread] to
     /// obtain messages to be sent using the
     /// [PushStream](Dispatch::PushStream) instance.
-    type Msgs: PrivateMsgs<OutMsg>;
+    type Msgs: PrivateMsgs<Types::OutMsg>;
     /// Type of authenticated message receivers.
     ///
     /// This will be used to deliver incoming messages.
@@ -89,67 +151,100 @@ where
     type DispatchError: Debug + Display + ScopedError;
 
     /// Obtain the components of a new private session.
+    ///
+    /// This is called when an inbound channel with a new session
+    /// principal is authenticated, to start the session with that
+    /// principal.  It will typically set up data structures and a
+    /// manager thread for that session.  The necessary components for
+    /// setting up the stream-level communications are returned as a
+    /// [Dispatched].
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context object to use.
+    ///
+    /// - `prin`: The new session principal.
+    ///
+    /// - `notify`: Notifier used to alert the dispatch thread to
+    /// changes in outbound messages.
     fn dispatch(
         &mut self,
         ctx: &mut Ctx,
         prin: &Types::SessionPrin,
         notify: Arc<Waker>,
     ) -> Result<
-        Dispatched<ID, Types, OutMsg, Self::PushStream, Self::Msgs, Self::Recv>,
+        Dispatched<Types, Types::OutMsg, Self::PushStream,
+                   Self::Msgs, Self::Recv>,
         Self::DispatchError
     >;
 }
 
-pub struct Dispatched<ID, Types, OutMsg, Stream, Msgs, Recv>
+/// Session handler for a specific principal.
+///
+/// This is returned by implementations of [Dispatch] from
+/// [dispatch](Dispatch::dispatch) in response to a session with a new
+/// session principal.  It contains the information needed to complete
+/// setup of new sessions with this principal.
+///
+/// # Type Parameters
+///
+/// - `Types`: [DisptachInboundTypes] instance that defines most of the types.
+///
+/// - `OutMsg`: Type of outbound messages.
+///
+/// - `Stream`: Type of [PushStream]s used to send messages.
+///
+/// - `Msgs`: Type of [PrivateMsgs] outbound message box used to
+///   generate outbound messages.
+///
+/// - `Recv`: Type of [AuthNMsgRecv] used to send messages.
+pub struct Dispatched<Types, OutMsg, Stream, Msgs, Recv>
 where
-    ID: Clone + Debug + Display + Debug + Eq + Hash,
     Types: DispatchInboundTypes,
     Msgs: PrivateMsgs<OutMsg>,
     Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg> {
     outmsg: PhantomData<OutMsg>,
+    /// Flag used to signal shutdown to the connected thread.
     shutdown: ShutdownFlag,
+    /// Message authenticator to use for inbound messages.
     authn: Types::MsgAuth,
+    /// Inbound message receiver.
     recv: Recv,
+    /// Outbound message box.
     msgs: Msgs,
+    /// [PushStream] used to send messages.
     stream: Stream,
-    pull_streams: HashMap<ID, Types::Chan>
 }
 
-pub trait DispatchTypes<Ctx>: DispatchInboundTypes {
-    type Addr: Clone + Debug + Display + Eq + Hash;
-    type ChannelParam: Clone + Debug + Display + Eq + Hash;
-    type ChannelID: Clone + Debug + Display + Eq + Hash;
-    type OutMsg;
-    type Stream;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
-    type Msgs: PrivateMsgs<Self::OutMsg>;
-    type Recv: AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg>;
-    type Chans: Channels<Ctx,
-                         Addr = Self::Addr,
-                         Param = Self::ChannelParam,
-                         Stream = Self::AuthNChan,
-                         ChannelID = Self::ChannelID>;
-}
-
-pub struct DispatchThreadCtx<Types, Chans, Disp, OutMsg, Ctx>
+pub struct DispatchedEntry<ID, Types, Ctx>
 where
-    Types: DispatchInboundTypes<Chan = Chans::Stream>,
-    Chans: Channels<Ctx>,
-    Disp: Dispatch<StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                   Types, OutMsg, Ctx>,
+    Types: DispatchEntryTypes<Ctx>,
+{
+    ctx: PhantomData<Ctx>,
+    dispatched: Dispatched<Types, Types::OutMsg, Types::Stream,
+                           Types::Msgs, Types::Recv>,
+    pull_streams: HashMap<ID, Types::AuthNChan>,
+    mode: Types::Mode
+}
+
+pub struct DispatchThreadCtx<Types, Chans, Ctx>
+where
+    Types: DispatchCtxTypes<Ctx>,
+    Chans: Channels<Ctx,
+                    Addr = Types::Addr,
+                    Param = Types::ChannelParam,
+                    Stream = Types::AuthNChan,
+                    ChannelID = Types::ChannelID>
 {
     dispatched: HashMap<
         Types::SessionPrin,
-        Dispatched<
-            StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        DispatchedEntry<
+            StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
             Types,
-            OutMsg,
-            Disp::PushStream,
-            Disp::Msgs,
-            Disp::Recv
+            Ctx
         >
     >,
-    dispatcher: Disp,
+    dispatcher: Types::Disp,
     channels: Chans,
     notify: Arc<Waker>,
     ctx: Ctx,
@@ -158,39 +253,67 @@ where
 }
 
 
-pub struct DispatchThread<Types, Chans, Disp, OutMsg, Ctx>
+pub struct DispatchThread<Types, Ctx>
 where
-    Types: DispatchInboundTypes<Chan = Chans::Stream>,
-    Chans: Channels<Ctx>,
-    Disp: Dispatch<StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                   Types, OutMsg, Ctx>,
+    Types: DispatchTypes<Ctx>,
 {
-    ctx: DispatchThreadCtx<Types, Chans, Disp, OutMsg, Ctx>,
+    ctx: DispatchThreadCtx<Types, Types::Chans, Ctx>,
     shutdown: ShutdownFlag,
 }
 
+#[derive(Debug)]
+pub enum DispatchThreadCreateError<Channels> {
+    Channels {
+        err: Channels
+    },
+    IO {
+        err: Error
+    }
+}
 
-impl<ID, Types, OutMsg, Stream, Msgs, Recv>
-    Dispatched<ID, Types, OutMsg, Stream, Msgs, Recv>
+#[derive(Debug)]
+pub enum DispatchThreadDispatchError<Mode, Dispatch> {
+    Mode {
+        err: Mode
+    },
+    Dispatch {
+        err: Dispatch
+    }
+}
+
+impl<Types, OutMsg, Stream, Msgs, Recv>
+    Dispatched<Types, OutMsg, Stream, Msgs, Recv>
 where
-    ID: Clone + Debug + Display + Debug + Eq + Hash,
     Types: DispatchInboundTypes,
     Msgs: PrivateMsgs<OutMsg>,
     Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg> {
+    /// Create a new `Dispatched` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `shutdown`: A [ShutdownFlag] used to signal any connected
+    ///   thread to shut down.  The dispatch thread will set this when
+    ///   it shuts down.
+    ///
+    /// - `stream`: The [PushStream] used to send messages.
+    ///
+    /// - `msgs`: The [PrivateMsgs] message outbox used to generate
+    ///   messages to send.
+    ///
+    /// - `authn`: The [MsgAuthN] used to authenticate incoming messages.
+    ///
+    /// - `recv`: The [AuthNMsgRecv] used to receive incoming messages.
+    #[inline]
     pub fn new(
         shutdown: ShutdownFlag,
         stream: Stream,
-        authn: Types::MsgAuth,
         msgs: Msgs,
+        authn: Types::MsgAuth,
         recv: Recv
     ) -> Self {
-        // XXX get a size hint here.
-        let streams = HashMap::new();
-
         Dispatched {
             outmsg: PhantomData,
             shutdown: shutdown,
-            pull_streams: streams,
             stream: stream,
             authn: authn,
             msgs: msgs,
@@ -199,19 +322,18 @@ where
     }
 }
 
-impl<ID, Types, OutMsg, Stream, Msgs, Recv>
+impl<ID, Types, Ctx>
     StreamReporter<
         Types::SessionPrin,
         ID,
-        Types::Chan,
+        Types::AuthNChan,
         ()
     >
-    for Dispatched<ID, Types, OutMsg, Stream, Msgs, Recv>
+    for DispatchedEntry<ID, Types, Ctx>
 where
     ID: Clone + Debug + Display + Debug + Eq + Hash,
-    Types: DispatchInboundTypes,
-    Msgs: PrivateMsgs<OutMsg>,
-    Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg> {
+    Types: DispatchEntryTypes<Ctx>
+{
     type ReportStreamError = Infallible;
 
     fn report_stream(
@@ -219,8 +341,8 @@ where
         _ctx: &mut (),
         _party: &Types::SessionPrin,
         stream_id: ID,
-        stream: Types::Chan
-    ) -> Result<Option<Types::Chan>, Self::ReportStreamError> {
+        stream: Types::AuthNChan
+    ) -> Result<Option<Types::AuthNChan>, Self::ReportStreamError> {
         match self.pull_streams.get(&stream_id) {
             Some(out) => Ok(Some(out.clone())),
             None => {
@@ -235,21 +357,22 @@ where
     }
 }
 
-impl<Types, Chans, Disp, OutMsg, Ctx> Channels<()>
-    for DispatchThreadCtx<Types, Chans, Disp, OutMsg, Ctx>
+impl<Types, Chans, Ctx> Channels<()> for DispatchThreadCtx<Types, Chans, Ctx>
 where
-    Types: DispatchInboundTypes<Chan = Chans::Stream>,
-    Chans: Channels<Ctx>,
-    Disp: Dispatch<StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                   Types, OutMsg, Ctx>
+    Types: DispatchCtxTypes<Ctx>,
+    Chans: Channels<Ctx,
+                    Addr = Types::Addr,
+                    Param = Types::ChannelParam,
+                    Stream = Types::AuthNChan,
+                    ChannelID = Types::ChannelID>
 {
-    type ChannelID = Chans::ChannelID;
-    type Param = Chans::Param;
+    type ChannelID = Types::ChannelID;
+    type Param = Types::ChannelParam;
     type ParamIter = Chans::ParamIter;
     type ParamError = Chans::ParamError;
     type OutNegoParam = Chans::OutNegoParam;
-    type Addr = Chans::Addr;
-    type Stream = Types::Chan;
+    type Addr = Types::Addr;
+    type Stream = Types::AuthNChan;
     type ReqStreamError = Chans::ReqStreamError;
 
     #[inline]
@@ -292,13 +415,14 @@ where
     }
 }
 
-impl<Types, Chans, Disp, OutMsg, Ctx> RegistryCtx
-    for DispatchThreadCtx<Types, Chans, Disp, OutMsg, Ctx>
+impl<Types, Chans, Ctx> RegistryCtx for DispatchThreadCtx<Types, Chans, Ctx>
 where
-    Types: DispatchInboundTypes<Chan = Chans::Stream>,
-    Chans: Channels<Ctx>,
-    Disp: Dispatch<StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                   Types, OutMsg, Ctx>
+    Types: DispatchCtxTypes<Ctx>,
+    Chans: Channels<Ctx,
+                    Addr = Types::Addr,
+                    Param = Types::ChannelParam,
+                    Stream = Types::AuthNChan,
+                    ChannelID = Types::ChannelID>
 {
     #[inline]
     fn registry(&self) -> &Registry {
@@ -306,22 +430,23 @@ where
     }
 }
 
-impl<Types, Chans, Disp, OutMsg, Ctx>
+impl<Types, Chans, Ctx>
     StreamReporter<
         Types::SessionPrin,
         StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
         Chans::Stream,
         ()
     >
-    for DispatchThreadCtx<Types, Chans, Disp, OutMsg, Ctx>
+    for DispatchThreadCtx<Types, Chans, Ctx>
 where
-    Types: DispatchInboundTypes<Chan = Chans::Stream>,
-    Chans: Channels<Ctx>,
-    Disp: Dispatch<StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                   Types, OutMsg, Ctx>
-
+    Types: DispatchCtxTypes<Ctx>,
+    Chans: Channels<Ctx,
+                    Addr = Types::Addr,
+                    Param = Types::ChannelParam,
+                    Stream = Types::AuthNChan,
+                    ChannelID = Types::ChannelID>
 {
-    type ReportStreamError = Disp::DispatchError;
+    type ReportStreamError = Types::DispatchError;
 
     fn report_stream(
         &mut self,
@@ -342,8 +467,14 @@ where
                        "adding stream {} for {}",
                        stream_id, party);
 
-                let mut dispatched = self.dispatcher
+                let dispatched = self.dispatcher
                     .dispatch(&mut self.ctx, party, self.notify.clone())?;
+                // XXX use a size hint here.
+                let pull_streams = HashMap::new();
+                let mut dispatched = DispatchedEntry {
+                    dispatched: dispatched,
+                    pull_streams: pull_streams
+                };
                 let Ok(out) = dispatched
                     .report_stream(ctx, party, stream_id, stream);
 
@@ -357,6 +488,79 @@ where
                 Ok(out)
             }
         }
+    }
+}
+
+impl<Types, Chans, Ctx> DispatchThreadCtx<Types, Chans, Ctx>
+where
+    Types: DispatchCtxTypes<Ctx>,
+    Chans: Channels<Ctx,
+                    Addr = Types::Addr,
+                    Param = Types::ChannelParam,
+                    Stream = Types::AuthNChan,
+                    ChannelID = Types::ChannelID>
+{
+    #[inline]
+    fn new(
+        ctx: Ctx,
+        poll: Poll,
+        notify: Arc<Waker>,
+        dispatcher: Types::Disp,
+        channels: Chans,
+        nevents: usize
+    ) -> Self {
+        DispatchThreadCtx {
+            dispatched: HashMap::new(),
+            dispatcher: dispatcher,
+            channels: channels,
+            notify: notify,
+            ctx: ctx,
+            poll: poll,
+            nevents: nevents
+        }
+    }
+
+    #[inline]
+    fn with_capacity(
+        ctx: Ctx,
+        poll: Poll,
+        notify: Arc<Waker>,
+        dispatcher: Types::Disp,
+        channels: Chans,
+        nevents: usize,
+        nsessions: usize
+    ) -> Self {
+        DispatchThreadCtx {
+            dispatched: HashMap::with_capacity(nsessions),
+            dispatcher: dispatcher,
+            channels: channels,
+            notify: notify,
+            ctx: ctx,
+            poll: poll,
+            nevents: nevents
+        }
+    }
+}
+
+impl<Types, Ctx> DispatchThread<Types, Ctx>
+where
+    Types: DispatchTypes<Ctx>,
+{
+    fn create(
+        mode_config: Types::ModeConfig,
+        chans_config: Types::ChansConfig,
+        srcs: Types::ChansSrcs,
+        dispatcher: Types::Disp,
+        mut ctx: Ctx,
+        shutdown: ShutdownFlag,
+        nevents: usize,
+        nsessions: Option<usize>
+    ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>>
+    {
+        let channels = Types::Chans::create(&mut ctx, chans_config, srcs)
+            .map_err(|err| DispatchThreadCreateError::Channels { err: err })?;
+        let mode = Types::Mode::create(&stream, mode_config)
+            .map_err(|err| DispatchThreadCreateError::Mode { err: err })?;
     }
 }
 
@@ -429,20 +633,6 @@ pub struct PullStreamsDispatchThread<
         >
     >,
     ctx: Ctx
-}
-
-/// [StreamReporter] instance derived from an entry in a
-/// [PullStreamsDispatchThread].
-///
-/// This is typically created to serve much the same purpose as a
-/// [PullStreamsReporter], but for a single principal.
-pub struct DispatchEntryReporter<Msg, Addr, Stream, AuthN, Recv>
-where
-    Stream: ConcurrentStream + Credentials + PullStream<Msg> + Send,
-    AuthN: Clone + MsgAuthN<Msg, Msg> + Send,
-    Recv: AuthNMsgRecv<AuthN::Prin, Msg, AuthN::AuthNMsg>,
-    Addr: Clone + Eq + Hash {
-    inner: Dispatched<Msg, Addr, Stream, AuthN, Recv>
 }
 
 #[derive(Debug)]
@@ -706,3 +896,32 @@ where
     }
 }
 */
+
+impl<Channels> Display for DispatchThreadCreateError<Channels>
+where
+    Channels: Display {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            DispatchThreadCreateError::Channels { err } => err.fmt(f),
+            DispatchThreadCreateError::IO { err } => write!(f, "{}", err)
+        }
+    }
+}
+
+impl<Mode, Dispatch> Display for DispatchThreadDispatchError<Mode, Dispatch>
+where
+    Dispatch: Display,
+    Mode: Display {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            DispatchThreadDispatchError::Dispatch { err } => err.fmt(f),
+            DispatchThreadDispatchError::Mode { err } => err.fmt(f),
+        }
+    }
+}
