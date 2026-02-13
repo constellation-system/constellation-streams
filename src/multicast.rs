@@ -33,8 +33,6 @@ use std::marker::PhantomData;
 use std::time::Instant;
 use std::vec::IntoIter;
 
-use bitvec::bitvec;
-use bitvec::vec::BitVec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -141,6 +139,13 @@ where
     F: Frags {
     idx: PhantomData<Idx>,
     frags: Vec<F>
+}
+
+#[derive(Clone, Debug)]
+pub struct MulticastSelectRetry<Idx, Retry>
+where Retry: RetryWhen {
+    retries: Vec<RetryResult<(), Retry>>,
+    indefs: Vec<Idx>
 }
 
 /// Errors that can occur while canceling a push operation.
@@ -298,6 +303,17 @@ impl<Inner> Default for StreamMulticasterSelections<Inner> {
         StreamMulticasterSelections { inner: Vec::new() }
     }
 }
+
+impl<Idx, Retry> RetryWhen for MulticastSelectRetry<Idx, Retry>
+where
+    Retry: RetryWhen
+{
+    #[inline]
+    fn when(&self) -> Instant {
+        self.retries.when()
+    }
+}
+
 
 impl<Idx, BatchRetry, Retry> RetryWhen
     for StreamMulticasterAbortRetry<Idx, BatchRetry, Retry>
@@ -1164,7 +1180,7 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success((when, ids)))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef)
+                    Ok(RetryIndefResult::Indef(()))
                 } else {
                     Ok(RetryIndefResult::Retry(results))
                 }
@@ -1264,8 +1280,11 @@ where
             Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::SelectError)>
         >
     ) -> Result<
-        RetryIndefResult<Vec<Idx>,
-                         <Self as PushStreamShared<Ctx>>::SelectRetry>,
+        RetryIndefResult<
+            Vec<Idx>,
+            <Self as PushStreamShared<Ctx>>::SelectRetry,
+            Vec<Idx>
+        >,
         <Self as PushStreamShared<Ctx>>::SelectError
     > {
         match errs {
@@ -1280,6 +1299,7 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
                 let mut all_indef = true;
@@ -1296,6 +1316,7 @@ where
                         }
                         RetryIndefResult::Indef(()) => {
                             all_indef = false;
+                            indefs.push(id)
                         }
                     }
                 }
@@ -1303,9 +1324,85 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success(ids))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef(()))
+                    Ok(RetryIndefResult::Indef(indefs))
                 } else {
-                    Ok(RetryIndefResult::Retry(results))
+                    let out = MulticastSelectRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
+                }
+            }
+        }
+    }
+
+    fn decide_select_retry_result(
+        &mut self,
+        mut elems: Vec<(
+            Idx,
+            RetryIndefResult<
+                (),
+                <Stream as PushStreamPrivate<Ctx>>::SelectRetry
+            >
+        )>,
+        mut indefs: Vec<Idx>,
+        errs: Option<
+            Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::SelectError)>
+        >
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Idx>,
+            <Self as PushStreamShared<Ctx>>::SelectRetry,
+            Vec<Idx>
+        >,
+        <Self as PushStreamShared<Ctx>>::SelectError
+    > {
+        match errs {
+            // There were errors.
+            // XXX need to capture the indefinite retries here
+            Some(errs) => Err(SelectionsError::Inner {
+                inner: ErrorSet::create(elems, errs)
+            }),
+            // No errors, check for retries.
+            None => {
+                elems.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut results = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
+                let mut all_success = true;
+                let mut all_indef = indefs.is_empty();
+
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(val) => {
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_success = false;
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef(()) => {
+                            all_indef = false;
+                            indefs.push(id)
+                        }
+                    }
+                }
+
+                if all_success {
+                    Ok(RetryIndefResult::Success(ids))
+                } else if all_indef {
+                    Ok(RetryIndefResult::Indef(indefs))
+                } else {
+                    let out = MulticastSelectRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 }
             }
         }
@@ -2346,6 +2443,7 @@ where
     Stream: PushStreamPrivate<Ctx> + PushStream<Ctx>,
     Stream::BatchID: Clone + Debug
 {
+    type IndefParties = Vec<Idx>;
     type AbortBatchRetry = Vec<
         StreamMulticasterAbortRetry<
             Idx,
@@ -2371,7 +2469,7 @@ where
         >,
         usize
     >;
-    type SelectRetry = Vec<RetryResult<(), Stream::SelectRetry>>;
+    type SelectRetry = MulticastSelectRetry<Idx, Stream::SelectRetry>;
     type Selections = StreamMulticasterSelections<Stream::Selections>;
     type StartBatchError = StreamMulticasterStartError<
         Self::SelectError,
@@ -2435,7 +2533,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Idx>,
@@ -2483,11 +2583,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
+        let MulticastSelectRetry { retries, indefs } = retries;
         let len = retries.len();
 
         // Go through the retries and try to create the batch.
@@ -2525,7 +2628,7 @@ where
             }
         }
 
-        self.decide_select_result(results, errs)
+        self.decide_select_retry_result(results, indefs, errs)
     }
 
     fn complete_select(
@@ -2533,7 +2636,9 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Vec<Self::PartyID>, Self::SelectRetry>,
+    ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
+                                 Self::SelectRetry,
+                                 Self::IndefParties>,
                 Self::SelectError> {
         let (mut results, retries) = retries.take();
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
@@ -2712,7 +2817,9 @@ where
         ctx: &mut Ctx,
         parties: I
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     >
     where
@@ -2752,7 +2859,8 @@ where
                     select: retry
                 }
             )),
-            RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
+            RetryIndefResult::Indef(parties) =>
+                    Ok(RetryIndefResult::Indef(parties)),
         }
     }
 
@@ -2761,7 +2869,9 @@ where
         ctx: &mut Ctx,
         retries: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     > {
         match retries {
@@ -2800,7 +2910,8 @@ where
                         select: retry
                     }
                 )),
-                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
+                RetryIndefResult::Indef(parties) =>
+                    Ok(RetryIndefResult::Indef(parties)),
             }
             StreamMulticasterStartError::Create {
                 selections,
@@ -2831,7 +2942,9 @@ where
         ctx: &mut Ctx,
         retries: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<Self::BatchID,
+                         Self::StartBatchRetry,
+                         Self::IndefParties>,
         Self::StartBatchError
     > {
         match retries {
@@ -2870,7 +2983,8 @@ where
                         select: retry
                     }
                 )),
-                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
+                RetryIndefResult::Indef(parties) =>
+                    Ok(RetryIndefResult::Indef(parties)),
             }
             StreamMulticasterStartError::Create {
                 selections,
@@ -3494,7 +3608,9 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &Msg
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -3543,7 +3659,9 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     {
         match retry {
@@ -3651,7 +3769,9 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     {
         match err {

@@ -959,6 +959,7 @@ where
     Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
     Stream::PartyID: Debug
 {
+    type IndefParties = Stream::IndefParties;
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
         SelectorBatchError<
@@ -1083,7 +1084,8 @@ where
                     select: retry
                 }))
             }
-            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Indef(parties)) =>
+                Ok(RetryIndefResult::Indef(parties)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -1295,7 +1297,8 @@ where
                     select: retry
                 }))
             }
-            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Indef(parties)) =>
+                Ok(RetryIndefResult::Indef(parties)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -2476,7 +2479,9 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &Msg
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2510,7 +2515,8 @@ where
                     parties: ()
                 }))
             }
-            Ok(RetryIndefResult::Indef(())) => Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Indef(parties)) =>
+                Ok(RetryIndefResult::Indef(parties)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     select: PartiesBatchError::new(
@@ -2528,7 +2534,9 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     {
         match retry {
@@ -2566,7 +2574,8 @@ where
                                 stream: retry
                             }
                         )),
-                    RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
+                    RetryIndefResult::Indef(parties) =>
+                        Ok(RetryIndefResult::Indef(parties)),
                 }
         }
     }
@@ -2576,7 +2585,9 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+    ) -> Result<RetryIndefResult<Self::BatchID,
+                                 Self::PushRetry,
+                                 Self::IndefParties>,
                 Self::PushError>
     {
         match err {
@@ -2615,7 +2626,8 @@ where
                             stream: retry
                         }
                     )),
-                RetryIndefResult::Indef(()) => Ok(RetryIndefResult::Indef(())),
+                RetryIndefResult::Indef(parties) =>
+                    Ok(RetryIndefResult::Indef(parties)),
             }
         }
     }

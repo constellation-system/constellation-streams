@@ -2214,6 +2214,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|_| ()))
         }
     }
@@ -2243,6 +2244,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|_| ())),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -2273,6 +2275,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|_| ())),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -2416,6 +2419,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id }))
         }
     }
@@ -2448,6 +2452,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -2481,6 +2486,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -2591,6 +2597,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id }))
         }
     }
@@ -2623,6 +2630,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
@@ -2656,6 +2664,7 @@ where
                 .map_retry(|retry| SharedPrivateStreamRetry::Shared {
                     retry: retry
                 })
+                .map_indef(|_| ())
                 .map(|id| SharedPrivateValue::Shared { shared: id })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
