@@ -594,7 +594,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         parties: I
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -613,7 +613,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::SelectError>;
 
     /// Retry a previously-failed call to
@@ -698,7 +698,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Self::IndefParties>,
+                         Option<Self::IndefParties>>,
         Self::StartBatchError
     >
     where
@@ -718,7 +718,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Self::IndefParties>,
+                         Option<Self::IndefParties>>,
         Self::StartBatchError
     >;
 
@@ -1105,7 +1105,7 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         msg: &T
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -1123,7 +1123,7 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         retry: Self::PushRetry
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>;
 
     /// Retry a previously-failed call to
@@ -1138,7 +1138,7 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>;
 
     fn cancel_push(
@@ -2082,7 +2082,7 @@ where
         parties: I
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2104,7 +2104,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::SelectError> {
         let mut guard = self
             .inner
@@ -2200,7 +2200,7 @@ where
         parties: I
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::StartBatchRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::StartBatchError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2221,7 +2221,7 @@ where
         retry: Self::StartBatchRetry
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::StartBatchRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::StartBatchError> {
         let mut guard = self
             .inner
@@ -2311,7 +2311,7 @@ where
         msg: &T
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2333,7 +2333,7 @@ where
         retry: Self::PushRetry
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>
     {
         let mut guard = self
@@ -2353,7 +2353,7 @@ where
         err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Self::IndefParties>,
+                                 Option<Self::IndefParties>>,
                 Self::PushError>
     {
         let mut guard = self

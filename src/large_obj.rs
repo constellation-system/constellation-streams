@@ -22,6 +22,7 @@ use std::array::TryFromSliceError;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -682,7 +683,7 @@ impl<InMsg, OutMsg, PartyID, F, Types>
     for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    PartyID: Clone,
+    PartyID: Clone + Eq + Hash,
     F: Frags
 {
     type MsgsError = LargeObjSendError<
@@ -694,7 +695,8 @@ where
     >;
 
     fn msgs(
-        &mut self
+        &mut self,
+        parties: &HashSet<PartyID>
     ) -> Result<
         (
             Option<Vec<(Vec<PartyID>, Vec<LargeObjMsg<Types::HashID>>)>>,
@@ -743,102 +745,104 @@ where
                     id: id.clone()
                 })?;
 
-            match &mut ent.frags {
-                // Still sending accepts.
-                InboundFragsState::Active {
-                    req: Some(ReqState { nretries, when }),
-                    frags
-                } => {
-                    let size = frags.len();
-                    let delay = self.retry.retry_delay(*nretries);
-                    let retry = now + delay;
-                    let msg = LargeObjMsg::req_obj(hash, size, id);
+            if parties.contains(&party_id) {
+                match &mut ent.frags {
+                    // Still sending accepts.
+                    InboundFragsState::Active {
+                        req: Some(ReqState { nretries, when }),
+                        frags
+                    } => {
+                        let size = frags.len();
+                        let delay = self.retry.retry_delay(*nretries);
+                        let retry = now + delay;
+                        let msg = LargeObjMsg::req_obj(hash, size, id);
 
-                    trace!(target: "large-obj-proto",
-                           "generating object request message");
-
-                    *nretries += 1;
-                    *when = retry;
-                    next = Some(
-                        next.map_or(retry, |next: Instant| next.min(retry))
-                    );
-                    msgs.push((vec![party_id], vec![msg]));
-                }
-                InboundFragsState::Active { frags, .. } => {
-                    let mut buf = [(false, 0, 0); 16];
-
-                    trace!(target: "large-obj-proto",
-                           "generating requests message");
-
-                    match frags.reqs_acks(&mut buf[..], &self.retry) {
-                        RetryResult::Success((n, retry)) => {
-                            let iter = buf[..n].iter().cloned();
-                            let msg = LargeObjMsg::reqs(id, iter);
-
-                            msgs.push((vec![party_id], vec![msg]));
-                            next = next.map_or(retry, |next| {
-                                retry.map(|retry| next.min(retry))
-                            });
-                        }
-                        RetryResult::Retry(retry) => {
-                            next = Some(
-                                next.map_or(retry, |next| next.min(retry))
-                            );
-                        }
-                    }
-                }
-                InboundFragsState::Finished {
-                    expire,
-                    accept,
-                    size,
-                    send
-                } => {
-                    trace!(target: "large-obj-proto",
-                           "generating finished or accept messages");
-
-                    if let Some(expire) = expire {
-                        if *send {
-                            trace!(target: "large-obj-proto",
-                                   concat!("extending expiration for ",
-                                           "tombstone for {} ({}) to {:?}"),
-                                   id, hash, self.tombstone_duration);
-
-                            *expire = when;
-                        } else if *expire <= now {
-                            trace!(target: "large-obj-proto",
-                                   "expiring tombstone for {} ({})",
-                                   id, hash);
-
-                            deletes.push((prin.clone(), hash.clone()));
-                        }
-                    } else {
                         trace!(target: "large-obj-proto",
-                               concat!("setting expiration for tombstone for ",
-                                       "{} ({}) in {:?}"),
-                               id, hash, self.tombstone_duration);
+                               "generating object request message");
 
-                        *expire = Some(when);
-                    }
-
-                    if *send {
-                        let msg = if *accept {
-                            trace!(target: "large-obj-proto",
-                                   "pushing accept for {}",
-                                   hash);
-
-                            LargeObjMsg::accept(ent.hash.clone(), *size, id)
-                        } else {
-                            trace!(target: "large-obj-proto",
-                                   "pushing finish for ID {} ({})",
-                                   id, hash);
-
-                            LargeObjMsg::finish(ent.hash.clone(), id)
-                        };
-
+                        *nretries += 1;
+                        *when = retry;
+                        next = Some(
+                            next.map_or(retry, |next: Instant| next.min(retry))
+                        );
                         msgs.push((vec![party_id], vec![msg]));
                     }
+                    InboundFragsState::Active { frags, .. } => {
+                        let mut buf = [(false, 0, 0); 16];
 
-                    *send = false;
+                        trace!(target: "large-obj-proto",
+                               "generating requests message");
+
+                        match frags.reqs_acks(&mut buf[..], &self.retry) {
+                            RetryResult::Success((n, retry)) => {
+                                let iter = buf[..n].iter().cloned();
+                                let msg = LargeObjMsg::reqs(id, iter);
+
+                                msgs.push((vec![party_id], vec![msg]));
+                                next = next.map_or(retry, |next| {
+                                    retry.map(|retry| next.min(retry))
+                                });
+                            }
+                            RetryResult::Retry(retry) => {
+                                next = Some(
+                                    next.map_or(retry, |next| next.min(retry))
+                                );
+                            }
+                        }
+                    }
+                    InboundFragsState::Finished {
+                        expire,
+                        accept,
+                        size,
+                        send
+                    } => {
+                        trace!(target: "large-obj-proto",
+                               "generating finished or accept messages");
+
+                        if let Some(expire) = expire {
+                            if *send {
+                                trace!(target: "large-obj-proto",
+                                       concat!("extending expiration for ",
+                                               "tombstone for {} ({}) to {:?}"),
+                                       id, hash, self.tombstone_duration);
+
+                                *expire = when;
+                            } else if *expire <= now {
+                                trace!(target: "large-obj-proto",
+                                       "expiring tombstone for {} ({})",
+                                       id, hash);
+
+                                deletes.push((prin.clone(), hash.clone()));
+                            }
+                        } else {
+                            trace!(target: "large-obj-proto",
+                                   concat!("setting expiration for tombstone ",
+                                           "for {} ({}) in {:?}"),
+                                   id, hash, self.tombstone_duration);
+
+                            *expire = Some(when);
+                        }
+
+                        if *send {
+                            let msg = if *accept {
+                                trace!(target: "large-obj-proto",
+                                       "pushing accept for {}",
+                                       hash);
+
+                                LargeObjMsg::accept(ent.hash.clone(), *size, id)
+                            } else {
+                                trace!(target: "large-obj-proto",
+                                       "pushing finish for ID {} ({})",
+                                       id, hash);
+
+                                LargeObjMsg::finish(ent.hash.clone(), id)
+                            };
+
+                            msgs.push((vec![party_id], vec![msg]));
+                        }
+
+                        *send = false;
+                    }
                 }
             }
         }
@@ -1630,7 +1634,7 @@ where
                         )
                             .map_err(|err| LargeObjPushError::Frags {
                                 err: err,
-                                id: id
+                                id: id.clone()
                             })
                             .map(|res| res
                                  .map_retry(|retry| LargeObjPushRetry::Frags {
@@ -1666,7 +1670,7 @@ where
                             &mut ents[0].1.frags
                         )
                             .map_err(|err| LargeObjPushError::Offer {
-                                hash: hash,
+                                hash: hash.clone(),
                                 err: err
                             })
                             .map(|res| res
