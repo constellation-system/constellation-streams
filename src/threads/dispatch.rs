@@ -39,6 +39,7 @@ use constellation_common::retry::RetryResult;
 use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
+use log::warn;
 use log::info;
 use log::trace;
 use mio::Events;
@@ -55,6 +56,8 @@ use crate::stream::StreamID;
 use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::RegistryCtx;
+use crate::threads::Tokens;
+use crate::threads::TokensCtx;
 
 pub trait DispatchInboundTypes {
     type InMsg;
@@ -72,7 +75,15 @@ pub trait DispatchInboundTypes {
 }
 
 pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
-    type Stream;
+    type Addr: Clone + Debug + Display + Eq + Hash;
+    type ChannelParam: Clone + Debug + Display + Eq + Hash
+        + ChannelParam<Self::Addr>;
+    type ChannelID: Clone + Debug + Display + Eq + Hash;
+    type Stream: StreamReporter<
+        Self::SessionPrin,
+        StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+        Self::AuthNChan
+    >;
     type Msgs: PrivateMsgs<Self::OutMsg>;
     type Recv: AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg>;
     type Chan: Credentials + PullStream<Self::Wrapper>;
@@ -89,10 +100,6 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
 }
 
 pub trait DispatchCtxTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
-    type Addr: Clone + Debug + Display + Eq + Hash;
-    type ChannelParam: Clone + Debug + Display + Eq + Hash
-        + ChannelParam<Self::Addr>;
-    type ChannelID: Clone + Debug + Display + Eq + Hash;
     type DispatchError: Debug + Display + ScopedError;
     type Disp: Dispatch<
         Self, Ctx,
@@ -216,40 +223,29 @@ where
     stream: Stream,
 }
 
-pub struct DispatchedEntry<ID, Types, Ctx>
+pub struct DispatchedEntry<Types, Ctx>
 where
     Types: DispatchEntryTypes<Ctx>,
 {
     ctx: PhantomData<Ctx>,
     dispatched: Dispatched<Types, Types::OutMsg, Types::Stream,
                            Types::Msgs, Types::Recv>,
-    pull_streams: HashMap<ID, Types::AuthNChan>,
+    pull_streams: HashMap<
+        StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        Types::AuthNChan
+    >,
     mode: Types::Mode
 }
 
-pub struct DispatchThreadCtx<Types, Chans, Ctx>
+pub struct DispatchThreadCtx<Chans, Ctx>
 where
-    Types: DispatchCtxTypes<Ctx>,
-    Chans: Channels<Ctx,
-                    Addr = Types::Addr,
-                    Param = Types::ChannelParam,
-                    Stream = Types::AuthNChan,
-                    ChannelID = Types::ChannelID>
+    Chans: Channels<Ctx>
 {
-    dispatched: HashMap<
-        Types::SessionPrin,
-        DispatchedEntry<
-            StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-            Types,
-            Ctx
-        >
-    >,
-    dispatcher: Types::Disp,
     channels: Chans,
-    notify: Arc<Waker>,
     ctx: Ctx,
     poll: Poll,
-    nevents: usize
+    nevents: usize,
+    tokens: Tokens
 }
 
 
@@ -257,7 +253,11 @@ pub struct DispatchThread<Types, Ctx>
 where
     Types: DispatchTypes<Ctx>,
 {
-    ctx: DispatchThreadCtx<Types, Types::Chans, Ctx>,
+    ctx: DispatchThreadCtx<Types::Chans, Ctx>,
+    dispatched: HashMap<Types::SessionPrin, DispatchedEntry<Types, Ctx>>,
+    notify: Arc<Waker>,
+    dispatcher: Types::Disp,
+    mode_config: Types::ModeConfig,
     shutdown: ShutdownFlag,
 }
 
@@ -322,57 +322,17 @@ where
     }
 }
 
-impl<ID, Types, Ctx>
-    StreamReporter<
-        Types::SessionPrin,
-        ID,
-        Types::AuthNChan,
-        ()
-    >
-    for DispatchedEntry<ID, Types, Ctx>
+impl<Chans, Ctx> Channels<()> for DispatchThreadCtx<Chans, Ctx>
 where
-    ID: Clone + Debug + Display + Debug + Eq + Hash,
-    Types: DispatchEntryTypes<Ctx>
+    Chans: Channels<Ctx>
 {
-    type ReportStreamError = Infallible;
-
-    fn report_stream(
-        &mut self,
-        _ctx: &mut (),
-        _party: &Types::SessionPrin,
-        stream_id: ID,
-        stream: Types::AuthNChan
-    ) -> Result<Option<Types::AuthNChan>, Self::ReportStreamError> {
-        match self.pull_streams.get(&stream_id) {
-            Some(out) => Ok(Some(out.clone())),
-            None => {
-                if self.pull_streams.insert(stream_id, stream).is_some() {
-                    error!(target: "dispatch-thread-context",
-                           "insert should not return Some");
-                }
-
-                Ok(None)
-            }
-        }
-    }
-}
-
-impl<Types, Chans, Ctx> Channels<()> for DispatchThreadCtx<Types, Chans, Ctx>
-where
-    Types: DispatchCtxTypes<Ctx>,
-    Chans: Channels<Ctx,
-                    Addr = Types::Addr,
-                    Param = Types::ChannelParam,
-                    Stream = Types::AuthNChan,
-                    ChannelID = Types::ChannelID>
-{
-    type ChannelID = Types::ChannelID;
-    type Param = Types::ChannelParam;
+    type ChannelID = Chans::ChannelID;
+    type Param = Chans::Param;
     type ParamIter = Chans::ParamIter;
     type ParamError = Chans::ParamError;
     type OutNegoParam = Chans::OutNegoParam;
-    type Addr = Types::Addr;
-    type Stream = Types::AuthNChan;
+    type Addr = Chans::Addr;
+    type Stream = Chans::Stream;
     type ReqStreamError = Chans::ReqStreamError;
 
     #[inline]
@@ -415,14 +375,27 @@ where
     }
 }
 
-impl<Types, Chans, Ctx> RegistryCtx for DispatchThreadCtx<Types, Chans, Ctx>
+impl<Chans, Ctx> TokensCtx for DispatchThreadCtx<Chans, Ctx>
 where
-    Types: DispatchCtxTypes<Ctx>,
-    Chans: Channels<Ctx,
-                    Addr = Types::Addr,
-                    Param = Types::ChannelParam,
-                    Stream = Types::AuthNChan,
-                    ChannelID = Types::ChannelID>
+    Chans: Channels<Ctx>
+{
+    #[inline]
+    fn token(&mut self) -> Token {
+        self.tokens.token()
+    }
+
+    #[inline]
+    fn free_token(
+        &mut self,
+        token: Token
+    ) {
+        self.tokens.free_token(token)
+    }
+}
+
+impl<Chans, Ctx> RegistryCtx for DispatchThreadCtx<Chans, Ctx>
+where
+    Chans: Channels<Ctx>
 {
     #[inline]
     fn registry(&self) -> &Registry {
@@ -430,116 +403,75 @@ where
     }
 }
 
-impl<Types, Chans, Ctx>
-    StreamReporter<
-        Types::SessionPrin,
-        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        Chans::Stream,
-        ()
-    >
-    for DispatchThreadCtx<Types, Chans, Ctx>
+impl<Chans, Ctx> DispatchThreadCtx<Chans, Ctx>
 where
-    Types: DispatchCtxTypes<Ctx>,
-    Chans: Channels<Ctx,
-                    Addr = Types::Addr,
-                    Param = Types::ChannelParam,
-                    Stream = Types::AuthNChan,
-                    ChannelID = Types::ChannelID>
-{
-    type ReportStreamError = Types::DispatchError;
-
-    fn report_stream(
-        &mut self,
-        ctx: &mut (),
-        party: &Types::SessionPrin,
-        stream_id: StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        stream: Chans::Stream
-    ) -> Result<Option<Chans::Stream>, Self::ReportStreamError> {
-        match self.dispatched.entry(party.clone()) {
-            Entry::Occupied(mut ent) => {
-                let Ok(out) = ent.get_mut()
-                    .report_stream(ctx, party, stream_id, stream);
-
-                Ok(out)
-            },
-            Entry::Vacant(ent) => {
-                debug!(target: "dispatch-thread-context",
-                       "adding stream {} for {}",
-                       stream_id, party);
-
-                let dispatched = self.dispatcher
-                    .dispatch(&mut self.ctx, party, self.notify.clone())?;
-                // XXX use a size hint here.
-                let pull_streams = HashMap::new();
-                let mut dispatched = DispatchedEntry {
-                    dispatched: dispatched,
-                    pull_streams: pull_streams
-                };
-                let Ok(out) = dispatched
-                    .report_stream(ctx, party, stream_id, stream);
-
-                if out.is_some() {
-                    error!(target: "dispatch-thread-context",
-                           "result of report_stream should not be Some");
-                }
-
-                ent.insert(dispatched);
-
-                Ok(out)
-            }
-        }
-    }
-}
-
-impl<Types, Chans, Ctx> DispatchThreadCtx<Types, Chans, Ctx>
-where
-    Types: DispatchCtxTypes<Ctx>,
-    Chans: Channels<Ctx,
-                    Addr = Types::Addr,
-                    Param = Types::ChannelParam,
-                    Stream = Types::AuthNChan,
-                    ChannelID = Types::ChannelID>
+    Chans: Channels<Ctx>
 {
     #[inline]
     fn new(
         ctx: Ctx,
         poll: Poll,
-        notify: Arc<Waker>,
-        dispatcher: Types::Disp,
         channels: Chans,
+        tokens: Tokens,
         nevents: usize
     ) -> Self {
         DispatchThreadCtx {
-            dispatched: HashMap::new(),
-            dispatcher: dispatcher,
             channels: channels,
-            notify: notify,
             ctx: ctx,
             poll: poll,
+            tokens: tokens,
             nevents: nevents
+        }
+    }
+}
+
+impl<Types, Ctx> DispatchedEntry<Types, Ctx>
+where
+    Types: DispatchEntryTypes<Ctx>,
+{
+    fn recv_stream(
+        &mut self,
+        id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        stream: Types::AuthNChan
+    ) {
+        debug!(target: "dispatched-entry",
+               "receiving stream from {} for {}",
+               id, stream.prin());
+
+        // Report up to the stream.
+        match self
+            .dispatched
+            .stream
+            .report_stream(stream.prin(), id.clone(), stream.clone()) {
+            Ok(res) => {
+                let stream = match res {
+                    Some(stream) => {
+                        warn!(target: "poll-thread",
+                              "stream {} with {} was already present",
+                              id, stream.prin());
+
+                        stream
+                    }
+                    None => stream
+                };
+
+                if self
+                    .pull_streams
+                    .insert(id.clone(), stream.clone())
+                    .is_some() {
+                    error!(target: "poll-thread",
+                           "stream {} was already present for {}",
+                           id, stream.prin());
+                }
+            }
+            Err(err) => {
+                error!(target: "poll-thread",
+                       "error reporting stream {} with {}: {}",
+                       id, stream.prin(), err);
+            }
         }
     }
 
-    #[inline]
-    fn with_capacity(
-        ctx: Ctx,
-        poll: Poll,
-        notify: Arc<Waker>,
-        dispatcher: Types::Disp,
-        channels: Chans,
-        nevents: usize,
-        nsessions: usize
-    ) -> Self {
-        DispatchThreadCtx {
-            dispatched: HashMap::with_capacity(nsessions),
-            dispatcher: dispatcher,
-            channels: channels,
-            notify: notify,
-            ctx: ctx,
-            poll: poll,
-            nevents: nevents
-        }
-    }
 }
 
 impl<Types, Ctx> DispatchThread<Types, Ctx>
@@ -562,6 +494,60 @@ where
         let mode = Types::Mode::create(&stream, mode_config)
             .map_err(|err| DispatchThreadCreateError::Mode { err: err })?;
     }
+
+    fn report_stream(
+        &mut self,
+        id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        stream: Types::AuthNChan
+    ) {
+        match self.dispatched.entry(stream.prin().clone()) {
+            Entry::Occupied(mut ent) => ent.get_mut().recv_stream(id, stream),
+            Entry::Vacant(ent) => {
+                debug!(target: "dispatch-thread",
+                       "dispatching for {}",
+                       stream.prin());
+
+                let token = self.ctx.tokens.token();
+
+                match Waker::new(self.ctx.poll.registry(), token) {
+                    Ok(notify) => match self.dispatcher
+                        .dispatch(&mut self.ctx, stream.prin(), notify) {
+                        Ok(dispatched) => match Types::Mode
+                            ::create(&stream, &self.mode_config) {
+                            Ok(mode) => {
+                                // XXX use a size hint here.
+                                let pull_streams = HashMap::new();
+                                let mut dispatched = DispatchedEntry {
+                                    ctx: PhantomData,
+                                    dispatched: dispatched,
+                                    pull_streams: pull_streams,
+                                    mode: mode
+                                };
+
+                                ent.insert(dispatched).recv_stream(id, stream)
+                            }
+                            Err(err) => {
+                                error!(target: "dispatch-thread",
+                                       "error creating push mode for {}: {}",
+                                       stream.prin(), err);
+                            }
+                        }
+                        Err(err) => {
+                            error!(target: "dispatch-thread",
+                                   "error dispatching for {}: {}",
+                                   stream.prin(), err);
+                        }
+                    },
+                    Err(err) => {
+                        error!(target: "dispatch-thread",
+                               "error creating notifier for {}: {}",
+                               stream.prin(), err);
+                    }
+                }
+            }
+        }
+    }
+
 }
 
 /*

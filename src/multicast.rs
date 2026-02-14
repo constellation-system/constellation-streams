@@ -1524,13 +1524,13 @@ where
 }
 
 impl<Party, Idx, Stream, Frags, ChannelID, Chan, Ctx>
-    StreamReporter<Party, ChannelID, Chan, Ctx>
+    StreamReporter<Party, ChannelID, Chan>
     for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
     ChannelID: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + StreamReporter<Party, ChannelID, Chan, Ctx>,
+    Stream: PushStream<Ctx> + StreamReporter<Party, ChannelID, Chan>,
     Stream::BatchID: Clone
 {
     type ReportStreamError =
@@ -1538,7 +1538,6 @@ where
 
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
         party: &Party,
         id: ChannelID,
         stream: Chan
@@ -1553,7 +1552,7 @@ where
 
                 self.rev_map[idx]
                     .stream
-                    .report_stream(ctx, party, id, stream)
+                    .report_stream(party, id, stream)
                     .map_err(|err| {
                         StreamMulticasterReportError::Report { error: err }
                     })

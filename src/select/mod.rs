@@ -46,7 +46,6 @@ use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
@@ -989,7 +988,7 @@ where
 
 impl<Epochs, Party, Ctx>
     StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
-                   Ctx::Stream, Ctx>
+                   Ctx::Stream>
     for StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
@@ -997,15 +996,12 @@ where
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream: Clone + PushStream<Ctx> + Send,
-    Ctx: StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
-                        Ctx::Stream, ()>
 {
-    type ReportStreamError = StreamSelectorReportError<Ctx::ReportStreamError>;
+    type ReportStreamError = StreamSelectorReportError<Infallible>;
 
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
-        party: &Party,
+        _party: &Party,
         stream_id: StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         stream: Ctx::Stream
     ) -> Result<Option<Ctx::Stream>, Self::ReportStreamError> {
@@ -1020,34 +1016,12 @@ where
                 }
                 None => {
                     trace!(target: "stream-selector",
-                           "reporting stream {} to inner reporter",
+                           "adding stream {}",
                            stream_id);
 
-                    match ctx
-                        .report_stream(&mut (), party, stream_id.clone(),
-                                       stream.clone())
-                        .map_err(|err| StreamSelectorReportError::Report {
-                            err: err
-                        })? {
-                        Some(stream) => {
-                            trace!(target: "stream-selector",
-                                   "inner reporter already had stream for {}",
-                                   stream_id);
+                    self.streams[idx.0].stream = Some(stream);
 
-                            self.streams[idx.0].stream = Some(stream.clone());
-
-                            Ok(Some(stream))
-                        }
-                        None => {
-                            trace!(target: "stream-selector",
-                                   "adding stream {}",
-                                   stream_id);
-
-                            self.streams[idx.0].stream = Some(stream);
-
-                            Ok(None)
-                        }
-                    }
+                    Ok(None)
                 }
             },
             None => Err(StreamSelectorReportError::NotFound)
@@ -1057,7 +1031,7 @@ where
 
 impl<Epochs, Resolve, Party, Ctx>
     StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
-                   Ctx::Stream, Ctx>
+                   Ctx::Stream>
     for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
@@ -1068,24 +1042,19 @@ where
     Ctx::Stream: Clone + PushStream<Ctx> + Send,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
-    Ctx: StreamReporter<Party, StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
-                        Ctx::Stream, ()>
 {
-    type ReportStreamError =
-        WithMutexPoison<StreamSelectorReportError<Ctx::ReportStreamError>>;
+    type ReportStreamError = StreamSelectorReportError<Infallible>;
 
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
         party: &Party,
         id: StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         stream: Ctx::Stream
     ) -> Result<Option<Ctx::Stream>, Self::ReportStreamError> {
         self.state
             .write()
-            .map_err(|_| WithMutexPoison::MutexPoison)?
-            .report_stream(ctx, party, id, stream)
-            .map_err(|err| WithMutexPoison::Inner { err: err })
+            .map_err(|_| StreamSelectorReportError::MutexPoison)?
+            .report_stream(party, id, stream)
     }
 }
 

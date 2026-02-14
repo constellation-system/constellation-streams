@@ -66,7 +66,7 @@ pub trait PullStream<T> {
 ///
 /// This is primarily intended to allow the push-side and the
 /// pull-side to report streams to one another.
-pub trait StreamReporter<Party, ID, Stream, Ctx>
+pub trait StreamReporter<Party, ID, Stream>
 where ID: Clone + Debug + Display + Eq + Hash
 {
     /// Type of errors that can happen reporting a stream.
@@ -81,7 +81,6 @@ where ID: Clone + Debug + Display + Eq + Hash
     /// stream was accepted.
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
         party: &Party,
         id: ID,
         stream: Stream
@@ -1446,17 +1445,16 @@ where
     }
 }
 
-impl<Party, ID, Stream, Ctx, Inner> StreamReporter<Party, ID, Stream, Ctx>
+impl<Party, ID, Stream, Inner> StreamReporter<Party, ID, Stream>
     for ThreadedStream<Inner>
 where
     ID: Clone + Debug + Display + Eq + Hash,
-    Inner: StreamReporter<Party, ID, Stream, Ctx>
+    Inner: StreamReporter<Party, ID, Stream>
 {
     type ReportStreamError = WithMutexPoison<Inner::ReportStreamError>;
 
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
         party: &Party,
         id: ID,
         stream: Stream
@@ -1467,7 +1465,7 @@ where
             .map_err(|_| WithMutexPoison::MutexPoison)?;
 
         guard
-            .report_stream(ctx, party, id, stream)
+            .report_stream(party, id, stream)
             .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }

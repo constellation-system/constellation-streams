@@ -18,7 +18,6 @@
 
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -64,8 +63,8 @@ use crate::threads::RegistryCtx;
 pub trait PollThreadTypes<Ctx>
 where Ctx: 'static + Send
 {
-    type Addr: 'static + Clone + Display + Eq + Hash + Send;
-    type ChannelParam: 'static + Clone + Display + Eq + Hash + Send;
+    type Addr: 'static + Clone + Debug + Display + Eq + Hash + Send;
+    type ChannelParam: 'static + Clone + Debug + Display + Eq + Hash + Send;
     type ChannelID: 'static + Clone + Debug + Display + Eq + Hash + Send;
     type MsgPrin: Clone + Display + Eq + Hash;
     type SessionPrin: Display;
@@ -89,6 +88,10 @@ where Ctx: 'static + Send
             >,
             RefreshRetry = Self::RefreshRetry,
             RefreshError = Self::RefreshError
+        > + StreamReporter<
+            Self::SessionPrin,
+            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+            Self::AuthNChan
         > + Send;
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
@@ -277,7 +280,6 @@ where Chans: Channels<Ctx>
     }
 }
 
-
 impl<Ctx, Types> PollThread<Ctx, Types>
 where
     Types: PollThreadTypes<Ctx>,
@@ -449,20 +451,44 @@ where
 
     fn recv_stream(
         &mut self,
-        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
         stream: Types::AuthNChan
     ) {
         debug!(target: "poll-thread",
-               "receiving stream from {}",
-               id);
-
-        if self.pull_streams.insert(id.clone(), stream.clone()).is_some() {
-            error!(target: "poll-thread",
-                   "stream was already present for {}",
-                   id);
-        }
+               "receiving stream from {} for {}",
+               id, stream.prin());
 
         // Report up to the stream.
+        match self
+            .stream
+            .report_stream(stream.prin(), id.clone(), stream.clone()) {
+            Ok(res) => {
+                let stream = match res {
+                    Some(stream) => {
+                        warn!(target: "poll-thread",
+                              "stream {} with {} was already present",
+                              id, stream.prin());
+
+                        stream
+                    }
+                    None => stream
+                };
+
+                if self
+                    .pull_streams
+                    .insert(id.clone(), stream.clone())
+                    .is_some() {
+                    error!(target: "poll-thread",
+                           "stream {} was already present for {}",
+                           id, stream.prin());
+                }
+            }
+            Err(err) => {
+                error!(target: "poll-thread",
+                       "error reporting stream {} with {}: {}",
+                       id, stream.prin(), err);
+            }
+        }
     }
 
     fn complete_refresh_stream(
@@ -630,7 +656,7 @@ where
                         for (addr, channel_id, param, stream) in streams {
                             let id = StreamID::new(addr, channel_id, param);
 
-                            self.recv_stream(&id, stream)
+                            self.recv_stream(id, stream)
                         }
 
                         // Pull in messages from all active streams.

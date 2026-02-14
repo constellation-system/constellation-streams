@@ -455,20 +455,19 @@ where
 }
 
 impl<Epochs, StreamID, Stream, Party, Ctx>
-    StreamReporter<Party, StreamID, Stream, Ctx>
+    StreamReporter<Party, StreamID, Stream>
     for DispatchSelectorState<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
     Stream: Clone + Send + PushStream<Ctx>
-        + StreamReporter<Party, StreamID, Stream, Ctx>
+        + StreamReporter<Party, StreamID, Stream>
 {
     type ReportStreamError = DispatchSelectorRefreshError<StreamID>;
 
     fn report_stream(
         &mut self,
-        _ctx: &mut Ctx,
         _party: &Party,
         stream_id: StreamID,
         stream: Stream
@@ -501,7 +500,7 @@ where
 }
 
 impl<Epochs, StreamID, Stream, Party, Ctx>
-    StreamReporter<Party, StreamID, Stream, Ctx>
+    StreamReporter<Party, StreamID, Stream>
     for DispatchSelector<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Create + Iterator,
@@ -509,7 +508,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
     Stream: Clone + PushStream<Ctx> + Send
-        + StreamReporter<Party, StreamID, Stream, Ctx>
+        + StreamReporter<Party, StreamID, Stream>
 {
     type ReportStreamError = WithMutexPoison<
         DispatchSelectorRefreshError<StreamID>
@@ -517,7 +516,6 @@ where
 
     fn report_stream(
         &mut self,
-        ctx: &mut Ctx,
         party: &Party,
         stream_id: StreamID,
         stream: Stream
@@ -525,7 +523,7 @@ where
         self.state
             .write()
             .map_err(|_| WithMutexPoison::MutexPoison)?
-            .report_stream(ctx, party, stream_id, stream)
+            .report_stream(party, stream_id, stream)
             .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }
