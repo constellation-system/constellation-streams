@@ -661,7 +661,7 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Stream::IndefParties)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -735,7 +735,7 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Stream::IndefParties)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -861,7 +861,7 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Stream::IndefParties)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,

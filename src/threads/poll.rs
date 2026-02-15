@@ -146,7 +146,6 @@ where Chans: Channels<Ctx>
     channels: Chans,
     ctx: Ctx,
     poll: Poll,
-    nevents: usize
 }
 
 pub struct PollThread<Ctx, Types>
@@ -169,6 +168,7 @@ where
     shutdown: ShutdownFlag,
     /// Stream to use to send.
     stream: Types::Stream,
+    nevents: usize
 }
 
 impl<Chans, Ctx> Channels<()> for PollThreadCtx<Chans, Ctx>
@@ -267,7 +267,6 @@ where Chans: Channels<Ctx>
     fn new(
         ctx: Ctx,
         channels: Chans,
-        nevents: usize
     ) -> Result<Self, Error> {
         let poll = Poll::new()?;
 
@@ -275,7 +274,6 @@ where Chans: Channels<Ctx>
             channels: channels,
             ctx: ctx,
             poll: poll,
-            nevents: nevents
         })
     }
 }
@@ -308,7 +306,7 @@ where
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
-        let ctx = PollThreadCtx::new(ctx, channels, nevents)
+        let ctx = PollThreadCtx::new(ctx, channels)
             .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let pull_streams = match nsessions {
             Some(nsessions) => HashMap::with_capacity(nsessions),
@@ -323,6 +321,7 @@ where
             notify: notify,
             shutdown: shutdown,
             stream: stream,
+            nevents: nevents,
             recv: recv,
             ctx: ctx
         })
@@ -491,6 +490,7 @@ where
         }
     }
 
+    // XXX need to check if the completable error type is wouldblock and delay.
     fn complete_refresh_stream(
         &mut self,
         err: Types::RefreshCompletableError
@@ -560,7 +560,7 @@ where
     }
 
     fn run(mut self) {
-        let mut events = Events::with_capacity(self.ctx.nevents);
+        let mut events = Events::with_capacity(self.nevents);
         let mut next_pending = None;
         let mut next_outbound = None;
         let mut next_listen = None;
