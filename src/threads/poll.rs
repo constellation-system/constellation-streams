@@ -743,6 +743,18 @@ where
                 }
             }
 
+            // Complete any stalled sends first.
+            if let Err(err) = self.mode.complete_pending(
+                &mut self.ctx,
+                &mut self.msgs,
+                &mut self.stream,
+                &live
+            ) {
+                error!(target: "poll-thread",
+                       "error completing stalled sends: {}",
+                       err)
+            }
+
             // Push new messages.
             if next_outbound.map_or(false, |when| when <= now) {
                 trace!(target: "poll-thread",

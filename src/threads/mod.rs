@@ -87,6 +87,14 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         now: Instant,
     ) -> Result<Option<Instant>, Self::RetryError>;
 
+    fn complete_pending(
+        &mut self,
+        ctx: &mut Ctx,
+        msgs: &mut Msgs,
+        stream: &mut Stream,
+        live: &HashSet<Token>,
+    ) -> Result<Option<Instant>, Self::RetryError>;
+
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,

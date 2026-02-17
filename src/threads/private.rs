@@ -173,7 +173,7 @@ where
     /// Buffer for sends in progress.
     pending: Vec<PushEntry<Msg, Stream, Ctx>>,
     /// Pending sends that stalled with `WouldBlock`
-    completes: Vec<PushEntryRecoverableError<
+    completes: Option<Vec<PushEntryRecoverableError<
         Vec<Msg>,
         Stream::BatchID,
         Stream::StreamFlags,
@@ -181,9 +181,11 @@ where
         <Stream::StartBatchError as RecoverableError>::Completable,
         <Stream::AddError as RecoverableError>::Completable,
         <Stream::FinishBatchError as RecoverableError>::Completable
-    >>,
+    >>>,
     /// Pending operations that produced indefinite waits.
-    indefs: Option<Vec<IndefEntry<Msg>>>
+    indefs: Option<Vec<IndefEntry<Msg>>>,
+    /// Size hint.
+    retries_hint: Option<usize>
 }
 
 pub struct PrivateLargeObjPushMode<Types, Ctx>
@@ -193,7 +195,7 @@ where
     msgs_pending:
         Vec<PushEntry<LargeObjMsg<Types::HashID>, Types::Stream, Ctx>>,
     /// Pending message sends that stalled with `WouldBlock`
-    msgs_completes: Vec<PushEntryRecoverableError<
+    msgs_completes: Option<Vec<PushEntryRecoverableError<
         Vec<LargeObjMsg<Types::HashID>>,
         Types::BatchID,
         Types::StreamFlags,
@@ -201,16 +203,20 @@ where
         Types::StartBatchErrorCompletable,
         Types::AddErrorCompletable,
         Types::FinishBatchErrorCompletable,
-    >>,
+    >>>,
     frags_pending: Vec<LargeObjEntry<Types::Stream, Types::Hash, Ctx>>,
-    frags_completes: Vec<FragsOrOffer<
+    frags_completes: Option<Vec<FragsOrOffer<
         Types::HashID,
         Types::PushFragErrorCompletable,
         Types::PushOfferErrorCompletable
-    >>,
+    >>>,
     /// Pending message sends that produced indefinite waits.
     msgs_indefs: Option<Vec<IndefEntry<LargeObjMsg<Types::HashID>>>>,
-    frags_indef: bool
+    frags_indef: bool,
+    /// Size hint for message arrays.
+    msg_retries_hint: Option<usize>,
+    /// Size hint for frags arrays.
+    frags_retries_hint: Option<usize>
 }
 
 #[derive(Clone)]
@@ -896,7 +902,18 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
-                self.completes.push(completable);
+                if let Some(completes) = &mut self.completes {
+                    completes.push(completable)
+                } else {
+                    let mut vec = match self.retries_hint {
+                        Some(hint) => Vec::with_capacity(hint),
+                        None => Vec::new()
+                    };
+
+                    vec.push(completable);
+
+                    self.completes = Some(vec);
+                }
 
                 None
             } else {
@@ -919,12 +936,16 @@ where
                         };
 
                         if let Some(indefs) = &mut self.indefs {
-                            error!(target: "private-datagram-push-mode",
-                                   "indefs should be empty");
-
                             indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![ent])
+                            let mut vec = match self.retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.indefs = Some(vec)
                         }
 
                         None
@@ -981,13 +1002,15 @@ where
         match retries_hint {
             Some(hint) => Ok(PrivateDatagramPushMode {
                 pending: Vec::with_capacity(hint),
-                completes: Vec::with_capacity(hint),
-                indefs: None
+                completes: None,
+                indefs: None,
+                retries_hint: retries_hint
             }),
             None => Ok(PrivateDatagramPushMode {
                 pending: Vec::new(),
-                completes: Vec::new(),
-                indefs: None
+                completes: None,
+                indefs: None,
+                retries_hint: retries_hint
             })
         }
     }
@@ -1030,7 +1053,14 @@ where
 
                             indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![ent])
+                            let mut vec = match self.retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.indefs = Some(vec)
                         }
 
                         None
@@ -1115,12 +1145,16 @@ where
                     };
 
                     if let Some(indefs) = &mut self.indefs {
-                        error!(target: "private-datagram-push-mode",
-                               "indefs should be empty");
-
                         indefs.push(ent)
                     } else {
-                        self.indefs = Some(vec![ent])
+                        let mut vec = match self.retries_hint {
+                            Some(hint) => Vec::with_capacity(hint),
+                            None => Vec::new()
+                        };
+
+                        vec.push(ent);
+
+                        self.indefs = Some(vec)
                     }
                 }
                 // Error occurred.
@@ -1135,6 +1169,66 @@ where
         }
 
         Ok(out)
+    }
+
+    fn complete_pending(
+        &mut self,
+        ctx: &mut Ctx,
+        _msgs: &mut Msgs,
+        stream: &mut Stream,
+        _live: &HashSet<Token>,
+    ) -> Result<Option<Instant>, Self::RetryError> {
+        if let Some(completes) = self.completes.take() {
+            let mut next = None;
+
+            // First complete any pending messages.
+            for complete in completes.into_iter() {
+                let retry = match PushEntry::complete(ctx, stream, complete) {
+                    // Send succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success(())) => None,
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        let when = retry.when();
+
+                        self.pending.push(retry);
+
+                        Some(when)
+                    },
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef(msgs)) => {
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            msgs: msgs
+                        };
+
+                        if let Some(indefs) = &mut self.indefs {
+                            indefs.push(ent)
+                        } else {
+                            let mut vec = match self.retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.indefs = Some(vec)
+                        }
+
+                        None
+                    }
+                    // Error occurred.
+                    Err(err) => self.handle_error(ctx, stream, err),
+                };
+
+                next = next.map_or(retry, |next| {
+                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
+                });
+            }
+
+            Ok(next)
+        } else {
+            Ok(None)
+        }
     }
 
     fn retry_indefs(
@@ -1172,7 +1266,14 @@ where
 
                             indefs.push(ent)
                         } else {
-                            self.indefs = Some(vec![ent])
+                            let mut vec = match self.retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.indefs = Some(vec)
                         }
                     }
                     // Error occurred.
@@ -1227,7 +1328,18 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
-                self.msgs_completes.push(completable);
+                if let Some(completes) = &mut self.msgs_completes {
+                    completes.push(completable)
+                } else {
+                    let mut vec = match self.msg_retries_hint {
+                        Some(hint) => Vec::with_capacity(hint),
+                        None => Vec::new()
+                    };
+
+                    vec.push(completable);
+
+                    self.msgs_completes = Some(vec);
+                }
 
                 None
             } else {
@@ -1250,12 +1362,16 @@ where
                         };
 
                         if let Some(indefs) = &mut self.msgs_indefs {
-                            error!(target: "private-large-obj-push-mode",
-                                   "indefs should be empty");
-
                             indefs.push(ent)
                         } else {
-                            self.msgs_indefs = Some(vec![ent])
+                            let mut vec = match self.msg_retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.msgs_indefs = Some(vec)
                         }
 
                         None
@@ -1308,7 +1424,18 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
-                self.frags_completes.push(completable);
+                if let Some(completes) = &mut self.frags_completes {
+                    completes.push(completable)
+                } else {
+                    let mut vec = match self.frags_retries_hint {
+                        Some(hint) => Vec::with_capacity(hint),
+                        None => Vec::new()
+                    };
+
+                    vec.push(completable);
+
+                    self.frags_completes = Some(vec);
+                }
 
                 None
             } else {
@@ -1380,22 +1507,24 @@ where
         config: Self::Config
     ) -> Result<Self, Self::CreateError> {
         let (msg_retries_hint, frag_retries_hint) = config.take();
-        let (msgs_pending, msgs_completes) = match msg_retries_hint {
-            Some(hint) => (Vec::with_capacity(hint), Vec::with_capacity(hint)),
-            None => (Vec::new(), Vec::new())
+        let msgs_pending = match msg_retries_hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
         };
-        let (frags_pending, frags_completes) = match frag_retries_hint {
-            Some(hint) => (Vec::with_capacity(hint), Vec::with_capacity(hint)),
-            None => (Vec::new(), Vec::new())
+        let frags_pending = match frag_retries_hint {
+            Some(hint) => Vec::with_capacity(hint),
+            None => Vec::new()
         };
 
         Ok(PrivateLargeObjPushMode {
             msgs_pending: msgs_pending,
-            msgs_completes: msgs_completes,
+            msgs_completes: None,
             frags_pending: frags_pending,
-            frags_completes: frags_completes,
+            frags_completes: None,
             msgs_indefs: None,
-            frags_indef: false
+            frags_indef: false,
+            msg_retries_hint: msg_retries_hint,
+            frags_retries_hint: frag_retries_hint
         })
     }
 
@@ -1446,7 +1575,14 @@ where
 
                             indefs.push(ent)
                         } else {
-                            self.msgs_indefs = Some(vec![ent])
+                            let mut vec = match self.msg_retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.msgs_indefs = Some(vec)
                         }
 
                         None
@@ -1565,12 +1701,16 @@ where
                     };
 
                     if let Some(indefs) = &mut self.msgs_indefs {
-                        error!(target: "private-large-obj-push-mode",
-                               "indefs should be empty");
-
                         indefs.push(ent)
                     } else {
-                        self.msgs_indefs = Some(vec![ent])
+                        let mut vec = match self.msg_retries_hint {
+                            Some(hint) => Vec::with_capacity(hint),
+                            None => Vec::new()
+                        };
+
+                        vec.push(ent);
+
+                        self.msgs_indefs = Some(vec)
                     }
                 }
                 // Error occurred.
@@ -1654,6 +1794,102 @@ where
         Ok(out)
     }
 
+    fn complete_pending(
+        &mut self,
+        ctx: &mut Ctx,
+        proto: &mut LargeObjProto<
+            InMsg,
+            OutMsg,
+            (),
+            Types::Frags,
+            LargeObjTypes
+        >,
+        stream: &mut Types::Stream,
+        _live: &HashSet<Token>,
+    ) -> Result<Option<Instant>, Self::RetryError> {
+        let mut next = None;
+
+        if let Some(completes) = self.msgs_completes.take() {
+            // First complete any pending messages.
+            for complete in completes.into_iter() {
+                let retry = match PushEntry::complete(ctx, stream, complete) {
+                    // Send succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success(())) => None,
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        let when = retry.when();
+
+                        self.msgs_pending.push(retry);
+
+                        Some(when)
+                    },
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef(msgs)) => {
+                        let ent = IndefEntry {
+                            origin: Instant::now(),
+                            msgs: msgs
+                        };
+
+                        if let Some(indefs) = &mut self.msgs_indefs {
+                            indefs.push(ent)
+                        } else {
+                            let mut vec = match self.msg_retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.msgs_indefs = Some(vec)
+                        }
+
+                        None
+                    }
+                    // Error occurred.
+                    Err(err) => self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err),
+                };
+
+                next = next.map_or(retry, |next| {
+                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
+                });
+            }
+        }
+
+        if let Some(completes) = self.frags_completes.take() {
+            // First complete any pending messages.
+            for complete in completes.into_iter() {
+                let retry = match LargeObjEntry::complete_send(ctx, stream,
+                                                               proto,
+                                                               complete) {
+                    // Send succeeded; nothing to do.
+                    Ok(RetryIndefResult::Success((next, _))) => next,
+                    // Retry delay; store to pending.
+                    Ok(RetryIndefResult::Retry(retry)) => {
+                        let when = retry.when();
+
+                        self.frags_pending.push(retry);
+
+                        Some(when)
+                    },
+                    // Indefinite delay; store to indefs.
+                    Ok(RetryIndefResult::Indef(())) => {
+                        self.frags_indef = true;
+
+                        None
+                    }
+                    // Error occurred.
+                    Err(err) => self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err)
+                };
+
+                next = next.map_or(retry, |next| {
+                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
+                });
+            }
+        }
+
+        Ok(next)
+    }
+
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,
@@ -1695,7 +1931,14 @@ where
 
                             indefs.push(ent)
                         } else {
-                            self.msgs_indefs = Some(vec![ent])
+                            let mut vec = match self.msg_retries_hint {
+                                Some(hint) => Vec::with_capacity(hint),
+                                None => Vec::new()
+                            };
+
+                            vec.push(ent);
+
+                            self.msgs_indefs = Some(vec)
                         }
                     }
                     // Error occurred.
