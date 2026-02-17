@@ -67,6 +67,7 @@ use crate::select::StreamSelectorReportError;
 use crate::select::StreamsIdx;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::Parties;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
@@ -1041,7 +1042,7 @@ where
         parties: I
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -1083,7 +1084,7 @@ where
                 }))
             }
             Ok(RetryIndefResult::Indef(())) =>
-                Ok(RetryIndefResult::Indef(None)),
+                Ok(RetryIndefResult::Indef(Parties::All)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -1100,7 +1101,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError> {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
@@ -1263,7 +1264,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Option<Self::IndefParties>>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     >
     where
@@ -1296,7 +1297,7 @@ where
                 }))
             }
             Ok(RetryIndefResult::Indef(())) =>
-                Ok(RetryIndefResult::Indef(None)),
+                Ok(RetryIndefResult::Indef(Parties::All)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     parties: parties.cloned().collect(),
@@ -1313,7 +1314,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Option<Self::IndefParties>>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     > {
         match retry {
@@ -2479,7 +2480,7 @@ where
         msg: &Msg
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -2514,7 +2515,7 @@ where
                 }))
             }
             Ok(RetryIndefResult::Indef(())) =>
-                Ok(RetryIndefResult::Indef(None)),
+                Ok(RetryIndefResult::Indef(Parties::All)),
             Err(err) => Err(SelectorBatchError::Batch {
                 batch: SelectorBatchSelectError::Select {
                     select: PartiesBatchError::new(
@@ -2534,7 +2535,7 @@ where
         retry: Self::PushRetry
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     {
         match retry {
@@ -2585,7 +2586,7 @@ where
         err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     {
         match err {

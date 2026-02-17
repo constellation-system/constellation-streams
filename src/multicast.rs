@@ -57,6 +57,7 @@ use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::Parties;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -2534,7 +2535,7 @@ where
         parties: I
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError>
     where
         I: Iterator<Item = &'a Idx>,
@@ -2575,7 +2576,7 @@ where
         }
 
         self.decide_select_result(results, errs)
-            .map(|res| res.map_indef(Some))
+            .map(|res| res.map_indef(Parties::Some))
     }
 
     fn retry_select(
@@ -2585,7 +2586,7 @@ where
         retries: Self::SelectRetry
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError> {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
@@ -2629,7 +2630,7 @@ where
         }
 
         self.decide_select_retry_result(results, indefs, errs)
-            .map(|res| res.map_indef(Some))
+            .map(|res| res.map_indef(Parties::Some))
     }
 
     fn complete_select(
@@ -2820,7 +2821,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Option<Self::IndefParties>>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     >
     where
@@ -2872,7 +2873,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Option<Self::IndefParties>>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     > {
         match retries {
@@ -3611,7 +3612,7 @@ where
         msg: &Msg
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     where
         I: Iterator<Item = &'a Self::PartyID>,
@@ -3662,7 +3663,7 @@ where
         retry: Self::PushRetry
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     {
         match retry {
@@ -3772,7 +3773,7 @@ where
         err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Self::BatchID,
                                  Self::PushRetry,
-                                 Option<Self::IndefParties>>,
+                                 Parties<Self::IndefParties>>,
                 Self::PushError>
     {
         match err {
@@ -3784,7 +3785,7 @@ where
                 .map_retry(|retry| StreamMulticasterPushError::Start {
                     start: retry
                 })
-                .map_indef(Some)
+                .map_indef(Parties::Some)
                 .flat_map_ok(|batch| {
                 // Add the message.
                 let mut flags = self.empty_flags();

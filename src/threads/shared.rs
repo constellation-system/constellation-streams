@@ -54,6 +54,7 @@ use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::Parties;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -82,6 +83,7 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
     type PushFragError: RecoverableError<Completable = Self::PushFragErrorCompletable>;
     type PushOfferErrorCompletable: ScopedError;
     type PushOfferError: RecoverableError<Completable = Self::PushOfferErrorCompletable>;
+    type IndefParties: IntoIterator<Item = Self::PartyID>;
     type PartiesError: Debug + Display + ScopedError;
     type StreamFlags: Default;
     type Stream: PushStreamReportBatchError<
@@ -106,7 +108,9 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
             Self::HashID,
             Ctx,
             PushOfferError = Self::PushOfferError
-        > + PushStreamShared<Ctx, StartBatchError = Self::StartBatchError>
+        > + PushStreamShared<Ctx,
+                             IndefParties = Self::IndefParties,
+                             StartBatchError = Self::StartBatchError>
         + PushStreamPartyID<PartyID = Self::PartyID>
         + PushStreamParties<PartiesError = Self::PartiesError>
         + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx, AddError = Self::AddError>
@@ -661,7 +665,7 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Parties<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -735,7 +739,7 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Parties<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -861,7 +865,7 @@ where
         parties: Vec<Stream::PartyID>,
         msgs: Vec<Msg>
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Option<Stream::IndefParties>)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Parties<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -990,6 +994,55 @@ where
             None
         }
     }
+
+    fn indef_delay(
+        &mut self,
+        stream: &mut Stream,
+        msgs: Vec<Msg>,
+        parties: Parties<Stream::IndefParties>
+    ) {
+        let parties: Option<Vec<Stream::PartyID>> = match parties {
+            Parties::Some(parties) => Some(parties.into_iter().collect()),
+            Parties::All => match stream.parties() {
+                Ok(parties) =>
+                    Some(parties.into_iter().map(|(id, _)| id).collect()),
+                Err(err) => {
+                    error!(target: "shared-datagram-push-mode",
+                           "error obtaining parties: {}",
+                           err);
+
+                    None
+                }
+            }
+        };
+
+        if let Some(parties) = parties {
+            // Add to the set of blocked parties.
+            for party in parties.iter() {
+                if self.live.remove(party) {
+                    warn!(target: "shared-datagram-push-mode",
+                          "party {} was not in live set",
+                          party)
+                }
+            }
+
+            // Record the indefinite wait.
+            let ent = IndefEntry {
+                origin: Instant::now(),
+                parties: parties,
+                msgs: msgs
+            };
+
+            if let Some(indefs) = &mut self.indefs {
+                error!(target: "shared-datagram-push-mode",
+                       "indefs should be empty");
+
+                indefs.push(ent)
+            } else {
+                self.indefs = Some(vec![ent])
+            }
+        }
+    }
 }
 
 impl<Msg, Msgs, Stream, Ctx> PushMode<Stream, Msgs, Ctx>
@@ -1084,35 +1137,8 @@ where
                                 Some(next.map_or(when, |next| next.min(next)));
                         },
                         // Indefinite delay; store to indefs.
-                        Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                            let parties: Vec<Stream::PartyID> =
-                                parties.into_iter().collect();
-
-                            // Add to the set of blocked parties.
-                            for party in parties.iter() {
-                                if self.live.remove(party) {
-                                    warn!(target: "shared-datagram-push-mode",
-                                          "party {} was not in live set",
-                                          party)
-                                }
-                            }
-
-                            // Record the indefinite wait.
-                            let ent = IndefEntry {
-                                origin: Instant::now(),
-                                parties: parties,
-                                msgs: msgs
-                            };
-
-                            if let Some(indefs) = &mut self.indefs {
-                                error!(target: "shared-datagram-push-mode",
-                                       "indefs should be empty");
-
-                                indefs.push(ent)
-                            } else {
-                                self.indefs = Some(vec![ent])
-                            }
-                        }
+                        Ok(RetryIndefResult::Indef((msgs, parties))) => self
+                            .indef_delay(stream, msgs, parties),
                         // Error occurred.
                         Err(err) => {
                             let when = self.handle_error(ctx, stream, err);
@@ -1188,35 +1214,8 @@ where
                     next = Some(next.map_or(when, |next| next.min(next)));
                 },
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                    let parties: Vec<Stream::PartyID> =
-                        parties.into_iter().collect();
-
-                    // Add to the set of blocked parties.
-                    for party in parties.iter() {
-                        if self.live.remove(party) {
-                            warn!(target: "shared-datagram-push-mode",
-                                  "party {} was not in live set",
-                                  party)
-                        }
-                    }
-
-                    // Record the indefinite wait.
-                    let ent = IndefEntry {
-                        origin: Instant::now(),
-                        parties: parties,
-                        msgs: msgs
-                    };
-
-                    if let Some(indefs) = &mut self.indefs {
-                        error!(target: "shared-datagram-push-mode",
-                               "indefs should be empty");
-
-                        indefs.push(ent)
-                    } else {
-                        self.indefs = Some(vec![ent])
-                    }
-                }
+                Ok(RetryIndefResult::Indef((msgs, parties))) => self
+                    .indef_delay(stream, msgs, parties),
                 // Error occurred.
                 Err(err) => {
                     let when = self.handle_error(ctx, stream, err);
@@ -1254,35 +1253,8 @@ where
                                               |curr: Instant| curr.max(when)));
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        let parties: Vec<Stream::PartyID> =
-                            parties.into_iter().collect();
-
-                        // Add to the set of blocked parties.
-                        for party in parties.iter() {
-                            if self.live.remove(party) {
-                                warn!(target: "shared-datagram-push-mode",
-                                      "party {} was not in live set",
-                                      party)
-                            }
-                        }
-
-                        // Record the indefinite wait.
-                        let ent = IndefEntry {
-                            origin: Instant::now(),
-                            parties: parties,
-                            msgs: msgs
-                        };
-
-                        if let Some(indefs) = &mut self.indefs {
-                            error!(target: "shared-datagram-push-mode",
-                                   "indefs should be empty");
-
-                            indefs.push(ent)
-                        } else {
-                            self.indefs = Some(vec![ent])
-                        }
-                    }
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => self
+                        .indef_delay(stream, msgs, parties),
                     // Error occurred.
                     Err(err) => {
                         let when = self.handle_error(ctx, stream, err);
@@ -1462,6 +1434,54 @@ where
             None
         }
     }
+
+    fn indef_delay(
+        &mut self,
+        stream: &mut Types::Stream,
+        msgs: Vec<LargeObjMsg<Types::HashID>>,
+        parties: Parties<Types::IndefParties>
+    ) {
+        let parties: Option<Vec<Types::PartyID>> = match parties {
+            Parties::Some(parties) => Some(parties.into_iter().collect()),
+            Parties::All => match stream.parties() {
+                Ok(parties) =>
+                    Some(parties.into_iter().map(|(id, _)| id).collect()),
+                Err(err) => {
+                    error!(target: "shared-datagram-push-mode",
+                           "error obtaining parties: {}",
+                           err);
+
+                    None
+                }
+            }
+        };
+
+        if let Some(parties) = parties {
+            // Add to the set of blocked parties.
+            for party in parties.iter() {
+                if self.live.remove(party) {
+                    warn!(target: "shared-large-obj-push-mode",
+                          "party {} was not in live set",
+                          party)
+                }
+            }
+
+            let ent = IndefEntry {
+                origin: Instant::now(),
+                parties: parties,
+                msgs: msgs
+            };
+
+            if let Some(indefs) = &mut self.msgs_indefs {
+                error!(target: "shared-large-obj-push-mode",
+                       "indefs should be empty");
+
+                indefs.push(ent)
+            } else {
+                self.msgs_indefs = Some(vec![ent])
+            }
+        }
+    }
 }
 
 impl<InMsg, OutMsg, LargeObjTypes, Types, Ctx>
@@ -1572,32 +1592,7 @@ where
                         },
                         // Indefinite delay; store to indefs.
                         Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                            let parties: Vec<Types::PartyID> =
-                                parties.into_iter().collect();
-
-                            // Add to the set of blocked parties.
-                            for party in parties.iter() {
-                                if self.live.remove(party) {
-                                    warn!(target: "shared-large-obj-push-mode",
-                                          "party {} was not in live set",
-                                          party)
-                                }
-                            }
-
-                            let ent = IndefEntry {
-                                origin: Instant::now(),
-                                parties: parties,
-                                msgs: msgs
-                            };
-
-                            if let Some(indefs) = &mut self.msgs_indefs {
-                                error!(target: "shared-large-obj-push-mode",
-                                       "indefs should be empty");
-
-                                indefs.push(ent)
-                            } else {
-                                self.msgs_indefs = Some(vec![ent])
-                            }
+                            self.indef_delay(stream, msgs, parties);
 
                             None
                         }
@@ -1711,34 +1706,8 @@ where
                     out = Some(out.map_or(when, |curr| curr.max(when)));
                 },
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                    let parties: Vec<Types::PartyID> =
-                        parties.into_iter().collect();
-
-                    // Add to the set of blocked parties.
-                    for party in parties.iter() {
-                        if self.live.remove(party) {
-                            warn!(target: "shared-large-obj-push-mode",
-                                  "party {} was not in live set",
-                                  party)
-                        }
-                    }
-
-                    let ent = IndefEntry {
-                        origin: Instant::now(),
-                        parties: parties,
-                        msgs: msgs
-                    };
-
-                    if let Some(indefs) = &mut self.msgs_indefs {
-                        error!(target: "shared-large-obj-push-mode",
-                               "indefs should be empty");
-
-                        indefs.push(ent)
-                    } else {
-                        self.msgs_indefs = Some(vec![ent])
-                    }
-                }
+                Ok(RetryIndefResult::Indef((msgs, parties))) => self
+                    .indef_delay(stream, msgs, parties),
                 // Error occurred.
                 Err(err) => {
                     let when = self
@@ -1847,37 +1816,12 @@ where
 
                         self.msgs_pending.push(retry);
 
-                        out = Some(out.map_or(when, |curr| curr.max(when)));
+                        out = Some(out.map_or(when,
+                                              |curr: Instant| curr.max(when)));
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        let parties: Vec<Types::PartyID> =
-                            parties.into_iter().collect();
-
-                        // Add to the set of blocked parties.
-                        for party in parties.iter() {
-                            if self.live.remove(party) {
-                                warn!(target: "shared-large-obj-push-mode",
-                                      "party {} was not in live set",
-                                      party)
-                            }
-                        }
-
-                        let ent = IndefEntry {
-                            origin: Instant::now(),
-                            parties: parties,
-                            msgs: msgs
-                        };
-
-                        if let Some(indefs) = &mut self.msgs_indefs {
-                            error!(target: "shared-large-obj-push-mode",
-                                   "indefs should be empty");
-
-                            indefs.push(ent)
-                        } else {
-                            self.msgs_indefs = Some(vec![ent])
-                        }
-                    }
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => self
+                    .indef_delay(stream, msgs, parties),
                     // Error occurred.
                     Err(err) => {
                         let when = self.handle_msg_error::<_, _, LargeObjTypes>(
