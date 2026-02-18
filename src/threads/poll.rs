@@ -587,7 +587,7 @@ where
 
             valid && self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
-                next.is_some_and(|next: Instant| next < now) ||
+                (next.is_some_and(|next: Instant| next < now) ||
                 {
                     let duration = next.map(|next| next - now);
 
@@ -609,7 +609,7 @@ where
                                    err)
                         })
                         .is_ok()
-                }
+                })
         } {
             // Gather up all the events.
             let live: HashSet<Token> = events
@@ -793,6 +793,98 @@ where
                 }
             }
         }
+
+        self.shutdown(events)
+    }
+
+    fn shutdown(
+        self,
+        mut events: Events
+    ) {
+        let PollThread { pull_streams, mut ctx, .. } = self;
+
+        info!(target: "poll-thread",
+              "mio polling thread shutting down");
+
+        // Shut down all streams.
+        for (id, stream) in pull_streams.into_iter() {
+            debug!(target: "poll-thread",
+                   "shutting down stream {} with {}",
+                   id, stream.prin());
+
+            if let Err(err) = ctx.channels
+                .shutdown_stream(&mut ctx.ctx, id.channel(),
+                                 id.param(), stream) {
+                error!(target: "poll-thread",
+                       "error shutting down stream {}: {}",
+                       id, err);
+
+            }
+        }
+
+        let mut live = true;
+        let mut next = None;
+
+        while {
+            let now = Instant::now();
+
+            live &&
+                (next.is_some_and(|next: Instant| next < now) ||
+                 {
+                     let duration = next.map(|next| next - now);
+
+                     if let Some(duration) = &duration {
+                         trace!(target: "poll-thread",
+                                "waiting for poll for {}.{:03}",
+                                duration.as_secs(), duration.subsec_millis());
+                     } else {
+                         trace!(target: "poll-thread",
+                                "waiting for poll indefinitely");
+                     }
+
+                     ctx.poll
+                         .poll(&mut events, duration)
+                         .inspect_err(|err| {
+                             error!(target: "poll-thread",
+                                    "error polling: {}",
+                                    err)
+                         })
+                         .is_ok()
+                 })
+        } {
+                // Gather up all the events.
+            let tokens: HashSet<Token> = events
+                .iter()
+                .map(|event| event.token())
+                .collect();
+
+            next = None;
+
+            match ctx.channels.shutdown_listen(&mut ctx.ctx, &tokens) {
+                Ok(RetryResult::Success(res)) => {
+                    live = res;
+                }
+                Ok(RetryResult::Retry(when)) => {
+                    next = Some(when)
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error listening during shutdown: {}",
+                           err);
+
+                    live = false;
+                }
+            }
+        }
+
+        if let Err(err) = ctx.channels.shutdown(&mut ctx.ctx) {
+            error!(target: "poll-thread",
+                   "error shutting down channels: {}",
+                   err);
+        }
+
+        info!(target: "poll-thread",
+              "mio polling thread exiting");
     }
 
     pub fn start(self) -> Result<JoinHandle<()>, Error> {

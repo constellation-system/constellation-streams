@@ -259,9 +259,9 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> {
     >;
 
     fn shutdown(
-        &mut self,
+        self,
         ctx: &mut Ctx,
-    ) -> Result<bool, Self::ShutdownError>;
+    ) -> Result<(), Self::ShutdownError>;
 
     fn shutdown_listen(
         &mut self,
@@ -678,10 +678,10 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
 
     #[inline]
     fn shutdown(
-        &mut self,
+        self,
         _ctx: &mut Ctx,
-    ) -> Result<bool, Self::ShutdownError> {
-        Ok(true)
+    ) -> Result<(), Self::ShutdownError> {
+        Ok(())
     }
 
     fn shutdown_listen(
@@ -1051,15 +1051,15 @@ where
     }
 
     fn shutdown(
-        &mut self,
+        self,
         ctx: &mut Ctx,
-    ) -> Result<bool, Self::ShutdownError> {
-        let private = self.private.shutdown(ctx)
+    ) -> Result<(), Self::ShutdownError> {
+        self.private.shutdown(ctx)
             .map_err(|err| SharedPrivateError::Private { err: err })?;
-        let shared = self.shared.shutdown(ctx)
+        self.shared.shutdown(ctx)
             .map_err(|err| SharedPrivateError::Shared { err: err })?;
 
-        Ok(shared && private)
+        Ok(())
     }
 
     fn shutdown_listen(
