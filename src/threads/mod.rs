@@ -40,6 +40,7 @@ use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjPushRetry;
 use crate::stream::LargeObjOfferStream;
+use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
 pub mod dispatch;
@@ -231,7 +232,9 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Stream::Parties), Self>,
+        RetryIndefResult<(Option<Instant>, Stream::Parties),
+                         Self,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
@@ -271,7 +274,9 @@ where
             <Stream::PushOfferError as RecoverableError>::Completable
         >
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>), Self>,
+        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>),
+                         Self,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
@@ -304,7 +309,9 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>), Self>,
+        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>),
+                         Self,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,

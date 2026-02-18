@@ -57,6 +57,7 @@ use crate::large_obj::LargeObjMsgCodec;
 use crate::large_obj::LargeObjMsgEncodeError;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::Parties;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
@@ -1138,7 +1139,9 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushFragRetry,
+                         Parties<()>>,
         Self::PushFragError
     > {
         LargeObjMsg::frags(frags, id, 1024)
@@ -1163,7 +1166,9 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushFragRetry,
+                         Parties<()>>,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1176,7 +1181,9 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushFragRetry,
+                         Parties<()>>,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1199,7 +1206,9 @@ where
         hash: H::HashID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushOfferRetry,
+                         Parties<()>>,
         Self::PushOfferError
     > {
         LargeObjMsg::offer(frags, hash, 1024)
@@ -1221,7 +1230,9 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushOfferRetry,
+                         Parties<()>>,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)
@@ -1234,7 +1245,9 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, ()),
+                         Self::PushOfferRetry,
+                         Parties<()>>,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)

@@ -1450,7 +1450,7 @@ where
                         None
                     }
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef(())) => {
+                    Ok(RetryIndefResult::Indef(_)) => {
                         self.frags_indef = true;
 
                         None
@@ -1613,7 +1613,7 @@ where
                     None
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(())) => {
+                Ok(RetryIndefResult::Indef(_)) => {
                     self.frags_indef = true;
 
                     None
@@ -1777,7 +1777,7 @@ where
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(())) => {
+                Ok(RetryIndefResult::Indef(_)) => {
                     self.frags_indef = true;
                 }
                 // Error occurred.
@@ -1872,7 +1872,7 @@ where
                         Some(when)
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef(())) => {
+                    Ok(RetryIndefResult::Indef(_)) => {
                         self.frags_indef = true;
 
                         None
@@ -1966,7 +1966,7 @@ where
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(())) => {
+                Ok(RetryIndefResult::Indef(_)) => {
                     self.frags_indef = true;
                 }
                 // Error occurred.

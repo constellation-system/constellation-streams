@@ -82,6 +82,7 @@ use crate::generated::large_obj::LargeObjOffer;
 use crate::generated::large_obj::LargeObjReq;
 use crate::generated::large_obj::LargeObjReqObj;
 use crate::stream::LargeObjOfferStream;
+use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
 pub trait LargeObjMsgs<H, Msg>: Sized
@@ -1582,6 +1583,7 @@ where
                 Stream::PushFragRetry,
                 Stream::PushOfferRetry
             >,
+            Parties<Stream::Parties>
         >,
         LargeObjPushError<
             Types::HashID,
@@ -1703,13 +1705,13 @@ where
                         when: when
                     }))
                 }
-                None => Ok(RetryIndefResult::Indef(()))
+                None => Ok(RetryIndefResult::Indef(Parties::All))
             }
         } else {
             trace!(target: "large-obj-proto",
                    "no active entries");
 
-            Ok(RetryIndefResult::Indef(()))
+            Ok(RetryIndefResult::Indef(Parties::All))
         }
     }
 
@@ -1721,7 +1723,8 @@ where
         retry: Stream::PushFragRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
-                         Stream::PushFragRetry>,
+                         Stream::PushFragRetry,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             Types::HashID,
             Stream::PushFragError,
@@ -1764,7 +1767,8 @@ where
         retry: Stream::PushOfferRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
-                         Stream::PushOfferRetry>,
+                         Stream::PushOfferRetry,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             Types::HashID,
             Stream::PushFragError,
@@ -1802,7 +1806,8 @@ where
         err: <Stream::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
-                         Stream::PushFragRetry>,
+                         Stream::PushFragRetry,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             Types::HashID,
             Stream::PushFragError,
@@ -1847,7 +1852,8 @@ where
         err: <Stream::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Stream::Parties),
-                         Stream::PushOfferRetry>,
+                         Stream::PushOfferRetry,
+                         Parties<Stream::Parties>>,
         LargeObjPushError<
             Types::HashID,
             Stream::PushFragError,

@@ -1888,7 +1888,8 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         // Try to select a stream.
@@ -1899,6 +1900,7 @@ where
                     parties: ()
                 }
             })?
+            .map_indef(|()| Parties::All)
             .map_retry(|retry| SelectorBatchSelectError::Select {
                 select: retry,
                 parties: ()
@@ -1927,7 +1929,8 @@ where
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         match retry {
@@ -1968,7 +1971,8 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         match err {
@@ -2031,7 +2035,8 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         // Try to select a stream.
@@ -2042,6 +2047,7 @@ where
                     parties: ()
                 }
             })?
+            .map_indef(|()| Parties::All)
             .map_retry(|retry| SelectorBatchSelectError::Select {
                 select: retry,
                 parties: ()
@@ -2070,7 +2076,8 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         match retry {
@@ -2111,7 +2118,8 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         match err {

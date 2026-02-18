@@ -1120,7 +1120,7 @@ impl<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjStream<Ctx>
+    Stream: LargeObjStream<Ctx, Parties = ()>
         + PushStream<Ctx>,
     Stream::BatchID: Clone {
     fn decide_push_frag_result(
@@ -1138,7 +1138,8 @@ where
     ) -> Result<
         RetryIndefResult<
             (Option<Instant>, Vec<Idx>),
-            <Self as LargeObjStream<Ctx>>::PushFragRetry
+            <Self as LargeObjStream<Ctx>>::PushFragRetry,
+            Parties<Vec<Idx>>
         >,
         <Self as LargeObjStream<Ctx>>::PushFragError
     > {
@@ -1152,6 +1153,7 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
                 let mut all_indef = true;
@@ -1169,11 +1171,11 @@ where
                         }
                         RetryIndefResult::Retry(when) => {
                             all_success = false;
-
                             results.push(RetryResult::Retry(when));
                         }
-                        RetryIndefResult::Indef(()) => {
+                        RetryIndefResult::Indef(_) => {
                             all_indef = false;
+                            indefs.push(id)
                         }
                     }
                 }
@@ -1181,7 +1183,7 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success((when, ids)))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef(()))
+                    Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
                 } else {
                     Ok(RetryIndefResult::Retry(results))
                 }
@@ -1204,7 +1206,8 @@ where
     ) -> Result<
         RetryIndefResult<
             (Option<Instant>, Vec<Idx>),
-            <Self as LargeObjOfferStream<H, Ctx>>::PushOfferRetry
+            <Self as LargeObjOfferStream<H, Ctx>>::PushOfferRetry,
+            Parties<Vec<Idx>>
         >,
         <Self as LargeObjOfferStream<H, Ctx>>::PushOfferError
     >
@@ -1222,6 +1225,7 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
+                let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
                 let mut all_success = true;
                 let mut all_indef = true;
@@ -1239,11 +1243,11 @@ where
                         }
                         RetryIndefResult::Retry(when) => {
                             all_success = false;
-
                             results.push(RetryResult::Retry(when));
                         }
-                        RetryIndefResult::Indef(()) => {
+                        RetryIndefResult::Indef(_) => {
                             all_indef = false;
+                            indefs.push(id)
                         }
                     }
                 }
@@ -1251,7 +1255,7 @@ where
                 if all_success {
                     Ok(RetryIndefResult::Success((when, ids)))
                 } else if all_indef {
-                    Ok(RetryIndefResult::Indef(()))
+                    Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
                 } else {
                     Ok(RetryIndefResult::Retry(results))
                 }
@@ -3238,7 +3242,7 @@ impl<Party, Idx, Stream, Ctx> LargeObjStream<Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjStream<Ctx> + PushStream<Ctx>,
+    Stream: LargeObjStream<Ctx, Parties = ()> + PushStream<Ctx>,
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
     type Frags = StreamMulticasterFrags<Idx, Stream::Frags>;
@@ -3257,7 +3261,9 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushFragRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushFragError
     > {
         let len = self.rev_map.len();
@@ -3269,7 +3275,7 @@ where
             match self.rev_map[i].stream.push_frags(ctx, id.clone(), frag) {
                 // We're good; add this to the output.
                 Ok(res) => {
-                    let res = res.map(|(res, _)| res);
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
 
                     results.push((Idx::from(i), res))
                 },
@@ -3298,7 +3304,9 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushFragRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushFragError
     > {
         // Decompose the error set into successes and retries.
@@ -3321,8 +3329,7 @@ where
                     ) {
                         // We're good; add this to the output.
                         Ok(res) => {
-                            let res = res.map(|(res, _)| res);
-                            let res = RetryIndefResult::from(res);
+                            let res = res.map(|(res, _)| res).map_indef(|_| ());
 
                             results.push((Idx::from(i), res))
                         },
@@ -3356,7 +3363,9 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushFragRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushFragRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushFragError
     > {
         let (mut results, retries) = retries.take();
@@ -3375,8 +3384,7 @@ where
             ) {
                 // We're good; add this to the output.
                 Ok(res) => {
-                    let res = res.map(|(res, _)| res);
-                    let res = RetryIndefResult::from(res);
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
 
                     results.push((Idx::from(i), res))
                 },
@@ -3410,7 +3418,7 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjOfferStream<H, Ctx>
+    Stream: LargeObjOfferStream<H, Ctx, Parties = ()>
         + PushStreamAdd<LargeObjMsg<H>, Ctx>,
     H: Clone + HashID
 {
@@ -3429,7 +3437,9 @@ where
         hash: H,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushOfferRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushOfferError
     > {
         let len = self.rev_map.len();
@@ -3441,7 +3451,7 @@ where
             match self.rev_map[i].stream.push_offer(ctx, hash.clone(), frag) {
                 // We're good; add this to the output.
                 Ok(res) => {
-                    let res = res.map(|(res, _)| res);
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
 
                     results.push((Idx::from(i), res))
                 },
@@ -3470,7 +3480,9 @@ where
         frags: &mut Self::Frags,
         retries: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushOfferRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushOfferError
     > {
         // Decompose the error set into successes and retries.
@@ -3494,7 +3506,7 @@ where
                         // We're good; add this to the output.
                         // We're good; add this to the output.
                         Ok(res) => {
-                            let res = res.map(|(res, _)| res);
+                            let res = res.map(|(res, _)| res).map_indef(|_| ());
                             let res = RetryIndefResult::from(res);
 
                             results.push((Idx::from(i), res))
@@ -3529,7 +3541,9 @@ where
         frags: &mut Self::Frags,
         retries: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Vec<Idx>), Self::PushOfferRetry>,
+        RetryIndefResult<(Option<Instant>, Vec<Idx>),
+                         Self::PushOfferRetry,
+                         Parties<Vec<Idx>>>,
         Self::PushOfferError
     > {
         let (mut results, retries) = retries.take();
@@ -3548,7 +3562,7 @@ where
             ) {
                 // We're good; add this to the output.
                 Ok(res) => {
-                    let res = res.map(|(res, _)| res);
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
                     let res = RetryIndefResult::from(res);
 
                     results.push((Idx::from(i), res))

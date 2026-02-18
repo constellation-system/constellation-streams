@@ -995,7 +995,8 @@ pub trait LargeObjStream<Ctx> {
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     >;
 
@@ -1007,7 +1008,8 @@ pub trait LargeObjStream<Ctx> {
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     >;
 
@@ -1019,7 +1021,8 @@ pub trait LargeObjStream<Ctx> {
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     >;
 }
@@ -1040,7 +1043,8 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     >;
 
@@ -1052,7 +1056,8 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     >;
 
@@ -1064,7 +1069,8 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     >;
 }
@@ -2588,7 +2594,8 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         self.inner
@@ -2606,7 +2613,8 @@ where
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         self.inner
@@ -2624,7 +2632,8 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushFragRetry>,
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
         Self::PushFragError
     > {
         self.inner
@@ -2650,7 +2659,8 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         self.inner
@@ -2668,7 +2678,8 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         self.inner
@@ -2686,7 +2697,8 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<(Option<Instant>, Self::Parties),
-                         Self::PushOfferRetry>,
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
         Self::PushOfferError
     > {
         self.inner
