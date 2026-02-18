@@ -51,8 +51,9 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
-use crate::channels::ChannelsListen;
 use crate::channels::ChannelsCreate;
+use crate::channels::ChannelsListen;
+use crate::channels::ChannelsShutdown;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
@@ -75,7 +76,7 @@ where Ctx: 'static + Send
                      PullError = Self::PullError>;
     type PullError: Debug + Display + ScopedError;
     type RefreshRetry: RetryWhen;
-    type RefreshCompletableError;
+    type RefreshCompletableError: ScopedError + Send;
     type RefreshPermanentError: Debug + Display + ScopedError;
     type RefreshError: Debug
         + RecoverableError<Completable = Self::RefreshCompletableError,
@@ -100,6 +101,7 @@ where Ctx: 'static + Send
     type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
+    type ChanShutdownError: Debug + Display;
     type Chans: 'static
         + ChannelsCreate<Ctx, Self::ChansSrcs,
                          Config = Self::ChansConfig,
@@ -109,7 +111,10 @@ where Ctx: 'static + Send
                    Param = Self::ChannelParam,
                    Stream = Self::AuthNChan,
                    ChannelID = Self::ChannelID>
-        + ChannelsListen<Ctx> + Send;
+        + ChannelsListen<Ctx>
+        + ChannelsShutdown<Ctx,
+                           ShutdownStreamError = Self::ChanShutdownError>
+        + Send;
     type MsgAuthConfig;
     type MsgAuth: 'static
         + Create<Config = Self::MsgAuthConfig,
@@ -158,6 +163,7 @@ where
         Types::AuthNChan
     >,
     ctx: PollThreadCtx<Types::Chans, Ctx>,
+    refresh_complete: Option<Types::RefreshCompletableError>,
     authn: Types::MsgAuth,
     recv: Types::Recv,
     mode: Types::Mode,
@@ -315,6 +321,7 @@ where
 
         Ok(PollThread {
             pull_streams: pull_streams,
+            refresh_complete: None,
             authn: authn,
             mode: mode,
             msgs: msgs,
@@ -463,12 +470,21 @@ where
             .report_stream(stream.prin(), id.clone(), stream.clone()) {
             Ok(res) => {
                 let stream = match res {
-                    Some(stream) => {
+                    Some(curr) => {
                         warn!(target: "poll-thread",
                               "stream {} with {} was already present",
-                              id, stream.prin());
+                              id, curr.prin());
 
-                        stream
+                        // Shut down the incoming stream.
+                        if let Err(err) = self.ctx.channels
+                            .shutdown_stream(&mut self.ctx.ctx, id.channel(),
+                                             id.param(), stream) {
+                            error!(target: "poll-thread",
+                                   "error shutting down stream {} with {}: {}",
+                                   id, curr.prin(), err);
+                        }
+
+                        curr
                     }
                     None => stream
                 };
@@ -490,28 +506,41 @@ where
         }
     }
 
+    fn handle_refresh_stream_error(
+        &mut self,
+        err: Types::RefreshError
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        match err.split() {
+            (_, Some(err)) => {
+                error!(target: "poll-thread",
+                       "unrecoverable error refreshing stream: {}",
+                       err);
+
+                RetryResult::Success(None)
+            }
+            (Some(err), _) => if err.scope() == ErrorScope::WouldBlock {
+                self.refresh_complete = Some(err);
+
+                RetryResult::Success(None)
+            } else {
+                self.complete_refresh_stream(err)
+            },
+            (None, None) => {
+                error!(target: "poll-thread",
+                       "refresh error split produced no results");
+
+                RetryResult::Success(None)
+            }
+        }
+    }
+
     // XXX need to check if the completable error type is wouldblock and delay.
     fn complete_refresh_stream(
         &mut self,
         err: Types::RefreshCompletableError
     ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
         self.stream.complete_refresh(&mut self.ctx, err)
-            .unwrap_or_else(|err| match err.split() {
-                (_, Some(err)) => {
-                    error!(target: "poll-thread",
-                           "unrecoverable error refreshing stream: {}",
-                           err);
-
-                    RetryResult::Success(None)
-                }
-                (Some(err), _) => self.complete_refresh_stream(err),
-                (None, None) => {
-                    error!(target: "poll-thread",
-                           "refresh error split produced no results");
-
-                    RetryResult::Success(None)
-                }
-            })
+            .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
     fn retry_refresh_stream(
@@ -519,44 +548,14 @@ where
         retry: Types::RefreshRetry
     ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
         self.stream.retry_refresh(&mut self.ctx, retry)
-            .unwrap_or_else(|err| match err.split() {
-                (_, Some(err)) => {
-                    error!(target: "poll-thread",
-                           "unrecoverable error refreshing stream: {}",
-                           err);
-
-                    RetryResult::Success(None)
-                }
-                (Some(err), _) => self.complete_refresh_stream(err),
-                (None, None) => {
-                    error!(target: "poll-thread",
-                           "refresh error split produced no results");
-
-                    RetryResult::Success(None)
-                }
-            })
+            .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
     fn refresh_stream(
         &mut self
     ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
         self.stream.refresh(&mut self.ctx)
-            .unwrap_or_else(|err| match err.split() {
-                (_, Some(err)) => {
-                    error!(target: "poll-thread",
-                           "unrecoverable error refreshing stream: {}",
-                           err);
-
-                    RetryResult::Success(None)
-                }
-                (Some(err), _) => self.complete_refresh_stream(err),
-                (None, None) => {
-                    error!(target: "poll-thread",
-                           "refresh error split produced no results");
-
-                    RetryResult::Success(None)
-                }
-            })
+            .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
     fn run(mut self) {
@@ -692,7 +691,26 @@ where
             };
 
             // Refresh the stream if needed.
-            if let Some(retry) = retry_refresh.take() {
+            if let Some(refresh_complete) = self.refresh_complete.take() {
+                match self.complete_refresh_stream(refresh_complete) {
+                    RetryResult::Success(when) => {
+                        next_refresh = when;
+
+                        if let Err(err) = self.mode.retry_indefs(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream,
+                        ) {
+                            error!(target: "poll-thread",
+                                   "error retrying indefinite delays: {}",
+                                   err)
+                        }
+                    }
+                    RetryResult::Retry(retry) => {
+                        retry_refresh = Some(retry)
+                    }
+                }
+            } else if let Some(retry) = retry_refresh.take() {
                 if retry.when() < now {
                     trace!(target: "poll-thread",
                            "retrying stream refresh");
