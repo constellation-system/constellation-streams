@@ -47,6 +47,7 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -1177,8 +1178,7 @@ where
             match self.connections[i].get_refresh(ctx)? {
                 // Split retry results and
                 RetryResult::Retry(when) => {
-                    min_retry =
-                        Some(min_retry.map_or(when, |curr| curr.min(when)));
+                    min_retry = Some(next_retry_definite(&min_retry, &when));
                 }
                 RetryResult::Success((addrs, params, refresh_when)) => {
                     size_hint += addrs.len() * params.len();

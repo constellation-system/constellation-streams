@@ -55,6 +55,8 @@ use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -763,9 +765,7 @@ where
 
                         *nretries += 1;
                         *when = retry;
-                        next = Some(
-                            next.map_or(retry, |next: Instant| next.min(retry))
-                        );
+                        next = Some(next_retry_definite(&next, &retry));
                         msgs.push((vec![party_id], vec![msg]));
                     }
                     InboundFragsState::Active { frags, .. } => {
@@ -780,14 +780,10 @@ where
                                 let msg = LargeObjMsg::reqs(id, iter);
 
                                 msgs.push((vec![party_id], vec![msg]));
-                                next = next.map_or(retry, |next| {
-                                    retry.map(|retry| next.min(retry))
-                                });
+                                next = next_retry(&next, &retry);
                             }
                             RetryResult::Retry(retry) => {
-                                next = Some(
-                                    next.map_or(retry, |next| next.min(retry))
-                                );
+                                next = Some(next_retry_definite(&next, &retry));
                             }
                         }
                     }
@@ -930,9 +926,7 @@ where
 
                     *nretries += 1;
                     *when = retry;
-                    next = Some(
-                        next.map_or(retry, |next: Instant| next.min(retry))
-                    );
+                    next = Some(next_retry_definite(&next, &retry));
                     msgs.push(msg);
                 }
                 InboundFragsState::Active { frags, .. } => {
@@ -944,14 +938,10 @@ where
                             let msg = LargeObjMsg::reqs(id, iter);
 
                             msgs.push(msg);
-                            next = next.map_or(retry, |next| {
-                                retry.map(|retry| next.min(retry))
-                            });
+                            next = next_retry(&next, &retry);
                         }
                         RetryResult::Retry(retry) => {
-                            next = Some(
-                                next.map_or(retry, |next| next.min(retry))
-                            );
+                            next = Some(next_retry_definite(&next, &retry));
                         }
                     }
                 }
@@ -1649,14 +1639,8 @@ where
                                      if ents_len < 2 {
                                          (retry, parties)
                                      } else {
-                                         let when = ents[1].1.when.map_or(
-                                             retry,
-                                             |when| {
-                                                 retry.map(|retry| {
-                                                     when.min(retry)
-                                                 })
-                                             }
-                                         );
+                                         let when = next_retry(&ents[1].1.when,
+                                                        &retry);
 
                                          (when, parties)
                                      }
@@ -1686,14 +1670,8 @@ where
                                      if ents_len < 2 {
                                          (retry, parties)
                                      } else {
-                                         let when = ents[1].1.when.map_or(
-                                             retry,
-                                             |when| {
-                                                 retry.map(|retry| {
-                                                     when.min(retry)
-                                                 })
-                                             }
-                                         );
+                                         let when = next_retry(&ents[1].1.when,
+                                                        &retry);
 
                                          (when, parties)
                                      }

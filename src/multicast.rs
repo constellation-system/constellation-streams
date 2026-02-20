@@ -37,6 +37,7 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
+use constellation_common::retry::next_retry;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -1162,9 +1163,7 @@ where
                 for (id, res) in elems.into_iter() {
                     match res {
                         RetryIndefResult::Success(retry) => {
-                            when = when.map_or(retry, |when: Instant| {
-                                retry.map(|retry| when.min(retry))
-                            });
+                            when = next_retry(&when, &retry);
                             ids.push(id);
 
                             results.push(RetryResult::Success(retry));
@@ -1234,9 +1233,7 @@ where
                 for (id, res) in elems.into_iter() {
                     match res {
                         RetryIndefResult::Success(retry) => {
-                            when = when.map_or(retry, |when: Instant| {
-                                retry.map(|retry| when.min(retry))
-                            });
+                            when = next_retry(&when, &retry);
                             ids.push(id);
 
                             results.push(RetryResult::Success(retry));
@@ -1506,11 +1503,7 @@ where
 
                 for (_, res) in elems.into_iter() {
                     if let RetryResult::Success(when) = &res {
-                        min = min
-                            .map_or(*when,
-                                    |curr|
-                                    Some(when.map_or(curr,
-                                                     |when| when.min(curr))));
+                        min = next_retry(&min, &when);
                     } else {
                         all_success = false
                     }

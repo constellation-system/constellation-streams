@@ -43,6 +43,8 @@ use std::time::Instant;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -930,13 +932,7 @@ where
                     shared: Some(shared_addrs)
                 };
                 let refresh = private_refresh || shared_refresh;
-                let when = private_when
-                    .map_or(shared_when,
-                            |private_when| Some(shared_when
-                                .map_or(private_when,
-                                        |shared_when|
-                                        shared_when.max(private_when))
-                            ));
+                let when = next_retry(&private_when, &shared_when);
 
                 Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }
@@ -954,10 +950,8 @@ where
                     private: Some(private_addrs),
                     shared: None
                 };
-                let when = Some(private_when
-                    .map_or(shared_when,
-                            |private_when| private_when.max(shared_when))
-                );
+                let when = Some(next_retry_definite(&private_when,
+                                                    &shared_when));
 
                 Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }
@@ -972,10 +966,8 @@ where
                     private: None,
                     shared: Some(shared_addrs)
                 };
-                let when = Some(shared_when
-                    .map_or(private_when, |shared_when|
-                            shared_when.max(private_when))
-                );
+                let when = Some(next_retry_definite(&shared_when,
+                                                    &private_when));
 
                 Ok(RetryResult::Success((streams, addrs, refresh, when)))
             }

@@ -33,6 +33,8 @@ use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::SharedMsgs;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -1160,8 +1162,7 @@ where
 
                             self.pending.push(retry);
 
-                            next =
-                                Some(next.map_or(when, |next| next.min(next)));
+                            next = Some(next_retry_definite(&next, &when));
                         },
                         // Indefinite delay; store to indefs.
                         Ok(RetryIndefResult::Indef((msgs, parties))) => self
@@ -1170,9 +1171,7 @@ where
                         Err(err) => {
                             let when = self.handle_error(ctx, stream, err);
 
-                            next = when.map_or(next, |when| {
-                                Some(next.map_or(when, |next| next.min(next)))
-                            });
+                            next = next_retry(&next, &when);
                         }
                     }
                 }
@@ -1238,7 +1237,7 @@ where
 
                     self.pending.push(retry);
 
-                    next = Some(next.map_or(when, |next| next.min(next)));
+                    next = Some(next_retry_definite(&next, &when));
                 },
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef((msgs, parties))) => self
@@ -1247,9 +1246,7 @@ where
                 Err(err) => {
                     let when = self.handle_error(ctx, stream, err);
 
-                    next = when.map_or(next, |when| {
-                        Some(next.map_or(when, |next| next.min(next)))
-                    });
+                    next = next_retry(&next, &when);
                 }
             }
         }
@@ -1290,9 +1287,7 @@ where
                     Err(err) => self.handle_error(ctx, stream, err),
                 };
 
-                next = next.map_or(retry, |next| {
-                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
-                });
+                next = next_retry(&next, &retry);
             }
 
             Ok(next)
@@ -1320,8 +1315,7 @@ where
 
                         self.pending.push(retry);
 
-                        out = Some(out.map_or(when,
-                                              |curr: Instant| curr.max(when)));
+                        out = Some(next_retry_definite(&out, &when));
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => self
@@ -1330,9 +1324,7 @@ where
                     Err(err) => {
                         let when = self.handle_error(ctx, stream, err);
 
-                        out = out.map_or(when, |curr| {
-                            Some(when.map_or(curr, |when| curr.max(when)))
-                        });
+                        out = next_retry(&out, &when);
                     }
                 }
             }
@@ -1726,10 +1718,7 @@ where
                             )
                     };
 
-                    out = out.map_or(retry, |next| {
-                        Some(retry.map_or(next, |retry: Instant|
-                                          retry.min(next)))
-                    });
+                    out = next_retry(&out, &retry);
                 }
             }
 
@@ -1739,9 +1728,7 @@ where
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
                 Ok(RetryIndefResult::Success((next, _))) => {
-                    out = next.map_or(next, |curr| {
-                        Some(next.map_or(curr, |frags| curr.min(frags)))
-                    });
+                    out = next_retry(&out, &next);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -1769,9 +1756,7 @@ where
                 Err(err) => {
                     let next = self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
 
-                    out = next.map_or(next, |curr| {
-                        Some(next.map_or(curr, |frags| curr.min(frags)))
-                    });
+                    out = next_retry(&out, &next);
                 }
             };
 
@@ -1840,7 +1825,7 @@ where
                     let when = retry.when();
 
                     self.msgs_pending.push(retry);
-                    out = Some(out.map_or(when, |curr| curr.max(when)));
+                    out = Some(next_retry_definite(&out, &when));
                 },
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef((msgs, parties))) => self
@@ -1850,9 +1835,7 @@ where
                     let when = self
                         .handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err);
 
-                    out = out.map_or(when, |curr| {
-                        Some(when.map_or(curr, |when| curr.max(when)))
-                    });
+                    out = next_retry(&out, &when);
                 }
             }
         }
@@ -1890,21 +1873,15 @@ where
         }
 
         // The last entry should now be the first time past the present.
-        out = self
-            .frags_pending.last()
-            .map(|ent| ent.when())
-            .map_or(out, |frags| {
-                Some(out.map_or(frags, |next| frags.min(next)))
-            });
+        out =
+            next_retry(&out, &self.frags_pending.last().map(|ent| ent.when()));
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
             match ent.exec(ctx, stream, proto) {
                 // Succeeded; nothing to do.
                 Ok(RetryIndefResult::Success((next, _))) => {
-                    out = next.map_or(next, |curr| {
-                        Some(next.map_or(curr, |frags| curr.min(frags)))
-                    });
+                    out = next_retry(&out, &next);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -1932,9 +1909,7 @@ where
                 Err(err) => {
                     let next = self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
 
-                    out = next.map_or(next, |curr| {
-                        Some(next.map_or(curr, |frags| curr.min(frags)))
-                    });
+                    out = next_retry(&out, &next);
                 }
             }
         }
@@ -1982,9 +1957,7 @@ where
                     Err(err) => self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err),
                 };
 
-                next = next.map_or(retry, |next| {
-                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
-                });
+                next = next_retry(&next, &retry);
             }
         }
 
@@ -2032,9 +2005,7 @@ where
                     Err(err) => self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err)
                 };
 
-                next = next.map_or(retry, |next| {
-                    Some(retry.map_or(next, |retry: Instant| retry.min(next)))
-                });
+                next = next_retry(&next, &retry);
             }
         }
 
@@ -2066,8 +2037,7 @@ where
 
                         self.msgs_pending.push(retry);
 
-                        out = Some(out.map_or(when,
-                                              |curr: Instant| curr.max(when)));
+                        out = Some(next_retry_definite(&out, &when));
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => self
@@ -2078,9 +2048,7 @@ where
                             ctx, stream, err
                         );
 
-                        out = out.map_or(when, |curr| {
-                            Some(when.map_or(curr, |when| curr.max(when)))
-                        });
+                        out = next_retry(&out, &when);
                     }
                 }
             }
@@ -2090,9 +2058,7 @@ where
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
                 Ok(RetryIndefResult::Success((when, _))) => {
-                    out = out.map_or(when, |curr| {
-                        Some(when.map_or(curr, |when| curr.max(when)))
-                    });
+                    out = next_retry(&out, &when);
                 },
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {

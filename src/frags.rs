@@ -25,6 +25,7 @@ use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 
@@ -414,13 +415,13 @@ impl OutboundFrags {
         {
             match frag {
                 (RetryResult::Success(retry), offset, len) => {
-                    let retry = when.map_or(retry, |when| when.min(retry));
+                    let retry = next_retry_definite(&when, &retry);
                     self.curr = offset + len;
 
                     return Ok(RetryResult::Success((offset, len, retry)));
                 }
                 (RetryResult::Retry(retry), offset, len) => {
-                    let retry = when.map_or(retry, |when| when.min(retry));
+                    let retry = next_retry_definite(&when, &retry);
 
                     self.curr = offset + len;
                     when = Some(retry);
@@ -456,7 +457,7 @@ impl OutboundFrags {
         {
             match frag {
                 (RetryResult::Success(retry), offset, len) => {
-                    let retry = when.map_or(retry, |when| when.min(retry));
+                    let retry = next_retry_definite(&when, &retry);
                     when = Some(retry);
 
                     if curr < buf.len() {
@@ -468,7 +469,7 @@ impl OutboundFrags {
                     }
                 }
                 (RetryResult::Retry(retry), offset, len) => {
-                    let retry = when.map_or(retry, |when| when.min(retry));
+                    let retry = next_retry_definite(&when, &retry);
 
                     self.curr = offset + len;
                     when = Some(retry);

@@ -35,6 +35,7 @@ use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
 use constellation_common::config::Create;
+use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::error::RecoverableError;
@@ -85,7 +86,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
         + ChannelParam<Self::Addr>;
     type ChannelID: Clone + Debug + Display + Eq + Hash;
     type RefreshRetry: RetryWhen;
-    type RefreshCompletableError;
+    type RefreshCompletableError: ScopedError;
     type RefreshPermanentError: Debug + Display + ScopedError;
     type RefreshError: Debug
         + RecoverableError<Completable = Self::RefreshCompletableError,
@@ -250,7 +251,9 @@ where
         Types::AuthNChan
     >,
     mode: Types::Mode,
-    retry_refresh: Option<Types::RefreshRetry>,
+    refresh_complete: Option<Types::RefreshCompletableError>,
+    refresh_retry: Option<Types::RefreshRetry>,
+    next_pending: Option<Instant>,
     next_refresh: Option<Instant>,
     next_outbound: Option<Instant>,
 }
@@ -647,8 +650,46 @@ where
     }
 
     fn next_refresh(&self) -> Option<Instant> {
-        self.retry_refresh.as_ref().map(|retry| retry.when())
+        self.refresh_retry.as_ref().map(|retry| retry.when())
             .or(self.next_refresh)
+    }
+
+    fn handle_refresh_stream_error(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        err: Types::RefreshError
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        match err.split() {
+            (_, Some(err)) => {
+                error!(target: "poll-thread",
+                       "unrecoverable error refreshing stream: {}",
+                       err);
+
+                RetryResult::Success(None)
+            }
+            (Some(err), _) => if err.scope() == ErrorScope::WouldBlock {
+                self.refresh_complete = Some(err);
+
+                RetryResult::Success(None)
+            } else {
+                self.complete_refresh_stream(ctx, err)
+            },
+            (None, None) => {
+                error!(target: "poll-thread",
+                       "refresh error split produced no results");
+
+                RetryResult::Success(None)
+            }
+        }
+    }
+
+    fn complete_refresh_stream(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        err: Types::RefreshCompletableError
+    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+        self.dispatched.stream.complete_refresh(ctx, err)
+            .unwrap_or_else(|err| self.handle_refresh_stream_error(ctx, err))
     }
 
     fn refresh_stream(
@@ -658,7 +699,26 @@ where
         now: Instant
     ) -> Option<Instant> {
         // Refresh the stream if needed.
-        if let Some(retry) = self.retry_refresh.take() {
+        if let Some(refresh_complete) = self.refresh_complete.take() {
+            match self.complete_refresh_stream(ctx, refresh_complete) {
+                RetryResult::Success(when) => {
+                    self.next_refresh = when;
+
+                    if let Err(err) = self.mode.retry_indefs(
+                        ctx,
+                        &mut self.dispatched.msgs,
+                        &mut self.dispatched.stream,
+                    ) {
+                        error!(target: "poll-thread",
+                               "error retrying indefinite delays: {}",
+                               err)
+                    }
+                }
+                RetryResult::Retry(retry) => {
+                    self.refresh_retry = Some(retry)
+                }
+            }
+        } else if let Some(retry) = self.refresh_retry.take() {
             if retry.when() < now {
                 trace!(target: "dispatch-entry",
                        "retrying stream refresh");
@@ -678,11 +738,11 @@ where
                         }
                     }
                     RetryResult::Retry(retry) => {
-                        self.retry_refresh = Some(retry)
+                        self.refresh_retry = Some(retry)
                     }
                 }
             } else {
-                self.retry_refresh = Some(retry)
+                self.refresh_retry = Some(retry)
             }
         } else if self.next_refresh.map_or(false, |when| when <= now) ||
             need_refresh {
@@ -704,7 +764,7 @@ where
                     }
                 }
                 RetryResult::Retry(retry) => {
-                    self.retry_refresh = Some(retry)
+                    self.refresh_retry = Some(retry)
                 }
             }
         }
@@ -719,7 +779,7 @@ where
         now: Instant
     ) -> Option<Instant> {
         if self.next_pending.map_or(false, |when| when <= now) {
-            trace!(target: "poll-thread",
+            trace!(target: "dispatch-entry",
                    "retrying pending messages");
 
             match self.mode.retry_pending(
@@ -741,6 +801,28 @@ where
         }
 
         self.next_outbound
+    }
+
+    fn complete_pending(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        live: &HashSet<Token>,
+    ) -> Option<Instant> {
+        match self.mode.complete_pending(
+            ctx,
+            &mut self.dispatched.msgs,
+            &mut self.dispatched.stream,
+            &live
+        ) {
+            Ok(next) => next,
+            Err(err) => {
+                error!(target: "poll-thread",
+                       "error completing stalled sends: {}",
+                       err);
+
+                None
+            }
+        }
     }
 
     fn push_msgs(
@@ -869,7 +951,9 @@ where
                                     mode: mode,
                                     next_outbound: Some(now),
                                     next_refresh: Some(now),
-                                    retry_refresh: None
+                                    next_pending: None,
+                                    refresh_retry: None,
+                                    refresh_complete: None,
                                 };
 
                                 dispatched.recv_stream(id, stream);

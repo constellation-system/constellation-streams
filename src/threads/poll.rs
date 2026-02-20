@@ -36,6 +36,7 @@ use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::error::RecoverableError;
+use constellation_common::retry::next_retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -170,6 +171,7 @@ where
     /// Source of outbound messages.
     msgs: Types::Msgs,
     notify: Arc<Waker>,
+    notify_token: Token,
     /// Flag to use to shut the stream down.
     shutdown: ShutdownFlag,
     /// Stream to use to send.
@@ -249,9 +251,6 @@ pub enum PollThreadCreateError<Mode, Channels, AuthN> {
     AuthN {
         err: AuthN
     },
-    IO {
-        err: Error
-    }
 }
 
 #[derive(Debug)]
@@ -273,14 +272,13 @@ where Chans: Channels<Ctx>
     fn new(
         ctx: Ctx,
         channels: Chans,
-    ) -> Result<Self, Error> {
-        let poll = Poll::new()?;
-
-        Ok(PollThreadCtx {
+        poll: Poll
+    ) -> Self {
+        PollThreadCtx {
             channels: channels,
             ctx: ctx,
             poll: poll,
-        })
+        }
     }
 }
 
@@ -295,9 +293,11 @@ where
         authn_config: Types::MsgAuthConfig,
         srcs: Types::ChansSrcs,
         mut ctx: Ctx,
+        poll: Poll,
         recv: Types::Recv,
         msgs: Types::Msgs,
         notify: Arc<Waker>,
+        notify_token: Token,
         stream: Types::Stream,
         shutdown: ShutdownFlag,
         nevents: usize,
@@ -312,12 +312,11 @@ where
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
-        let ctx = PollThreadCtx::new(ctx, channels)
-            .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let pull_streams = match nsessions {
             Some(nsessions) => HashMap::with_capacity(nsessions),
             None => HashMap::new()
         };
+        let ctx = PollThreadCtx::new(ctx, channels, poll);
 
         Ok(PollThread {
             pull_streams: pull_streams,
@@ -326,6 +325,7 @@ where
             mode: mode,
             msgs: msgs,
             notify: notify,
+            notify_token: notify_token,
             shutdown: shutdown,
             stream: stream,
             nevents: nevents,
@@ -534,7 +534,6 @@ where
         }
     }
 
-    // XXX need to check if the completable error type is wouldblock and delay.
     fn complete_refresh_stream(
         &mut self,
         err: Types::RefreshCompletableError
@@ -573,15 +572,9 @@ where
 
         // Loop until told to shut down.
         while {
-            let next = next_pending.map_or(next_outbound, |next| {
-                Some(next_outbound.map_or(next, |when: Instant| when.min(next)))
-            });
-            let next = next.map_or(next_listen, |next| {
-                Some(next_listen.map_or(next, |when: Instant| when.min(next)))
-            });
-            let next = next.map_or(next_refresh, |next| {
-                Some(next_refresh.map_or(next, |when: Instant| when.min(next)))
-            });
+            let next = next_retry(&next_pending, &next_outbound);
+            let next = next_retry(&next, &next_listen);
+            let next = next_retry(&next, &next_refresh);
 
             now = Instant::now();
 
@@ -761,20 +754,28 @@ where
                 }
             }
 
+            let this_outbound = next_outbound;
+
             // Complete any stalled sends first.
-            if let Err(err) = self.mode.complete_pending(
+            match self.mode.complete_pending(
                 &mut self.ctx,
                 &mut self.msgs,
                 &mut self.stream,
                 &live
             ) {
-                error!(target: "poll-thread",
-                       "error completing stalled sends: {}",
-                       err)
+                Ok(next) => {
+                    next_outbound = next_retry(&next_outbound, &next);
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error completing stalled sends: {}",
+                           err)
+                }
             }
 
             // Push new messages.
-            if next_outbound.map_or(false, |when| when <= now) {
+            if this_outbound.map_or(false, |when| when <= now) ||
+                live.contains(&self.notify_token) {
                 trace!(target: "poll-thread",
                        "pushing messages");
 
@@ -784,7 +785,9 @@ where
                     &mut self.stream,
                     &live
                 ) {
-                    Ok(next) => next_outbound = next,
+                    Ok(next) => {
+                        next_outbound = next_retry(&next_outbound, &next);
+                    }
                     Err(err) => {
                         error!(target: "poll-thread",
                                "error sending messages: {}",
@@ -908,7 +911,6 @@ where
             PollThreadCreateError::Channels { err } => err.fmt(f),
             PollThreadCreateError::AuthN { err } => err.fmt(f),
             PollThreadCreateError::Mode { err } => err.fmt(f),
-            PollThreadCreateError::IO { err } => write!(f, "{}", err)
         }
     }
 }
