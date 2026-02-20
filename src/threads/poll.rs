@@ -557,6 +557,216 @@ where
             .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
+    fn handle_events(
+        &mut self,
+        events: &mut Events,
+        retry_refresh: &mut Option<Types::RefreshRetry>,
+        next_pending: &mut Option<Instant>,
+        next_listen: &mut Option<Instant>,
+        next_refresh: &mut Option<Instant>,
+        next_outbound: &mut Option<Instant>,
+        now: Instant,
+    ) -> bool {
+        // Gather up all the events.
+        let live: HashSet<Token> = events
+            .iter()
+            .map(|event| event.token())
+            .collect();
+        let mut valid = true;
+
+        // First push all pending messages.
+        if next_pending.map_or(false, |when| when <= now) {
+            trace!(target: "poll-thread",
+                   "retrying pending messages");
+
+            *next_pending = None;
+
+            match self.mode.retry_pending(
+                &mut self.ctx,
+                &mut self.msgs,
+                &mut self.stream,
+                &live,
+                now,
+            ) {
+                Ok(next) => {
+                    *next_pending = next;
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error retrying pending messages: {}",
+                           err);
+                }
+            }
+        }
+
+        // Do pulls before pushing new messages.
+        let need_refresh = if next_listen
+            .map_or(false, |when| when <= now) {
+            trace!(target: "poll-thread",
+                   "listening");
+
+            match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
+                Ok(RetryResult::Success((streams, endpoints,
+                                         refresh, when))) => {
+                    *next_listen = when;
+
+                    // Report new streams.
+                    for (addr, channel_id, param, stream) in streams {
+                        let id = StreamID::new(addr, channel_id, param);
+
+                        self.recv_stream(id, stream)
+                    }
+
+                    // Pull in messages from all active streams.
+                    for (addr, channel_id, param) in endpoints {
+                        let id = StreamID::new(addr, channel_id, param);
+
+                        if let Err(err) = self.pull_msgs(&id) {
+                            error!(target: "poll-thread",
+                                   "error receiving messages from {}: {}",
+                                   id, err);
+
+                            valid = false;
+                        }
+                    }
+
+                    refresh
+                },
+                Ok(RetryResult::Retry(when)) => {
+                    *next_listen = Some(when);
+
+                    false
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error listening: {}",
+                           err);
+
+                    false
+                }
+            }
+        } else {
+            false
+        };
+
+        // Refresh the stream if needed.
+        if let Some(refresh_complete) = self.refresh_complete.take() {
+            match self.complete_refresh_stream(refresh_complete) {
+                RetryResult::Success(when) => {
+                    *next_refresh = when;
+
+                    if let Err(err) = self.mode.retry_indefs(
+                        &mut self.ctx,
+                        &mut self.msgs,
+                        &mut self.stream,
+                    ) {
+                        error!(target: "poll-thread",
+                               "error completing refresh: {}",
+                               err)
+                    }
+                }
+                RetryResult::Retry(retry) => {
+                    *retry_refresh = Some(retry)
+                }
+            }
+        } else if let Some(retry) = retry_refresh.take() {
+            if retry.when() < now {
+                trace!(target: "poll-thread",
+                       "retrying stream refresh");
+
+                match self.retry_refresh_stream(retry) {
+                    RetryResult::Success(when) => {
+                        *next_refresh = when;
+
+                        if let Err(err) = self.mode.retry_indefs(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream,
+                        ) {
+                            error!(target: "poll-thread",
+                                   "error retrying refresh: {}",
+                                   err)
+                        }
+                    }
+                    RetryResult::Retry(retry) => {
+                        *retry_refresh = Some(retry)
+                    }
+                }
+            } else {
+                *retry_refresh = Some(retry)
+            }
+        } else if next_refresh.map_or(false, |when| when <= now) ||
+            need_refresh {
+            trace!(target: "poll-thread",
+                   "refreshing stream");
+
+            *next_refresh = None;
+
+            match self.refresh_stream() {
+                RetryResult::Success(when) => {
+                    *next_refresh = when;
+
+                    if let Err(err) = self.mode.retry_indefs(
+                        &mut self.ctx,
+                        &mut self.msgs,
+                        &mut self.stream,
+                    ) {
+                        error!(target: "poll-thread",
+                               "error retrying refresh: {}",
+                               err)
+                    }
+                }
+                RetryResult::Retry(retry) => {
+                    *retry_refresh = Some(retry)
+                }
+            }
+        }
+
+        let this_outbound = next_outbound.clone();
+
+        // Complete any stalled sends first.
+        match self.mode.complete_pending(
+            &mut self.ctx,
+            &mut self.msgs,
+            &mut self.stream,
+            &live
+        ) {
+            Ok(next) => {
+                *next_outbound = next_retry(next_outbound, &next);
+            }
+            Err(err) => {
+                error!(target: "poll-thread",
+                       "error completing stalled sends: {}",
+                       err)
+            }
+        }
+
+        // Push new messages.
+        if this_outbound.map_or(false, |when| when <= now) ||
+            live.contains(&self.notify_token) {
+            trace!(target: "poll-thread",
+                   "pushing messages");
+
+            match self.mode.send_from_outbound(
+                &mut self.ctx,
+                &mut self.msgs,
+                &mut self.stream,
+                &live
+            ) {
+                Ok(next) => {
+                    *next_outbound = next_retry(&next_outbound, &next);
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error sending messages: {}",
+                           err);
+                }
+            }
+        }
+
+        valid
+    }
+
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
         let mut next_pending = None;
@@ -564,7 +774,6 @@ where
         let mut next_listen = None;
         let mut next_refresh = None;
         let mut retry_refresh: Option<Types::RefreshRetry> = None;
-        let mut valid = true;
         let mut now;
 
         info!(target: "poll-thread",
@@ -578,7 +787,7 @@ where
 
             now = Instant::now();
 
-            valid && self.shutdown.is_live() &&
+            self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
                 (next.is_some_and(|next: Instant| next < now) ||
                 {
@@ -602,200 +811,11 @@ where
                                    err)
                         })
                         .is_ok()
-                })
-        } {
-            // Gather up all the events.
-            let live: HashSet<Token> = events
-                .iter()
-                .map(|event| event.token())
-                .collect();
-
-            // First push all pending messages.
-            if next_pending.map_or(false, |when| when <= now) {
-                trace!(target: "poll-thread",
-                       "retrying pending messages");
-
-                match self.mode.retry_pending(
-                    &mut self.ctx,
-                    &mut self.msgs,
-                    &mut self.stream,
-                    &live,
-                    now,
-                ) {
-                    Ok(next) => {
-                        next_pending = next;
-                    }
-                    Err(err) => {
-                        error!(target: "poll-thread",
-                               "error retrying pending messages: {}",
-                               err);
-                    }
-                }
-            }
-
-            // Do pulls before pushing new messages.
-            let need_refresh = if next_listen
-                .map_or(false, |when| when <= now) {
-                trace!(target: "poll-thread",
-                       "listening");
-
-                match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
-                    Ok(RetryResult::Success((streams, endpoints,
-                                             refresh, when))) => {
-                        next_listen = when;
-
-                        // Report new streams.
-                        for (addr, channel_id, param, stream) in streams {
-                            let id = StreamID::new(addr, channel_id, param);
-
-                            self.recv_stream(id, stream)
-                        }
-
-                        // Pull in messages from all active streams.
-                        for (addr, channel_id, param) in endpoints {
-                            let id = StreamID::new(addr, channel_id, param);
-
-                            if let Err(err) = self.pull_msgs(&id) {
-                                error!(target: "poll-thread",
-                                       "error receiving messages from {}: {}",
-                                       id, err);
-
-                                valid = false;
-                            }
-                        }
-
-                        refresh
-                    },
-                    Ok(RetryResult::Retry(when)) => {
-                        next_listen = Some(when);
-
-                        false
-                    }
-                    Err(err) => {
-                        error!(target: "poll-thread",
-                               "error listening: {}",
-                               err);
-
-                        false
-                    }
-                }
-            } else {
-                false
-            };
-
-            // Refresh the stream if needed.
-            if let Some(refresh_complete) = self.refresh_complete.take() {
-                match self.complete_refresh_stream(refresh_complete) {
-                    RetryResult::Success(when) => {
-                        next_refresh = when;
-
-                        if let Err(err) = self.mode.retry_indefs(
-                            &mut self.ctx,
-                            &mut self.msgs,
-                            &mut self.stream,
-                        ) {
-                            error!(target: "poll-thread",
-                                   "error retrying indefinite delays: {}",
-                                   err)
-                        }
-                    }
-                    RetryResult::Retry(retry) => {
-                        retry_refresh = Some(retry)
-                    }
-                }
-            } else if let Some(retry) = retry_refresh.take() {
-                if retry.when() < now {
-                    trace!(target: "poll-thread",
-                           "retrying stream refresh");
-
-                    match self.retry_refresh_stream(retry) {
-                        RetryResult::Success(when) => {
-                            next_refresh = when;
-
-                            if let Err(err) = self.mode.retry_indefs(
-                                &mut self.ctx,
-                                &mut self.msgs,
-                                &mut self.stream,
-                            ) {
-                                error!(target: "poll-thread",
-                                       "error retrying indefinite delays: {}",
-                                       err)
-                            }
-                        }
-                        RetryResult::Retry(retry) => {
-                            retry_refresh = Some(retry)
-                        }
-                    }
-                } else {
-                    retry_refresh = Some(retry)
-                }
-            } else if next_refresh.map_or(false, |when| when <= now) ||
-                need_refresh {
-                trace!(target: "poll-thread",
-                       "refreshing stream");
-
-                match self.refresh_stream() {
-                    RetryResult::Success(when) => {
-                        next_refresh = when;
-
-                        if let Err(err) = self.mode.retry_indefs(
-                            &mut self.ctx,
-                            &mut self.msgs,
-                            &mut self.stream,
-                        ) {
-                            error!(target: "poll-thread",
-                                   "error retrying indefinite delays: {}",
-                                   err)
-                        }
-                    }
-                    RetryResult::Retry(retry) => {
-                        retry_refresh = Some(retry)
-                    }
-                }
-            }
-
-            let this_outbound = next_outbound;
-
-            // Complete any stalled sends first.
-            match self.mode.complete_pending(
-                &mut self.ctx,
-                &mut self.msgs,
-                &mut self.stream,
-                &live
-            ) {
-                Ok(next) => {
-                    next_outbound = next_retry(&next_outbound, &next);
-                }
-                Err(err) => {
-                    error!(target: "poll-thread",
-                           "error completing stalled sends: {}",
-                           err)
-                }
-            }
-
-            // Push new messages.
-            if this_outbound.map_or(false, |when| when <= now) ||
-                live.contains(&self.notify_token) {
-                trace!(target: "poll-thread",
-                       "pushing messages");
-
-                match self.mode.send_from_outbound(
-                    &mut self.ctx,
-                    &mut self.msgs,
-                    &mut self.stream,
-                    &live
-                ) {
-                    Ok(next) => {
-                        next_outbound = next_retry(&next_outbound, &next);
-                    }
-                    Err(err) => {
-                        error!(target: "poll-thread",
-                               "error sending messages: {}",
-                               err);
-                    }
-                }
-            }
-        }
+                }) &&
+                self.handle_events(&mut events, &mut retry_refresh,
+                                   &mut next_pending, &mut next_listen,
+                                   &mut next_refresh, &mut next_outbound, now)
+        } {}
 
         self.shutdown(events)
     }

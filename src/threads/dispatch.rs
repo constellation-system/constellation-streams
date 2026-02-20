@@ -34,11 +34,11 @@ use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
-use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::error::RecoverableError;
+use constellation_common::retry::next_retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
@@ -56,6 +56,7 @@ use mio::Waker;
 use crate::channels::Channels;
 use crate::channels::ChannelParam;
 use crate::channels::ChannelsCreate;
+use crate::channels::ChannelsShutdown;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
@@ -118,6 +119,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
     type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
+    type ChanShutdownError: Debug + Display;
     type Chans:
         ChannelsCreate<Ctx, Self::ChansSrcs,
                        Config = Self::ChansConfig,
@@ -126,7 +128,9 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
                    Addr = Self::Addr,
                    Param = Self::ChannelParam,
                    Stream = Self::AuthNChan,
-                   ChannelID = Self::ChannelID>;
+                   ChannelID = Self::ChannelID>
+        + ChannelsShutdown<Ctx,
+                           ShutdownStreamError = Self::ChanShutdownError>;
 }
 
 pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
@@ -367,7 +371,7 @@ where
         >
     >
     where ID: Display {
-        trace!(target: "poll-thread",
+        trace!(target: "dispatched",
                "handling incoming message from {} ({})",
                session_prin, id);
 
@@ -379,7 +383,7 @@ where
                 err: err
             })? {
             AuthNResult::Accept(msg) => {
-                trace!(target: "poll-thread",
+                trace!(target: "dispatched",
                        "authenticated message from {} ({}) as {}",
                        session_prin, id, msg.prin());
 
@@ -389,7 +393,7 @@ where
                     })
             },
             AuthNResult::Reject(_) => {
-                warn!(target: "poll-thread",
+                warn!(target: "dispatched",
                       "authentication rejected message from {} ({})",
                       session_prin, id);
 
@@ -410,7 +414,7 @@ where
         self.stream.complete_refresh(ctx, err)
             .unwrap_or_else(|err| match err.split() {
             (_, Some(err)) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "unrecoverable error refreshing stream: {}",
                        err);
 
@@ -418,7 +422,7 @@ where
             }
             (Some(err), _) => self.complete_refresh_stream(ctx, err),
             (None, None) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "refresh error split produced no results");
 
                 RetryResult::Success(None)
@@ -438,7 +442,7 @@ where
         self.stream.retry_refresh(ctx, retry)
             .unwrap_or_else(|err| match err.split() {
             (_, Some(err)) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "unrecoverable error refreshing stream: {}",
                        err);
 
@@ -446,7 +450,7 @@ where
             }
             (Some(err), _) => self.complete_refresh_stream(ctx, err),
             (None, None) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "refresh error split produced no results");
 
                 RetryResult::Success(None)
@@ -464,7 +468,7 @@ where
     {
         self.stream.refresh(ctx).unwrap_or_else(|err| match err.split() {
             (_, Some(err)) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "unrecoverable error refreshing stream: {}",
                        err);
 
@@ -472,12 +476,21 @@ where
             }
             (Some(err), _) => self.complete_refresh_stream(ctx, err),
             (None, None) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched",
                        "refresh error split produced no results");
 
                 RetryResult::Success(None)
             }
         })
+    }
+
+    /// Shut down this `Dispatched`.
+    ///
+    /// This will trigger the [ShutdownFlag] associated with this
+    /// `Dispatched`.
+    #[inline]
+    fn shutdown(&mut self) {
+        self.shutdown.set();
     }
 }
 
@@ -661,7 +674,7 @@ where
     ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
         match err.split() {
             (_, Some(err)) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched-entry",
                        "unrecoverable error refreshing stream: {}",
                        err);
 
@@ -675,7 +688,7 @@ where
                 self.complete_refresh_stream(ctx, err)
             },
             (None, None) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched-entry",
                        "refresh error split produced no results");
 
                 RetryResult::Success(None)
@@ -709,8 +722,8 @@ where
                         &mut self.dispatched.msgs,
                         &mut self.dispatched.stream,
                     ) {
-                        error!(target: "poll-thread",
-                               "error retrying indefinite delays: {}",
+                        error!(target: "dispatched-entry",
+                               "error completing refresh: {}",
                                err)
                     }
                 }
@@ -733,7 +746,7 @@ where
                             &mut self.dispatched.stream,
                         ) {
                             error!(target: "dispatch-entry",
-                                   "error retrying indefinite delays: {}",
+                                   "error retrying refresh: {}",
                                    err)
                         }
                     }
@@ -749,6 +762,8 @@ where
             trace!(target: "dispatch-entry",
                    "refreshing stream");
 
+            self.next_refresh = None;
+
             match self.dispatched.refresh_stream(ctx) {
                 RetryResult::Success(when) => {
                     self.next_refresh = when;
@@ -759,7 +774,7 @@ where
                         &mut self.dispatched.stream,
                     ) {
                         error!(target: "dispatch-entry",
-                               "error retrying indefinite delays: {}",
+                               "error retrying refresh: {}",
                                err)
                     }
                 }
@@ -779,6 +794,8 @@ where
         now: Instant
     ) -> Option<Instant> {
         if self.next_pending.map_or(false, |when| when <= now) {
+            self.next_pending = None;
+
             trace!(target: "dispatch-entry",
                    "retrying pending messages");
 
@@ -800,7 +817,7 @@ where
             }
         }
 
-        self.next_outbound
+        self.next_pending
     }
 
     fn complete_pending(
@@ -816,7 +833,7 @@ where
         ) {
             Ok(next) => next,
             Err(err) => {
-                error!(target: "poll-thread",
+                error!(target: "dispatched-entry",
                        "error completing stalled sends: {}",
                        err);
 
@@ -835,13 +852,17 @@ where
             trace!(target: "dispatch-entry",
                    "pushing messages");
 
+            self.next_outbound = None;
+
             match self.mode.send_from_outbound(
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
                 live
             ) {
-                Ok(next) => self.next_outbound = next,
+                Ok(next) => {
+                    self.next_outbound = next_retry(&self.next_outbound, &next);
+                },
                 Err(err) => {
                     error!(target: "dispatch-entry",
                            "error sending messages: {}",
@@ -851,6 +872,27 @@ where
         }
 
         self.next_outbound
+    }
+
+    fn shutdown(
+        self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>
+    ) {
+        // Shut down all streams.
+        for (id, stream) in self.pull_streams.into_iter() {
+            debug!(target: "poll-thread",
+                   "shutting down stream {} with {}",
+                   id, stream.prin());
+
+            if let Err(err) = ctx.channels
+                .shutdown_stream(&mut ctx.ctx, id.channel(),
+                                 id.param(), stream) {
+                error!(target: "poll-thread",
+                       "error shutting down stream {}: {}",
+                       id, err);
+
+            }
+        }
     }
 }
 
@@ -990,6 +1032,106 @@ where
         }
     }
 
+    fn run(mut self) {
+    }
+
+    fn shutdown(
+        self,
+        mut events: Events
+    ) {
+        let DispatchThread { mut ctx, mut dispatched, tokens, .. } = self;
+        info!(target: "dispatch-thread",
+              "mio dispatch thread shutting down");
+
+        // Shutdown all dispatched entries.
+        for (party, token) in tokens.into_iter() {
+            if let Some(ent) = dispatched.remove(&token) {
+                info!(target: "dispatch-thread",
+                      "shutting down dispatched entry for {}",
+                      party);
+
+                ent.shutdown(&mut ctx)
+            } else {
+                trace!(target: "dispatch-thread",
+                       "entry missing for {}, token {}",
+                       party, token.0);
+            }
+        }
+
+        // Empty out the remaining tokens.
+        for (token, ent) in dispatched.into_iter() {
+            warn!(target: "dispatch-thread",
+                  "shutting down dispatched entry for token {} with no party",
+                  token.0);
+
+            ent.shutdown(&mut ctx)
+
+        }
+
+        let mut live = true;
+        let mut next = None;
+
+        while {
+            let now = Instant::now();
+
+            live &&
+                (next.is_some_and(|next: Instant| next < now) ||
+                 {
+                     let duration = next.map(|next| next - now);
+
+                     if let Some(duration) = &duration {
+                         trace!(target: "dispatch-thread",
+                                "waiting for poll for {}.{:03}",
+                                duration.as_secs(), duration.subsec_millis());
+                     } else {
+                         trace!(target: "dispatch-thread",
+                                "waiting for poll indefinitely");
+                     }
+
+                     ctx.poll
+                         .poll(&mut events, duration)
+                         .inspect_err(|err| {
+                             error!(target: "dispatch-thread",
+                                    "error polling: {}",
+                                    err)
+                         })
+                         .is_ok()
+                 })
+        } {
+            // Gather up all the events.
+            let tokens: HashSet<Token> = events
+                .iter()
+                .map(|event| event.token())
+                .collect();
+
+            next = None;
+
+            match ctx.channels.shutdown_listen(&mut ctx.ctx, &tokens) {
+                Ok(RetryResult::Success(res)) => {
+                    live = res;
+                }
+                Ok(RetryResult::Retry(when)) => {
+                    next = Some(when)
+                }
+                Err(err) => {
+                    error!(target: "dispatch-thread",
+                           "error listening during shutdown: {}",
+                           err);
+
+                    live = false;
+                }
+            }
+        }
+
+        if let Err(err) = ctx.channels.shutdown(&mut ctx.ctx) {
+            error!(target: "dispatch-thread",
+                   "error shutting down channels: {}",
+                   err);
+        }
+
+        info!(target: "dispatch-thread",
+              "mio dispatch thread exiting");
+    }
 }
 
 /*
