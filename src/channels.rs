@@ -330,6 +330,10 @@ pub struct SharedPrivateChannels<Private, Shared> {
     shared: Shared
 }
 
+#[cfg(test)]
+pub struct TestChannel {
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SharedPrivateValue<Private, Shared> {
     /// ID for the private channels.

@@ -43,7 +43,7 @@ use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
-pub mod dispatch;
+//pub mod dispatch;
 pub mod poll;
 pub mod private;
 pub mod shared;
@@ -95,6 +95,8 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         stream: &mut Stream,
         live: &HashSet<Token>,
     ) -> Result<Option<Instant>, Self::RetryError>;
+
+    fn has_complete_pending(&self) -> bool;
 
     fn retry_indefs(
         &mut self,
@@ -177,12 +179,33 @@ impl Tokens {
 
 impl TokensCtx for Tokens {
     fn token(&mut self) -> Token {
-        self.freed.pop().unwrap_or_else(|| {
+        if let Some(out) = self.freed.pop() {
+            out
+        } else {
             let out = self.curr;
+
+            self.curr += 1;
+
+            Token(out)
+        }
+    }
+
+    #[inline]
+    fn free_token(
+        &mut self,
+        token: Token
+    ) {
+        if token.0 + 1 == self.curr {
+            self.curr -= 1;
 
             // Clear out any tokens that can be merged back into curr.
             while self.freed.peek()
-                .map_or(false, |head| head.0 + 1 == self.curr) {
+                .map_or(false, |head| {
+
+                    head.0 + 1 == self.curr
+                }) {
+                self.curr -= 1;
+
                 // Smoke-check
                 match self.freed.pop() {
                     Some(head) => if head.0 + 1 != self.curr {
@@ -195,20 +218,6 @@ impl TokensCtx for Tokens {
                     }
                 }
             }
-
-            self.curr += 1;
-
-            Token(out)
-        })
-    }
-
-    #[inline]
-    fn free_token(
-        &mut self,
-        token: Token
-    ) {
-        if token.0 + 1 == self.curr {
-            self.curr -= 1;
         } else {
             self.freed.push(token)
         }
@@ -344,8 +353,13 @@ where
     }
 }
 
+#[cfg(test)]
+use crate::init;
+
 #[test]
 fn test_tokens_alloc_free_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let expected = tokens.token();
 
@@ -358,6 +372,8 @@ fn test_tokens_alloc_free_alloc() {
 
 #[test]
 fn test_tokens_unique() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();
@@ -367,6 +383,8 @@ fn test_tokens_unique() {
 
 #[test]
 fn test_tokens_alloc_free_first_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();
@@ -380,6 +398,8 @@ fn test_tokens_alloc_free_first_alloc() {
 
 #[test]
 fn test_tokens_alloc_free_second_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let _ = tokens.token();
     let second = tokens.token();
@@ -393,6 +413,8 @@ fn test_tokens_alloc_free_second_alloc() {
 
 #[test]
 fn test_tokens_alloc_free_all_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();
@@ -409,6 +431,8 @@ fn test_tokens_alloc_free_all_alloc() {
 
 #[test]
 fn test_tokens_alloc_free_all_rev_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();
@@ -425,6 +449,8 @@ fn test_tokens_alloc_free_all_rev_alloc() {
 
 #[test]
 fn test_tokens_alloc_free_gap_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();
@@ -437,13 +463,16 @@ fn test_tokens_alloc_free_gap_alloc() {
 
     let fifth = tokens.token();
 
-    let fourth = tokens.token();
+    let sixth = tokens.token();
 
-    assert_eq!(fifth, fourth)
+    assert_eq!(second, fifth);
+    assert_eq!(first, sixth)
 }
 
 #[test]
 fn test_tokens_alloc_free_close_gap_alloc() {
+    init();
+
     let mut tokens = Tokens::with_capacity(1);
     let first = tokens.token();
     let second = tokens.token();

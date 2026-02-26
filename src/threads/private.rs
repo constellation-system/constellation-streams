@@ -900,6 +900,8 @@ where
             error!(target: "private-datagram-push-mode",
                    "unrecoverable error sending batch: {}",
                    permanent);
+
+            // XXX Abort the batch here if necessary
         }
 
         if let Some(completable) = completable {
@@ -1015,6 +1017,11 @@ where
                 retries_hint: retries_hint
             })
         }
+    }
+
+    #[inline]
+    fn has_complete_pending(&self) -> bool {
+        self.completes.is_some()
     }
 
     fn send_from_outbound(
@@ -1519,6 +1526,11 @@ where
             msg_retries_hint: msg_retries_hint,
             frags_retries_hint: frag_retries_hint
         })
+    }
+
+    #[inline]
+    fn has_complete_pending(&self) -> bool {
+        self.msgs_completes.is_some() || self.frags_completes.is_some()
     }
 
     fn send_from_outbound(

@@ -1137,6 +1137,11 @@ where
         }
     }
 
+    #[inline]
+    fn has_complete_pending(&self) -> bool {
+        self.completes.is_some()
+    }
+
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
@@ -1663,6 +1668,11 @@ where
             msg_retries_hint: msg_retries_hint,
             frags_retries_hint: frag_retries_hint,
         })
+    }
+
+    #[inline]
+    fn has_complete_pending(&self) -> bool {
+        self.msgs_completes.is_some() || self.frags_completes.is_some()
     }
 
     fn send_from_outbound(

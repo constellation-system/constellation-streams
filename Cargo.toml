@@ -68,4 +68,5 @@ serde = { version = "1.0", features = ["derive"] }
 asn1rs = { version = "0.3" }
 
 [dev-dependencies]
+env_logger = { version = "0.10" }
 serde_yaml = { version = "0.9" }

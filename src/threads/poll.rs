@@ -480,8 +480,8 @@ where
                             .shutdown_stream(&mut self.ctx.ctx, id.channel(),
                                              id.param(), stream) {
                             error!(target: "poll-thread",
-                                   "error shutting down stream {} with {}: {}",
-                                   id, curr.prin(), err);
+                                   "error shutting down stream {}: {}",
+                                   id, err);
                         }
 
                         curr
@@ -502,6 +502,15 @@ where
                 error!(target: "poll-thread",
                        "error reporting stream {} with {}: {}",
                        id, stream.prin(), err);
+
+                // Shut down the incoming stream.
+                if let Err(err) = self.ctx.channels
+                    .shutdown_stream(&mut self.ctx.ctx, id.channel(),
+                                     id.param(), stream) {
+                    error!(target: "poll-thread",
+                           "error shutting down stream {}: {}",
+                           id, err);
+                }
             }
         }
     }
@@ -574,7 +583,27 @@ where
             .collect();
         let mut valid = true;
 
-        // First push all pending messages.
+        // First deal with stalled and pending sends.
+        let this_outbound = next_outbound.take();
+
+        // Complete any stalled sends first.
+        match self.mode.complete_pending(
+            &mut self.ctx,
+            &mut self.msgs,
+            &mut self.stream,
+            &live
+        ) {
+            Ok(next) => {
+                *next_outbound = next_retry(next_outbound, &next);
+            }
+            Err(err) => {
+                error!(target: "poll-thread",
+                       "error completing stalled sends: {}",
+                       err)
+            }
+        }
+
+        // Push all pending messages.
         if next_pending.map_or(false, |when| when <= now) {
             trace!(target: "poll-thread",
                    "retrying pending messages");
@@ -722,25 +751,6 @@ where
             }
         }
 
-        let this_outbound = next_outbound.clone();
-
-        // Complete any stalled sends first.
-        match self.mode.complete_pending(
-            &mut self.ctx,
-            &mut self.msgs,
-            &mut self.stream,
-            &live
-        ) {
-            Ok(next) => {
-                *next_outbound = next_retry(next_outbound, &next);
-            }
-            Err(err) => {
-                error!(target: "poll-thread",
-                       "error completing stalled sends: {}",
-                       err)
-            }
-        }
-
         // Push new messages.
         if this_outbound.map_or(false, |when| when <= now) ||
             live.contains(&self.notify_token) {
@@ -790,28 +800,30 @@ where
             self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
                 (next.is_some_and(|next: Instant| next < now) ||
-                {
-                    let duration = next.map(|next| next - now);
+                 {
+                     let duration = next.map(|next| next - now);
 
-                    if let Some(duration) = &duration {
-                        trace!(target: "poll-thread",
-                               "waiting for poll for {}.{:03}",
-                               duration.as_secs(), duration.subsec_millis());
-                    } else {
-                        trace!(target: "poll-thread",
-                               "waiting for poll indefinitely");
-                    }
+                     if let Some(duration) = &duration {
+                         trace!(target: "poll-thread",
+                                "waiting for poll for {}.{:03}",
+                                duration.as_secs(), duration.subsec_millis());
+                     } else {
+                         trace!(target: "poll-thread",
+                                "waiting for poll indefinitely");
+                     }
 
-                    self.ctx
-                        .poll
-                        .poll(&mut events, duration)
-                        .inspect_err(|err| {
-                            error!(target: "poll-thread",
-                                   "error polling: {}",
-                                   err)
-                        })
-                        .is_ok()
-                }) &&
+                     self.ctx
+                         .poll
+                         .poll(&mut events, duration)
+                         .inspect_err(|err| {
+                             error!(target: "poll-thread",
+                                    "error polling: {}",
+                                    err)
+                         })
+                         .is_ok()
+                 } ||
+                 self.refresh_complete.is_some() ||
+                 self.mode.has_complete_pending()) &&
                 self.handle_events(&mut events, &mut retry_refresh,
                                    &mut next_pending, &mut next_listen,
                                    &mut next_refresh, &mut next_outbound, now)
