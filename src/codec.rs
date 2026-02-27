@@ -29,8 +29,6 @@ use std::io::Error;
 use std::io::Read;
 use std::io::Write;
 use std::marker::PhantomData;
-use std::sync::Arc;
-use std::sync::Condvar;
 use std::time::Instant;
 
 use constellation_auth::cred::Credentials;
