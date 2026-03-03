@@ -1136,7 +1136,7 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError> {
         match err {
             // This is here as a placeholder; this type is
@@ -1364,7 +1364,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Self::IndefParties>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     > {
         match err {

@@ -628,7 +628,7 @@ where
         msgs: Vec<Msg>,
         err: <Stream::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Stream::IndefParties)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Parties<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -719,7 +719,7 @@ where
             <Stream::FinishBatchError as RecoverableError>::Completable
         >
     ) -> Result<
-        RetryIndefResult<(), Self, (Vec<Msg>, Stream::IndefParties)>,
+        RetryIndefResult<(), Self, (Vec<Msg>, Parties<Stream::IndefParties>)>,
         PushEntryRecoverableError<
             Vec<Msg>,
             Stream::BatchID,
@@ -971,37 +971,7 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        let parties: Vec<Stream::PartyID> =
-                            parties.into_iter().collect();
-
-                        // Add to the set of blocked parties.
-                        for party in parties.iter() {
-                            if self.live.remove(party) {
-                                warn!(target: "shared-datagram-push-mode",
-                                      "party {} was not in live set",
-                                      party)
-                            }
-                        }
-
-                        // Record the indefinite wait.
-                        let ent = IndefEntry {
-                            origin: Instant::now(),
-                            parties: parties,
-                            msgs: msgs
-                        };
-
-                        if let Some(indefs) = &mut self.indefs {
-                            indefs.push(ent)
-                        } else {
-                            let mut vec = match self.retries_hint {
-                                Some(hint) => Vec::with_capacity(hint),
-                                None => Vec::new()
-                            };
-
-                            vec.push(ent);
-
-                            self.indefs = Some(vec)
-                        }
+                        self.indef_delay(stream, msgs, parties);
 
                         None
                     }
@@ -1284,7 +1254,7 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        self.indef_delay(stream, msgs, Parties::Some(parties));
+                        self.indef_delay(stream, msgs, parties);
 
                         None
                     }
@@ -1403,37 +1373,7 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        let parties: Vec<Types::PartyID> =
-                            parties.into_iter().collect();
-
-                        // Add to the set of blocked parties.
-                        for party in parties.iter() {
-                            if self.live.remove(party) {
-                                warn!(target: "shared-datagram-push-mode",
-                                      "party {} was not in live set",
-                                      party)
-                            }
-                        }
-
-                        // Record the indefinite wait.
-                        let ent = IndefEntry {
-                            origin: Instant::now(),
-                            parties: parties,
-                            msgs: msgs
-                        };
-
-                        if let Some(indefs) = &mut self.msgs_indefs {
-                            indefs.push(ent)
-                        } else {
-                            let mut vec = match self.msg_retries_hint {
-                                Some(hint) => Vec::with_capacity(hint),
-                                None => Vec::new()
-                            };
-
-                            vec.push(ent);
-
-                            self.msgs_indefs = Some(vec)
-                        }
+                        self.indef_delay(stream, msgs, parties, Instant::now());
 
                         None
                     }
@@ -1958,8 +1898,7 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
-                        self.indef_delay(stream, msgs, Parties::Some(parties),
-                                         Instant::now());
+                        self.indef_delay(stream, msgs, parties, Instant::now());
 
                         None
                     }

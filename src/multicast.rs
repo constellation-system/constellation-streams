@@ -2637,7 +2637,7 @@ where
         retries: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Vec<Self::PartyID>,
                                  Self::SelectRetry,
-                                 Self::IndefParties>,
+                                 Parties<Self::IndefParties>>,
                 Self::SelectError> {
         let (mut results, retries) = retries.take();
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
@@ -2670,6 +2670,7 @@ where
         }
 
         self.decide_select_result(results, errs)
+            .map(|res| res.map_indef(Parties::Some))
     }
 
     fn create_batch(
@@ -2943,7 +2944,7 @@ where
     ) -> Result<
         RetryIndefResult<Self::BatchID,
                          Self::StartBatchRetry,
-                         Self::IndefParties>,
+                         Parties<Self::IndefParties>>,
         Self::StartBatchError
     > {
         match retries {
@@ -3792,7 +3793,6 @@ where
                 .map_retry(|retry| StreamMulticasterPushError::Start {
                     start: retry
                 })
-                .map_indef(Parties::Some)
                 .flat_map_ok(|batch| {
                 // Add the message.
                 let mut flags = self.empty_flags();
