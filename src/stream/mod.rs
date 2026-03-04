@@ -7747,11 +7747,11 @@ fn test_test_stream_shared_select() {
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
-/*
+
 #[test]
-fn test_test_stream_private_create_batch() {
+fn test_test_stream_shared_create_batch() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -7806,15 +7806,23 @@ fn test_test_stream_private_create_batch() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let batch = stream.create_batch(&mut (), &mut (), &())
+    let batch = stream.create_batch(&mut (), &mut (), &vec![1, 2, 3])
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    let retry = stream.create_batch(&mut (), &mut (), &())
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
+                       msgs: vec![]
+                   },
+               ]);
+
+    let retry = stream.create_batch(&mut (), &mut (), &vec![0, 1, 2])
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -7824,12 +7832,14 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
 
-    let err = stream.retry_create_batch(&mut (), &mut (), &(), retry);
+    let err = stream.retry_create_batch(&mut (), &mut (),
+                                        &vec![0, 2, 3], retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -7838,7 +7848,8 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
@@ -7848,22 +7859,25 @@ fn test_test_stream_private_create_batch() {
 
     assert!(permanent.is_none());
 
-    let batch = stream.complete_create_batch(&mut (), &mut (), &(), completable)
+    let batch = stream.complete_create_batch(&mut (), &mut (),
+                                             &vec![0, 2, 3], completable)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
 
-    let err = stream.create_batch(&mut (), &mut (), &());
+    let err = stream.create_batch(&mut (), &mut (), &vec![2, 3]);
     let err = if let Err(err) = err {
         err
     } else {
@@ -7872,10 +7886,12 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
@@ -7885,7 +7901,8 @@ fn test_test_stream_private_create_batch() {
 
     assert!(permanent.is_none());
 
-    let retry = stream.complete_create_batch(&mut (), &mut (), &(), completable)
+    let retry = stream.complete_create_batch(&mut (), &mut (),
+                                             &vec![2, 3], completable)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -7895,15 +7912,18 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
 
-    let err = stream.retry_create_batch(&mut (), &mut (), &(), retry);
+    let err = stream.retry_create_batch(&mut (), &mut (),
+                                        &vec![2, 3], retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -7912,10 +7932,12 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
@@ -7924,7 +7946,8 @@ fn test_test_stream_private_create_batch() {
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
-    let err = stream.complete_create_batch(&mut (), &mut (), &(), completable);
+    let err = stream.complete_create_batch(&mut (), &mut (),
+                                           &vec![2, 3], completable);
     let err = if let Err(err) = err {
         err
     } else {
@@ -7933,10 +7956,12 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
@@ -7949,7 +7974,7 @@ fn test_test_stream_private_create_batch() {
         scope: ErrorScope::Session,
     });
 
-    let err = stream.create_batch(&mut (), &mut (), &());
+    let err = stream.create_batch(&mut (), &mut (), &vec![1, 2]);
     let err = if let Err(err) = err {
         err
     } else {
@@ -7966,10 +7991,12 @@ fn test_test_stream_private_create_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 2, 3],
                        msgs: vec![]
                    }
                ]);
@@ -7980,14 +8007,14 @@ fn test_test_stream_private_create_batch() {
 }
 
 #[test]
-fn test_test_stream_private_start_batch() {
+fn test_test_stream_shared_start_batch() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8042,15 +8069,22 @@ fn test_test_stream_private_start_batch() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let batch = stream.start_batch(&mut ())
+    let batch = stream.start_batch(&mut (), vec![0, 1, 2, 3].iter())
         .expect("Expected success");
 
     assert!(batch.is_success());
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
+                       msgs: vec![]
+                   },
+               ]);
 
-    let retry = stream.start_batch(&mut ())
+    let retry = stream.start_batch(&mut (), vec![1, 2, 3].iter())
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -8060,7 +8094,8 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
                ]);
@@ -8074,7 +8109,8 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
                ]);
@@ -8091,15 +8127,17 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    }
                ]);
 
-    let err = stream.start_batch(&mut ());
+    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8108,10 +8146,12 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    }
                ]);
@@ -8131,10 +8171,12 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    }
                ]);
@@ -8148,10 +8190,12 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    }
                ]);
@@ -8169,13 +8213,15 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::StartError
+                   TestSharedBatchState::StartError
                ]);
 
     let (completable, permanent) = err.split();
@@ -8190,7 +8236,7 @@ fn test_test_stream_private_start_batch() {
         ..
     }));
 
-    let err = stream.start_batch(&mut ());
+    let err = stream.start_batch(&mut (), vec![0, 2, 3].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8211,14 +8257,16 @@ fn test_test_stream_private_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::StartError,
-                   TestPrivateBatchState::StartError
+                   TestSharedBatchState::StartError,
+                   TestSharedBatchState::StartError
                ]);
 
     assert!(stream.frags.is_empty());
@@ -8227,9 +8275,9 @@ fn test_test_stream_private_start_batch() {
 }
 
 #[test]
-fn test_test_stream_private_cancel_batch() {
+fn test_test_stream_shared_cancel_batch() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8289,10 +8337,10 @@ fn test_test_stream_private_cancel_batch() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let batch_1 = stream.create_batch(&mut (), &mut (), &())
+    let batch_1 = stream.create_batch(&mut (), &mut (), &vec![0, 1, 2])
         .expect("Expected success");
     let batch_1 = if let RetryResult::Success(batch_1) = batch_1 {
         batch_1
@@ -8302,28 +8350,32 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
                ]);
 
-    assert_eq!(stream.cancel_batch(&mut (), &mut (), &batch_1),
+    let mut flag = false;
+
+    assert_eq!(stream.cancel_batch(&mut (), &mut flag, &batch_1),
                Ok(RetryResult::Success(())));
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
                ]);
+    assert!(flag);
 
-    let batch_2 = stream.create_batch(&mut (), &mut (), &())
+    let batch_2 = stream.create_batch(&mut (), &mut (), &vec![1, 2])
         .expect("Expected success");
     let batch_2 = if let RetryResult::Success(batch_2) = batch_2 {
         batch_2
     } else {
         panic!("Expected success")
     };
-
-    let retry = stream.cancel_batch(&mut (), &mut (), &batch_2)
+    let mut flag = false;
+    let retry = stream.cancel_batch(&mut (), &mut flag, &batch_2)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -8333,13 +8385,15 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_cancel_batch(&mut (), &mut (), &batch_2, retry);
+    let err = stream.retry_cancel_batch(&mut (), &mut flag, &batch_2, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8348,11 +8402,13 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8360,26 +8416,26 @@ fn test_test_stream_private_cancel_batch() {
     assert!(permanent.is_none());
 
     let res = stream
-        .complete_cancel_batch(&mut (), &mut (), &batch_2, completable)
+        .complete_cancel_batch(&mut (), &mut flag, &batch_2, completable)
         .expect("Expected success");
 
     assert!(res.is_success());
-
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
                ]);
+    assert!(flag);
 
-    let batch_3 = stream.create_batch(&mut (), &mut (), &())
+    let batch_3 = stream.create_batch(&mut (), &mut (), &vec![1, 2, 3])
         .expect("Expected success");
     let batch_3 = if let RetryResult::Success(batch_3) = batch_3 {
         batch_3
     } else {
         panic!("Expected success")
     };
-
-    let err = stream.cancel_batch(&mut (), &mut (), &batch_3);
+    let mut flag = false;
+    let err = stream.cancel_batch(&mut (), &mut flag, &batch_3);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8388,12 +8444,14 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8401,7 +8459,7 @@ fn test_test_stream_private_cancel_batch() {
     assert!(permanent.is_none());
 
     let retry = stream
-        .complete_cancel_batch(&mut (), &mut (), &batch_3, completable)
+        .complete_cancel_batch(&mut (), &mut flag, &batch_3, completable)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -8411,14 +8469,16 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_cancel_batch(&mut (), &mut (), &batch_3, retry);
+    let err = stream.retry_cancel_batch(&mut (), &mut flag, &batch_3, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8427,19 +8487,21 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
     let err = stream
-        .complete_cancel_batch(&mut (), &mut (), &batch_3, completable);
+        .complete_cancel_batch(&mut (), &mut flag, &batch_3, completable);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8448,12 +8510,14 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let permanent = permanent.expect("Expected Some");
@@ -8463,7 +8527,7 @@ fn test_test_stream_private_cancel_batch() {
         scope: ErrorScope::Session,
     });
 
-    let batch_4 = stream.create_batch(&mut (), &mut (), &())
+    let batch_4 = stream.create_batch(&mut (), &mut (), &vec![0, 1, 3])
         .expect("Expected success");
     let batch_4 = if let RetryResult::Success(batch_4) = batch_4 {
         batch_4
@@ -8473,17 +8537,20 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 3],
                        msgs: vec![]
                    }
                ]);
 
-    let err = stream.cancel_batch(&mut (), &mut (), &batch_4);
+    let mut flag = false;
+    let err = stream.cancel_batch(&mut (), &mut flag, &batch_4);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8500,15 +8567,18 @@ fn test_test_stream_private_cancel_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Canceled,
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Canceled,
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 3],
                        msgs: vec![]
                    }
                ]);
+    assert!(!flag);
 
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
@@ -8516,9 +8586,9 @@ fn test_test_stream_private_cancel_batch() {
 }
 
 #[test]
-fn test_test_stream_private_finish_batch() {
+fn test_test_stream_shared_finish_batch() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8578,10 +8648,10 @@ fn test_test_stream_private_finish_batch() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let batch_1 = stream.create_batch(&mut (), &mut (), &())
+    let batch_1 = stream.create_batch(&mut (), &mut (), &vec![0, 1, 2])
         .expect("Expected success");
     let batch_1 = if let RetryResult::Success(batch_1) = batch_1 {
         batch_1
@@ -8591,30 +8661,35 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
                ]);
 
-    assert_eq!(stream.finish_batch(&mut (), &mut (), &batch_1),
+    let mut flag = false;
+
+    assert_eq!(stream.finish_batch(&mut (), &mut flag, &batch_1),
                Ok(RetryResult::Success(())));
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(flag);
 
-    let batch_2 = stream.create_batch(&mut (), &mut (), &())
+    let batch_2 = stream.create_batch(&mut (), &mut (), &vec![1, 2, 3])
         .expect("Expected success");
     let batch_2 = if let RetryResult::Success(batch_2) = batch_2 {
         batch_2
     } else {
         panic!("Expected success")
     };
-
-    let retry = stream.finish_batch(&mut (), &mut (), &batch_2)
+    let mut flag = false;
+    let retry = stream.finish_batch(&mut (), &mut flag, &batch_2)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -8624,15 +8699,19 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_finish_batch(&mut (), &mut (), &batch_2, retry);
+    let mut flag = false;
+    let err = stream.retry_finish_batch(&mut (), &mut flag, &batch_2, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8641,13 +8720,16 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8655,30 +8737,33 @@ fn test_test_stream_private_finish_batch() {
     assert!(permanent.is_none());
 
     let res = stream
-        .complete_finish_batch(&mut (), &mut (), &batch_2, completable)
+        .complete_finish_batch(&mut (), &mut flag, &batch_2, completable)
         .expect("Expected success");
 
     assert!(res.is_success());
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
                ]);
+    assert!(flag);
 
-    let batch_3 = stream.create_batch(&mut (), &mut (), &())
+    let batch_3 = stream.create_batch(&mut (), &mut (), &vec![1, 2])
         .expect("Expected success");
     let batch_3 = if let RetryResult::Success(batch_3) = batch_3 {
         batch_3
     } else {
         panic!("Expected success")
     };
-
-    let err = stream.finish_batch(&mut (), &mut (), &batch_3);
+    let mut flag = false;
+    let err = stream.finish_batch(&mut (), &mut flag, &batch_3);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8687,16 +8772,20 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8704,7 +8793,7 @@ fn test_test_stream_private_finish_batch() {
     assert!(permanent.is_none());
 
     let retry = stream
-        .complete_finish_batch(&mut (), &mut (), &batch_3, completable)
+        .complete_finish_batch(&mut (), &mut flag, &batch_3, completable)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -8714,18 +8803,22 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_finish_batch(&mut (), &mut (), &batch_3, retry);
+    let err = stream.retry_finish_batch(&mut (), &mut flag, &batch_3, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8734,23 +8827,27 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
     let err = stream
-        .complete_finish_batch(&mut (), &mut (), &batch_3, completable);
+        .complete_finish_batch(&mut (), &mut flag, &batch_3, completable);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8759,16 +8856,20 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let permanent = permanent.expect("Expected Some");
@@ -8778,7 +8879,7 @@ fn test_test_stream_private_finish_batch() {
         scope: ErrorScope::Session,
     });
 
-    let batch_4 = stream.create_batch(&mut (), &mut (), &())
+    let batch_4 = stream.create_batch(&mut (), &mut (), &vec![0, 1])
         .expect("Expected success");
     let batch_4 = if let RetryResult::Success(batch_4) = batch_4 {
         batch_4
@@ -8788,21 +8889,26 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1],
                        msgs: vec![]
                    }
                ]);
 
-    let err = stream.finish_batch(&mut (), &mut (), &batch_4);
+    let mut flag = false;
+    let err = stream.finish_batch(&mut (), &mut flag, &batch_4);
     let err = if let Err(err) = err {
         err
     } else {
@@ -8819,19 +8925,24 @@ fn test_test_stream_private_finish_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![0, 1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Finished {
+                   TestSharedBatchState::Finished {
+                       parties: vec![1, 2, 3],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![1, 2],
                        msgs: vec![]
                    },
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1],
                        msgs: vec![]
                    }
                ]);
+    assert!(!flag);
 
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
@@ -8839,12 +8950,12 @@ fn test_test_stream_private_finish_batch() {
 }
 
 #[test]
-fn test_test_stream_private_abort_start_batch() {
+fn test_test_stream_shared_abort_start_batch() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
         ],
         create_batch: vec![
             Err(TestError::Permanent {
@@ -8877,10 +8988,10 @@ fn test_test_stream_private_abort_start_batch() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let err = stream.start_batch(&mut ());
+    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8901,18 +9012,21 @@ fn test_test_stream_private_abort_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::StartError
+                   TestSharedBatchState::StartError
                ]);
 
-    assert_eq!(stream.abort_start_batch(&mut (), &mut (), permanent),
+    let mut flag = false;
+
+    assert_eq!(stream.abort_start_batch(&mut (), &mut flag, permanent),
                RetryResult::Success(()));
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Aborted,
+                   TestSharedBatchState::Aborted,
                ]);
+    assert!(flag);
 
-    let err = stream.start_batch(&mut ());
+    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8933,11 +9047,12 @@ fn test_test_stream_private_abort_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Aborted,
-                   TestPrivateBatchState::StartError
+                   TestSharedBatchState::Aborted,
+                   TestSharedBatchState::StartError
                ]);
 
-    let retry = stream.abort_start_batch(&mut (), &mut (), permanent);
+    let mut flag = false;
+    let retry = stream.abort_start_batch(&mut (), &mut flag, permanent);
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
     } else {
@@ -8946,24 +9061,26 @@ fn test_test_stream_private_abort_start_batch() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Aborted,
-                   TestPrivateBatchState::StartError
+                   TestSharedBatchState::Aborted,
+                   TestSharedBatchState::StartError
                ]);
+    assert!(!flag);
 
-    assert_eq!(stream.retry_abort_start_batch(&mut (), &mut (), retry),
+    assert_eq!(stream.retry_abort_start_batch(&mut (), &mut flag, retry),
                RetryResult::Success(()));
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Aborted,
-                   TestPrivateBatchState::Aborted
+                   TestSharedBatchState::Aborted,
+                   TestSharedBatchState::Aborted
                ]);
+    assert!(flag);
 }
 
 #[test]
-fn test_test_stream_private_add() {
+fn test_test_stream_shared_add() {
     let now = Instant::now();
-    let script = TestPrivateStreamScript {
+    let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9023,10 +9140,10 @@ fn test_test_stream_private_add() {
                           scope: ErrorScope::Session
                       })]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
+    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
 
-    let batch_1 = stream.create_batch(&mut (), &mut (), &())
+    let batch_1 = stream.create_batch(&mut (), &mut (), &vec![0, 1, 2, 3])
         .expect("Expected success");
     let batch_1 = if let RetryResult::Success(batch_1) = batch_1 {
         batch_1
@@ -9036,22 +9153,28 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec![]
                    },
                ]);
 
-    assert_eq!(stream.add(&mut (), &mut (), &"hello", &batch_1),
+    let mut flag = false;
+
+    assert_eq!(stream.add(&mut (), &mut flag, &"hello", &batch_1),
                Ok(RetryResult::Success(())));
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello"]
                    },
                ]);
+    assert!(flag);
 
-    let retry = stream.add(&mut (), &mut (), &"goodbye", &batch_1)
+    let mut flag = false;
+    let retry = stream.add(&mut (), &mut flag, &"goodbye", &batch_1)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -9061,12 +9184,14 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello"]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_add(&mut (), &mut (), &"goodbye", &batch_1, retry);
+    let err = stream.retry_add(&mut (), &mut flag, &"goodbye", &batch_1, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -9075,10 +9200,12 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello"]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9086,19 +9213,22 @@ fn test_test_stream_private_add() {
     assert!(permanent.is_none());
 
     let res = stream
-        .complete_add(&mut (), &mut (), &"goodbye", &batch_1, completable)
+        .complete_add(&mut (), &mut flag, &"goodbye", &batch_1, completable)
         .expect("Expected success");
 
     assert!(res.is_success());
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(flag);
 
-    let err = stream.add(&mut (), &mut (), &"nothing", &batch_1);
+    let mut flag = false;
+    let err = stream.add(&mut (), &mut flag, &"nothing", &batch_1);
     let err = if let Err(err) = err {
         err
     } else {
@@ -9107,10 +9237,12 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9118,7 +9250,7 @@ fn test_test_stream_private_add() {
     assert!(permanent.is_none());
 
     let retry = stream
-        .complete_add(&mut (), &mut (), &"nothing", &batch_1, completable)
+        .complete_add(&mut (), &mut flag, &"nothing", &batch_1, completable)
         .expect("Expected success");
     let retry = if let RetryResult::Retry(retry) = retry {
         retry
@@ -9128,12 +9260,14 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(!flag);
 
-    let err = stream.retry_add(&mut (), &mut (), &"nothing", &batch_1, retry);
+    let err = stream.retry_add(&mut (), &mut flag, &"nothing", &batch_1, retry);
     let err = if let Err(err) = err {
         err
     } else {
@@ -9142,17 +9276,19 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
     let err = stream
-        .complete_add(&mut (), &mut (), &"hello", &batch_1, completable);
+        .complete_add(&mut (), &mut flag, &"hello", &batch_1, completable);
     let err = if let Err(err) = err {
         err
     } else {
@@ -9161,10 +9297,12 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(!flag);
 
     let (completable, permanent) = err.split();
     let permanent = permanent.expect("Expected Some");
@@ -9174,7 +9312,7 @@ fn test_test_stream_private_add() {
         scope: ErrorScope::Session,
     });
 
-    let err = stream.add(&mut (), &mut (), &"nothing", &batch_1);
+    let err = stream.add(&mut (), &mut flag, &"nothing", &batch_1);
     let err = if let Err(err) = err {
         err
     } else {
@@ -9191,16 +9329,18 @@ fn test_test_stream_private_add() {
 
     assert_eq!(stream.batches.as_ref(),
                &vec![
-                   TestPrivateBatchState::Live {
+                   TestSharedBatchState::Live {
+                       parties: vec![0, 1, 2, 3],
                        msgs: vec!["hello", "goodbye"]
                    },
                ]);
+    assert!(!flag);
 
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
-*/
+
 #[test]
 fn test_test_stream_shared_frags() {
     let now = Instant::now();
