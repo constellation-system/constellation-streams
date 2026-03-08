@@ -84,6 +84,7 @@ pub trait Addrs {
 pub trait AddrsCreate<Ctx>: Sized + Addrs {
     /// Type of configurations from which this is created.
     type Config;
+    type OriginConfig: Clone + Into<Self::Origin>;
     /// Type of errors that can occur during creation.
     type CreateError: Debug + Display;
 
@@ -94,5 +95,5 @@ pub trait AddrsCreate<Ctx>: Sized + Addrs {
         origin: I
     ) -> Result<Self, Self::CreateError>
     where
-        I: Iterator<Item = Self::Origin>;
+        I: Iterator<Item = Self::OriginConfig>;
 }

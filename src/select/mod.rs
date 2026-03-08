@@ -97,6 +97,8 @@ pub mod dispatch;
 mod sched;
 
 pub trait OutboundEndpointConfig<Endpoint, OutboundNego> {
+    fn endpoint(&self) -> &Endpoint;
+
     fn take(self) -> (Endpoint, OutboundNego);
 }
 
@@ -466,20 +468,26 @@ where
         StreamSelectorConnectionCreateError<Resolve::CreateError>
     >
     where
-        EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
+        EndpointConfig: OutboundEndpointConfig<Resolve::OriginConfig,
                                                Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
         let (srcs, endpoints) = config.take();
-        let params: HashMap<Resolve::Origin, Ctx::OutNegoParam> = endpoints
-            .into_iter()
-            .map(|endpoint| endpoint.take())
-            .collect();
-        let addrs = Resolve::create(ctx, addrs_config.clone(),
-                                    params.keys().cloned())
+        let origins = endpoints.iter()
+            .map(|endpoint| endpoint.endpoint().clone());
+        let addrs = Resolve::create(ctx, addrs_config.clone(), origins)
             .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
                 err: err
             })?;
+        let params: HashMap<Resolve::Origin, Ctx::OutNegoParam> = endpoints
+            .into_iter()
+            .map(|endpoint| {
+                let (endpoint, param) = endpoint.take();
+                let endpoint: Resolve::Origin = endpoint.into();
+
+                (endpoint, param)
+            })
+            .collect();
         let mut channels = Vec::with_capacity(srcs.len());
 
         for src in srcs {
@@ -1114,7 +1122,7 @@ where
         >
     >
     where
-        EndpointConfig: OutboundEndpointConfig<Resolve::Origin,
+        EndpointConfig: OutboundEndpointConfig<Resolve::OriginConfig,
                                                Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone + Default {
