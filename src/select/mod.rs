@@ -564,17 +564,19 @@ where
         )>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
-        let (params, refresh_channels_when) = match ctx
+        match ctx
             .params(&mut (), self.channels.iter().cloned())
             .map_err(|err| ThreadedStreamSelectorError::Param { err: err })?
         {
-            // Pass through retries.
-            RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
-            RetryResult::Success(res) => res
-        };
-        let params: Vec<(Ctx::ChannelID, Ctx::Param)> = params.collect();
+            RetryResult::Success((params, refresh_channels_when)) => {
+                let params: Vec<(Ctx::ChannelID, Ctx::Param)> = params
+                    .collect();
 
-        self.handle_refresh_params(params, refresh_channels_when)
+                self.handle_refresh_params(params, refresh_channels_when)
+            }
+            // Pass through retries.
+            RetryResult::Retry(when) => Ok(RetryResult::Retry(when)),
+        }
     }
 
     #[inline]
