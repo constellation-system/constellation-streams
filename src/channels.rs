@@ -2875,31 +2875,31 @@ use constellation_common::hashid::SHA3ID;
 #[cfg(test)]
 use crate::stream::Parties;
 #[cfg(test)]
-use crate::stream::TestCompletableError;
+use crate::stream::test::TestCompletableError;
 #[cfg(test)]
-use crate::stream::TestAction;
+use crate::stream::test::TestAction;
 #[cfg(test)]
-use crate::stream::TestError;
+use crate::stream::test::TestError;
 #[cfg(test)]
-use crate::stream::TestIndefAction;
+use crate::stream::test::TestIndefAction;
 #[cfg(test)]
-use crate::stream::TestIndefPartiesAction;
+use crate::stream::test::TestIndefPartiesAction;
 #[cfg(test)]
-use crate::stream::TestPermanentError;
+use crate::stream::test::TestPermanentError;
 #[cfg(test)]
-use crate::stream::TestPrivateBatchState;
+use crate::stream::test::TestPrivateBatchState;
 #[cfg(test)]
-use crate::stream::TestPrivateStream;
+use crate::stream::test::TestPrivateStream;
 #[cfg(test)]
-use crate::stream::TestPrivateStreamScript;
+use crate::stream::test::TestPrivateStreamScript;
 #[cfg(test)]
-use crate::stream::TestRetry;
+use crate::stream::test::TestRetry;
 #[cfg(test)]
-use crate::stream::TestSharedBatchState;
+use crate::stream::test::TestSharedBatchState;
 #[cfg(test)]
-use crate::stream::TestSharedStream;
+use crate::stream::test::TestSharedStream;
 #[cfg(test)]
-use crate::stream::TestSharedStreamScript;
+use crate::stream::test::TestSharedStreamScript;
 
 #[test]
 fn test_private_stream_select_private() {
