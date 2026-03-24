@@ -44,6 +44,7 @@ use std::vec::IntoIter;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
 use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryIndefResult;
@@ -54,6 +55,10 @@ use log::error;
 use mio::Token;
 
 use crate::error::ErrorReportInfo;
+use crate::large_obj::LargeObjID;
+use crate::stream::LargeObjStream;
+use crate::stream::LargeObjOfferStream;
+use crate::stream::Parties;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPartyID;
@@ -456,18 +461,18 @@ pub enum SharedPrivateChannelStream<Private, Shared, Party> {
     }
 }
 
-/// Type of [Frags] instance for [SharedPrivateChannelStream].
-#[derive(Clone)]
-pub enum SharedPrivateStreamFrags<Private, Shared> {
-    /// [Frags] for private channels.
+/// Type of parties for [SharedPrivateChannelStream].
+#[derive(Clone, Debug)]
+pub enum SharedPrivateStreamParties<Private, Shared> {
+    /// Parties for private channels.
     Private {
-        /// `Frags` instance for private channels.
-        frags: Private
+        /// Parties for private channels.
+        parties: Private
     },
-    /// [Frags] for shared channels.
+    /// Parties for shared channels.
     Shared {
-        /// `Frags` instance for shared channels.
-        frags: Shared
+        /// Parties for shared channels.
+        parties: Shared
     }
 }
 
@@ -2129,6 +2134,334 @@ where
     }
 }
 
+impl<Private, Shared, Ctx> LargeObjStream<Ctx>
+    for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
+where
+    Shared: LargeObjStream<Ctx> + PushStreamPartyID,
+    Private: LargeObjStream<Ctx, Frags = Shared::Frags>
+{
+    type PushFragError = SharedPrivateMatchError<Private::PushFragError,
+                                                 Shared::PushFragError>;
+    type PushFragRetry = SharedPrivateStreamRetry<Private::PushFragRetry,
+                                                  Shared::PushFragRetry>;
+    type Frags = Shared::Frags;
+    type Parties = SharedPrivateStreamParties<Private::Parties,
+                                              Shared::Parties>;
+
+    fn push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
+        Self::PushFragError
+    > {
+        match self {
+            SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
+                .push_frags(ctx, id, frags)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            SharedPrivateChannelStream::Private { stream } => Ok(stream
+                .push_frags(ctx, id, frags)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+        }
+    }
+
+    fn retry_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
+        Self::PushFragError
+    > {
+        match (self, retry) {
+            (SharedPrivateChannelStream::Shared { stream, .. },
+             SharedPrivateStreamRetry::Shared { retry }) => Ok(stream
+                .retry_push_frags(ctx, id, frags, retry)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            (SharedPrivateChannelStream::Private { stream },
+             SharedPrivateStreamRetry::Private { retry }) => Ok(stream
+                .retry_push_frags(ctx, id, frags, retry)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+
+    fn complete_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushFragRetry,
+                         Parties<Self::Parties>>,
+        Self::PushFragError
+    > {
+        match (self, err) {
+            (SharedPrivateChannelStream::Shared { stream, .. },
+             SharedPrivateMatchError::Shared { err }) => Ok(stream
+                .complete_push_frags(ctx, id, frags, err)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            (SharedPrivateChannelStream::Private { stream },
+             SharedPrivateMatchError::Private { err }) => Ok(stream
+                .complete_push_frags(ctx, id, frags, err)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+}
+
+impl<Private, Shared, H, Ctx> LargeObjOfferStream<H, Ctx>
+    for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
+where
+    Shared: LargeObjStream<Ctx> + LargeObjOfferStream<H, Ctx>
+        + PushStreamPartyID,
+    Private: LargeObjStream<Ctx, Frags = Shared::Frags>
+        + LargeObjOfferStream<H, Ctx>,
+    H: HashID
+{
+    type PushOfferError = SharedPrivateMatchError<Private::PushOfferError,
+                                                  Shared::PushOfferError>;
+    type PushOfferRetry = SharedPrivateStreamRetry<Private::PushOfferRetry,
+                                                   Shared::PushOfferRetry>;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
+        Self::PushOfferError
+    > {
+        match self {
+            SharedPrivateChannelStream::Shared { stream, .. } => Ok(stream
+                .push_offer(ctx, hash, frags)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            SharedPrivateChannelStream::Private { stream } => Ok(stream
+                .push_offer(ctx, hash, frags)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+        }
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
+        Self::PushOfferError
+    > {
+        match (self, retry) {
+            (SharedPrivateChannelStream::Shared { stream, .. },
+             SharedPrivateStreamRetry::Shared { retry }) => Ok(stream
+                .retry_push_offer(ctx, hash, frags, retry)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            (SharedPrivateChannelStream::Private { stream },
+             SharedPrivateStreamRetry::Private { retry }) => Ok(stream
+                .retry_push_offer(ctx, hash, frags, retry)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<(Option<Instant>, Self::Parties),
+                         Self::PushOfferRetry,
+                         Parties<Self::Parties>>,
+        Self::PushOfferError
+    > {
+        match (self, err) {
+            (SharedPrivateChannelStream::Shared { stream, .. },
+             SharedPrivateMatchError::Shared { err }) => Ok(stream
+                .complete_push_offer(ctx, hash, frags, err)
+                .map_err(|err| SharedPrivateMatchError::Shared {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                    (when, SharedPrivateStreamParties::Shared {
+                        parties: parties
+                    }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Shared {
+                               parties: parties
+                           }))),
+            (SharedPrivateChannelStream::Private { stream },
+             SharedPrivateMatchError::Private { err }) => Ok(stream
+                .complete_push_offer(ctx, hash, frags, err)
+                .map_err(|err| SharedPrivateMatchError::Private {
+                    err: err
+                })?
+                .map(|(when, parties)|
+                     (when, SharedPrivateStreamParties::Private {
+                         parties: parties
+                     }))
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map_indef(|parties| parties
+                           .map(|parties| SharedPrivateStreamParties::Private {
+                               parties: parties
+                           }))),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+}
+
 impl<Shared, Private> PushStreamPartyID
     for SharedPrivateChannelStream<Private, Shared, Shared::PartyID>
 where
@@ -2869,816 +3202,3 @@ where
         }
     }
 }
-
-#[cfg(test)]
-use constellation_common::hashid::SHA3ID;
-#[cfg(test)]
-use crate::stream::Parties;
-#[cfg(test)]
-use crate::stream::test::TestCompletableError;
-#[cfg(test)]
-use crate::stream::test::TestAction;
-#[cfg(test)]
-use crate::stream::test::TestError;
-#[cfg(test)]
-use crate::stream::test::TestIndefAction;
-#[cfg(test)]
-use crate::stream::test::TestIndefPartiesAction;
-#[cfg(test)]
-use crate::stream::test::TestPermanentError;
-#[cfg(test)]
-use crate::stream::test::TestPrivateBatchState;
-#[cfg(test)]
-use crate::stream::test::TestPrivateStream;
-#[cfg(test)]
-use crate::stream::test::TestPrivateStreamScript;
-#[cfg(test)]
-use crate::stream::test::TestRetry;
-#[cfg(test)]
-use crate::stream::test::TestSharedBatchState;
-#[cfg(test)]
-use crate::stream::test::TestSharedStream;
-#[cfg(test)]
-use crate::stream::test::TestSharedStreamScript;
-
-#[test]
-fn test_private_stream_select_private() {
-    let now = Instant::now();
-    let script = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Indef(())),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Private {
-        stream: test_stream
-    };
-    let mut batches = SharedPrivateStreamCaches {
-        private: (),
-        shared: vec![]
-    };
-
-    assert!(matches!(stream.select(&mut (), &mut batches),
-                     Ok(RetryIndefResult::Success(_))));
-
-    let retry = stream.select(&mut (), &mut batches)
-        .expect("Expected success");
-    let retry = if let RetryIndefResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let indef = stream.retry_select(&mut (), &mut batches, retry)
-        .expect("Expected success");
-
-    assert!(indef.is_indef());
-
-    let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_select(&mut (), &mut batches, completable),
-                     Ok(RetryIndefResult::Success(_))));
-
-    let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let permanent = permanent.expect("Expected Some");
-
-    assert!(completable.is_none());
-    assert!(matches!(permanent,
-                     SharedPrivateMatchError::Private {
-                         err: TestPermanentError { scope: ErrorScope::Session }
-                     }));
-
-    let stream = if let SharedPrivateChannelStream::Private {
-        stream
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.batches.is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-
-#[test]
-fn test_private_stream_select_shared() {
-    let now = Instant::now();
-    let script = TestSharedStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Indef(Parties::All)),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Shared {
-        stream: test_stream,
-        party: 0
-    };
-    let mut batches = SharedPrivateStreamCaches {
-        private: (),
-        shared: vec![]
-    };
-
-    assert!(matches!(stream.select(&mut (), &mut batches),
-                     Ok(RetryIndefResult::Success(_))));
-
-    let retry = stream.select(&mut (), &mut batches)
-        .expect("Expected success");
-    let retry = if let RetryIndefResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let indef = stream.retry_select(&mut (), &mut batches, retry)
-        .expect("Expected success");
-
-    assert!(indef.is_indef());
-
-    let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_select(&mut (), &mut batches, completable),
-                     Ok(RetryIndefResult::Success(_))));
-
-    let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let permanent = permanent.expect("Expected Some");
-
-    assert!(completable.is_none());
-    assert!(matches!(permanent,
-                     SharedPrivateMatchError::Shared {
-                         err: TestPermanentError { scope: ErrorScope::Session }
-                     }));
-
-    let stream = if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.batches.is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-
-#[test]
-fn test_private_stream_create_batch_private() {
-    let now = Instant::now();
-    let script = TestPrivateStreamScript {
-        select: vec![],
-        create_batch: vec![
-            Ok(RetryResult::Success(())),
-            Ok(RetryResult::Retry(TestRetry {
-                when: now
-            })),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Private {
-        stream: test_stream
-    };
-    let mut batches: SharedPrivateStreamCaches<(), Vec<usize>> =
-        SharedPrivateStreamCaches {
-            private: (),
-            shared: vec![]
-        };
-    let mut flags = SharedPrivateStreamCaches {
-        private: (),
-        shared: ()
-    };
-    let selections = SharedPrivateStreamCaches {
-        private: (),
-        shared: vec![0, 1, 2]
-    };
-
-    assert!(matches!(stream.create_batch(&mut batches, &mut flags, &selections),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let retry = stream.create_batch(&mut batches, &mut flags, &selections)
-        .expect("Expected success");
-    let retry = if let RetryResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let err = stream
-        .retry_create_batch(&mut batches, &mut flags, &selections, retry);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_create_batch(&mut batches, &mut flags,
-                                                  &selections, completable),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let stream = if let SharedPrivateChannelStream::Private {
-        stream
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-
-#[test]
-fn test_private_stream_create_batch_shared() {
-    let now = Instant::now();
-    let script = TestSharedStreamScript {
-        select: vec![],
-        create_batch: vec![
-            Ok(RetryResult::Success(())),
-            Ok(RetryResult::Retry(TestRetry {
-                when: now
-            })),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Shared {
-        stream: test_stream,
-        party: 0
-    };
-    let mut batches: SharedPrivateStreamCaches<(), Vec<usize>> =
-        SharedPrivateStreamCaches {
-            private: (),
-            shared: vec![]
-        };
-    let mut flags = SharedPrivateStreamCaches {
-        private: (),
-        shared: ()
-    };
-    let selections = SharedPrivateStreamCaches {
-        private: (),
-        shared: vec![0, 1, 2]
-    };
-
-    assert!(matches!(stream.create_batch(&mut batches, &mut flags, &selections),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let retry = stream.create_batch(&mut batches, &mut flags, &selections)
-        .expect("Expected success");
-    let retry = if let RetryResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let err = stream
-        .retry_create_batch(&mut batches, &mut flags, &selections, retry);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_create_batch(&mut batches, &mut flags,
-                                                  &selections, completable),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let stream = if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-
-#[test]
-fn test_private_stream_start_batch_private() {
-    let now = Instant::now();
-    let script = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![
-            Ok(RetryResult::Success(())),
-            Ok(RetryResult::Retry(TestRetry {
-                when: now
-            })),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Private {
-        stream: test_stream
-    };
-    let mut batches: SharedPrivateStreamCaches<(), Vec<usize>> =
-        SharedPrivateStreamCaches {
-            private: (),
-            shared: vec![]
-        };
-
-    assert!(matches!(stream.start_batch(&mut batches),
-                     Ok(RetryIndefResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let retry = stream.start_batch(&mut batches).expect("Expected success");
-    let retry = if let RetryIndefResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let err = stream.retry_start_batch(&mut batches, retry);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_start_batch(&mut batches, completable),
-                     Ok(RetryIndefResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Private {
-        stream
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                       TestPrivateBatchState::Live {
-                           msgs: vec![]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let stream = if let SharedPrivateChannelStream::Private {
-        stream
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-
-/*
-
-
-#[test]
-fn test_private_stream_create_shared() {
-    let now = Instant::now();
-    let script = TestSharedStreamScript {
-        select: vec![],
-        create_batch: vec![
-            Ok(RetryResult::Success(())),
-            Ok(RetryResult::Retry(TestRetry {
-                when: now
-            })),
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-            Err(TestError::Permanent {
-                err: TestPermanentError {
-                    scope: ErrorScope::Session,
-                }
-            })
-        ],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
-    let mut stream: SharedPrivateChannelStream<
-        TestPrivateStream<&str, &str, SHA3ID>,
-        TestSharedStream<&str, &str, SHA3ID>,
-        usize
-    > = SharedPrivateChannelStream::Shared {
-        stream: test_stream,
-        party: 0
-    };
-    let mut batches: SharedPrivateStreamCaches<(), Vec<usize>> =
-        SharedPrivateStreamCaches {
-            private: (),
-            shared: vec![]
-        };
-    let mut flags = SharedPrivateStreamCaches {
-        private: (),
-        shared: ()
-    };
-    let selections = SharedPrivateStreamCaches {
-        private: (),
-        shared: vec![0, 1, 2]
-    };
-
-    assert!(matches!(stream.create_batch(&mut batches, &mut flags, &selections),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let retry = stream.create_batch(&mut batches, &mut flags, &selections)
-        .expect("Expected success");
-    let retry = if let RetryResult::Retry(retry) = retry {
-        retry
-    } else {
-        panic!("Expected retry")
-    };
-
-    let err = stream
-        .retry_create_batch(&mut batches, &mut flags, &selections, retry);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    assert!(matches!(stream.complete_create_batch(&mut batches, &mut flags,
-                                                  &selections, completable),
-                     Ok(RetryResult::Success(_))));
-
-    if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = &stream {
-        assert_eq!(stream.batches.as_ref(),
-                   &vec![
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                       TestSharedBatchState::Live {
-                           msgs: vec![],
-                           parties: vec![0, 1, 2]
-                       },
-                   ]);
-    } else {
-        panic!("Expected private")
-    };
-
-    let stream = if let SharedPrivateChannelStream::Shared {
-        stream, ..
-    } = stream {
-        stream
-    } else {
-        panic!("Expected private")
-    };
-
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
-    assert!(stream.failures.is_empty());
-}
-*/

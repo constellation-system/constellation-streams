@@ -1334,6 +1334,22 @@ pub struct PassthruReporter<Addr, Prin, Stream> {
     addr: PhantomData<Addr>
 }
 
+impl<P> Parties<P> {
+    #[inline]
+    pub fn map<F, Q>(
+        self,
+        f: F
+    ) -> Parties<Q>
+    where
+        F: FnOnce(P) -> Q
+    {
+        match self {
+            Parties::All => Parties::All,
+            Parties::Some(parties) => Parties::Some(f(parties))
+        }
+    }
+}
+
 impl<Finish, Cancel, T> ErrorReportInfo<T>
     for StreamFinishCancel<Finish, Cancel>
 where

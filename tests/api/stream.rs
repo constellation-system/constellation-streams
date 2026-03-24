@@ -8199,7 +8199,6 @@ fn test_test_stream_shared_finish_batch_complete_permanent() {
     assert!(stream.failures.is_empty());
 }
 
-
 #[test]
 fn test_test_stream_shared_abort_start_batch_succeed() {
     let script = TestSharedStreamScript {
