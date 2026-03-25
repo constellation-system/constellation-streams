@@ -16,10 +16,13 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::iter::once;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
+use constellation_common::hashid::HashAlgo;
+use constellation_common::hashid::SHA3Algo;
 use constellation_common::hashid::SHA3ID;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::Retry;
@@ -9204,9 +9207,6 @@ fn test_private_frags_succeed() {
     assert!(stream.failures.is_empty());
 }
 
-
-/*
-
 #[test]
 fn test_private_frags_indef() {
     let script = TestPrivateStreamScript {
@@ -9223,13 +9223,20 @@ fn test_private_frags_indef() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
-    assert_eq!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
-                                 &mut frags),
-               Ok(RetryIndefResult::Indef(Parties::All)));
+    assert!(matches!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
+                                       &mut frags),
+                     Ok(RetryIndefResult::Indef(Parties::All))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9265,8 +9272,15 @@ fn test_private_frags_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let retry = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9278,11 +9292,22 @@ fn test_private_frags_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
-    assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.retry_push_frags(&mut (),
+                                             LargeObjID::from(1 as u64),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9321,8 +9346,15 @@ fn test_private_frags_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(2 as u64),
@@ -9337,9 +9369,11 @@ fn test_private_frags_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Private {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9379,8 +9413,15 @@ fn test_private_frags_complete_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9391,16 +9432,27 @@ fn test_private_frags_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.complete_push_frags(&mut (),
+                                                LargeObjID::from(1 as u64),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9446,8 +9498,15 @@ fn test_private_frags_complete_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9458,7 +9517,13 @@ fn test_private_frags_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9474,11 +9539,22 @@ fn test_private_frags_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
-    assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.retry_push_frags(&mut (),
+                                             LargeObjID::from(1 as u64),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9524,8 +9600,15 @@ fn test_private_frags_complete_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9536,7 +9619,13 @@ fn test_private_frags_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9555,9 +9644,11 @@ fn test_private_frags_complete_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Private {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9604,8 +9695,15 @@ fn test_private_frags_complete_complete() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9616,7 +9714,13 @@ fn test_private_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9631,16 +9735,27 @@ fn test_private_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.complete_push_frags(&mut (),
+                                                LargeObjID::from(1 as u64),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -9658,10 +9773,6 @@ fn test_private_frags_complete_complete() {
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
-
- */
-
-/*
 
 #[test]
 fn test_shared_frags_succeed() {
@@ -9681,22 +9792,44 @@ fn test_shared_frags_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
-    assert_eq!(stream.push_frags(&mut (), LargeObjID::from(1 as u64),
-                                 &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                       &mut frags),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
 
-    assert_eq!(stream.frags.as_ref(),
-               &vec![
-                   LargeObjID::from(1 as u64),
-               ]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(),
+                   &vec![
+                       LargeObjID::from(1 as u64),
+                   ]);
+    } else {
+        panic!("Expected shared")
+    };
 
-    assert_eq!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
-                                 &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
+                                       &mut frags),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(),
                &vec![
@@ -9724,13 +9857,29 @@ fn test_shared_frags_indef() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
-    assert_eq!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
-                                 &mut frags),
-               Ok(RetryIndefResult::Indef(Parties::All)));
+    assert!(matches!(stream.push_frags(&mut (), LargeObjID::from(2 as u64),
+                                       &mut frags),
+                     Ok(RetryIndefResult::Indef(Parties::All))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -9758,8 +9907,16 @@ fn test_shared_frags_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let retry = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9771,11 +9928,26 @@ fn test_shared_frags_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
-    assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.retry_push_frags(&mut (),
+                                             LargeObjID::from(1 as u64),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(),
                &vec![
@@ -9806,8 +9978,16 @@ fn test_shared_frags_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(2 as u64),
@@ -9822,9 +10002,19 @@ fn test_shared_frags_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Shared {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -9856,8 +10046,16 @@ fn test_shared_frags_complete_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9868,16 +10066,33 @@ fn test_shared_frags_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.complete_push_frags(&mut (),
+                                                LargeObjID::from(1 as u64),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), _)
+                     ))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(),
                &vec![
@@ -9915,8 +10130,16 @@ fn test_shared_frags_complete_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9927,7 +10150,13 @@ fn test_shared_frags_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9943,11 +10172,26 @@ fn test_shared_frags_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
-    assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.retry_push_frags(&mut (),
+                                             LargeObjID::from(1 as u64),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(),
                &vec![
@@ -9985,8 +10229,16 @@ fn test_shared_frags_complete_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -9997,7 +10249,13 @@ fn test_shared_frags_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10016,9 +10274,19 @@ fn test_shared_frags_complete_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Shared {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -10057,8 +10325,16 @@ fn test_shared_frags_complete_complete() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
     let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
@@ -10069,7 +10345,13 @@ fn test_shared_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10084,16 +10366,32 @@ fn test_shared_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
+    assert!(matches!(stream.complete_push_frags(&mut (),
+                                                LargeObjID::from(1 as u64),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), _)
+                     ))));
 
-    assert_eq!(stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(),
                &vec![
@@ -10103,10 +10401,6 @@ fn test_shared_frags_complete_complete() {
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
-
- */
-
-/*
 
 #[test]
 fn test_private_offer_succeed() {
@@ -10126,23 +10420,44 @@ fn test_private_offer_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
+    let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
     let hash_1 = hasher.hash_bytes(once(&[0x01 as u8][..]));
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script);
-    let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
-    assert_eq!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
-    assert_eq!(stream.offers.as_ref(),
-               &vec![
-                   hash_0.clone(),
-               ]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(),
+                   &vec![
+                       hash_0.clone(),
+                   ]);
+    } else {
+        panic!("Expected private")
+    }
 
-    assert_eq!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10178,14 +10493,21 @@ fn test_private_offer_indef() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    assert_eq!(stream.push_offer(&mut (), hash.clone(), &mut frags),
-               Ok(RetryIndefResult::Indef(Parties::All)));
+    assert!(matches!(stream.push_offer(&mut (), hash.clone(), &mut frags),
+                     Ok(RetryIndefResult::Indef(Parties::All))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10221,8 +10543,15 @@ fn test_private_offer_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10235,11 +10564,21 @@ fn test_private_offer_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
-    assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.retry_push_offer(&mut (), hash.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10278,8 +10617,15 @@ fn test_private_offer_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10295,9 +10641,11 @@ fn test_private_offer_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Private {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10337,8 +10685,15 @@ fn test_private_offer_complete_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10350,16 +10705,26 @@ fn test_private_offer_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_offer(&mut (), hash.clone(),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.complete_push_offer(&mut (), hash.clone(),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10405,8 +10770,15 @@ fn test_private_offer_complete_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10418,7 +10790,13 @@ fn test_private_offer_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10434,11 +10812,21 @@ fn test_private_offer_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
-    assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.retry_push_offer(&mut (), hash.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10484,8 +10872,15 @@ fn test_private_offer_complete_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10497,7 +10892,13 @@ fn test_private_offer_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10516,9 +10917,11 @@ fn test_private_offer_complete_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Private {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10565,8 +10968,15 @@ fn test_private_offer_complete_complete() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+    let test_stream: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Private {
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10578,7 +10988,13 @@ fn test_private_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10593,16 +11009,25 @@ fn test_private_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Private {
+        stream
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(), &vec![]);
+    } else {
+        panic!("Expected private")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
-
-    assert_eq!(stream.complete_push_offer(&mut (), hash.clone(),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), ()))));
+    assert!(matches!(stream.complete_push_offer(&mut (), hash.clone(),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success(
+                         (Some(_), SharedPrivateStreamParties::Private {
+                             parties: ()
+                         })
+                     ))));
 
     let stream = if let SharedPrivateChannelStream::Private {
         stream
@@ -10620,10 +11045,6 @@ fn test_private_offer_complete_complete() {
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
-
- */
-
-/*
 
 #[test]
 fn test_shared_offer_succeed() {
@@ -10643,23 +11064,45 @@ fn test_shared_offer_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
+        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
     let hash_1 = hasher.hash_bytes(once(&[0x01 as u8][..]));
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
 
-    assert_eq!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
 
-    assert_eq!(stream.offers.as_ref(),
-               &vec![
-                   hash_0.clone(),
-               ]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.offers.as_ref(),
+                   &vec![
+                       hash_0.clone(),
+                   ]);
+    } else {
+        panic!("Expected shared")
+    };
 
-    assert_eq!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.offers.as_ref(),
                &vec![
@@ -10687,14 +11130,38 @@ fn test_shared_offer_indef() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    assert_eq!(stream.push_offer(&mut (), hash.clone(), &mut frags),
-               Ok(RetryIndefResult::Indef(Parties::All)));
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
+
+    assert!(matches!(stream.push_offer(&mut (), hash.clone(), &mut frags),
+                     Ok(RetryIndefResult::Indef(Parties::All))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -10722,8 +11189,16 @@ fn test_shared_offer_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10736,11 +11211,25 @@ fn test_shared_offer_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
-    assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.retry_push_offer(&mut (), hash.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.offers.as_ref(),
                &vec![
@@ -10771,8 +11260,16 @@ fn test_shared_offer_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10788,9 +11285,19 @@ fn test_shared_offer_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Shared {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -10822,8 +11329,16 @@ fn test_shared_offer_complete_succeed() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10835,16 +11350,30 @@ fn test_shared_offer_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_offer(&mut (), hash.clone(),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.complete_push_offer(&mut (), hash.clone(),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.offers.as_ref(),
                &vec![
@@ -10882,8 +11411,16 @@ fn test_shared_offer_complete_retry() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10895,7 +11432,13 @@ fn test_shared_offer_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10911,11 +11454,25 @@ fn test_shared_offer_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
-    assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
-                                       &mut frags, retry),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.retry_push_offer(&mut (), hash.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.offers.as_ref(),
                &vec![
@@ -10953,8 +11510,16 @@ fn test_shared_offer_complete_permanent() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -10966,7 +11531,13 @@ fn test_shared_offer_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -10985,9 +11556,19 @@ fn test_shared_offer_complete_permanent() {
     let permanent = permanent.expect("Expected Some");
 
     assert!(completable.is_none());
-    assert_eq!(permanent, TestPermanentError {
-        scope: ErrorScope::Session,
-    });
+    assert!(matches!(permanent, SharedPrivateMatchError::Shared {
+        err: TestPermanentError {
+            scope: ErrorScope::Session,
+        }
+    }));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
     assert!(stream.batches.is_empty());
@@ -11026,8 +11607,16 @@ fn test_shared_offer_complete_complete() {
         report_failure: vec![],
         inbound: vec![]
     };
-    let mut stream: TestSharedStream<&str, &str, SHA3ID> =
+    let test_stream: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2, 3].into_iter());
+    let mut stream: SharedPrivateChannelStream<
+        TestPrivateStream<&str, &str, SHA3ID>,
+        TestSharedStream<&str, &str, SHA3ID>,
+        usize
+    > = SharedPrivateChannelStream::Shared {
+        party: 0,
+        stream: test_stream
+    };
     let mut frags = OutboundFrags::new(Retry::default(), vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -11039,7 +11628,13 @@ fn test_shared_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -11054,16 +11649,30 @@ fn test_shared_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = &stream {
+        assert_eq!(stream.frags.as_ref(), &vec![]);
+    } else {
+        panic!("Expected shared")
+    }
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
 
-    assert_eq!(stream.complete_push_offer(&mut (), hash.clone(),
-                                          &mut frags, completable),
-               Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
+    assert!(matches!(stream.complete_push_offer(&mut (), hash.clone(),
+                                                &mut frags, completable),
+                     Ok(RetryIndefResult::Success((Some(_), _)))));
+
+    let stream = if let SharedPrivateChannelStream::Shared {
+        stream, ..
+    } = stream {
+        stream
+    } else {
+        panic!("Expected shared")
+    };
 
     assert_eq!(stream.offers.as_ref(),
                &vec![
@@ -11073,5 +11682,3 @@ fn test_shared_offer_complete_complete() {
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
-
-*/
