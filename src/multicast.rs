@@ -33,6 +33,7 @@ use std::marker::PhantomData;
 use std::time::Instant;
 use std::vec::IntoIter;
 
+use bitvec::bitvec;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -783,6 +784,17 @@ where
         }
     }
 
+    /// Get a reference to a component stream.
+    #[inline]
+    pub fn stream(
+        &self,
+        idx: Idx
+    ) -> &Stream {
+        let i: usize = idx.into();
+
+        &self.rev_map[i].stream
+    }
+
     /// Get the number of counterparties.
     #[inline]
     pub fn nparties(&self) -> usize {
@@ -1303,37 +1315,38 @@ where
                 let mut results = Vec::with_capacity(len);
                 let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
-                let mut all_success = true;
+                let mut has_retry = false;
                 let mut all_indef = true;
 
                 for (id, res) in elems.into_iter() {
                     match res {
                         RetryIndefResult::Success(val) => {
+                            all_indef = false;
                             results.push(RetryResult::Success(val));
                             ids.push(id);
                         }
                         RetryIndefResult::Retry(when) => {
-                            all_success = false;
+                            all_indef = false;
+                            has_retry = true;
                             results.push(RetryResult::Retry(when));
                         }
                         RetryIndefResult::Indef(()) => {
-                            all_indef = false;
                             indefs.push(id)
                         }
                     }
                 }
 
-                if all_success {
-                    Ok(RetryIndefResult::Success(ids))
-                } else if all_indef {
+                if all_indef {
                     Ok(RetryIndefResult::Indef(indefs))
-                } else {
+                } else if has_retry {
                     let out = MulticastSelectRetry {
                         retries: results,
                         indefs: indefs
                     };
 
                     Ok(RetryIndefResult::Retry(out))
+                } else {
+                    Ok(RetryIndefResult::Success(ids))
                 }
             }
         }
@@ -1374,37 +1387,38 @@ where
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
-                let mut all_success = true;
-                let mut all_indef = indefs.is_empty();
+                let mut has_retry = false;
+                let mut all_indef = true;
 
                 for (id, res) in elems.into_iter() {
                     match res {
                         RetryIndefResult::Success(val) => {
+                            all_indef = false;
                             results.push(RetryResult::Success(val));
                             ids.push(id);
                         }
                         RetryIndefResult::Retry(when) => {
-                            all_success = false;
+                            all_indef = false;
+                            has_retry = true;
                             results.push(RetryResult::Retry(when));
                         }
                         RetryIndefResult::Indef(()) => {
-                            all_indef = false;
                             indefs.push(id)
                         }
                     }
                 }
 
-                if all_success {
-                    Ok(RetryIndefResult::Success(ids))
-                } else if all_indef {
+                if all_indef {
                     Ok(RetryIndefResult::Indef(indefs))
-                } else {
+                } else if has_retry {
                     let out = MulticastSelectRetry {
                         retries: results,
                         indefs: indefs
                     };
 
                     Ok(RetryIndefResult::Retry(out))
+                } else {
+                    Ok(RetryIndefResult::Success(ids))
                 }
             }
         }
@@ -2590,9 +2604,22 @@ where
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
         let MulticastSelectRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
+            while skip[i + offset] {
+                offset += 1;
+            }
+            let i = i + offset;
+
             let idx = Idx::from(i);
             let selections = match &mut selections.inner[i] {
                 Some(selections) => Ok(selections),
