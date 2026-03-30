@@ -2564,12 +2564,18 @@ where
             let i: usize = idx.clone().into();
 
             if selections.inner[i].is_none() {
-                let selections = selections.inner[i]
+                let selection = selections.inner[i]
                     .insert(self.rev_map[i].stream.empty_selections());
 
-                match self.rev_map[i].stream.select(ctx, selections) {
+                match self.rev_map[i].stream.select(ctx, selection) {
                     // We're good; add this to the output.
-                    Ok(id) => results.push((Idx::from(i), id)),
+                    Ok(id) => {
+                        if id.is_indef() {
+                            selections.inner[i] = None;
+                        }
+
+                        results.push((Idx::from(i), id))
+                    },
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
                     Err(err) => match &mut errs {
@@ -2621,7 +2627,7 @@ where
             let i = i + offset;
 
             let idx = Idx::from(i);
-            let selections = match &mut selections.inner[i] {
+            let selection = match &mut selections.inner[i] {
                 Some(selections) => Ok(selections),
                 None => Err(SelectionsError::NoSelections { info: i })
             }?;
@@ -2630,10 +2636,16 @@ where
                 // Actually do retries.
                 RetryResult::Retry(retry) => match self.rev_map[i]
                     .stream
-                    .retry_select(ctx, selections, retry)
+                    .retry_select(ctx, selection, retry)
                 {
                     // We're good; add this to the output.
-                    Ok(id) => results.push((Idx::from(i), id)),
+                    Ok(id) => {
+                        if id.is_indef() {
+                            selections.inner[i] = None;
+                        }
+
+                        results.push((Idx::from(i), id))
+                    },
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
                     Err(err) => match &mut errs {
@@ -2673,14 +2685,20 @@ where
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
             let i: usize = idx.into();
-            let selections = match &mut selections.inner[i] {
-                Some(selections) => Ok(selections),
+            let selection = match &mut selections.inner[i] {
+                Some(selection) => Ok(selection),
                 None => Err(SelectionsError::NoSelections { info: i })
             }?;
 
-            match self.rev_map[i].stream.complete_select(ctx, selections, err) {
+            match self.rev_map[i].stream.complete_select(ctx, selection, err) {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(id) => {
+                    if id.is_indef() {
+                        selections.inner[i] = None;
+                    }
+
+                    results.push((Idx::from(i), id))
+                },
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
                 Err(err) => match &mut errs {
