@@ -39,6 +39,7 @@ use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -145,9 +146,9 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct MulticastSelectRetry<Idx, Retry>
+pub struct MulticastRetry<Idx, Retry>
 where Retry: RetryWhen {
-    retries: Vec<RetryResult<(), Retry>>,
+    retries: Vec<Retry>,
     indefs: Vec<Idx>
 }
 
@@ -307,7 +308,7 @@ impl<Inner> Default for StreamMulticasterSelections<Inner> {
     }
 }
 
-impl<Idx, Retry> RetryWhen for MulticastSelectRetry<Idx, Retry>
+impl<Idx, Retry> RetryWhen for MulticastRetry<Idx, Retry>
 where
     Retry: RetryWhen
 {
@@ -1168,35 +1169,41 @@ where
                 let mut results = Vec::with_capacity(len);
                 let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
-                let mut all_success = true;
+                let mut has_retry = false;
                 let mut all_indef = true;
-                let mut when = None;
+                let mut min = None;
 
                 for (id, res) in elems.into_iter() {
                     match res {
-                        RetryIndefResult::Success(retry) => {
-                            when = next_retry(&when, &retry);
-                            ids.push(id);
-
-                            results.push(RetryResult::Success(retry));
-                        }
-                        RetryIndefResult::Retry(when) => {
-                            all_success = false;
-                            results.push(RetryResult::Retry(when));
-                        }
-                        RetryIndefResult::Indef(_) => {
+                        RetryIndefResult::Success(val) => {
                             all_indef = false;
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(retry) => {
+                            all_indef = false;
+                            has_retry = true;
+                            min =
+                                Some(next_retry_definite(&min, &retry.when()));
+                            results.push(RetryResult::Retry(retry));
+                        }
+                        RetryIndefResult::Indef(()) => {
                             indefs.push(id)
                         }
                     }
                 }
 
-                if all_success {
-                    Ok(RetryIndefResult::Success((when, ids)))
-                } else if all_indef {
+                if all_indef {
                     Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 } else {
-                    Ok(RetryIndefResult::Retry(results))
+                    Ok(RetryIndefResult::Success((min, ids)))
                 }
             }
         }
@@ -1339,7 +1346,7 @@ where
                 if all_indef {
                     Ok(RetryIndefResult::Indef(indefs))
                 } else if has_retry {
-                    let out = MulticastSelectRetry {
+                    let out = MulticastRetry {
                         retries: results,
                         indefs: indefs
                     };
@@ -1411,7 +1418,7 @@ where
                 if all_indef {
                     Ok(RetryIndefResult::Indef(indefs))
                 } else if has_retry {
-                    let out = MulticastSelectRetry {
+                    let out = MulticastRetry {
                         retries: results,
                         indefs: indefs
                     };
@@ -2480,7 +2487,8 @@ where
         >,
         usize
     >;
-    type SelectRetry = MulticastSelectRetry<Idx, Stream::SelectRetry>;
+    type SelectRetry =
+        MulticastRetry<Idx, RetryResult<(), Stream::SelectRetry>>;
     type Selections = StreamMulticasterSelections<Stream::Selections>;
     type StartBatchError = StreamMulticasterStartError<
         Self::SelectError,
@@ -2608,7 +2616,7 @@ where
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
-        let MulticastSelectRetry { retries, indefs } = retries;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
         let mut skip = bitvec![0; self.rev_map.len()];
         let mut offset = 0;
@@ -3290,8 +3298,10 @@ where
         RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
         Stream::PushFragError
     >;
-    type PushFragRetry =
-        Vec<RetryResult<Option<Instant>, Stream::PushFragRetry>>;
+    type PushFragRetry = MulticastRetry<
+        Idx,
+        RetryResult<Option<Instant>, Stream::PushFragRetry>
+    >;
     type Parties = Vec<Idx>;
 
     fn push_frags(
@@ -3351,11 +3361,23 @@ where
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
+            while skip[i + offset] {
+                offset += 1;
+            }
+            let i = i + offset;
 
             match res {
                 // Actually do retries.
@@ -3387,8 +3409,11 @@ where
                     }
                 }
                 // Retain prior successes.
-                RetryResult::Success(val) =>
+                RetryResult::Success(val) => {
+                    let idx = Idx::from(i);
+
                     results.push((idx, RetryIndefResult::Success(val)))
+                }
             }
         }
 
