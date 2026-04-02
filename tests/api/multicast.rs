@@ -16,10 +16,13 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::iter::once;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
+use constellation_common::hashid::HashAlgo;
+use constellation_common::hashid::SHA3Algo;
 use constellation_common::hashid::SHA3ID;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
@@ -14680,52 +14683,52 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     assert!(stream.stream(2).offers.is_empty());
     assert!(stream.stream(2).failures.is_empty());
 }
-/*
 
 #[test]
-fn test_select_one_permanent() {
+fn test_push_frags_one_permanent() {
+    let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
             Err(TestError::Permanent {
                 err: TestPermanentError {
                     scope: ErrorScope::Session,
                 }
             })
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
         push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
-        push_frags: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
-        push_frags: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
@@ -14743,9 +14746,3310 @@ fn test_select_one_permanent() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+
+    assert!(completable.is_none());
+    assert!(permanent.is_some());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_all_complete_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_succeed_complete() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_one_indef_complete_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_one_succeed_complete_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Indef
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_one_indef_complete_indef() {
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Indef
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let indef = stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                                           &mut frags, completable)
+        .expect("Expected success");
+
+    assert!(indef.is_indef());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_complete_retry() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Retry {
+                        retry: TestRetry {
+                            when: now
+                        }
+                    }
+                }
+            }),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_retry_complete() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_retry_complete_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Indef
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_retry_complete_retry_complete() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Error {
+                        err: Box::new(TestError::Completable {
+                            err: TestCompletableError {
+                                scope: ErrorScope::Retryable,
+                                action: TestIndefAction::Success {
+                                    val: Some(now)
+                                }
+                            }
+                        })
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Retry {
+                        retry: TestRetry {
+                            when: now
+                        }
+                    }
+                }
+            }),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_retry_complete_retry_complete_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Error {
+                        err: Box::new(TestError::Completable {
+                            err: TestCompletableError {
+                                scope: ErrorScope::Retryable,
+                                action: TestIndefAction::Indef
+                            }
+                        })
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Retry {
+                        retry: TestRetry {
+                            when: now
+                        }
+                    }
+                }
+            }),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert_eq!(stream.stream(2).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_frags_retry_indef_complete_retry_complete() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Error {
+                        err: Box::new(TestError::Completable {
+                            err: TestCompletableError {
+                                scope: ErrorScope::Retryable,
+                                action: TestIndefAction::Success {
+                                    val: Some(now)
+                                }
+                            }
+                        })
+                    }
+                }
+            }),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Retry {
+                        retry: TestRetry {
+                            when: now
+                        }
+                    }
+                }
+            }),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+
+    let err = stream.push_frags(&mut (), LargeObjID::from(1 as u64),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_frags(&mut (), LargeObjID::from(1 as u64),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_frags(&mut (), LargeObjID::from(1 as u64),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert_eq!(stream.stream(0).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert_eq!(stream.stream(1).frags.as_ref(),
+               &vec![
+                   LargeObjID::from(1 as u64),
+               ]);
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_all_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+    let hash_1 = hasher.hash_bytes(once(&[0x01 as u8][..]));
+
+    if let RetryIndefResult::Success(res) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .push_offer(&mut (), hash_1.clone(), &mut frags)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+                   hash_1.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+                   hash_1.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+                   hash_1.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_subset_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    if let RetryIndefResult::Success(res) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_all_indef() {
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    assert!(matches!(stream.push_offer(&mut (), hash_0.clone(),
+                                       &mut frags),
+                     Ok(RetryIndefResult::Indef(_))));
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_subset_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    if let RetryIndefResult::Success(res) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_one_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    if let RetryIndefResult::Success(res) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_retry_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_succeed_retry_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_retry_retry_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_indef_retry_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_indef_retry_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(matches!(stream.retry_push_offer(&mut (),
+                                             hash_0.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Indef(_))));
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_succeed_retry_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_indef_retry_indef_retry_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_indef_retry_indef_retry_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(matches!(stream.retry_push_offer(&mut (),
+                                             hash_0.clone(),
+                                             &mut frags, retry),
+                     Ok(RetryIndefResult::Indef(_))));
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_indef_retry_succeed_retry_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_one_permanent() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Permanent {
+                err: TestPermanentError {
+                    scope: ErrorScope::Session,
+                }
+            })
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -14763,539 +18067,683 @@ fn test_select_one_permanent() {
     assert!(stream.stream(0).failures.is_empty());
     assert!(stream.stream(1).batches.is_empty());
     assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_all_complete_succeed() {
-    let script_0 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_0);
-    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_1);
-    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_2);
-    let streams = vec![
-        ("stream-0", Retry::default(), stream_0),
-        ("stream-1", Retry::default(), stream_1),
-        ("stream-2", Retry::default(), stream_2),
-    ];
-    let mut stream = StreamMulticaster::create(streams.into_iter(),
-                                               BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
-
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    assert_eq!(parties, vec![0, 1, 2]);
-
-    assert!(stream.stream(0).batches.is_empty());
-    assert!(stream.stream(0).frags.is_empty());
-    assert!(stream.stream(0).offers.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(1).batches.is_empty());
-    assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(stream.stream(2).batches.is_empty());
-    assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
-    assert!(stream.stream(2).failures.is_empty());
-}
-
-#[test]
-fn test_select_succeed_complete() {
-    let script_0 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_0);
-    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_1);
-    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_2);
-    let streams = vec![
-        ("stream-0", Retry::default(), stream_0),
-        ("stream-1", Retry::default(), stream_1),
-        ("stream-2", Retry::default(), stream_2),
-    ];
-    let mut stream = StreamMulticaster::create(streams.into_iter(),
-                                               BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
-
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    assert_eq!(parties, vec![0, 1, 2]);
-
-    assert!(stream.stream(0).batches.is_empty());
-    assert!(stream.stream(0).frags.is_empty());
-    assert!(stream.stream(0).offers.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(1).batches.is_empty());
-    assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(stream.stream(2).batches.is_empty());
-    assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
-    assert!(stream.stream(2).failures.is_empty());
-}
-
-#[test]
-fn test_select_one_indef_complete_succeed() {
-    let script_0 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Success {
-                        val: ()
-                    }
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Indef(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_0);
-    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_1);
-    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_2);
-    let streams = vec![
-        ("stream-0", Retry::default(), stream_0),
-        ("stream-1", Retry::default(), stream_1),
-        ("stream-2", Retry::default(), stream_2),
-    ];
-    let mut stream = StreamMulticaster::create(streams.into_iter(),
-                                               BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
-
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    assert_eq!(parties, vec![0, 1]);
-
-    assert!(stream.stream(0).batches.is_empty());
-    assert!(stream.stream(0).frags.is_empty());
-    assert!(stream.stream(0).offers.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(1).batches.is_empty());
-    assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(stream.stream(2).batches.is_empty());
-    assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
-    assert!(stream.stream(2).failures.is_empty());
-}
-
-#[test]
-fn test_select_succeed_complete_indef() {
-    let script_0 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Indef
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_0);
-    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_1);
-    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_2);
-    let streams = vec![
-        ("stream-0", Retry::default(), stream_0),
-        ("stream-1", Retry::default(), stream_1),
-        ("stream-2", Retry::default(), stream_2),
-    ];
-    let mut stream = StreamMulticaster::create(streams.into_iter(),
-                                               BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
-
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    assert_eq!(parties, vec![1, 2]);
-
-    assert!(stream.stream(0).batches.is_empty());
-    assert!(stream.stream(0).frags.is_empty());
-    assert!(stream.stream(0).offers.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(1).batches.is_empty());
-    assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(stream.stream(2).batches.is_empty());
-    assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
-    assert!(stream.stream(2).failures.is_empty());
-}
-
-#[test]
-fn test_select_indef_complete_indef() {
-    let script_0 = TestPrivateStreamScript {
-        select: vec![
-            Err(TestError::Completable {
-                err: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    action: TestIndefAction::Indef
-                }
-            }),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Indef(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Indef(())),
-        ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_0);
-    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_1);
-    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
-        TestPrivateStream::new(script_2);
-    let streams = vec![
-        ("stream-0", Retry::default(), stream_0),
-        ("stream-1", Retry::default(), stream_1),
-        ("stream-2", Retry::default(), stream_2),
-    ];
-    let mut stream = StreamMulticaster::create(streams.into_iter(),
-                                               BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
-
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-
-    let parties = if let RetryIndefResult::Indef(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, Parties::Some(vec![0, 1, 2]));
-
-    assert!(stream.stream(0).batches.is_empty());
-    assert!(stream.stream(0).frags.is_empty());
-    assert!(stream.stream(0).offers.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(1).batches.is_empty());
-    assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(stream.stream(2).batches.is_empty());
-    assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
-    assert!(stream.stream(2).failures.is_empty());
-}
-
-#[test]
-fn test_select_complete_retry() {
+fn test_push_offer_all_complete_succeed() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_succeed_complete() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_one_indef_complete_succeed() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: Some(now)
+                    }
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_one_succeed_complete_indef() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Indef
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected success")
+    }
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_one_indef_complete_indef() {
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Indef
+                }
+            }),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_2 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let stream_0: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_0);
+    let stream_1: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_1);
+    let stream_2: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script_2);
+    let streams = vec![
+        ("stream-0", Retry::default(), stream_0),
+        ("stream-1", Retry::default(), stream_1),
+        ("stream-2", Retry::default(), stream_2),
+    ];
+    let mut stream = StreamMulticaster::create(streams.into_iter(),
+                                               BatchSlotsConfig::default());
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
+
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let indef = stream.complete_push_offer(&mut (), hash_0.clone(),
+                                           &mut frags, completable)
+        .expect("Expected success");
+
+    assert!(indef.is_indef());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+}
+
+#[test]
+fn test_push_offer_complete_retry() {
+    let now = Instant::now();
+    let script_0 = TestPrivateStreamScript {
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15306,43 +18754,36 @@ fn test_select_complete_retry() {
                     }
                 }
             }),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15359,9 +18800,14 @@ fn test_select_complete_retry() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -15373,23 +18819,33 @@ fn test_select_complete_retry() {
 
     assert!(permanent.is_none());
 
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
         .expect("Expected success") {
-        parties
+        retry
     } else {
         panic!("Expected success")
     };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![0, 1, 2]);
 
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
@@ -15397,66 +18853,103 @@ fn test_select_complete_retry() {
     assert!(stream.stream(0).failures.is_empty());
     assert!(stream.stream(1).batches.is_empty());
     assert!(stream.stream(1).frags.is_empty());
-    assert!(stream.stream(1).offers.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_retry_complete() {
+fn test_push_offer_retry_complete() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefAction::Success {
-                        val: ()
+                        val: Some(now)
                     }
                 }
             }),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15473,9 +18966,14 @@ fn test_select_retry_complete() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -15487,24 +18985,6 @@ fn test_select_retry_complete() {
 
     assert!(permanent.is_none());
 
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![0, 1, 2]);
-
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
     assert!(stream.stream(0).offers.is_empty());
@@ -15515,15 +18995,84 @@ fn test_select_retry_complete() {
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_retry_complete_indef() {
+fn test_push_offer_retry_complete_indef() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15531,44 +19080,37 @@ fn test_select_retry_complete_indef() {
                 }
             }),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_1 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15585,9 +19127,14 @@ fn test_select_retry_complete_indef() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -15599,23 +19146,30 @@ fn test_select_retry_complete_indef() {
 
     assert!(permanent.is_none());
 
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
         .expect("Expected success") {
-        parties
+        retry
     } else {
         panic!("Expected success")
     };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![1, 2]);
 
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
@@ -15627,15 +19181,53 @@ fn test_select_retry_complete_indef() {
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_retry_complete_retry_complete() {
+fn test_push_offer_retry_complete_retry_complete() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15644,7 +19236,7 @@ fn test_select_retry_complete_retry_complete() {
                             err: TestCompletableError {
                                 scope: ErrorScope::Retryable,
                                 action: TestIndefAction::Success {
-                                    val: ()
+                                    val: Some(now)
                                 }
                             }
                         })
@@ -15652,18 +19244,18 @@ fn test_select_retry_complete_retry_complete() {
                 }
             }),
         ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15674,32 +19266,22 @@ fn test_select_retry_complete_retry_complete() {
                     }
                 }
             }),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15716,9 +19298,14 @@ fn test_select_retry_complete_retry_complete() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -15729,34 +19316,6 @@ fn test_select_retry_complete_retry_complete() {
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
-    let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![0, 1, 2]);
 
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
@@ -15768,15 +19327,114 @@ fn test_select_retry_complete_retry_complete() {
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_offer(&mut (), hash_0.clone(),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_retry_complete_retry_complete_indef() {
+fn test_push_offer_retry_complete_retry_complete_indef() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15791,18 +19449,18 @@ fn test_select_retry_complete_retry_complete_indef() {
                 }
             }),
         ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15813,32 +19471,22 @@ fn test_select_retry_complete_retry_complete_indef() {
                     }
                 }
             }),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Success(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Success((Some(now), ()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15855,9 +19503,14 @@ fn test_select_retry_complete_retry_complete_indef() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -15868,34 +19521,6 @@ fn test_select_retry_complete_retry_complete_indef() {
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
-    let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![1, 2]);
 
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
@@ -15907,15 +19532,107 @@ fn test_select_retry_complete_retry_complete_indef() {
     assert!(stream.stream(1).failures.is_empty());
     assert!(stream.stream(2).batches.is_empty());
     assert!(stream.stream(2).frags.is_empty());
-    assert!(stream.stream(2).offers.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_offer(&mut (), hash_0.clone(),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![1, 2]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert_eq!(stream.stream(2).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
     assert!(stream.stream(2).failures.is_empty());
 }
 
 #[test]
-fn test_select_retry_indef_complete_retry_complete() {
+fn test_push_offer_retry_indef_complete_retry_complete() {
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
-        select: vec![
+        select: vec![],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15924,7 +19641,7 @@ fn test_select_retry_indef_complete_retry_complete() {
                             err: TestCompletableError {
                                 scope: ErrorScope::Retryable,
                                 action: TestIndefAction::Success {
-                                    val: ()
+                                    val: Some(now)
                                 }
                             }
                         })
@@ -15932,18 +19649,18 @@ fn test_select_retry_indef_complete_retry_complete() {
                 }
             }),
         ],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let script_1 = TestPrivateStreamScript {
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
-        report_failure: vec![],
-        inbound: vec![]
-    };
-    let script_1 = TestPrivateStreamScript {
-        select: vec![
+        push_offers: vec![
             Err(TestError::Completable {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
@@ -15954,32 +19671,25 @@ fn test_select_retry_indef_complete_retry_complete() {
                     }
                 }
             }),
-            Ok(RetryIndefResult::Success(())),
+            Ok(RetryIndefResult::Success((Some(now), ()))),
         ],
-        create_batch: vec![],
-        cancel_batch: vec![],
-        finish_batch: vec![],
-        abort_start_batch: vec![],
-        add: vec![],
-        push_frags: vec![],
-        push_offers: vec![],
         report_failure: vec![],
         inbound: vec![]
     };
     let script_2 = TestPrivateStreamScript {
-        select: vec![
-            Ok(RetryIndefResult::Retry(TestRetry {
-                when: now
-            })),
-            Ok(RetryIndefResult::Indef(())),
-        ],
+        select: vec![],
         create_batch: vec![],
         cancel_batch: vec![],
         finish_batch: vec![],
         abort_start_batch: vec![],
         add: vec![],
         push_frags: vec![],
-        push_offers: vec![],
+        push_offers: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: now
+            })),
+            Ok(RetryIndefResult::Indef(Parties::Some(()))),
+        ],
         report_failure: vec![],
         inbound: vec![]
     };
@@ -15996,9 +19706,14 @@ fn test_select_retry_indef_complete_retry_complete() {
     ];
     let mut stream = StreamMulticaster::create(streams.into_iter(),
                                                BatchSlotsConfig::default());
-    let mut selections = stream.empty_selections();
+    let frags_params = vec![Retry::default(); 3];
+    let mut frags = StreamMulticasterFrags::from_data(frags_params,
+                                                      vec![0x55; 2048]);
+    let hasher = SHA3Algo::default();
+    let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.push_offer(&mut (), hash_0.clone(),
+                                &mut frags);
     let err = if let Err(err) = err {
         err
     } else {
@@ -16009,34 +19724,6 @@ fn test_select_retry_indef_complete_retry_complete() {
     let completable = completable.expect("Expected Some");
 
     assert!(permanent.is_none());
-    let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
-        err
-    } else {
-        panic!("Expected error")
-    };
-
-    let (completable, permanent) = err.split();
-    let completable = completable.expect("Expected Some");
-
-    assert!(permanent.is_none());
-    let retry = if let RetryIndefResult::Retry(parties) =
-        stream.complete_select(&mut (), &mut selections, completable)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected success")
-    };
-
-    let parties = if let RetryIndefResult::Success(parties) =
-        stream.retry_select(&mut (), &mut selections, retry)
-        .expect("Expected success") {
-        parties
-    } else {
-        panic!("Expected indef")
-    };
-
-    assert_eq!(parties, vec![0, 1]);
 
     assert!(stream.stream(0).batches.is_empty());
     assert!(stream.stream(0).frags.is_empty());
@@ -16050,5 +19737,84 @@ fn test_select_retry_indef_complete_retry_complete() {
     assert!(stream.stream(2).frags.is_empty());
     assert!(stream.stream(2).offers.is_empty());
     assert!(stream.stream(2).failures.is_empty());
+
+    let err = stream.complete_push_offer(&mut (), hash_0.clone(),
+                                         &mut frags, completable);
+    let err = if let Err(err) = err {
+        err
+    } else {
+        panic!("Expected error")
+    };
+
+    let (completable, permanent) = err.split();
+    let completable = completable.expect("Expected Some");
+
+    assert!(permanent.is_none());
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert!(stream.stream(0).offers.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    let retry = if let RetryIndefResult::Retry(retry) = stream
+        .complete_push_offer(&mut (), hash_0.clone(),
+                             &mut frags, completable)
+        .expect("Expected success") {
+        retry
+    } else {
+        panic!("Expected success")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert!(stream.stream(1).offers.is_empty());
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
+
+    if let RetryIndefResult::Success(res) = stream
+        .retry_push_offer(&mut (), hash_0.clone(),
+                          &mut frags, retry)
+        .expect("Expected success") {
+        assert_eq!(res, (None, vec![0, 1]))
+    } else {
+        panic!("Expected indef")
+    };
+
+    assert!(stream.stream(0).batches.is_empty());
+    assert!(stream.stream(0).frags.is_empty());
+    assert_eq!(stream.stream(0).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(1).batches.is_empty());
+    assert!(stream.stream(1).frags.is_empty());
+    assert_eq!(stream.stream(1).offers.as_ref(),
+               &vec![
+                   hash_0.clone(),
+               ]);
+    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(2).batches.is_empty());
+    assert!(stream.stream(2).frags.is_empty());
+    assert!(stream.stream(2).offers.is_empty());
+    assert!(stream.stream(2).failures.is_empty());
 }
- */

@@ -1230,8 +1230,7 @@ where
         <Self as LargeObjOfferStream<H, Ctx>>::PushOfferError
     >
     where
-        Stream: LargeObjOfferStream<H, Ctx>
-            + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+        Stream: LargeObjOfferStream<H, Ctx> + PushStream<Ctx>,
         H: Clone + HashID {
         match errs {
             // There were errors.
@@ -1245,35 +1244,41 @@ where
                 let mut results = Vec::with_capacity(len);
                 let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
-                let mut all_success = true;
+                let mut has_retry = false;
                 let mut all_indef = true;
-                let mut when = None;
+                let mut min = None;
 
                 for (id, res) in elems.into_iter() {
                     match res {
-                        RetryIndefResult::Success(retry) => {
-                            when = next_retry(&when, &retry);
-                            ids.push(id);
-
-                            results.push(RetryResult::Success(retry));
-                        }
-                        RetryIndefResult::Retry(when) => {
-                            all_success = false;
-                            results.push(RetryResult::Retry(when));
-                        }
-                        RetryIndefResult::Indef(_) => {
+                        RetryIndefResult::Success(val) => {
                             all_indef = false;
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(retry) => {
+                            all_indef = false;
+                            has_retry = true;
+                            min =
+                                Some(next_retry_definite(&min, &retry.when()));
+                            results.push(RetryResult::Retry(retry));
+                        }
+                        RetryIndefResult::Indef(()) => {
                             indefs.push(id)
                         }
                     }
                 }
 
-                if all_success {
-                    Ok(RetryIndefResult::Success((when, ids)))
-                } else if all_indef {
+                if all_indef {
                     Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 } else {
-                    Ok(RetryIndefResult::Retry(results))
+                    Ok(RetryIndefResult::Success((min, ids)))
                 }
             }
         }
@@ -3482,8 +3487,7 @@ impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: LargeObjOfferStream<H, Ctx, Parties = ()>
-        + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Stream: LargeObjOfferStream<H, Ctx, Parties = ()> + PushStream<Ctx>,
     H: Clone + HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
@@ -3492,8 +3496,10 @@ where
         RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
         Stream::PushOfferError
     >;
-    type PushOfferRetry =
-        Vec<RetryResult<Option<Instant>, Stream::PushOfferRetry>>;
+    type PushOfferRetry = MulticastRetry<
+        Idx,
+        RetryResult<Option<Instant>, Stream::PushOfferRetry>
+    >;
 
     fn push_offer(
         &mut self,
@@ -3552,11 +3558,23 @@ where
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
         let mut errs: Option<Vec<(Idx, Stream::PushOfferError)>> = None;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
+            while skip[i + offset] {
+                offset += 1;
+            }
+            let i = i + offset;
 
             match res {
                 // Actually do retries.
@@ -3590,8 +3608,11 @@ where
                     }
                 }
                 // Retain prior successes.
-                RetryResult::Success(val) =>
+                RetryResult::Success(val) => {
+                    let idx = Idx::from(i);
+
                     results.push((idx, RetryIndefResult::Success(val)))
+                }
             }
         }
 
