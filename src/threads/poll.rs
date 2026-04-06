@@ -184,9 +184,8 @@ where Chans: Channels<Ctx>
 {
     type ChannelID = Chans::ChannelID;
     type Param = Chans::Param;
-    type SelectParamIter<'a, I> = Chans::SelectParamIter<'a, I>
+    type SelectParamIter<'a> = Chans::SelectParamIter<'a>
     where
-        I: 'a + Iterator<Item = Self::ChannelID>,
         Self: 'a;
     type ParamError = Chans::ParamError;
     type OutNegoParam = Chans::OutNegoParam;
@@ -219,7 +218,7 @@ where Chans: Channels<Ctx>
         &'a mut self,
         _ctx: &'a mut (),
         channels: I
-    ) -> Result<RetryResult<(Self::SelectParamIter<'a, I>, Option<Instant>)>,
+    ) -> Result<RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
                 Self::ParamError>
     where I: 'a + Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
