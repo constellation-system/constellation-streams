@@ -43,6 +43,8 @@ use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
+use crate::stream::PushStreamReportBatchError;
+use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -94,9 +96,10 @@ where H: HashID {
     pub frags: Rc<Vec<LargeObjID>>,
     pub offers: Rc<Vec<H>>,
     pub failures: Rc<Vec<usize>>,
+    pub batch_reports: Rc<Vec<(usize, TestPermanentError)>>,
+    pub reports: Rc<Vec<TestPermanentError>>,
     script: Rc<TestPrivateStreamScript<In>>
 }
-
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TestSharedBatchState<T> {
@@ -209,6 +212,11 @@ pub enum TestBatchError<Act> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TestReportBatchError {
+    batch: usize
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TestStartBatchError<Select, Create, Selections> {
     Select {
         err: Select,
@@ -285,6 +293,82 @@ pub enum TestIndefPartiesAction {
     }
 }
 
+impl<In, Out, H> PushStreamReportBatchError<TestPermanentError, usize>
+    for TestPrivateStream<In, Out, H>
+where H: HashID {
+    type ReportBatchError = TestReportBatchError;
+
+    fn report_error_with_batch(
+        &mut self,
+        batch: &usize,
+        error: &TestPermanentError
+    ) -> Result<(), Self::ReportBatchError> {
+        Rc::get_mut(&mut self.batch_reports)
+            .expect("get_mut failed")
+            .push((*batch, error.clone()));
+
+        Ok(())
+    }
+}
+impl<In, Out, H> PushStreamReportError<TestPermanentError>
+    for TestPrivateStream<In, Out, H>
+where H: HashID {
+    type ReportError = Infallible;
+
+    fn report_error(
+        &mut self,
+        error: &TestPermanentError
+    ) -> Result<(), Self::ReportError> {
+        Rc::get_mut(&mut self.reports)
+            .expect("get_mut failed")
+            .push(error.clone());
+
+        Ok(())
+    }
+}
+
+impl<In, Out, H> PushStreamReportError<TestPermanentBatchError>
+    for TestPrivateStream<In, Out, H>
+where H: HashID {
+    type ReportError = TestReportBatchError;
+
+    fn report_error(
+        &mut self,
+        error: &TestPermanentBatchError
+    ) -> Result<(), Self::ReportError> {
+        let batch = error.batch;
+        let error = TestPermanentError {
+            scope: error.scope.clone()
+        };
+
+        self.report_error_with_batch(&batch, &error)
+    }
+}
+
+impl<In, Out, H> PushStreamReportError<
+        TestStartBatchError<TestPermanentError, TestPermanentBatchError, ()>
+    >
+    for TestPrivateStream<In, Out, H>
+where H: HashID {
+    type ReportError = TestReportBatchError;
+
+    fn report_error(
+        &mut self,
+        error: &TestStartBatchError<TestPermanentError,
+                                    TestPermanentBatchError, ()>
+    ) -> Result<(), Self::ReportError> {
+        match error {
+            TestStartBatchError::Select { err, .. } => {
+                let Ok(res) = self.report_error(err);
+
+                Ok(res)
+            },
+            TestStartBatchError::Create { err, .. } =>
+                self.report_error(err),
+        }
+    }
+}
+
 impl<In, Out, H> TestPrivateStream<In, Out, H>
 where H: HashID {
     #[inline]
@@ -307,6 +391,8 @@ where H: HashID {
             batches: Rc::new(Vec::new()),
             frags: Rc::new(Vec::new()),
             offers: Rc::new(Vec::new()),
+            batch_reports: Rc::new(Vec::new()),
+            reports: Rc::new(Vec::new()),
             script: Rc::new(script)
         }
     }
@@ -2334,5 +2420,14 @@ where Select: Display,
             TestStartBatchError::Select { err, .. } => err.fmt(f),
             TestStartBatchError::Create { err, .. } => err.fmt(f),
         }
+    }
+}
+
+impl Display for TestReportBatchError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "bad batch ID {}", self.batch)
     }
 }

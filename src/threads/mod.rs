@@ -47,29 +47,12 @@ use crate::stream::PushStreamReportError;
 pub mod poll;
 pub mod private;
 pub mod shared;
+pub mod test;
 
 pub trait PushMode<Stream, Msgs, Ctx>: Sized {
-    /// Type of configuration objects used in [create](PushMode::create).
-    type Config;
-    /// Type of errors that can happen in [create](PushMode::create).
-    type CreateError: Debug + Display + ScopedError;
     type SendError: Debug + Display + ScopedError;
     type RetryError: Debug + Display + ScopedError;
     type RetryIndefError: Debug + Display + ScopedError;
-
-    /// Create an instance from a stream and a configuration object.
-    ///
-    /// # Parameters
-    ///
-    /// - `stream`: Reference to the [PushStream] that will be used to
-    ///   send messages.  This allows the `PushMode` to gather
-    ///   information from the stream.
-    ///
-    /// - `config`: The configuratiot object.
-    fn create(
-        stream: &Stream,
-        config: Self::Config,
-    ) -> Result<Self, Self::CreateError>;
 
     fn send_from_outbound(
         &mut self,

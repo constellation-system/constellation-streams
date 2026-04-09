@@ -33,6 +33,7 @@ use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_common::config::Create;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::error::RecoverableError;
@@ -141,8 +142,6 @@ where Ctx: 'static + Send
                 Self::Chans,
                 Ctx
             >,
-            Config = Self::ModeConfig,
-            CreateError = Self::ModeCreateError
         > + Send;
 }
 
@@ -307,10 +306,13 @@ where
     ) -> Result<Self, PollThreadCreateError<Types::ModeCreateError,
                                             Types::ChansCreateError,
                                             Types::MsgAuthCreateError>>
+    where Types::Mode: for<'a> CreateWithParam<&'a Types::Stream,
+                                               Config = Types::ModeConfig,
+                                               CreateError = Types::ModeCreateError>
     {
         let channels = Types::Chans::create(&mut ctx, chans_config, srcs)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
-        let mode = Types::Mode::create(&stream, mode_config)
+        let mode = Types::Mode::create(mode_config, &stream)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;

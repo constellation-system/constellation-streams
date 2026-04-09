@@ -36,6 +36,7 @@ use mio::Token;
 
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
+use crate::channels::ChannelsCreate;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 
@@ -86,6 +87,27 @@ pub struct TestChannels<Stream> {
     >
 }
 
+pub struct TestChannelsScript<Stream> {
+    pub req_streams: Vec<(
+        TestStreamID,
+        Result<
+            RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+            TestChannelsError
+        >,
+        Option<Instant>
+    )>,
+    pub listen: Vec<Result<
+        RetryResult<(
+            Vec<TestStream<Stream>>,
+            Vec<TestStreamID>,
+            Option<Vec<(String, TestChannelParam)>>,
+            Option<Instant>
+        )>,
+        TestChannelsError
+    >>,
+    pub shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>
+}
+
 impl ChannelParam<String> for TestChannelParam {
     #[inline]
     fn accepts_addr(
@@ -114,27 +136,19 @@ impl ScopedError for TestChannelsError {
     }
 }
 
-impl<Stream> TestChannels<Stream> {
-    pub fn new(
-        req_streams: Vec<(
-            TestStreamID,
-            Result<
-                RetryResult<(Option<Stream>, bool, Option<Instant>)>,
-                TestChannelsError
-            >,
-            Option<Instant>
-        )>,
-        mut listen: Vec<Result<
-            RetryResult<(
-                Vec<TestStream<Stream>>,
-                Vec<TestStreamID>,
-                Option<Vec<(String, TestChannelParam)>>,
-                Option<Instant>
-            )>,
-            TestChannelsError
-        >>,
-        mut shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>
-    ) -> Self {
+impl<Stream, Ctx, Srcs> ChannelsCreate<Ctx, Srcs> for TestChannels<Stream>
+where Stream: Clone {
+    type Config = TestChannelsScript<Stream>;
+    type CreateError = Infallible;
+
+    fn create(
+        _ctx: &mut Ctx,
+        config: Self::Config,
+        _srcs: Srcs
+    ) -> Result<Self, Self::CreateError> {
+        let TestChannelsScript {
+            req_streams, mut listen, mut shutdown_listen
+        } = config;
         let mut reqs: HashMap<
             TestStreamID,
             Vec<(Result<
@@ -164,12 +178,12 @@ impl<Stream> TestChannels<Stream> {
         listen.reverse();
         shutdown_listen.reverse();
 
-        TestChannels {
+        Ok(TestChannels {
             req_streams: reqs,
             listen: listen,
             shutdown_listen: shutdown_listen,
             actives: HashMap::new()
-        }
+        })
     }
 }
 
