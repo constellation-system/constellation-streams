@@ -136,7 +136,7 @@ struct ThreadedStreamSelectorConnections<
 }
 
 /// Type of batch ID's produce by [StreamSelector].
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StreamSelectorBatch<Epoch, BatchID> {
     /// The stream on which the batch exists.
     stream: DenseItemID<Epoch>,
@@ -1952,7 +1952,7 @@ impl<Epochs, Resolve, Ctx> PushStreamReportError<DenseItemID<Epochs::Item>>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream: Clone + PushStream<Ctx> + Send,
@@ -1982,7 +1982,7 @@ impl<Epochs, Resolve, Ctx, Error> PushStreamReportError<Error>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream: Clone + PushStream<Ctx> + Send,
@@ -2019,17 +2019,17 @@ impl<Epochs, Resolve, Ctx, Error>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
-    Epochs::Item: Clone + Default + Display + Eq,
+    Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream: Clone + PushStream<Ctx> + Send,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
 {
-    type ReportBatchError = StreamSelectorReportError<
-        ReportError<
-            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
-        >
+    type ReportBatchError = SelectorReportFailureError<
+        Epochs::Item,
+        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        <Ctx::Stream as PushStream<Ctx>>::ReportError
     >;
 
     fn report_error_with_batch(
@@ -2040,7 +2040,7 @@ where
         >,
         _error: &Error
     ) -> Result<(), Self::ReportBatchError> {
-        self.report_error(&batch.stream)
+        self.report_failure(batch)
     }
 }
 

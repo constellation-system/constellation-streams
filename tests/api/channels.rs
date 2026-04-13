@@ -58,9 +58,12 @@ use constellation_streams::stream::test::TestSharedStream;
 use constellation_streams::stream::test::TestSharedStreamScript;
 use constellation_streams::stream::test::TestStartBatchError;
 
+use crate::init;
 
 #[test]
 fn test_private_select_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -106,6 +109,8 @@ fn test_private_select_succeed() {
 
 #[test]
 fn test_private_select_indef() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -152,6 +157,8 @@ fn test_private_select_indef() {
 
 #[test]
 fn test_private_select_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![
@@ -208,6 +215,8 @@ fn test_private_select_retry_succeed() {
 
 #[test]
 fn test_private_select_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -269,6 +278,8 @@ fn test_private_select_permanent() {
 
 #[test]
 fn test_private_select_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -332,6 +343,8 @@ fn test_private_select_complete_succeed() {
 
 #[test]
 fn test_private_select_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![
@@ -407,6 +420,8 @@ fn test_private_select_complete_retry() {
 
 #[test]
 fn test_private_select_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -486,6 +501,8 @@ fn test_private_select_complete_permanent() {
 
 #[test]
 fn test_private_select_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -567,6 +584,8 @@ fn test_private_select_complete_complete() {
 
 #[test]
 fn test_shared_select_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(vec![0, 1, 2])),
@@ -612,6 +631,8 @@ fn test_shared_select_succeed() {
 
 #[test]
 fn test_shared_select_indef() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 3]))),
@@ -659,6 +680,8 @@ fn test_shared_select_indef() {
 
 #[test]
 fn test_shared_select_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![
@@ -716,6 +739,8 @@ fn test_shared_select_retry_succeed() {
 
 #[test]
 fn test_shared_select_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -778,6 +803,8 @@ fn test_shared_select_permanent() {
 
 #[test]
 fn test_shared_select_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -842,6 +869,8 @@ fn test_shared_select_complete_succeed() {
 
 #[test]
 fn test_shared_select_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![
@@ -919,6 +948,8 @@ fn test_shared_select_complete_retry() {
 
 #[test]
 fn test_shared_select_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -999,6 +1030,8 @@ fn test_shared_select_complete_permanent() {
 
 #[test]
 fn test_shared_select_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -1081,6 +1114,8 @@ fn test_shared_select_complete_complete() {
 
 #[test]
 fn test_private_create_batch_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1133,6 +1168,8 @@ fn test_private_create_batch_succeed() {
 
 #[test]
 fn test_private_create_batch_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -1206,6 +1243,8 @@ fn test_private_create_batch_retry_succeed() {
 
 #[test]
 fn test_private_create_batch_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1271,6 +1310,8 @@ fn test_private_create_batch_permanent() {
 
 #[test]
 fn test_private_create_batch_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1351,6 +1392,8 @@ fn test_private_create_batch_complete_succeed() {
 
 #[test]
 fn test_private_create_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -1452,6 +1495,8 @@ fn test_private_create_batch_complete_retry() {
 
 #[test]
 fn test_private_create_batch_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1545,6 +1590,8 @@ fn test_private_create_batch_complete_permanent() {
 
 #[test]
 fn test_private_create_batch_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1653,6 +1700,8 @@ fn test_private_create_batch_complete_complete() {
 
 #[test]
 fn test_shared_create_batch_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1707,6 +1756,8 @@ fn test_shared_create_batch_succeed() {
 
 #[test]
 fn test_shared_create_batch_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -1782,6 +1833,8 @@ fn test_shared_create_batch_retry_succeed() {
 
 #[test]
 fn test_shared_create_batch_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1848,6 +1901,8 @@ fn test_shared_create_batch_permanent() {
 
 #[test]
 fn test_shared_create_batch_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -1930,6 +1985,8 @@ fn test_shared_create_batch_complete_succeed() {
 
 #[test]
 fn test_shared_create_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -2033,6 +2090,8 @@ fn test_shared_create_batch_complete_retry() {
 
 #[test]
 fn test_shared_create_batch_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -2128,6 +2187,8 @@ fn test_shared_create_batch_complete_permanent() {
 
 #[test]
 fn test_shared_create_batch_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -2238,6 +2299,8 @@ fn test_shared_create_batch_complete_complete() {
 
 #[test]
 fn test_private_start_batch_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -2288,6 +2351,8 @@ fn test_private_start_batch_succeed() {
 
 #[test]
 fn test_private_start_batch_both_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![
@@ -2377,6 +2442,8 @@ fn test_private_start_batch_both_retry_succeed() {
 
 #[test]
 fn test_private_start_batch_indef() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -2421,6 +2488,8 @@ fn test_private_start_batch_indef() {
 
 #[test]
 fn test_private_start_batch_select_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -2487,6 +2556,8 @@ fn test_private_start_batch_select_permanent() {
 
 #[test]
 fn test_private_start_batch_create_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -2554,6 +2625,8 @@ fn test_private_start_batch_create_permanent() {
 
 #[test]
 fn test_private_start_batch_both_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -2658,6 +2731,8 @@ fn test_private_start_batch_both_complete_succeed() {
 
 #[test]
 fn test_private_start_batch_both_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -2816,6 +2891,8 @@ fn test_private_start_batch_both_complete_complete() {
 
 #[test]
 fn test_private_start_batch_select_complete_indef() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -2887,6 +2964,8 @@ fn test_private_start_batch_select_complete_indef() {
 
 #[test]
 fn test_private_start_batch_both_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![
@@ -3031,6 +3110,8 @@ fn test_private_start_batch_both_complete_retry() {
 
 #[test]
 fn test_private_start_batch_both_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -3153,6 +3234,8 @@ fn test_private_start_batch_both_complete_permanent() {
 
 #[test]
 fn test_shared_start_batch_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(vec![0, 1, 2])),
@@ -3205,6 +3288,8 @@ fn test_shared_start_batch_succeed() {
 
 #[test]
 fn test_shared_start_batch_both_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![
@@ -3296,6 +3381,8 @@ fn test_shared_start_batch_both_retry_succeed() {
 
 #[test]
 fn test_shared_start_batch_indef() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(Parties::All)),
@@ -3341,6 +3428,8 @@ fn test_shared_start_batch_indef() {
 
 #[test]
 fn test_shared_start_batch_create_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(vec![0, 1, 2, 3])),
@@ -3409,6 +3498,8 @@ fn test_shared_start_batch_create_permanent() {
 
 #[test]
 fn test_shared_start_batch_both_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -3515,6 +3606,8 @@ fn test_shared_start_batch_both_complete_succeed() {
 
 #[test]
 fn test_shared_start_batch_both_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -3675,6 +3768,8 @@ fn test_shared_start_batch_both_complete_complete() {
 
 #[test]
 fn test_shared_start_batch_select_complete_indef() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -3749,6 +3844,8 @@ fn test_shared_start_batch_select_complete_indef() {
 
 #[test]
 fn test_shared_start_batch_both_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![
@@ -3895,6 +3992,8 @@ fn test_shared_start_batch_both_complete_retry() {
 
 #[test]
 fn test_shared_start_batch_both_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -4018,6 +4117,8 @@ fn test_shared_start_batch_both_complete_permanent() {
 
 #[test]
 fn test_private_cancel_batch_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4091,6 +4192,8 @@ fn test_private_cancel_batch_succeed() {
 
 #[test]
 fn test_private_cancel_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -4190,6 +4293,8 @@ fn test_private_cancel_batch_retry() {
 
 #[test]
 fn test_private_cancel_batch_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4283,6 +4388,8 @@ fn test_private_cancel_batch_permanent() {
 
 #[test]
 fn test_private_cancel_batch_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4389,6 +4496,8 @@ fn test_private_cancel_batch_complete_succeed() {
 
 #[test]
 fn test_private_cancel_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -4521,6 +4630,8 @@ fn test_private_cancel_batch_complete_retry() {
 
 #[test]
 fn test_private_cancel_batch_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4660,6 +4771,8 @@ fn test_private_cancel_batch_complete_complete() {
 
 #[test]
 fn test_private_cancel_batch_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4786,6 +4899,8 @@ fn test_private_cancel_batch_complete_permanent() {
 
 #[test]
 fn test_shared_cancel_batch_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -4861,6 +4976,8 @@ fn test_shared_cancel_batch_succeed() {
 
 #[test]
 fn test_shared_cancel_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -4963,6 +5080,8 @@ fn test_shared_cancel_batch_retry() {
 
 #[test]
 fn test_shared_cancel_batch_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5059,6 +5178,8 @@ fn test_shared_cancel_batch_permanent() {
 
 #[test]
 fn test_shared_cancel_batch_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5168,6 +5289,8 @@ fn test_shared_cancel_batch_complete_succeed() {
 
 #[test]
 fn test_shared_cancel_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -5304,6 +5427,8 @@ fn test_shared_cancel_batch_complete_retry() {
 
 #[test]
 fn test_shared_cancel_batch_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5447,6 +5572,8 @@ fn test_shared_cancel_batch_complete_complete() {
 
 #[test]
 fn test_shared_cancel_batch_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5577,6 +5704,8 @@ fn test_shared_cancel_batch_complete_permanent() {
 
 #[test]
 fn test_private_finish_batch_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5652,6 +5781,8 @@ fn test_private_finish_batch_succeed() {
 
 #[test]
 fn test_private_finish_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -5753,6 +5884,8 @@ fn test_private_finish_batch_retry() {
 
 #[test]
 fn test_private_finish_batch_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5846,6 +5979,8 @@ fn test_private_finish_batch_permanent() {
 
 #[test]
 fn test_private_finish_batch_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -5954,6 +6089,8 @@ fn test_private_finish_batch_complete_succeed() {
 
 #[test]
 fn test_private_finish_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -6088,6 +6225,8 @@ fn test_private_finish_batch_complete_retry() {
 
 #[test]
 fn test_private_finish_batch_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -6229,6 +6368,8 @@ fn test_private_finish_batch_complete_complete() {
 
 #[test]
 fn test_private_finish_batch_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -6355,6 +6496,8 @@ fn test_private_finish_batch_complete_permanent() {
 
 #[test]
 fn test_shared_finish_batch_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -6433,6 +6576,8 @@ fn test_shared_finish_batch_succeed() {
 
 #[test]
 fn test_shared_finish_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -6538,6 +6683,8 @@ fn test_shared_finish_batch_retry() {
 
 #[test]
 fn test_shared_finish_batch_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -6634,6 +6781,8 @@ fn test_shared_finish_batch_permanent() {
 
 #[test]
 fn test_shared_finish_batch_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -6746,6 +6895,8 @@ fn test_shared_finish_batch_complete_succeed() {
 
 #[test]
 fn test_shared_finish_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -6885,6 +7036,8 @@ fn test_shared_finish_batch_complete_retry() {
 
 #[test]
 fn test_shared_finish_batch_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -7031,6 +7184,8 @@ fn test_shared_finish_batch_complete_complete() {
 
 #[test]
 fn test_shared_finish_batch_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -7161,6 +7316,8 @@ fn test_shared_finish_batch_complete_permanent() {
 
 #[test]
 fn test_private_abort_start_batch_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -7244,6 +7401,8 @@ fn test_private_abort_start_batch_succeed() {
 
 #[test]
 fn test_private_abort_start_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![
@@ -7350,6 +7509,8 @@ fn test_private_abort_start_batch_retry() {
 
 #[test]
 fn test_shared_abort_start_batch_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(vec![0, 1, 2, 3])),
@@ -7434,6 +7595,8 @@ fn test_shared_abort_start_batch_succeed() {
 
 #[test]
 fn test_shared_abort_start_batch_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![
@@ -7541,6 +7704,8 @@ fn test_shared_abort_start_batch_retry() {
 
 #[test]
 fn test_private_add_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -7616,6 +7781,8 @@ fn test_private_add_succeed() {
 
 #[test]
 fn test_private_add_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -7717,6 +7884,8 @@ fn test_private_add_retry() {
 
 #[test]
 fn test_private_add_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -7810,6 +7979,8 @@ fn test_private_add_permanent() {
 
 #[test]
 fn test_private_add_complete_succeed() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -7920,6 +8091,8 @@ fn test_private_add_complete_succeed() {
 
 #[test]
 fn test_private_add_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -8054,6 +8227,8 @@ fn test_private_add_complete_retry() {
 
 #[test]
 fn test_private_add_complete_complete() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -8198,6 +8373,8 @@ fn test_private_add_complete_complete() {
 
 #[test]
 fn test_private_add_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![
@@ -8324,6 +8501,8 @@ fn test_private_add_complete_permanent() {
 
 #[test]
 fn test_shared_add_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -8402,6 +8581,8 @@ fn test_shared_add_succeed() {
 
 #[test]
 fn test_shared_add_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -8507,6 +8688,8 @@ fn test_shared_add_retry() {
 
 #[test]
 fn test_shared_add_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -8603,6 +8786,8 @@ fn test_shared_add_permanent() {
 
 #[test]
 fn test_shared_add_complete_succeed() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -8717,6 +8902,8 @@ fn test_shared_add_complete_succeed() {
 
 #[test]
 fn test_shared_add_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -8856,6 +9043,8 @@ fn test_shared_add_complete_retry() {
 
 #[test]
 fn test_shared_add_complete_complete() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -9005,6 +9194,8 @@ fn test_shared_add_complete_complete() {
 
 #[test]
 fn test_shared_add_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![
@@ -9135,6 +9326,8 @@ fn test_shared_add_complete_permanent() {
 
 #[test]
 fn test_private_frags_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -9209,6 +9402,8 @@ fn test_private_frags_succeed() {
 
 #[test]
 fn test_private_frags_indef() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -9254,6 +9449,8 @@ fn test_private_frags_indef() {
 
 #[test]
 fn test_private_frags_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -9328,6 +9525,8 @@ fn test_private_frags_retry() {
 
 #[test]
 fn test_private_frags_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -9391,6 +9590,8 @@ fn test_private_frags_permanent() {
 
 #[test]
 fn test_private_frags_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -9473,6 +9674,8 @@ fn test_private_frags_complete_succeed() {
 
 #[test]
 fn test_private_frags_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -9575,6 +9778,8 @@ fn test_private_frags_complete_retry() {
 
 #[test]
 fn test_private_frags_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -9666,6 +9871,8 @@ fn test_private_frags_complete_permanent() {
 
 #[test]
 fn test_private_frags_complete_complete() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -9776,6 +9983,8 @@ fn test_private_frags_complete_complete() {
 
 #[test]
 fn test_shared_frags_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -9843,6 +10052,8 @@ fn test_shared_frags_succeed() {
 
 #[test]
 fn test_shared_frags_indef() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -9889,6 +10100,8 @@ fn test_shared_frags_indef() {
 
 #[test]
 fn test_shared_frags_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -9960,6 +10173,8 @@ fn test_shared_frags_retry() {
 
 #[test]
 fn test_shared_frags_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -10024,6 +10239,8 @@ fn test_shared_frags_permanent() {
 
 #[test]
 fn test_shared_frags_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -10105,6 +10322,8 @@ fn test_shared_frags_complete_succeed() {
 
 #[test]
 fn test_shared_frags_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -10204,6 +10423,8 @@ fn test_shared_frags_complete_retry() {
 
 #[test]
 fn test_shared_frags_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -10296,6 +10517,8 @@ fn test_shared_frags_complete_permanent() {
 
 #[test]
 fn test_shared_frags_complete_complete() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -10404,6 +10627,8 @@ fn test_shared_frags_complete_complete() {
 
 #[test]
 fn test_private_offer_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -10479,6 +10704,8 @@ fn test_private_offer_succeed() {
 
 #[test]
 fn test_private_offer_indef() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -10525,6 +10752,8 @@ fn test_private_offer_indef() {
 
 #[test]
 fn test_private_offer_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -10599,6 +10828,8 @@ fn test_private_offer_retry() {
 
 #[test]
 fn test_private_offer_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -10663,6 +10894,8 @@ fn test_private_offer_permanent() {
 
 #[test]
 fn test_private_offer_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -10745,6 +10978,8 @@ fn test_private_offer_complete_succeed() {
 
 #[test]
 fn test_private_offer_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -10847,6 +11082,8 @@ fn test_private_offer_complete_retry() {
 
 #[test]
 fn test_private_offer_complete_permanent() {
+    init();
+
     let script = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -10939,6 +11176,8 @@ fn test_private_offer_complete_permanent() {
 
 #[test]
 fn test_private_offer_complete_complete() {
+    init();
+
     let now = Instant::now();
     let script = TestPrivateStreamScript {
         select: vec![],
@@ -11048,6 +11287,8 @@ fn test_private_offer_complete_complete() {
 
 #[test]
 fn test_shared_offer_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -11116,6 +11357,8 @@ fn test_shared_offer_succeed() {
 
 #[test]
 fn test_shared_offer_indef() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -11171,6 +11414,8 @@ fn test_shared_offer_indef() {
 
 #[test]
 fn test_shared_offer_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -11242,6 +11487,8 @@ fn test_shared_offer_retry() {
 
 #[test]
 fn test_shared_offer_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -11307,6 +11554,8 @@ fn test_shared_offer_permanent() {
 
 #[test]
 fn test_shared_offer_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -11386,6 +11635,8 @@ fn test_shared_offer_complete_succeed() {
 
 #[test]
 fn test_shared_offer_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],
@@ -11485,6 +11736,8 @@ fn test_shared_offer_complete_retry() {
 
 #[test]
 fn test_shared_offer_complete_permanent() {
+    init();
+
     let script = TestSharedStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -11578,6 +11831,8 @@ fn test_shared_offer_complete_permanent() {
 
 #[test]
 fn test_shared_offer_complete_complete() {
+    init();
+
     let now = Instant::now();
     let script = TestSharedStreamScript {
         select: vec![],

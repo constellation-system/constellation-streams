@@ -20,21 +20,32 @@ use std::collections::HashSet;
 use std::time::Duration;
 use std::time::Instant;
 
-use constellation_streams::config::PrivateDatagramModeConfig;
+use constellation_common::error::ErrorScope;
 use constellation_common::config::Create;
 use constellation_common::hashid::SHA3ID;
 use constellation_common::net::test::TestPrivateMsgs;
 use constellation_common::net::test::TestMsgsError;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryIndefResult;
+use constellation_streams::config::PrivateDatagramModeConfig;
+use constellation_streams::stream::test::TestAction;
+use constellation_streams::stream::test::TestCompletableError;
+use constellation_streams::stream::test::TestError;
+use constellation_streams::stream::test::TestIndefAction;
+use constellation_streams::stream::test::TestPermanentError;
 use constellation_streams::stream::test::TestPrivateBatchState;
 use constellation_streams::stream::test::TestPrivateStream;
 use constellation_streams::stream::test::TestPrivateStreamScript;
+use constellation_streams::stream::test::TestRetry;
 use constellation_streams::threads::PushMode;
 use constellation_streams::threads::private::PrivateDatagramPushMode;
 
+use crate::init;
+
 #[test]
 fn test_send_from_outbound_succeed() {
+    init();
+
     let when = Instant::now() + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
@@ -87,4 +98,7315 @@ fn test_send_from_outbound_succeed() {
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
 }
+
+#[test]
+fn test_send_from_outbound_retry_select() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+#[test]
+fn test_send_from_outbound_retry_create_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: later
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: later
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: later
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(later)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(later));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry {
+                when: when
+            })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert!(stream.reports.is_empty());
+}
+
+
+
+
+
+#[test]
+fn test_send_from_outbound_select_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Permanent {
+                err: TestPermanentError {
+                    scope: ErrorScope::Session,
+                }
+            })
+        ],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+    assert_eq!(stream.reports.as_ref(),
+               &vec![
+                   TestPermanentError {
+                       scope: ErrorScope::Session,
+                   }
+               ]);
+}
+
+
+
+
+/*
+
+#[test]
+fn test_send_from_outbound_complete_select_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_select() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestIndefAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert!(stream.batches.is_empty());
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec![]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Err(TestError::Completable {
+                err: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    action: TestAction::Success {
+                        val: ()
+                    }
+                }
+            }),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<Result<(Option<Vec<&str>>, Option<Instant>),
+                           TestMsgsError>> = vec![
+        Ok((Some(vec!["hello"]), Some(when)))
+    ];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config)
+        .expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, Some(when));
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Live {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .expect("Expected success");
+
+    assert_eq!(next, None);
+
+    assert_eq!(stream.batches.as_ref(),
+               &vec![
+                   TestPrivateBatchState::Finished {
+                       msgs: vec!["hello"]
+                   },
+               ]);
+    assert!(stream.frags.is_empty());
+    assert!(stream.offers.is_empty());
+    assert!(stream.failures.is_empty());
+}
+*/

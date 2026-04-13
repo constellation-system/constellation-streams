@@ -81,6 +81,20 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
 
     fn has_complete_pending(&self) -> bool;
 
+    /// Retry all stored indefinite retries.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `msgs`: The outbound message buffer to use to get messages.
+    ///
+    /// - `stream`: The stream to use to send.
+    ///
+    /// # Return Value
+    ///
+    /// If retries are generated, the time at which to call
+    /// [retry_pending](PushMode::retry_pending), or `None`.
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,

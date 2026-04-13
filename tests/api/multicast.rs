@@ -49,8 +49,12 @@ use constellation_streams::stream::test::TestPrivateStreamScript;
 use constellation_streams::stream::test::TestRetry;
 use constellation_streams::stream::test::TestStartBatchError;
 
+use crate::init;
+
 #[test]
 fn test_select_all_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -134,6 +138,8 @@ fn test_select_all_succeed() {
 
 #[test]
 fn test_select_multi_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -215,6 +221,8 @@ fn test_select_multi_subset_succeed() {
 
 #[test]
 fn test_select_all_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -298,6 +306,8 @@ fn test_select_all_indef() {
 
 #[test]
 fn test_select_subset_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -379,6 +389,8 @@ fn test_select_subset_indef() {
 
 #[test]
 fn test_select_one_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -462,6 +474,8 @@ fn test_select_one_indef() {
 
 #[test]
 fn test_select_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -563,6 +577,8 @@ fn test_select_retry_succeed() {
 
 #[test]
 fn test_select_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -661,6 +677,8 @@ fn test_select_succeed_retry_succeed() {
 
 #[test]
 fn test_select_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -773,6 +791,8 @@ fn test_select_retry_retry_succeed() {
 
 #[test]
 fn test_select_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -871,6 +891,8 @@ fn test_select_indef_retry_succeed() {
 
 #[test]
 fn test_select_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -969,6 +991,8 @@ fn test_select_indef_retry_indef() {
 
 #[test]
 fn test_select_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -1067,6 +1091,8 @@ fn test_select_succeed_retry_indef() {
 
 #[test]
 fn test_select_indef_retry_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -1176,6 +1202,8 @@ fn test_select_indef_retry_indef_retry_succeed() {
 
 #[test]
 fn test_select_succeed_retry_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -1285,6 +1313,8 @@ fn test_select_succeed_retry_indef_retry_indef() {
 
 #[test]
 fn test_select_indef_retry_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -1394,6 +1424,8 @@ fn test_select_indef_retry_succeed_retry_indef() {
 
 #[test]
 fn test_select_one_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -1483,6 +1515,8 @@ fn test_select_one_permanent() {
 
 #[test]
 fn test_select_all_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -1599,6 +1633,8 @@ fn test_select_all_complete_succeed() {
 
 #[test]
 fn test_select_succeed_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -1701,6 +1737,8 @@ fn test_select_succeed_complete() {
 
 #[test]
 fn test_select_one_indef_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -1803,6 +1841,8 @@ fn test_select_one_indef_complete_succeed() {
 
 #[test]
 fn test_select_succeed_complete_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -1903,6 +1943,8 @@ fn test_select_succeed_complete_indef() {
 
 #[test]
 fn test_select_indef_complete_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -2003,6 +2045,8 @@ fn test_select_indef_complete_indef() {
 
 #[test]
 fn test_select_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2117,6 +2161,8 @@ fn test_select_complete_retry() {
 
 #[test]
 fn test_select_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2231,6 +2277,8 @@ fn test_select_retry_complete() {
 
 #[test]
 fn test_select_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2343,6 +2391,8 @@ fn test_select_retry_complete_indef() {
 
 #[test]
 fn test_select_retry_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2484,6 +2534,8 @@ fn test_select_retry_complete_retry_complete() {
 
 #[test]
 fn test_select_retry_complete_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2623,6 +2675,8 @@ fn test_select_retry_complete_retry_complete_indef() {
 
 #[test]
 fn test_select_retry_indef_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -2764,6 +2818,8 @@ fn test_select_retry_indef_complete_retry_complete() {
 
 #[test]
 fn test_create_all_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -2874,6 +2930,8 @@ fn test_create_all_succeed() {
 
 #[test]
 fn test_create_succeed_subset_selected() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -2979,6 +3037,8 @@ fn test_create_succeed_subset_selected() {
 
 #[test]
 fn test_create_multi_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -3080,6 +3140,8 @@ fn test_create_multi_subset_succeed() {
 
 #[test]
 fn test_create_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -3222,6 +3284,8 @@ fn test_create_retry_succeed() {
 
 #[test]
 fn test_create_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -3366,6 +3430,8 @@ fn test_create_succeed_retry_succeed() {
 
 #[test]
 fn test_create_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -3542,6 +3608,8 @@ fn test_create_retry_retry_succeed() {
 
 #[test]
 fn test_create_one_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -3657,6 +3725,8 @@ fn test_create_one_permanent() {
 
 #[test]
 fn test_create_all_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -3817,6 +3887,8 @@ fn test_create_all_complete_succeed() {
 
 #[test]
 fn test_create_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -3973,6 +4045,8 @@ fn test_create_complete_succeed() {
 
 #[test]
 fn test_create_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -4141,6 +4215,8 @@ fn test_create_complete_retry() {
 
 #[test]
 fn test_create_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -4304,6 +4380,8 @@ fn test_create_retry_complete() {
 
 #[test]
 fn test_create_retry_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -4507,6 +4585,8 @@ fn test_create_retry_complete_retry_complete() {
 
 #[test]
 fn test_start_batch_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -4603,6 +4683,8 @@ fn test_start_batch_succeed() {
 
 #[test]
 fn test_start_batch_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -4692,6 +4774,8 @@ fn test_start_batch_subset_succeed() {
 
 #[test]
 fn test_start_batch_select_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -4815,6 +4899,8 @@ fn test_start_batch_select_retry_succeed() {
 
 #[test]
 fn test_start_batch_create_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -4948,6 +5034,8 @@ fn test_start_batch_create_retry_succeed() {
 
 #[test]
 fn test_start_batch_both_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -5105,6 +5193,8 @@ fn test_start_batch_both_retry_succeed() {
 
 #[test]
 fn test_start_batch_all_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -5182,6 +5272,8 @@ fn test_start_batch_all_indef() {
 
 #[test]
 fn test_start_batch_one_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -5271,6 +5363,8 @@ fn test_start_batch_one_indef() {
 
 #[test]
 fn test_start_batch_select_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -5363,6 +5457,8 @@ fn test_start_batch_select_permanent() {
 
 #[test]
 fn test_start_batch_create_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -5467,6 +5563,8 @@ fn test_start_batch_create_permanent() {
 
 #[test]
 fn test_start_batch_select_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -5597,6 +5695,8 @@ fn test_start_batch_select_complete_succeed() {
 
 #[test]
 fn test_start_batch_create_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -5737,6 +5837,8 @@ fn test_start_batch_create_complete_succeed() {
 
 #[test]
 fn test_start_batch_both_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -5909,6 +6011,8 @@ fn test_start_batch_both_complete_succeed() {
 
 #[test]
 fn test_start_batch_select_complete_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -6071,6 +6175,8 @@ fn test_start_batch_select_complete_complete() {
 
 #[test]
 fn test_start_batch_create_complete_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -6253,6 +6359,8 @@ fn test_start_batch_create_complete_complete() {
 
 #[test]
 fn test_start_batch_both_complete_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -6499,6 +6607,8 @@ fn test_start_batch_both_complete_complete() {
 
 #[test]
 fn test_start_batch_complete_indef_all() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -6603,6 +6713,8 @@ fn test_start_batch_complete_indef_all() {
 
 #[test]
 fn test_start_batch_succeed_complete_indef_one() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -6724,6 +6836,8 @@ fn test_start_batch_succeed_complete_indef_one() {
 
 #[test]
 fn test_start_batch_complete_indef_one() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -6859,6 +6973,8 @@ fn test_start_batch_complete_indef_one() {
 
 #[test]
 fn test_start_batch_select_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -7014,6 +7130,8 @@ fn test_start_batch_select_complete_retry() {
 
 #[test]
 fn test_start_batch_create_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -7189,6 +7307,8 @@ fn test_start_batch_create_complete_retry() {
 
 #[test]
 fn test_start_batch_both_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -7420,6 +7540,8 @@ fn test_start_batch_both_complete_retry() {
 
 #[test]
 fn test_start_batch_select_complete_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -7533,6 +7655,8 @@ fn test_start_batch_select_complete_permanent() {
 
 #[test]
 fn test_start_batch_create_complete_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -7656,6 +7780,8 @@ fn test_start_batch_create_complete_permanent() {
 
 #[test]
 fn test_start_batch_both_complete_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -7811,6 +7937,8 @@ fn test_start_batch_both_complete_permanent() {
 
 #[test]
 fn test_cancel_batch_all_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -7929,6 +8057,8 @@ fn test_cancel_batch_all_succeed() {
 
 #[test]
 fn test_cancel_batch_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -8040,6 +8170,8 @@ fn test_cancel_batch_subset_succeed() {
 
 #[test]
 fn test_cancel_batch_multi_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -8149,6 +8281,8 @@ fn test_cancel_batch_multi_subset_succeed() {
 
 #[test]
 fn test_cancel_batch_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -8315,6 +8449,8 @@ fn test_cancel_batch_retry_succeed() {
 
 #[test]
 fn test_cancel_batch_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -8471,6 +8607,8 @@ fn test_cancel_batch_succeed_retry_succeed() {
 
 #[test]
 fn test_cancel_batch_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -8667,6 +8805,8 @@ fn test_cancel_batch_retry_retry_succeed() {
 
 #[test]
 fn test_cancel_batch_one_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -8799,6 +8939,8 @@ fn test_cancel_batch_one_permanent() {
 
 #[test]
 fn test_cancel_batch_all_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -8984,6 +9126,8 @@ fn test_cancel_batch_all_complete_succeed() {
 
 #[test]
 fn test_cancel_batch_succeed_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -9151,6 +9295,8 @@ fn test_cancel_batch_succeed_complete() {
 
 #[test]
 fn test_cancel_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -9330,6 +9476,8 @@ fn test_cancel_batch_complete_retry() {
 
 #[test]
 fn test_cancel_batch_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -9566,6 +9714,8 @@ fn test_cancel_batch_retry_complete() {
 
 #[test]
 fn test_finish_batch_all_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -9690,6 +9840,8 @@ fn test_finish_batch_all_succeed() {
 
 #[test]
 fn test_finish_batch_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -9805,6 +9957,8 @@ fn test_finish_batch_subset_succeed() {
 
 #[test]
 fn test_finish_batch_multi_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -9918,6 +10072,8 @@ fn test_finish_batch_multi_subset_succeed() {
 
 #[test]
 fn test_finish_batch_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -10090,6 +10246,8 @@ fn test_finish_batch_retry_succeed() {
 
 #[test]
 fn test_finish_batch_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -10256,6 +10414,8 @@ fn test_finish_batch_succeed_retry_succeed() {
 
 #[test]
 fn test_finish_batch_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -10464,6 +10624,8 @@ fn test_finish_batch_retry_retry_succeed() {
 
 #[test]
 fn test_finish_batch_one_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -10600,6 +10762,8 @@ fn test_finish_batch_one_permanent() {
 
 #[test]
 fn test_finish_batch_all_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -10791,6 +10955,8 @@ fn test_finish_batch_all_complete_succeed() {
 
 #[test]
 fn test_finish_batch_succeed_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -10968,6 +11134,8 @@ fn test_finish_batch_succeed_complete() {
 
 #[test]
 fn test_finish_batch_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -11157,6 +11325,8 @@ fn test_finish_batch_complete_retry() {
 
 #[test]
 fn test_finish_batch_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -11401,6 +11571,8 @@ fn test_finish_batch_retry_complete() {
 
 #[test]
 fn test_add_all_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -11525,6 +11697,8 @@ fn test_add_all_succeed() {
 
 #[test]
 fn test_add_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Indef(())),
@@ -11640,6 +11814,8 @@ fn test_add_subset_succeed() {
 
 #[test]
 fn test_add_multi_subset_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -11753,6 +11929,8 @@ fn test_add_multi_subset_succeed() {
 
 #[test]
 fn test_add_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -11925,6 +12103,8 @@ fn test_add_retry_succeed() {
 
 #[test]
 fn test_add_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -12091,6 +12271,8 @@ fn test_add_succeed_retry_succeed() {
 
 #[test]
 fn test_add_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -12299,6 +12481,8 @@ fn test_add_retry_retry_succeed() {
 
 #[test]
 fn test_add_one_permanent() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -12435,6 +12619,8 @@ fn test_add_one_permanent() {
 
 #[test]
 fn test_add_all_complete_succeed() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -12625,6 +12811,8 @@ fn test_add_all_complete_succeed() {
 
 #[test]
 fn test_add_succeed_complete() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -12801,6 +12989,8 @@ fn test_add_succeed_complete() {
 
 #[test]
 fn test_add_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -12989,6 +13179,8 @@ fn test_add_complete_retry() {
 
 #[test]
 fn test_add_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![
@@ -13232,6 +13424,8 @@ fn test_add_retry_complete() {
 
 #[test]
 fn test_push_frags_all_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13361,6 +13555,8 @@ fn test_push_frags_all_succeed() {
 
 #[test]
 fn test_push_frags_subset_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13451,6 +13647,8 @@ fn test_push_frags_subset_succeed() {
 
 #[test]
 fn test_push_frags_all_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -13530,6 +13728,8 @@ fn test_push_frags_all_indef() {
 
 #[test]
 fn test_push_frags_subset_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13617,6 +13817,8 @@ fn test_push_frags_subset_indef() {
 
 #[test]
 fn test_push_frags_one_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13707,6 +13909,8 @@ fn test_push_frags_one_indef() {
 
 #[test]
 fn test_push_frags_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13818,6 +14022,8 @@ fn test_push_frags_retry_succeed() {
 
 #[test]
 fn test_push_frags_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -13926,6 +14132,8 @@ fn test_push_frags_succeed_retry_succeed() {
 
 #[test]
 fn test_push_frags_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14046,6 +14254,8 @@ fn test_push_frags_retry_retry_succeed() {
 
 #[test]
 fn test_push_frags_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14151,6 +14361,8 @@ fn test_push_frags_indef_retry_succeed() {
 
 #[test]
 fn test_push_frags_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14243,6 +14455,8 @@ fn test_push_frags_indef_retry_indef() {
 
 #[test]
 fn test_push_frags_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14351,6 +14565,8 @@ fn test_push_frags_succeed_retry_indef() {
 
 #[test]
 fn test_push_frags_indef_retry_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14465,6 +14681,8 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
 
 #[test]
 fn test_push_frags_indef_retry_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14572,6 +14790,8 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
 
 #[test]
 fn test_push_frags_indef_retry_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14686,6 +14906,8 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
 
 #[test]
 fn test_push_frags_one_permanent() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14785,6 +15007,8 @@ fn test_push_frags_one_permanent() {
 
 #[test]
 fn test_push_frags_all_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -14926,6 +15150,8 @@ fn test_push_frags_all_complete_succeed() {
 
 #[test]
 fn test_push_frags_succeed_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15059,6 +15285,8 @@ fn test_push_frags_succeed_complete() {
 
 #[test]
 fn test_push_frags_one_indef_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15186,6 +15414,8 @@ fn test_push_frags_one_indef_complete_succeed() {
 
 #[test]
 fn test_push_frags_one_succeed_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15314,6 +15544,8 @@ fn test_push_frags_one_succeed_complete_indef() {
 
 #[test]
 fn test_push_frags_one_indef_complete_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -15426,6 +15658,8 @@ fn test_push_frags_one_indef_complete_indef() {
 
 #[test]
 fn test_push_frags_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15590,6 +15824,8 @@ fn test_push_frags_complete_retry() {
 
 #[test]
 fn test_push_frags_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15751,6 +15987,8 @@ fn test_push_frags_retry_complete() {
 
 #[test]
 fn test_push_frags_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -15904,6 +16142,8 @@ fn test_push_frags_retry_complete_indef() {
 
 #[test]
 fn test_push_frags_retry_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16108,6 +16348,8 @@ fn test_push_frags_retry_complete_retry_complete() {
 
 #[test]
 fn test_push_frags_retry_complete_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16304,6 +16546,8 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
 
 #[test]
 fn test_push_frags_retry_indef_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16499,6 +16743,8 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
 
 #[test]
 fn test_push_offer_all_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16631,6 +16877,8 @@ fn test_push_offer_all_succeed() {
 
 #[test]
 fn test_push_offer_subset_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16723,6 +16971,8 @@ fn test_push_offer_subset_succeed() {
 
 #[test]
 fn test_push_offer_all_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -16804,6 +17054,8 @@ fn test_push_offer_all_indef() {
 
 #[test]
 fn test_push_offer_subset_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16893,6 +17145,8 @@ fn test_push_offer_subset_indef() {
 
 #[test]
 fn test_push_offer_one_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -16985,6 +17239,8 @@ fn test_push_offer_one_indef() {
 
 #[test]
 fn test_push_offer_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17098,6 +17354,8 @@ fn test_push_offer_retry_succeed() {
 
 #[test]
 fn test_push_offer_succeed_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17208,6 +17466,8 @@ fn test_push_offer_succeed_retry_succeed() {
 
 #[test]
 fn test_push_offer_retry_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17330,6 +17590,8 @@ fn test_push_offer_retry_retry_succeed() {
 
 #[test]
 fn test_push_offer_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17437,6 +17699,8 @@ fn test_push_offer_indef_retry_succeed() {
 
 #[test]
 fn test_push_offer_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17531,6 +17795,8 @@ fn test_push_offer_indef_retry_indef() {
 
 #[test]
 fn test_push_offer_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17641,6 +17907,8 @@ fn test_push_offer_succeed_retry_indef() {
 
 #[test]
 fn test_push_offer_indef_retry_indef_retry_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17757,6 +18025,8 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
 
 #[test]
 fn test_push_offer_indef_retry_indef_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17866,6 +18136,8 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
 
 #[test]
 fn test_push_offer_indef_retry_succeed_retry_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -17982,6 +18254,8 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
 
 #[test]
 fn test_push_offer_one_permanent() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18083,6 +18357,8 @@ fn test_push_offer_one_permanent() {
 
 #[test]
 fn test_push_offer_all_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18226,6 +18502,8 @@ fn test_push_offer_all_complete_succeed() {
 
 #[test]
 fn test_push_offer_succeed_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18361,6 +18639,8 @@ fn test_push_offer_succeed_complete() {
 
 #[test]
 fn test_push_offer_one_indef_complete_succeed() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18490,6 +18770,8 @@ fn test_push_offer_one_indef_complete_succeed() {
 
 #[test]
 fn test_push_offer_one_succeed_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18620,6 +18902,8 @@ fn test_push_offer_one_succeed_complete_indef() {
 
 #[test]
 fn test_push_offer_one_indef_complete_indef() {
+    init();
+
     let script_0 = TestPrivateStreamScript {
         select: vec![],
         create_batch: vec![],
@@ -18734,6 +19018,8 @@ fn test_push_offer_one_indef_complete_indef() {
 
 #[test]
 fn test_push_offer_complete_retry() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -18900,6 +19186,8 @@ fn test_push_offer_complete_retry() {
 
 #[test]
 fn test_push_offer_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -19063,6 +19351,8 @@ fn test_push_offer_retry_complete() {
 
 #[test]
 fn test_push_offer_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -19218,6 +19508,8 @@ fn test_push_offer_retry_complete_indef() {
 
 #[test]
 fn test_push_offer_retry_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -19425,6 +19717,8 @@ fn test_push_offer_retry_complete_retry_complete() {
 
 #[test]
 fn test_push_offer_retry_complete_retry_complete_indef() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],
@@ -19623,6 +19917,8 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
 #[test]
 fn test_push_offer_retry_indef_complete_retry_complete() {
+    init();
+
     let now = Instant::now();
     let script_0 = TestPrivateStreamScript {
         select: vec![],

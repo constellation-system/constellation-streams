@@ -21,8 +21,12 @@ use constellation_common::retry::RetryResult;
 use constellation_streams::frags::InboundFrags;
 use constellation_streams::frags::OutboundFrags;
 
+use crate::init;
+
 #[test]
 fn test_offer_frag_exact() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
 
     let first = frags.offer_frag(16).expect("Expected success");
@@ -32,6 +36,8 @@ fn test_offer_frag_exact() {
 
 #[test]
 fn test_offer_frag_short() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 8]);
 
     let first = frags.offer_frag(16).expect("Expected success");
@@ -41,6 +47,8 @@ fn test_offer_frag_short() {
 
 #[test]
 fn test_offer_frag_multi() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 40]);
 
     let first = frags.offer_frag(16).expect("Expected success");
@@ -58,6 +66,8 @@ fn test_offer_frag_multi() {
 
 #[test]
 fn test_data_frags_exact() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
     let mut buf = [(0, 0); 1];
 
@@ -69,6 +79,8 @@ fn test_data_frags_exact() {
 
 #[test]
 fn test_data_frags_short() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 8]);
     let mut buf = [(0, 0); 1];
 
@@ -80,6 +92,8 @@ fn test_data_frags_short() {
 
 #[test]
 fn test_data_frags_ack() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 16]);
     let mut buf = [(0, 0); 1];
 
@@ -93,6 +107,8 @@ fn test_data_frags_ack() {
 
 #[test]
 fn test_data_frags_ack_exact() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
     let mut buf = [(0, 0); 2];
 
@@ -107,6 +123,8 @@ fn test_data_frags_ack_exact() {
 
 #[test]
 fn test_data_frags_ack_long() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 24]);
     let mut buf = [(0, 0); 2];
 
@@ -121,6 +139,8 @@ fn test_data_frags_ack_long() {
 
 #[test]
 fn test_data_frags_ack_exact_wrap() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
     let mut buf = [(0, 0); 2];
 
@@ -141,6 +161,8 @@ fn test_data_frags_ack_exact_wrap() {
 
 #[test]
 fn test_data_frags_ack_gap_wrap() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 24]);
     let mut buf = [(0, 0); 2];
 
@@ -163,6 +185,8 @@ fn test_data_frags_ack_gap_wrap() {
 
 #[test]
 fn test_data_frags_ack_req_wrap() {
+    init();
+
     let mut frags = OutboundFrags::new(Retry::default(), vec![0; 20]);
     let mut buf = [(0, 0); 2];
 
@@ -184,6 +208,8 @@ fn test_data_frags_ack_req_wrap() {
 
 #[test]
 fn test_reqs_exact() {
+    init();
+
     let retry = Retry::default();
     let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];
@@ -196,6 +222,8 @@ fn test_reqs_exact() {
 
 #[test]
 fn test_reqs_exact_recv_first() {
+    init();
+
     let retry = Retry::default();
     let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
@@ -211,6 +239,8 @@ fn test_reqs_exact_recv_first() {
 
 #[test]
 fn test_reqs_exact_recv_second() {
+    init();
+
     let retry = Retry::default();
     let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 2];
@@ -226,6 +256,8 @@ fn test_reqs_exact_recv_second() {
 
 #[test]
 fn test_reqs_exact_recv_cont() {
+    init();
+
     let retry = Retry::default();
     let mut frags = InboundFrags::new(16);
     let mut buf = [(false, 0, 0); 1];

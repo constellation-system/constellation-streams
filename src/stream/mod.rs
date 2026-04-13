@@ -140,7 +140,7 @@ pub trait StreamRefresh<Ctx>
 /// linearization point).
 pub trait PushStream<Ctx> {
     /// ID for batches.
-    type BatchID: Clone;
+    type BatchID: Clone + Debug;
     /// Type of errors that can occur when canceling a batch.
     type CancelBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a new batch.

@@ -66,7 +66,7 @@ use crate::threads::PushMode;
 
 pub trait PrivateLargeObjPushModeTypes<Ctx> {
     type Frags: Frags;
-    type BatchID: Clone;
+    type BatchID: Clone + Debug;
     type HashID: Clone + Debug + Display + Hash + HashID + Eq;
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
     type AddErrorCompletable: ScopedError;
@@ -253,7 +253,7 @@ enum PushEntryRecoverableError<Msgs, ID, Flags, Msg, Batch, Add, Finish> {
 
 /// Type of permanent errors that can occur creating and sending a batch.
 #[derive(Debug)]
-pub enum PushEntryError<Batch, Add, Finish> {
+pub enum PushEntryError<ID, Batch, Add, Finish> {
     /// An error occurred creating the batch.
     Batch {
         /// The error that occurred creating the batch.
@@ -261,11 +261,15 @@ pub enum PushEntryError<Batch, Add, Finish> {
     },
     /// An error occurred adding messages.
     Add {
+        /// Batch ID to which the error corresponds.
+        batch_id: ID,
         /// The error that occurred adding messages.
         err: Add
     },
     /// An error occurred finishing the batch.
     Finish {
+        /// Batch ID to which the error corresponds.
+        batch_id: ID,
         /// The error that occurred finishing the batch.
         err: Finish
     }
@@ -900,6 +904,30 @@ where
                    permanent);
 
             // XXX Abort the batch here if necessary
+
+            // Report the error.
+            match permanent {
+                PushEntryError::Batch { err } => if let Err(err) = stream
+                    .report_error(&err) {
+                    error!(target: "private-datagram-push-mode",
+                           "failure reporting error to stream: {}",
+                           err);
+                },
+                PushEntryError::Add { batch_id, err } =>
+                    if let Err(err) = stream
+                    .report_error_with_batch(&batch_id, &err) {
+                        error!(target: "private-datagram-push-mode",
+                               "failure reporting error to stream: {}",
+                               err);
+                    },
+                PushEntryError::Finish { batch_id, err } =>
+                    if let Err(err) = stream
+                    .report_error_with_batch(&batch_id, &err) {
+                        error!(target: "private-datagram-push-mode",
+                               "failure reporting error to stream: {}",
+                               err);
+                    },
+            }
         }
 
         if let Some(completable) = completable {
@@ -1178,7 +1206,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.pending.last().is_some_and(|ent| now > ent.when()) {
+        while self.pending.last().is_some_and(|ent| now >= ent.when()) {
             debug!(target: "private-datagram-push-mode",
                    "retrying pending operation");
 
@@ -2091,7 +2119,8 @@ impl<Msgs, ID, Flags, Msg, Batch, Add, Finish> RecoverableError
 where
     Finish: RecoverableError,
     Batch: RecoverableError,
-    Add: RecoverableError
+    Add: RecoverableError,
+    ID: Clone + Debug
 {
     type Completable = PushEntryRecoverableError<
         Msgs,
@@ -2103,6 +2132,7 @@ where
         Finish::Completable
     >;
     type Permanent = PushEntryError<
+        ID,
         Batch::Permanent,
         Add::Permanent,
         Finish::Permanent
@@ -2125,29 +2155,36 @@ where
                 let (completable, permanent) = err.split();
 
                 (completable.map(|err| PushEntryRecoverableError::Add {
-                    batch_id: batch_id,
+                    batch_id: batch_id.clone(),
                     flags: flags,
                     msgs: msgs,
                     msg: msg,
                     err: err
                 }),
-                 permanent.map(|err| PushEntryError::Add { err: err }))
+                 permanent.map(|err| PushEntryError::Add {
+                     batch_id: batch_id,
+                     err: err
+                 }))
             }
             PushEntryRecoverableError::Finish { batch_id, flags, err } => {
                 let (completable, permanent) = err.split();
 
                 (completable.map(|err| PushEntryRecoverableError::Finish {
-                    batch_id: batch_id,
+                    batch_id: batch_id.clone(),
                     flags: flags,
                     err: err
                 }),
-                 permanent.map(|err| PushEntryError::Finish { err: err }))
+                 permanent.map(|err| PushEntryError::Finish {
+                     batch_id: batch_id,
+                     err: err
+                 }))
             }
         }
     }
 }
 
-impl<Batch, Add, Finish> ScopedError for PushEntryError<Batch, Add, Finish>
+impl<ID, Batch, Add, Finish> ScopedError
+    for PushEntryError<ID, Batch, Add, Finish>
 where
     Finish: ScopedError,
     Batch: ScopedError,
@@ -2155,9 +2192,9 @@ where
 {
     fn scope(&self) -> ErrorScope {
         match self {
-            PushEntryError::Finish { err } => err.scope(),
+            PushEntryError::Finish { err, .. } => err.scope(),
             PushEntryError::Batch { err } => err.scope(),
-            PushEntryError::Add { err } => err.scope()
+            PushEntryError::Add { err, .. } => err.scope()
         }
     }
 }
@@ -2175,7 +2212,7 @@ where
     }
 }
 
-impl<Batch, Add, Finish> Display for PushEntryError<Batch, Add, Finish>
+impl<ID, Batch, Add, Finish> Display for PushEntryError<ID, Batch, Add, Finish>
 where
     Finish: Display,
     Batch: Display,
@@ -2186,9 +2223,9 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            PushEntryError::Finish { err } => err.fmt(f),
+            PushEntryError::Finish { err, .. } => err.fmt(f),
             PushEntryError::Batch { err } => err.fmt(f),
-            PushEntryError::Add { err } => err.fmt(f)
+            PushEntryError::Add { err, .. } => err.fmt(f)
         }
     }
 }

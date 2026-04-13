@@ -55,7 +55,6 @@ use crate::error::SelectionsError;
 use crate::frags::Frags;
 use crate::generated::large_obj::LargeObjFragReq;
 use crate::large_obj::LargeObjID;
-use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
 use crate::stream::LargeObjOfferStream;
