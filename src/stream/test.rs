@@ -153,6 +153,8 @@ where H: HashID {
     pub frags: Rc<Vec<LargeObjID>>,
     pub offers: Rc<Vec<H>>,
     pub failures: Rc<Vec<usize>>,
+    pub batch_reports: Rc<Vec<(usize, TestPermanentError)>>,
+    pub reports: Rc<Vec<TestPermanentError>>,
     script: Rc<TestSharedStreamScript<In>>,
     parties: Vec<(usize, ())>
 }
@@ -424,6 +426,8 @@ where H: HashID {
             batches: Rc::new(Vec::new()),
             frags: Rc::new(Vec::new()),
             offers: Rc::new(Vec::new()),
+            batch_reports: Rc::new(Vec::new()),
+            reports: Rc::new(Vec::new()),
             script: Rc::new(script),
             parties: parties
         }
@@ -2232,6 +2236,83 @@ where Out: Clone,
         }
     }
 }
+
+impl<In, Out, H> PushStreamReportBatchError<TestPermanentError, usize>
+    for TestSharedStream<In, Out, H>
+where H: HashID {
+    type ReportBatchError = TestReportBatchError;
+
+    fn report_error_with_batch(
+       &mut self,
+        batch: &usize,
+        error: &TestPermanentError
+    ) -> Result<(), Self::ReportBatchError> {
+       Rc::get_mut(&mut self.batch_reports)
+            .expect("get_mut failed")
+            .push((*batch, error.clone()));
+
+       Ok(())
+    }
+}
+
+impl<In, Out, H> PushStreamReportError<TestPermanentError>
+   for TestSharedStream<In, Out, H>
+where H: HashID {
+    type ReportError = Infallible;
+
+   fn report_error(
+        &mut self,
+        error: &TestPermanentError
+    ) -> Result<(), Self::ReportError> {
+        Rc::get_mut(&mut self.reports)
+           .expect("get_mut failed")
+            .push(error.clone());
+
+        Ok(())
+    }
+}
+
+impl<In, Out, H> PushStreamReportError<TestPermanentBatchError>
+    for TestSharedStream<In, Out, H>
+where H: HashID {
+    type ReportError = TestReportBatchError;
+
+    fn report_error(
+       &mut self,
+        error: &TestPermanentBatchError
+    ) -> Result<(), Self::ReportError> {
+       let batch = error.batch;
+        let error = TestPermanentError {
+            scope: error.scope.clone()
+        };
+
+        self.report_error_with_batch(&batch, &error)
+    }
+}
+
+impl<In, Out, H> PushStreamReportError<
+        TestStartBatchError<TestPermanentError, TestPermanentBatchError, ()>
+   >
+    for TestSharedStream<In, Out, H>
+where H: HashID {
+    type ReportError = TestReportBatchError;
+    fn report_error(
+        &mut self,
+        error: &TestStartBatchError<TestPermanentError,
+                                   TestPermanentBatchError, ()>
+    ) -> Result<(), Self::ReportError> {
+        match error {
+            TestStartBatchError::Select { err, .. } => {
+               let Ok(res) = self.report_error(err);
+
+                Ok(res)
+            },
+            TestStartBatchError::Create { err, .. } =>
+                self.report_error(err),
+        }
+    }
+}
+
 
 impl<Ctx, In, Out, H> LargeObjOfferStream<H, Ctx>
     for TestPrivateStream<In, Out, H>
