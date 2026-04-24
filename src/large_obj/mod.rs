@@ -87,9 +87,11 @@ use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
+pub mod test;
+
 pub trait LargeObjMsgs<H, Msg>: Sized
 where
-    H: Clone + HashAlgo,
+    H: HashAlgo + Clone,
     H::HashID: Clone + Display + Hash + HashID + Eq {
     type AddMsgsError<Encode>: Debug + Display + ScopedError
     where
@@ -120,22 +122,19 @@ pub trait LargeObjProtoTypes<InMsg, OutMsg> {
     type Wrapper;
     type DecoderConfig: Default;
     type DecodeError: Debug + Display;
-    type Decoder: Clone
-        + Create<Config = Self::DecoderConfig>
+    type Decoder: Create<Config = Self::DecoderConfig>
         + Decoder<Self::Wrapper, DecodeError = Self::DecodeError>;
     type EncoderConfig: Default;
     type EncodeError: Debug + Display + ScopedError;
-    type Encoder: Clone
-        + Create<Config = Self::EncoderConfig>
+    type Encoder: Clone + Create<Config = Self::EncoderConfig>
         + Encoder<OutMsg, EncodeError = Self::EncodeError>;
     /// Type of message source.
-    type Msgs: Clone + LargeObjMsgs<Self::Hash, OutMsg>;
+    type Msgs: LargeObjMsgs<Self::Hash, OutMsg>;
     /// Type of message receiver.
     type Recv: AuthNMsgRecv<Self::Prin, InMsg, Self::AuthNMsg> + Clone;
     type AuthNMsg: AuthNed<Self::Prin, InMsg>;
     type AuthNError: Debug + Display;
-    type MsgAuthN: Clone
-        + MsgAuthN<
+    type MsgAuthN: MsgAuthN<
             InMsg,
             Self::Wrapper,
             SessionPrin = Self::SessionPrin,
@@ -426,7 +425,7 @@ pub enum FragsOrOffer<HashID, Frags, Offer> {
         err: Offer
     }
 }
-
+/*
 impl<InMsg, OutMsg, PartyID, F, Types> Clone
     for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
@@ -455,7 +454,7 @@ where
         }
     }
 }
-
+*/
 impl From<usize> for LargeObjID {
     #[inline]
     fn from(val: usize) -> LargeObjID {
@@ -708,7 +707,7 @@ where
         Self::MsgsError
     > {
         debug!(target: "large-obj-proto",
-               "collecting outbound messages");
+               "collecting shared outbound messages");
 
         let mut next = self
             .msgs
@@ -880,7 +879,7 @@ where
         Self::MsgsError
     > {
         debug!(target: "large-obj-proto",
-               "collecting outbound messages");
+               "collecting private outbound messages");
 
         let mut next = self
             .msgs
@@ -1861,7 +1860,7 @@ where
             })
     }
 
-    fn recv_offer_msg(
+    pub fn recv_offer_msg(
         &mut self,
         prin: &<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
         hash: Types::HashID,
@@ -2059,7 +2058,7 @@ where
         Ok(out)
     }
 
-    fn recv_frags_msg(
+    pub fn recv_frags_msg(
         &mut self,
         id: LargeObjID,
         recv: Vec<LargeObjFrag>
@@ -2172,7 +2171,7 @@ where
         }
     }
 
-    fn recv_accept_msg(
+    pub fn recv_accept_msg(
         &mut self,
         hash: Types::HashID,
         id: LargeObjID
@@ -2221,7 +2220,7 @@ where
         }
     }
 
-    fn recv_req_obj_msg(
+    pub fn recv_req_obj_msg(
         &mut self,
         hash: Types::HashID,
         id: LargeObjID
@@ -2252,6 +2251,7 @@ where
         let valid = match outbound.objs.get_mut(&hash) {
             Some(ent) => {
                 ent.id = Some(id.clone());
+                ent.when = Some(Instant::now());
 
                 true
             }
@@ -2268,7 +2268,7 @@ where
                 }
                 Entry::Vacant(ent) => {
                     debug!(target: "large-obj-proto",
-                           "received object request for {} (ID {})",
+                           "new request for {} (ID {})",
                            hash, id);
 
                     ent.insert(hash);
@@ -2291,7 +2291,7 @@ where
         }
     }
 
-    fn recv_reqs_msg(
+    pub fn recv_reqs_msg(
         &mut self,
         id: LargeObjID,
         reqs: Vec<LargeObjFragReq>
@@ -2360,7 +2360,7 @@ where
         }
     }
 
-    fn recv_finish_msg(
+    pub fn recv_finish_msg(
         &mut self,
         hash: Types::HashID,
         id: LargeObjID

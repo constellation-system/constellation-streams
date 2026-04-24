@@ -66,7 +66,7 @@ use crate::threads::PushMode;
 
 pub trait PrivateLargeObjPushModeTypes<Ctx> {
     type Frags: Frags;
-    type BatchID: Clone + Debug;
+    type BatchID: Clone + Debug + Display;
     type HashID: Clone + Debug + Display + Hash + HashID + Eq;
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
     type AddErrorCompletable: ScopedError;
@@ -334,6 +334,7 @@ where
         >
         + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>,
+    Stream::BatchID: Display,
     Msg: Clone
 {
     fn complete_cancel(
@@ -356,7 +357,8 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while cancelling message");
+               "attempting to recover from error while cancelling batch {}",
+               batch_id);
 
         match stream.complete_cancel_batch(ctx, &mut flags, &batch_id, err) {
             // It succeeded.
@@ -368,6 +370,10 @@ where
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying cancelling of batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Cancel {
                     batch: batch_id,
                     retry: retry,
@@ -400,13 +406,27 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "cancelling batch {}",
+               batch_id);
+
         let mut flags = stream.empty_flags();
 
         match stream.cancel_batch(ctx, &mut flags, &batch_id) {
             // It succeeded.
-            Ok(RetryResult::Success(_)) => Ok(RetryResult::Success(())),
+            Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "successfully cancelled batch {}",
+                       batch_id);
+
+                Ok(RetryResult::Success(()))
+            },
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying cancelling of batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Cancel {
                     batch: batch_id,
                     retry: retry,
@@ -426,13 +446,24 @@ where
         stream: &mut Stream,
         err: <Stream::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self> {
+        trace!(target: "push-entry",
+               "aborting starting batch");
+
         let mut flags = stream.empty_flags();
 
         match stream.abort_start_batch(ctx, &mut flags, err) {
             // It succeeded.
-            RetryResult::Success(_) => RetryResult::Success(()),
+            RetryResult::Success(_) => {
+                trace!(target: "push-entry",
+                       "aborted starting batch");
+
+                RetryResult::Success(())
+            },
             // We got a retry.
             RetryResult::Retry(retry) => {
+                trace!(target: "push-entry",
+                       "delaying abort starting batch");
+
                 RetryResult::Retry(PushEntry::Abort {
                     retry: retry,
                     flags: flags
@@ -461,18 +492,24 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while finishing batch");
+               "attempting to recover from error while finishing batch {}",
+               batch_id);
 
         match stream.complete_finish_batch(ctx, &mut flags, &batch_id, err) {
             // It succeeded.
             Ok(RetryResult::Success(())) => {
                 trace!(target: "push-entry",
-                       "successfully finished batch");
+                       "successfully finished batch, {}",
+                       batch_id);
 
                 Ok(RetryResult::Success(()))
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying finishing batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Finish {
                     batch: batch_id,
                     retry: retry
@@ -503,13 +540,27 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "finishing batch {}",
+               batch_id);
+
         let mut flags = stream.empty_flags();
 
         match stream.finish_batch(ctx, &mut flags, &batch_id) {
             // It succeeded.
-            Ok(RetryResult::Success(_)) => Ok(RetryResult::Success(())),
+            Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "finished batch {}",
+                       batch_id);
+
+                Ok(RetryResult::Success(()))
+            },
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying finishing batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Finish {
                     batch: batch_id.clone(),
                     retry: retry
@@ -545,18 +596,25 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while adding message");
+               "attempting to recover from error while \
+                adding message to batch {}",
+               batch_id);
 
         match stream.complete_add(ctx, &mut flags, &msg, &batch_id, err) {
             // It succeeded.
             Ok(RetryResult::Success(())) => {
                 trace!(target: "push-entry",
-                       "successfully added message");
+                       "successfully added message to batch {}",
+                       batch_id);
 
                 Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying adding message to batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Add {
                     msgs: msgs,
                     msg: msg,
@@ -595,13 +653,25 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "adding message to batch {}",
+               batch_id);
+
         match stream.add(ctx, &mut flags, &msg, &batch_id) {
             // It succeeded.
             Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "added message to batch {}",
+                       batch_id);
+
                 Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying adding message to batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Add {
                     msgs: msgs,
                     msg: msg,
@@ -673,13 +743,17 @@ where
             // It succeeded.
             Ok(RetryIndefResult::Success(batch_id)) => {
                 trace!(target: "push-entry",
-                       "successfully created batch");
+                       "successfully created batch {}",
+                       batch_id);
 
                 Self::try_add(ctx, stream, msgs, batch_id)
                     .map(RetryIndefResult::from)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying creating batch");
+
                 Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
@@ -711,14 +785,24 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "creating batch");
+
         match stream.start_batch(ctx) {
             // It succeeded.
             Ok(RetryIndefResult::Success(batch_id)) => {
+                trace!(target: "push-entry",
+                       "created batch {}",
+                       batch_id);
+
                 Self::try_add(ctx, stream, msgs, batch_id)
                     .map(RetryIndefResult::from)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying creating batch");
+
                 Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
@@ -935,6 +1019,7 @@ where
         >
         + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>,
+    Stream::BatchID: Display,
     <Stream::StartBatchError as RecoverableError>::Completable: ScopedError,
     <Stream::AddError as RecoverableError>::Completable: ScopedError,
     <Stream::FinishBatchError as RecoverableError>::Completable: ScopedError,
@@ -1032,6 +1117,9 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "private-datagram-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.completes {
                     completes.push(completable)
                 } else {
@@ -1047,11 +1135,17 @@ where
 
                 next
             } else {
+                trace!(target: "private-datagram-push-mode",
+                       "completing error immediately");
+
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed operation");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1060,6 +1154,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed operation indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -1203,6 +1300,7 @@ where
         >
         + PushStreamAdd<Msg, Ctx>
         + PushStreamPrivate<Ctx>,
+    Stream::BatchID: Display,
     <Stream::StartBatchError as RecoverableError>::Completable: ScopedError,
     <Stream::AddError as RecoverableError>::Completable: ScopedError,
     <Stream::FinishBatchError as RecoverableError>::Completable: ScopedError,
@@ -1238,6 +1336,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying send");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1246,6 +1347,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying send indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -1334,6 +1438,9 @@ where
                 Ok(RetryIndefResult::Success(())) => {}
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "private-datagram-push-mode",
+                           "delaying retried send");
+
                     let when = retry.when();
 
                     self.pending.push(retry);
@@ -1341,6 +1448,9 @@ where
                 },
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(msgs)) => {
+                    trace!(target: "private-datagram-push-mode",
+                           "delaying retried send indefinitely");
+
                     let ent = IndefEntry {
                         origin: Instant::now(),
                         msgs: msgs
@@ -1379,6 +1489,9 @@ where
         _live: &HashSet<Token>,
     ) -> Result<Option<Instant>, Self::RetryError> {
         if let Some(completes) = self.completes.take() {
+            debug!(target: "private-datagram-push-mode",
+                   "completing pending operations");
+
             let mut next = None;
 
             // First complete any pending messages.
@@ -1388,6 +1501,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed send");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1396,6 +1512,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed send indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -1438,12 +1557,18 @@ where
         let mut out = None;
 
         if let Some(indefs) = self.indefs.take() {
+            debug!(target: "private-datagram-push-mode",
+                   "retrying indefinitely delayed operations");
+
             for IndefEntry { msgs, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => {},
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying retried send");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1452,6 +1577,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying retried send indefinitely");
+
                         let ent = IndefEntry {
                             origin: origin,
                             msgs: msgs
@@ -1524,6 +1652,9 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "private-datagram-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.msgs_completes {
                     completes.push(completable)
                 } else {
@@ -1539,11 +1670,17 @@ where
 
                 None
             } else {
+                trace!(target: "private-datagram-push-mode",
+                       "completing error immediately");
+
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed offer");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -1552,6 +1689,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed offer indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -1620,6 +1760,9 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "private-datagram-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.frags_completes {
                     completes.push(completable)
                 } else {
@@ -1635,18 +1778,27 @@ where
 
                 None
             } else {
+                trace!(target: "private-datagram-push-mode",
+                       "completing error immediately");
+
                 match LargeObjEntry::complete_send(ctx, stream, proto,
                                                    completable) {
                     // Succeeded; nothing to do.
                     Ok(RetryIndefResult::Success((next, _))) => next,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed frags");
+
                         self.frags_pending.push(retry);
 
                         None
                     }
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(_)) => {
+                        trace!(target: "private-datagram-push-mode",
+                               "delaying completed frags indefinitely");
+
                         self.frags_indef = true;
 
                         None
@@ -1797,6 +1949,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying protocol messages");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -1805,6 +1960,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying protocol messages indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -1847,12 +2005,18 @@ where
                 Ok(RetryIndefResult::Success((next, _))) => next,
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying data fragments");
+
                     self.frags_pending.push(retry);
 
                     None
                 }
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(_)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying data fragments indefinitely");
+
                     self.frags_indef = true;
 
                     None
@@ -1925,6 +2089,9 @@ where
                 Ok(RetryIndefResult::Success(())) => {}
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried protocol messages");
+
                     let when = retry.when();
 
                     self.msgs_pending.push(retry);
@@ -1932,6 +2099,9 @@ where
                 },
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(msgs)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried protocol messages indefinitely");
+
                     let ent = IndefEntry {
                         origin: Instant::now(),
                         msgs: msgs
@@ -2003,10 +2173,16 @@ where
                 },
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried data fragments");
+
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(_)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried data fragments indefinitely");
+
                     self.frags_indef = true;
                 }
                 // Error occurred.
@@ -2037,6 +2213,9 @@ where
         let mut next = None;
 
         if let Some(completes) = self.msgs_completes.take() {
+            debug!(target: "private-large-obj-push-mode",
+                   "completing pending operations");
+
             // First complete any pending messages.
             for complete in completes.into_iter() {
                 let retry = match PushEntry::complete(ctx, stream, complete) {
@@ -2044,6 +2223,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying completed protocol messages");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -2052,6 +2234,10 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying completed protocol \
+                                messages indefinitely");
+
                         let ent = IndefEntry {
                             origin: Instant::now(),
                             msgs: msgs
@@ -2090,6 +2276,9 @@ where
                     Ok(RetryIndefResult::Success((next, _))) => next,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying completed data fragments");
+
                         let when = retry.when();
 
                         self.frags_pending.push(retry);
@@ -2098,6 +2287,10 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(_)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying completed data \
+                                fragments indefinitely");
+
                         self.frags_indef = true;
 
                         None
@@ -2128,12 +2321,18 @@ where
         let mut out = None;
 
         if let Some(indefs) = self.msgs_indefs.take() {
+            debug!(target: "private-large-obj-push-mode",
+                   "retrying pending indefinitely delayed operations");
+
             for IndefEntry { msgs, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => {},
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying retried protocol messages");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -2142,6 +2341,10 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef(msgs)) => {
+                        trace!(target: "private-large-obj-push-mode",
+                               "delaying retried protocol \
+                                messages indefinitely");
+
                         let ent = IndefEntry {
                             origin: origin,
                             msgs: msgs
@@ -2174,6 +2377,8 @@ where
         }
 
         if self.frags_indef {
+            self.frags_indef = false;
+
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
                 Ok(RetryIndefResult::Success((when, _))) => {
@@ -2181,10 +2386,16 @@ where
                 },
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried data fragments");
+
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
                 Ok(RetryIndefResult::Indef(_)) => {
+                    trace!(target: "private-large-obj-push-mode",
+                           "delaying retried data fragments indefinitely");
+
                     self.frags_indef = true;
                 }
                 // Error occurred.
@@ -2192,8 +2403,6 @@ where
                     self.handle_frags_error::<_, _, LargeObjTypes>(ctx, stream, proto, err);
                 }
             }
-
-            self.frags_indef = false
         }
 
         Ok(out)

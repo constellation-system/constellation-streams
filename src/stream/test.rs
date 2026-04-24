@@ -19,8 +19,11 @@
 use std::convert::Infallible;
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::fmt::Debug;
 use std::fmt::Error;
 use std::fmt::Formatter;
+use std::hash::Hash;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -30,10 +33,12 @@ use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 
 use crate::frags::OutboundFrags;
 use crate::large_obj::LargeObjID;
+use crate::large_obj::LargeObjMsg;
 use crate::stream::LargeObjStream;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
@@ -46,6 +51,7 @@ use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
+use crate::threads::private::PrivateLargeObjPushModeTypes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TestPrivateBatchState<T> {
@@ -99,6 +105,13 @@ where H: HashID {
     pub batch_reports: Rc<Vec<(usize, TestPermanentError)>>,
     pub reports: Rc<Vec<TestPermanentError>>,
     script: Rc<TestPrivateStreamScript<In>>
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct TestLargeObjPushModeTypes<In, H>
+where H: HashAlgo {
+    msg: PhantomData<In>,
+    hash: PhantomData<H>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -293,6 +306,40 @@ pub enum TestIndefPartiesAction {
     Error {
         err: Box<TestError<TestIndefPartiesAction>>
     }
+}
+
+impl<Ctx, In, H> PrivateLargeObjPushModeTypes<Ctx>
+    for TestLargeObjPushModeTypes<In, H>
+where H: Clone + HashAlgo,
+      H::HashID: Clone + Debug + Display + Eq + Hash,
+      In: Clone {
+    type Frags = OutboundFrags;
+    type BatchID = usize;
+    type HashID = H::HashID;
+    type Hash = H;
+    type StreamFlags = ();
+    type StartBatchError = TestStartBatchError<
+        TestError<TestIndefAction<()>>,
+        TestBatchError<TestAction<()>>,
+        ()
+    >;
+    type StartBatchErrorCompletable =
+        TestStartBatchError<TestCompletableError<TestIndefAction<()>>,
+                            TestCompletableError<TestAction<()>>,
+                            ()>;
+    type CancelBatchErrorCompletable = TestCompletableError<TestAction<()>>;
+    type CancelBatchError = TestError<TestAction<()>>;
+    type FinishBatchErrorCompletable = TestCompletableError<TestAction<()>>;
+    type FinishBatchError = TestError<TestAction<()>>;
+    type AddErrorCompletable = TestCompletableError<TestAction<()>>;
+    type AddError = TestError<TestAction<()>>;
+    type PushFragError = TestError<TestIndefAction<Option<Instant>>>;
+    type PushFragErrorCompletable =
+        TestCompletableError<TestIndefAction<Option<Instant>>>;
+    type PushOfferError = TestError<TestIndefAction<Option<Instant>>>;
+    type PushOfferErrorCompletable =
+        TestCompletableError<TestIndefAction<Option<Instant>>>;
+    type Stream = TestPrivateStream<In, LargeObjMsg<H::HashID>, H::HashID>;
 }
 
 impl<In, Out, H> PushStreamReportBatchError<TestPermanentError, usize>
@@ -539,8 +586,8 @@ where Select: RecoverableError,
       Selections: Clone
 {
     type Completable = TestStartBatchError<Select::Completable,
-                                                  Create::Completable,
-                                                  Selections>;
+                                           Create::Completable,
+                                           Selections>;
     type Permanent = TestStartBatchError<Select::Permanent,
                                                 Create::Permanent,
                                                 ()>;
