@@ -520,6 +520,17 @@ where
 
 impl LargeObjFrag {
     #[inline]
+    pub fn new(
+        offset: u64,
+        data: Vec<u8>
+    ) -> Self {
+        LargeObjFrag {
+            offset: offset,
+            data: data
+        }
+    }
+
+    #[inline]
     pub fn offset(&self) -> u64 {
         self.offset
     }
