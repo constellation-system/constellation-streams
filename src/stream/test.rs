@@ -52,6 +52,7 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::threads::private::PrivateLargeObjPushModeTypes;
+use crate::threads::shared::SharedLargeObjPushModeTypes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TestPrivateBatchState<T> {
@@ -340,6 +341,44 @@ where H: Clone + HashAlgo,
     type PushOfferErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
     type Stream = TestPrivateStream<In, LargeObjMsg<H::HashID>, H::HashID>;
+}
+
+impl<Ctx, In, H> SharedLargeObjPushModeTypes<Ctx>
+    for TestLargeObjPushModeTypes<In, H>
+where H: Clone + HashAlgo,
+      H::HashID: Clone + Debug + Display + Eq + Hash,
+      In: Clone {
+    type PartyID = usize;
+    type Parties = Vec<usize>;
+    type IndefParties = Vec<usize>;
+    type PartiesError = Infallible;
+    type Frags = OutboundFrags;
+    type BatchID = usize;
+    type HashID = H::HashID;
+    type Hash = H;
+    type StreamFlags = bool;
+    type StartBatchError = TestStartBatchError<
+        TestError<TestIndefPartiesAction>,
+        TestBatchError<TestAction<()>>,
+        Vec<usize>
+    >;
+    type StartBatchErrorCompletable =
+        TestStartBatchError<TestCompletableError<TestIndefPartiesAction>,
+                            TestCompletableError<TestAction<()>>,
+                            Vec<usize>>;
+    type CancelBatchErrorCompletable = TestCompletableError<TestAction<()>>;
+    type CancelBatchError = TestError<TestAction<()>>;
+    type FinishBatchErrorCompletable = TestCompletableError<TestAction<()>>;
+    type FinishBatchError = TestError<TestAction<()>>;
+    type AddErrorCompletable = TestCompletableError<TestAction<()>>;
+    type AddError = TestError<TestAction<()>>;
+    type PushFragError = TestError<TestIndefAction<Option<Instant>>>;
+    type PushFragErrorCompletable =
+        TestCompletableError<TestIndefAction<Option<Instant>>>;
+    type PushOfferError = TestError<TestIndefAction<Option<Instant>>>;
+    type PushOfferErrorCompletable =
+        TestCompletableError<TestIndefAction<Option<Instant>>>;
+    type Stream = TestSharedStream<In, LargeObjMsg<H::HashID>, H::HashID>;
 }
 
 impl<In, Out, H> PushStreamReportBatchError<TestPermanentError, usize>

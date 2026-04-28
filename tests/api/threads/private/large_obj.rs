@@ -15309,8 +15309,6 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
     init();
 
     let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -15402,7 +15400,6 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -15507,7 +15504,6 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -15601,7 +15597,6 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Completable {
@@ -15708,7 +15703,6 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -15802,7 +15796,6 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16001,9 +15994,6 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
 fn test_send_from_outbound_msg_create_complete_finish_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16108,9 +16098,6 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
 fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16202,9 +16189,6 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
 fn test_send_from_outbound_msg_add_complete_finish_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16314,9 +16298,6 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
 fn test_send_from_outbound_msg_select_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Err(TestError::Permanent {
@@ -16390,9 +16371,6 @@ fn test_send_from_outbound_msg_select_permanent() {
 fn test_send_from_outbound_msg_create_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16475,7 +16453,6 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16581,9 +16558,6 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
 fn test_send_from_outbound_msg_add_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16668,7 +16642,6 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16777,9 +16750,6 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
 fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16869,9 +16839,6 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
 fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -16984,9 +16951,6 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
 fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -17075,9 +17039,6 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
 fn test_send_from_outbound_msg_finish_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -17164,7 +17125,6 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -17281,9 +17241,6 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
 fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -17375,9 +17332,6 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
 fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),
@@ -17498,9 +17452,6 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
 fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
     init();
 
-    let now = Instant::now();
-    let when = now + Duration::from_secs(1);
-    let later = when + Duration::from_secs(1);
     let script = TestPrivateStreamScript {
         select: vec![
             Ok(RetryIndefResult::Success(())),

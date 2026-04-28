@@ -71,7 +71,7 @@ use crate::threads::PushMode;
 pub trait SharedLargeObjPushModeTypes<Ctx> {
     type Parties: IntoIterator<Item = Self::PartyID>;
     type Frags: Frags;
-    type BatchID: Clone + Debug;
+    type BatchID: Clone + Debug + Display;
     type PartyID: Clone + Debug + Display + From<usize> + Eq + Hash + Ord;
     type HashID: Clone + Debug + Display + Hash + HashID + Eq;
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
