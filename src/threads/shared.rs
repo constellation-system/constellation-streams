@@ -356,6 +356,7 @@ where
         + PushStreamAdd<Msg, Ctx>
         + PushStreamShared<Ctx>,
     Stream::PartyID: From<usize>,
+    Stream::BatchID: Display,
     Msg: Clone
 {
     fn complete_cancel(
@@ -378,7 +379,8 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while cancelling message");
+               "attempting to recover from error while cancelling batch {}",
+               batch_id);
 
         match stream.complete_cancel_batch(ctx, &mut flags, &batch_id, err) {
             // It succeeded.
@@ -390,6 +392,10 @@ where
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying cancelling of batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Cancel {
                     batch: batch_id,
                     retry: retry,
@@ -422,13 +428,27 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+              "cancelling batch {}",
+               batch_id);
+
         let mut flags = stream.empty_flags();
 
         match stream.cancel_batch(ctx, &mut flags, &batch_id) {
             // It succeeded.
-            Ok(RetryResult::Success(_)) => Ok(RetryResult::Success(())),
+            Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "successfully cancelled batch {}",
+                       batch_id);
+
+                Ok(RetryResult::Success(()))
+            }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying cancelling of batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Cancel {
                     batch: batch_id,
                     retry: retry,
@@ -448,13 +468,24 @@ where
         stream: &mut Stream,
         err: <Stream::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self> {
+        trace!(target: "push-entry",
+               "aborting starting batch");
+
         let mut flags = stream.empty_flags();
 
         match stream.abort_start_batch(ctx, &mut flags, err) {
             // It succeeded.
-            RetryResult::Success(_) => RetryResult::Success(()),
+            RetryResult::Success(_) => {
+                trace!(target: "push-entry",
+                       "aborted starting batch");
+
+                RetryResult::Success(())
+            }
             // We got a retry.
             RetryResult::Retry(retry) => {
+                trace!(target: "push-entry",
+                       "delaying abort starting batch");
+
                 RetryResult::Retry(PushEntry::Abort {
                     retry: retry,
                     flags: flags
@@ -483,18 +514,24 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while finishing batch");
+               "attempting to recover from error while finishing batch {}",
+               batch_id);
 
         match stream.complete_finish_batch(ctx, &mut flags, &batch_id, err) {
             // It succeeded.
             Ok(RetryResult::Success(())) => {
                 trace!(target: "push-entry",
-                       "successfully finished batch");
+                       "successfully finished batch {}",
+                       batch_id);
 
                 Ok(RetryResult::Success(()))
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying finishing batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Finish {
                     batch: batch_id,
                     retry: retry
@@ -525,13 +562,27 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "finishing batch {}",
+               batch_id);
+
         let mut flags = stream.empty_flags();
 
         match stream.finish_batch(ctx, &mut flags, &batch_id) {
             // It succeeded.
-            Ok(RetryResult::Success(_)) => Ok(RetryResult::Success(())),
+            Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "finished batch {}",
+                       batch_id);
+
+                Ok(RetryResult::Success(()))
+            }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying finishing batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Finish {
                     batch: batch_id.clone(),
                     retry: retry
@@ -567,18 +618,25 @@ where
         >
     > {
         trace!(target: "push-entry",
-               "attempting to recover from error while adding message");
+               "attempting to recover from error while \
+                adding message to batch {}",
+               batch_id);
 
         match stream.complete_add(ctx, &mut flags, &msg, &batch_id, err) {
             // It succeeded.
             Ok(RetryResult::Success(())) => {
                 trace!(target: "push-entry",
-                       "successfully added message");
+                       "successfully added message to batch {}",
+                       batch_id);
 
                 Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying adding message to batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Add {
                     msgs: msgs,
                     msg: msg,
@@ -617,13 +675,25 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "adding message to batch {}",
+               batch_id);
+
         match stream.add(ctx, &mut flags, &msg, &batch_id) {
             // It succeeded.
             Ok(RetryResult::Success(_)) => {
+                trace!(target: "push-entry",
+                       "added message to batch {}",
+                       batch_id);
+
                 Self::try_add(ctx, stream, msgs, batch_id)
             }
             // We got a retry.
             Ok(RetryResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying adding message to batch {}",
+                       batch_id);
+
                 Ok(RetryResult::Retry(PushEntry::Add {
                     msgs: msgs,
                     msg: msg,
@@ -695,13 +765,17 @@ where
             // It succeeded.
             Ok(RetryIndefResult::Success(batch_id)) => {
                 trace!(target: "push-entry",
-                       "successfully created batch");
+                       "successfully created batch {}",
+                       batch_id);
 
                 Self::try_add(ctx, stream, msgs, batch_id)
                     .map(RetryIndefResult::from)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying creating batch");
+
                 Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
@@ -734,14 +808,24 @@ where
             Stream::CancelBatchError
         >
     > {
+        trace!(target: "push-entry",
+               "creating batch");
+
         match stream.start_batch(ctx, parties.iter()) {
             // It succeeded.
             Ok(RetryIndefResult::Success(batch_id)) => {
+                trace!(target: "push-entry",
+                       "created batch {}",
+                       batch_id);
+
                 Self::try_add(ctx, stream, msgs, batch_id)
                     .map(RetryIndefResult::from)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
+                trace!(target: "push-entry",
+                       "delaying creating batch");
+
                 Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
@@ -965,6 +1049,7 @@ where
     <Stream::FinishBatchError as RecoverableError>::Completable: ScopedError,
     <Stream::CancelBatchError as RecoverableError>::Completable: ScopedError,
     Stream::PartyID: Display + From<usize>,
+    Stream::BatchID: Display,
     Msg: Clone
 {
     fn handle_error(
@@ -993,7 +1078,7 @@ where
             match permanent {
                 PushEntryError::Batch { err } => {
                     if let Err(err) = stream.report_error(&err) {
-                        error!(target: "private-datagram-push-mode",
+                        error!(target: "shared-datagram-push-mode",
                                "failure reporting error to stream: {}",
                                err);
                     }
@@ -1012,7 +1097,7 @@ where
                 PushEntryError::Add { batch_id, err } => {
                     if let Err(err) = stream
                         .report_error_with_batch(&batch_id, &err) {
-                        error!(target: "private-datagram-push-mode",
+                        error!(target: "shared-datagram-push-mode",
                                "failure reporting error to stream: {}",
                                err);
                     }
@@ -1032,7 +1117,7 @@ where
                 PushEntryError::Finish { batch_id, err } => {
                     if let Err(err) = stream
                         .report_error_with_batch(&batch_id, &err) {
-                        error!(target: "private-datagram-push-mode",
+                        error!(target: "shared-datagram-push-mode",
                                "failure reporting error to stream: {}",
                                err);
                     }
@@ -1058,6 +1143,9 @@ where
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "shared-datagram-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.completes {
                     completes.push(completable)
                 } else {
@@ -1073,11 +1161,17 @@ where
 
                 next
             } else {
+                trace!(target: "shared-datagram-push-mode",
+                       "completing error immediately");
+
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying completed operation");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1086,6 +1180,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying completed operation indefinitely");
+
                         self.indef_delay(stream, msgs, parties);
 
                         next
@@ -1179,6 +1276,7 @@ where
     <Stream::FinishBatchError as RecoverableError>::Completable: ScopedError,
     <Stream::CancelBatchError as RecoverableError>::Completable: ScopedError,
     Stream::PartyID: Display + From<usize>,
+    Stream::BatchID: Display,
     Msg: Clone
 {
     type Config = SharedDatagramModeConfig;
@@ -1233,6 +1331,7 @@ where
     <Stream::FinishBatchError as RecoverableError>::Completable: ScopedError,
     <Stream::CancelBatchError as RecoverableError>::Completable: ScopedError,
     Stream::PartyID: Display + From<usize>,
+    Stream::BatchID: Display,
     Msgs: SharedMsgs<Stream::PartyID, Msg>,
     Msg: Clone
 {
@@ -1266,6 +1365,9 @@ where
                         Ok(RetryIndefResult::Success(())) => {}
                         // Retry delay; store to pending.
                         Ok(RetryIndefResult::Retry(retry)) => {
+                            trace!(target: "shared-datagram-push-mode",
+                                   "delaying send");
+
                             let when = retry.when();
 
                             self.pending.push(retry);
@@ -1273,8 +1375,12 @@ where
                             next = Some(next_retry_definite(&next, &when));
                         },
                         // Indefinite delay; store to indefs.
-                        Ok(RetryIndefResult::Indef((msgs, parties))) => self
-                            .indef_delay(stream, msgs, parties),
+                        Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                            trace!(target: "shared-datagram-push-mode",
+                                   "delaying send indefinitely");
+
+                            self.indef_delay(stream, msgs, parties)
+                        }
                         // Error occurred.
                         Err(err) => {
                             let when = self.handle_error(ctx, stream, err);
@@ -1341,6 +1447,9 @@ where
                 Ok(RetryIndefResult::Success(())) => {}
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "shared-datagram-push-mode",
+                           "delaying retried send");
+
                     let when = retry.when();
 
                     self.pending.push(retry);
@@ -1348,8 +1457,12 @@ where
                     next = Some(next_retry_definite(&next, &when));
                 },
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef((msgs, parties))) => self
-                    .indef_delay(stream, msgs, parties),
+                Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                    trace!(target: "shared-datagram-push-mode",
+                           "delaying retried send indefinitely");
+
+                    self.indef_delay(stream, msgs, parties)
+                }
                 // Error occurred.
                 Err(err) => {
                     let when = self.handle_error(ctx, stream, err);
@@ -1370,6 +1483,9 @@ where
         _live: &HashSet<Token>,
     ) -> Result<Option<Instant>, Self::RetryError> {
         if let Some(completes) = self.completes.take() {
+            debug!(target: "shared-datagram-push-mode",
+                   "completing pending operations");
+
             let mut next = None;
 
             // First complete any pending messages.
@@ -1379,6 +1495,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying completed send");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1387,6 +1506,9 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying completed send indefinitely");
+
                         self.indef_delay(stream, msgs, parties);
 
                         None
@@ -1413,12 +1535,18 @@ where
         let mut out = None;
 
         if let Some(indefs) = self.indefs.take() {
+            debug!(target: "shared-datagram-push-mode",
+                   "retrying indefinitely delayed operations");
+
             for IndefEntry { msgs, parties, .. } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, parties, msgs) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => {},
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying retried send");
+
                         let when = retry.when();
 
                         self.pending.push(retry);
@@ -1426,8 +1554,12 @@ where
                         out = Some(next_retry_definite(&out, &when));
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef((msgs, parties))) => self
-                        .indef_delay(stream, msgs, parties),
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-datagram-push-mode",
+                               "delaying retried send indefinitely");
+
+                        self.indef_delay(stream, msgs, parties)
+                    }
                     // Error occurred.
                     Err(err) => {
                         let when = self.handle_error(ctx, stream, err);
@@ -1471,14 +1603,83 @@ where
     {
         let (completable, permanent) = err.split();
 
-        if let Some(permanent) = permanent {
+        let next = if let Some(permanent) = permanent {
             error!(target: "shared-large-obj-push-mode",
                    "unrecoverable error sending batch: {}",
                    permanent);
-        }
+
+            // Report the error.
+            match permanent {
+                PushEntryError::Batch { err } => {
+                    if let Err(err) = stream.report_error(&err) {
+                        error!(target: "shared-large-obj-push-mode",
+                               "failure reporting error to stream: {}",
+                               err);
+                    }
+
+                    if let RetryResult::Retry(retry) =
+                        PushEntry::try_abort_batch(ctx, stream, err) {
+                        let when = retry.when();
+
+                        self.msgs_pending.push(retry);
+
+                        Some(when)
+                    } else {
+                        None
+                    }
+                },
+                PushEntryError::Add { batch_id, err } => {
+                    if let Err(err) = stream
+                        .report_error_with_batch(&batch_id, &err) {
+                        error!(target: "shared-large-obj-push-mode",
+                               "failure reporting error to stream: {}",
+                               err);
+                    }
+
+                    match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
+                        Ok(RetryResult::Success(())) => None,
+                        Ok(RetryResult::Retry(retry)) => {
+                            let when = retry.when();
+
+                            self.msgs_pending.push(retry);
+
+                            Some(when)
+                        },
+                        Err(err) => self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err),
+                    }
+                },
+                PushEntryError::Finish { batch_id, err } => {
+                    if let Err(err) = stream
+                        .report_error_with_batch(&batch_id, &err) {
+                        error!(target: "shared-large-obj-push-mode",
+                               "failure reporting error to stream: {}",
+                               err);
+                    }
+
+                    match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
+                        Ok(RetryResult::Success(())) => None,
+                        Ok(RetryResult::Retry(retry)) => {
+                            let when = retry.when();
+
+                            self.msgs_pending.push(retry);
+
+                            Some(when)
+                        },
+                        Err(err) => self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err),
+                    }
+                }
+                // Don't report cancel errors.
+                PushEntryError::Cancel { .. } => None,
+            }
+        } else {
+            None
+        };
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "shared-large-obj-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.msgs_completes {
                     completes.push(completable)
                 } else {
@@ -1492,35 +1693,44 @@ where
                     self.msgs_completes = Some(vec);
                 }
 
-                None
+                next
             } else {
+                trace!(target: "shared-large-obj-push-mode",
+                       "completing error immediately");
+
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed operation");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
 
-                        Some(when)
+                        Some(next_retry_definite(&next, &when))
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed operation indefinitely");
+
                         self.indef_delay(stream, msgs, parties, Instant::now());
 
-                        None
+                        next
                     }
                     // Error occurred.
                     Err(err) => {
                         self.handle_msg_error::<_, _, LargeObjTypes>(ctx, stream, err);
 
-                        None
+                        next
                     }
                 }
             }
         } else {
-            None
+            next
         }
     }
 
@@ -1552,13 +1762,16 @@ where
         let (completable, permanent) = err.split();
 
         if let Some(permanent) = permanent {
-            error!(target: "private-large-obj-push-mode",
+            error!(target: "shared-large-obj-push-mode",
                    "unrecoverable error sending batch: {}",
                    permanent);
         }
 
         if let Some(completable) = completable {
             if completable.scope() == ErrorScope::WouldBlock {
+                trace!(target: "shared-large-obj-push-mode",
+                       "delaying completion of error");
+
                 if let Some(completes) = &mut self.frags_completes {
                     completes.push(completable)
                 } else {
@@ -1574,37 +1787,49 @@ where
 
                 None
             } else {
+                trace!(target: "shared-large-obj-push-mode",
+                       "completing error immediately");
+
                 match LargeObjEntry::complete_send(ctx, stream, proto,
                                                    completable) {
                     // Succeeded; nothing to do.
                     Ok(RetryIndefResult::Success((next, _))) => next,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed frags");
+
                         self.frags_pending.push(retry);
 
                         None
                     }
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef(parties)) => match parties {
-                        Parties::Some(parties) => {
-                            self.frags_indef = parties.into_iter().collect();
+                    Ok(RetryIndefResult::Indef(parties)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed frags indefinitely");
 
-                            None
-                        },
-                        Parties::All => match stream.parties() {
-                            Ok(parties) => {
+                        match parties {
+                            Parties::Some(parties) => {
                                 self.frags_indef = parties.into_iter()
-                                    .map(|(id, _)| id)
                                     .collect();
 
                                 None
                             },
-                            Err(err) => {
-                                error!(target: "shared-datagram-push-mode",
-                                       "error obtaining parties: {}",
-                                       err);
+                            Parties::All => match stream.parties() {
+                                Ok(parties) => {
+                                    self.frags_indef = parties.into_iter()
+                                        .map(|(id, _)| id)
+                                        .collect();
 
-                                None
+                                    None
+                                },
+                                Err(err) => {
+                                    error!(target: "shared-large-obj-push-mode",
+                                           "error obtaining parties: {}",
+                                           err);
+
+                                    None
+                                }
                             }
                         }
                     }
@@ -1634,7 +1859,7 @@ where
                 Ok(parties) =>
                     Some(parties.into_iter().map(|(id, _)| id).collect()),
                 Err(err) => {
-                    error!(target: "shared-datagram-push-mode",
+                    error!(target: "shared-large-obj-push-mode",
                            "error obtaining parties: {}",
                            err);
 
@@ -1789,6 +2014,9 @@ where
                         Ok(RetryIndefResult::Success(())) => None,
                         // Retry delay; store to pending.
                         Ok(RetryIndefResult::Retry(retry)) => {
+                            trace!(target: "shared-large-obj-push-mode",
+                                   "delaying protocol messages");
+
                             let when = retry.when();
 
                             self.msgs_pending.push(retry);
@@ -1797,6 +2025,9 @@ where
                         },
                         // Indefinite delay; store to indefs.
                         Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                            trace!(target: "shared-large-obj-push-mode",
+                                   "delaying protocol messages indefinitely");
+
                             self.indef_delay(stream, msgs, parties,
                                              Instant::now());
 
@@ -1823,23 +2054,31 @@ where
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying data fragments");
+
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(parties)) => match parties {
-                    Parties::Some(parties) => {
-                        self.frags_indef = parties.into_iter().collect();
-                    },
-                    Parties::All => match stream.parties() {
-                        Ok(parties) => {
-                            self.frags_indef = parties.into_iter()
-                                 .map(|(id, _)| id)
-                                .collect();
+                Ok(RetryIndefResult::Indef(parties)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying data fragments indefinitely");
+
+                    match parties {
+                        Parties::Some(parties) => {
+                            self.frags_indef = parties.into_iter().collect();
                         },
-                        Err(err) => {
-                            error!(target: "shared-datagram-push-mode",
-                                   "error obtaining parties: {}",
-                                   err);
+                        Parties::All => match stream.parties() {
+                            Ok(parties) => {
+                                self.frags_indef = parties.into_iter()
+                                    .map(|(id, _)| id)
+                                    .collect();
+                            },
+                            Err(err) => {
+                                error!(target: "shared-large-obj-push-mode",
+                                       "error obtaining parties: {}",
+                                       err);
+                            }
                         }
                     }
                 }
@@ -1886,7 +2125,7 @@ where
 
         // Go through the sorted pending items and get all the ones
         // whose times are less than the present.
-        while self.msgs_pending.last().is_some_and(|ent| now > ent.when()) {
+        while self.msgs_pending.last().is_some_and(|ent| now >= ent.when()) {
             debug!(target: "shared-large-obj-push-mode",
                    "retrying pending operation");
 
@@ -1913,14 +2152,21 @@ where
                 Ok(RetryIndefResult::Success(())) => {},
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried protocol messages");
+
                     let when = retry.when();
 
                     self.msgs_pending.push(retry);
                     out = Some(next_retry_definite(&out, &when));
                 },
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef((msgs, parties))) => self
-                    .indef_delay(stream, msgs, parties, Instant::now()),
+                Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried protocol messages indefinitely");
+
+                    self.indef_delay(stream, msgs, parties, Instant::now())
+                }
                 // Error occurred.
                 Err(err) => {
                     let when = self
@@ -1976,23 +2222,31 @@ where
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried data fragments");
+
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(parties)) => match parties {
-                    Parties::Some(parties) => {
-                        self.frags_indef = parties.into_iter().collect();
-                    },
-                    Parties::All => match stream.parties() {
-                        Ok(parties) => {
-                            self.frags_indef = parties.into_iter()
-                                .map(|(id, _)| id)
-                                .collect();
+                Ok(RetryIndefResult::Indef(parties)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried data fragments indefinitely");
+
+                    match parties {
+                        Parties::Some(parties) => {
+                            self.frags_indef = parties.into_iter().collect();
                         },
-                        Err(err) => {
-                            error!(target: "shared-datagram-push-mode",
-                                   "error obtaining parties: {}",
-                                   err);
+                        Parties::All => match stream.parties() {
+                            Ok(parties) => {
+                                self.frags_indef = parties.into_iter()
+                                    .map(|(id, _)| id)
+                                    .collect();
+                            },
+                            Err(err) => {
+                                error!(target: "shared-large-obj-push-mode",
+                                       "error obtaining parties: {}",
+                                       err);
+                            }
                         }
                     }
                 }
@@ -2024,6 +2278,9 @@ where
         let mut next = None;
 
         if let Some(completes) = self.msgs_completes.take() {
+            debug!(target: "shared-large-obj-push-mode",
+                   "completing pending operations");
+
             // First complete any pending messages.
             for complete in completes.into_iter() {
                 let retry = match PushEntry::complete(ctx, stream, complete) {
@@ -2031,6 +2288,9 @@ where
                     Ok(RetryIndefResult::Success(())) => None,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed protocol messages");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -2039,6 +2299,10 @@ where
                     },
                     // Indefinite delay; store to indefs.
                     Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed protocol messages \
+                                indefinitely");
+
                         self.indef_delay(stream, msgs, parties, Instant::now());
 
                         None
@@ -2061,6 +2325,9 @@ where
                     Ok(RetryIndefResult::Success((next, _))) => next,
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed data fragments");
+
                         let when = retry.when();
 
                         self.frags_pending.push(retry);
@@ -2068,26 +2335,33 @@ where
                         Some(when)
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef(parties)) => match parties {
-                        Parties::Some(parties) => {
-                            self.frags_indef = parties.into_iter().collect();
+                    Ok(RetryIndefResult::Indef(parties)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying completed protocol messages \
+                                indefinitely");
 
-                            None
-                        },
-                        Parties::All => match stream.parties() {
-                            Ok(parties) => {
+                        match parties {
+                            Parties::Some(parties) => {
                                 self.frags_indef = parties.into_iter()
-                                    .map(|(id, _)| id)
                                     .collect();
 
                                 None
                             },
-                            Err(err) => {
-                                error!(target: "shared-datagram-push-mode",
-                                       "error obtaining parties: {}",
-                                       err);
+                            Parties::All => match stream.parties() {
+                                Ok(parties) => {
+                                    self.frags_indef = parties.into_iter()
+                                        .map(|(id, _)| id)
+                                        .collect();
 
-                                None
+                                    None
+                                },
+                                Err(err) => {
+                                    error!(target: "shared-large-obj-push-mode",
+                                           "error obtaining parties: {}",
+                                           err);
+
+                                    None
+                                }
                             }
                         }
                     }
@@ -2117,12 +2391,18 @@ where
         let mut out = None;
 
         if let Some(indefs) = self.msgs_indefs.take() {
+            debug!(target: "shared-large-obj-push-mode",
+                   "retrying pending indefinitely delayed operations");
+
             for IndefEntry { msgs, parties, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, parties, msgs) {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success(())) => {},
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying retried protocol messages");
+
                         let when = retry.when();
 
                         self.msgs_pending.push(retry);
@@ -2130,8 +2410,13 @@ where
                         out = Some(next_retry_definite(&out, &when));
                     },
                     // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef((msgs, parties))) => self
-                        .indef_delay(stream, msgs, parties, origin),
+                    Ok(RetryIndefResult::Indef((msgs, parties))) => {
+                        trace!(target: "shared-large-obj-push-mode",
+                               "delaying retried protocol messages \
+                                indefinitely");
+
+                        self.indef_delay(stream, msgs, parties, origin)
+                    }
                     // Error occurred.
                     Err(err) => {
                         let when = self.handle_msg_error::<_, _, LargeObjTypes>(
@@ -2145,6 +2430,8 @@ where
         }
 
         if !self.frags_indef.is_empty() {
+            self.frags_indef.clear();
+
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
                 Ok(RetryIndefResult::Success((when, _))) => {
@@ -2152,23 +2439,31 @@ where
                 },
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried data fragments");
+
                     self.frags_pending.push(retry);
                 }
                 // Indefinite delay; store to indefs.
-                Ok(RetryIndefResult::Indef(parties)) => match parties {
-                    Parties::Some(parties) => {
-                        self.frags_indef = parties.into_iter().collect();
-                    },
-                    Parties::All => match stream.parties() {
-                        Ok(parties) => {
-                            self.frags_indef = parties.into_iter()
-                                .map(|(id, _)| id)
-                                .collect();
+                Ok(RetryIndefResult::Indef(parties)) => {
+                    trace!(target: "shared-large-obj-push-mode",
+                           "delaying retried data fragments indefinitely");
+
+                    match parties {
+                        Parties::Some(parties) => {
+                            self.frags_indef = parties.into_iter().collect();
                         },
-                        Err(err) => {
-                            error!(target: "shared-datagram-push-mode",
-                                   "error obtaining parties: {}",
-                                   err);
+                        Parties::All => match stream.parties() {
+                            Ok(parties) => {
+                                self.frags_indef = parties.into_iter()
+                                    .map(|(id, _)| id)
+                                    .collect();
+                            },
+                            Err(err) => {
+                                error!(target: "shared-large-obj-push-mode",
+                                       "error obtaining parties: {}",
+                                       err);
+                            }
                         }
                     }
                 }
@@ -2178,7 +2473,6 @@ where
                 }
             }
 
-            self.frags_indef.clear()
         }
 
         Ok(out)

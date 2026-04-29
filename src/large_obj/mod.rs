@@ -425,36 +425,7 @@ pub enum FragsOrOffer<HashID, Frags, Offer> {
         err: Offer
     }
 }
-/*
-impl<InMsg, OutMsg, PartyID, F, Types> Clone
-    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
-where
-    Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    PartyID: Clone,
-    F: Frags
-{
-    fn clone(&self) -> Self {
-        LargeObjProto {
-            out_msg: PhantomData,
-            in_msg: PhantomData,
-            tombstone_duration: self.tombstone_duration,
-            inbound: self.inbound.clone(),
-            outbound: self.outbound.clone(),
-            upstream: self.upstream.clone(),
-            parties: self.parties.clone(),
-            encoder: self.encoder.clone(),
-            decoder: self.decoder.clone(),
-            notify: self.notify.clone(),
-            param: self.param.clone(),
-            retry: self.retry.clone(),
-            auth: self.auth.clone(),
-            hash: self.hash.clone(),
-            msgs: self.msgs.clone(),
-            ids: self.ids.clone()
-        }
-    }
-}
-*/
+
 impl From<usize> for LargeObjID {
     #[inline]
     fn from(val: usize) -> LargeObjID {

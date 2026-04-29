@@ -29,6 +29,7 @@ use constellation_common::error::ErrorScope;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::SHA3Algo;
 use constellation_common::hashid::SHA3ID;
+use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::sync::Notify;
@@ -5735,7 +5736,7 @@ fn test_send_from_outbound_msg_succeed() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -5761,6 +5762,10 @@ fn test_send_from_outbound_msg_succeed() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -5782,7 +5787,7 @@ fn test_send_from_outbound_msg_succeed() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -5804,7 +5809,7 @@ fn test_send_from_outbound_msg_select_retry() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -5823,7 +5828,7 @@ fn test_send_from_outbound_msg_select_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -5849,6 +5854,10 @@ fn test_send_from_outbound_msg_select_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -5883,7 +5892,7 @@ fn test_send_from_outbound_msg_select_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -5902,7 +5911,7 @@ fn test_send_from_outbound_msg_create_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -5924,7 +5933,7 @@ fn test_send_from_outbound_msg_create_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -5950,6 +5959,10 @@ fn test_send_from_outbound_msg_create_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -5984,7 +5997,7 @@ fn test_send_from_outbound_msg_create_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6003,7 +6016,7 @@ fn test_send_from_outbound_msg_add_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -6025,7 +6038,7 @@ fn test_send_from_outbound_msg_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6051,6 +6064,10 @@ fn test_send_from_outbound_msg_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6066,7 +6083,7 @@ fn test_send_from_outbound_msg_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6091,7 +6108,7 @@ fn test_send_from_outbound_msg_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6110,7 +6127,7 @@ fn test_send_from_outbound_msg_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -6132,7 +6149,7 @@ fn test_send_from_outbound_msg_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6158,6 +6175,10 @@ fn test_send_from_outbound_msg_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6179,7 +6200,7 @@ fn test_send_from_outbound_msg_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6204,7 +6225,7 @@ fn test_send_from_outbound_msg_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6226,7 +6247,7 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -6248,7 +6269,7 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6274,6 +6295,10 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6321,7 +6346,7 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6343,7 +6368,7 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -6365,7 +6390,7 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6391,6 +6416,10 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6419,7 +6448,7 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6444,7 +6473,7 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6466,7 +6495,7 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -6488,7 +6517,7 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6514,6 +6543,10 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6548,7 +6581,7 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6573,7 +6606,7 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6592,7 +6625,7 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -6617,7 +6650,7 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6643,6 +6676,10 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6671,7 +6708,7 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6696,7 +6733,7 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6715,7 +6752,7 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -6740,7 +6777,7 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6766,6 +6803,10 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6800,7 +6841,7 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6825,7 +6866,7 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6844,7 +6885,7 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -6869,7 +6910,7 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -6895,6 +6936,10 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -6910,7 +6955,7 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6935,7 +6980,7 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6960,7 +7005,7 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -6982,7 +7027,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -7008,7 +7053,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7034,6 +7079,10 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7068,7 +7117,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7090,7 +7139,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -7116,7 +7165,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7142,6 +7191,10 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7189,7 +7242,7 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7211,7 +7264,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -7237,7 +7290,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7263,6 +7316,10 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7297,7 +7354,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7319,7 +7376,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -7345,7 +7402,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7371,6 +7428,10 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7399,7 +7460,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7424,7 +7485,7 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7446,7 +7507,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -7472,7 +7533,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7498,6 +7559,10 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7532,7 +7597,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7554,7 +7619,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -7580,7 +7645,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7606,6 +7671,10 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7640,7 +7709,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7665,7 +7734,7 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7685,7 +7754,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -7714,7 +7783,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7740,6 +7809,10 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7774,7 +7847,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7793,7 +7866,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -7822,7 +7895,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7848,6 +7921,10 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -7876,7 +7953,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7901,7 +7978,7 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -7920,7 +7997,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -7949,7 +8026,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -7975,6 +8052,10 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8009,7 +8090,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8028,7 +8109,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -8057,7 +8138,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8083,6 +8164,10 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8117,7 +8202,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8142,7 +8227,7 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8161,7 +8246,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8190,7 +8275,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8216,6 +8301,10 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8231,7 +8320,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8256,7 +8345,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8275,7 +8364,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8304,7 +8393,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8330,6 +8419,10 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8345,7 +8438,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8370,7 +8463,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8395,7 +8488,7 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -8417,7 +8510,7 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Permanent {
@@ -8438,7 +8531,7 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8464,6 +8557,10 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8516,7 +8613,7 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8539,7 +8636,7 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8565,6 +8662,10 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8617,7 +8718,7 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
             Ok(RetryIndefResult::Retry(TestRetry {
                 when: when
             })),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8642,7 +8743,7 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8668,6 +8769,10 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8717,7 +8822,7 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -8743,7 +8848,7 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8769,6 +8874,10 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8818,7 +8927,7 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -8846,7 +8955,7 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8872,6 +8981,10 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8921,7 +9034,7 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -8949,7 +9062,7 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -8975,6 +9088,10 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -8990,7 +9107,7 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9034,8 +9151,8 @@ fn test_send_from_outbound_msg_select_indef() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9054,7 +9171,7 @@ fn test_send_from_outbound_msg_select_indef() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9080,6 +9197,10 @@ fn test_send_from_outbound_msg_select_indef() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9114,7 +9235,7 @@ fn test_send_from_outbound_msg_select_indef() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9133,8 +9254,8 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Retry(TestRetry {
@@ -9156,7 +9277,7 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9182,6 +9303,10 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9229,7 +9354,7 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9248,8 +9373,8 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9271,7 +9396,7 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9297,6 +9422,10 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9325,7 +9454,7 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9350,7 +9479,7 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9369,8 +9498,8 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9392,7 +9521,7 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9418,6 +9547,10 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9452,7 +9585,7 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9477,7 +9610,7 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9496,8 +9629,8 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -9523,7 +9656,7 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9549,6 +9682,10 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9583,7 +9720,7 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9602,8 +9739,8 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -9629,7 +9766,7 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9655,6 +9792,10 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9702,7 +9843,7 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9721,8 +9862,8 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9748,7 +9889,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9774,6 +9915,10 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9808,7 +9953,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9827,8 +9972,8 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9854,7 +9999,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -9880,6 +10025,10 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -9908,7 +10057,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9933,7 +10082,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -9952,8 +10101,8 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -9979,7 +10128,7 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10005,6 +10154,10 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10039,7 +10192,7 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10058,8 +10211,8 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Indef(Parties::Some(vec![0, 1, 2]))),
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Indef(Parties::Some(vec![0]))),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -10085,7 +10238,7 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10111,6 +10264,10 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10145,7 +10302,7 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10170,7 +10327,7 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10190,7 +10347,7 @@ fn test_send_from_outbound_msg_select_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -10212,7 +10369,7 @@ fn test_send_from_outbound_msg_select_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10238,6 +10395,10 @@ fn test_send_from_outbound_msg_select_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10259,7 +10420,7 @@ fn test_send_from_outbound_msg_select_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10279,7 +10440,7 @@ fn test_send_from_outbound_msg_select_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -10301,7 +10462,7 @@ fn test_send_from_outbound_msg_select_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10327,6 +10488,10 @@ fn test_send_from_outbound_msg_select_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10361,7 +10526,7 @@ fn test_send_from_outbound_msg_select_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10377,7 +10542,7 @@ fn test_send_from_outbound_msg_create_complete_imm() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -10403,7 +10568,7 @@ fn test_send_from_outbound_msg_create_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10429,6 +10594,10 @@ fn test_send_from_outbound_msg_create_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10450,7 +10619,7 @@ fn test_send_from_outbound_msg_create_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10466,7 +10635,7 @@ fn test_send_from_outbound_msg_create_complete() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -10492,7 +10661,7 @@ fn test_send_from_outbound_msg_create_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10518,6 +10687,10 @@ fn test_send_from_outbound_msg_create_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10552,7 +10725,7 @@ fn test_send_from_outbound_msg_create_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10568,7 +10741,7 @@ fn test_send_from_outbound_msg_add_complete_imm() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -10594,7 +10767,7 @@ fn test_send_from_outbound_msg_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10620,6 +10793,10 @@ fn test_send_from_outbound_msg_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10641,7 +10818,7 @@ fn test_send_from_outbound_msg_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10657,7 +10834,7 @@ fn test_send_from_outbound_msg_add_complete() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -10683,7 +10860,7 @@ fn test_send_from_outbound_msg_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10709,6 +10886,10 @@ fn test_send_from_outbound_msg_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10724,7 +10905,7 @@ fn test_send_from_outbound_msg_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10749,7 +10930,7 @@ fn test_send_from_outbound_msg_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10765,7 +10946,7 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -10791,7 +10972,7 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10817,6 +10998,10 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10838,7 +11023,7 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10854,7 +11039,7 @@ fn test_send_from_outbound_msg_finish_complete() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -10880,7 +11065,7 @@ fn test_send_from_outbound_msg_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -10906,6 +11091,10 @@ fn test_send_from_outbound_msg_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -10927,7 +11116,7 @@ fn test_send_from_outbound_msg_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10952,7 +11141,7 @@ fn test_send_from_outbound_msg_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -10975,7 +11164,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11000,7 +11189,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11026,6 +11215,10 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11060,7 +11253,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11083,7 +11276,7 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11108,7 +11301,7 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11134,6 +11327,10 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11181,7 +11378,7 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11204,7 +11401,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11229,7 +11426,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11255,6 +11452,10 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11270,7 +11471,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11295,7 +11496,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11318,7 +11519,7 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11343,7 +11544,7 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11369,6 +11570,10 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11397,7 +11602,7 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11422,7 +11627,7 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11445,7 +11650,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11470,7 +11675,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11496,6 +11701,10 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11517,7 +11726,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11542,7 +11751,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11565,7 +11774,7 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -11590,7 +11799,7 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11616,6 +11825,10 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11650,7 +11863,7 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11675,7 +11888,7 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11694,7 +11907,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -11723,7 +11936,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11749,6 +11962,10 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11764,7 +11981,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11789,7 +12006,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11808,7 +12025,7 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -11837,7 +12054,7 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11863,6 +12080,10 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -11891,7 +12112,7 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11916,7 +12137,7 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -11935,7 +12156,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -11964,7 +12185,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -11990,6 +12211,10 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12011,7 +12236,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12036,7 +12261,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12055,7 +12280,7 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -12084,7 +12309,7 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12110,6 +12335,10 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12144,7 +12373,7 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12169,7 +12398,7 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12188,7 +12417,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -12217,7 +12446,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12243,6 +12472,10 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12264,7 +12497,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12289,7 +12522,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12308,7 +12541,7 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -12337,7 +12570,7 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12363,6 +12596,10 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12378,7 +12615,7 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12403,7 +12640,7 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12428,7 +12665,7 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12451,7 +12688,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -12480,7 +12717,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12506,6 +12743,10 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12527,7 +12768,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12550,7 +12791,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -12579,7 +12820,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12605,6 +12846,10 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12639,7 +12884,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12662,7 +12907,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -12691,7 +12936,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12717,6 +12962,10 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12751,7 +13000,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12774,7 +13023,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -12803,7 +13052,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12829,6 +13078,10 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12876,7 +13129,7 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12899,7 +13152,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -12928,7 +13181,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -12954,6 +13207,10 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -12975,7 +13232,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -12998,7 +13255,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13027,7 +13284,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13053,6 +13310,10 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13087,7 +13348,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13110,7 +13371,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13139,7 +13400,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13165,6 +13426,10 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13180,7 +13445,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13205,7 +13470,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13228,7 +13493,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13257,7 +13522,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13283,6 +13548,10 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13311,7 +13580,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13336,7 +13605,7 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13359,7 +13628,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13388,7 +13657,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13414,6 +13683,10 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13435,7 +13708,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13458,7 +13731,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13487,7 +13760,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13513,6 +13786,10 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13547,7 +13824,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13570,7 +13847,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13599,7 +13876,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13625,6 +13902,10 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13646,7 +13927,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13671,7 +13952,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13694,7 +13975,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -13723,7 +14004,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13749,6 +14030,10 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13783,7 +14068,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13808,7 +14093,7 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13827,7 +14112,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -13860,7 +14145,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13886,6 +14171,10 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -13907,7 +14196,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -13926,7 +14215,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -13959,7 +14248,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -13985,6 +14274,10 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14019,7 +14312,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14038,7 +14331,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14071,7 +14364,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14097,6 +14390,10 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14112,7 +14409,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14137,7 +14434,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14156,7 +14453,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14189,7 +14486,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14215,6 +14512,10 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14243,7 +14544,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14268,7 +14569,7 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14287,7 +14588,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14320,7 +14621,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14346,6 +14647,10 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14367,7 +14672,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14386,7 +14691,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14419,7 +14724,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14445,6 +14750,10 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14479,7 +14788,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14498,7 +14807,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14531,7 +14840,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14557,6 +14866,10 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14578,7 +14891,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14603,7 +14916,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14622,7 +14935,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -14655,7 +14968,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14681,6 +14994,10 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14715,7 +15032,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14740,7 +15057,7 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14759,7 +15076,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -14792,7 +15109,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14818,6 +15135,10 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14839,7 +15160,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14858,7 +15179,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -14891,7 +15212,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -14917,6 +15238,10 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -14932,7 +15257,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14957,7 +15282,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -14976,7 +15301,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -15009,7 +15334,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15035,6 +15360,10 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15056,7 +15385,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -15081,7 +15410,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -15100,7 +15429,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -15133,7 +15462,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15159,6 +15488,10 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15174,7 +15507,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -15199,7 +15532,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -15224,7 +15557,7 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                                hash: hash
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -15247,7 +15580,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15271,7 +15604,7 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15297,6 +15630,10 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15337,7 +15674,7 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15361,7 +15698,7 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15387,6 +15724,10 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15438,7 +15779,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15464,7 +15805,7 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15490,6 +15831,10 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15529,7 +15874,7 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15555,7 +15900,7 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15581,6 +15926,10 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15633,7 +15982,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::Retryable,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15661,7 +16010,7 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15687,6 +16036,10 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15726,7 +16079,7 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
                 err: TestCompletableError {
                     scope: ErrorScope::WouldBlock,
                     action: TestIndefPartiesAction::Success {
-                        parties: vec![0, 1, 2]
+                        parties: vec![0]
                     }
                 }
             }),
@@ -15754,7 +16107,7 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15780,6 +16133,10 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15828,7 +16185,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
     let when = now + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -15860,7 +16217,7 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15886,6 +16243,10 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -15921,7 +16282,7 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
     let when = now + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -15953,7 +16314,7 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -15979,6 +16340,10 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16028,7 +16393,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
     let later = when + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -16060,7 +16425,7 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16086,6 +16451,10 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16119,7 +16488,7 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Completable {
@@ -16151,7 +16520,7 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16177,6 +16546,10 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16223,7 +16596,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16255,7 +16628,7 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16281,6 +16654,10 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16314,7 +16691,7 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16346,7 +16723,7 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16372,6 +16749,10 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16387,7 +16768,7 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -16441,7 +16822,7 @@ fn test_send_from_outbound_msg_select_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16467,6 +16848,10 @@ fn test_send_from_outbound_msg_select_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16497,7 +16882,7 @@ fn test_send_from_outbound_msg_create_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Permanent {
@@ -16518,7 +16903,7 @@ fn test_send_from_outbound_msg_create_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16544,6 +16929,10 @@ fn test_send_from_outbound_msg_create_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16579,7 +16968,7 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
     let when = now + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Err(TestError::Permanent {
@@ -16604,7 +16993,7 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16630,6 +17019,10 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16684,7 +17077,7 @@ fn test_send_from_outbound_msg_add_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16707,7 +17100,7 @@ fn test_send_from_outbound_msg_add_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16733,6 +17126,10 @@ fn test_send_from_outbound_msg_add_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16768,7 +17165,7 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
     let when = now + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16794,7 +17191,7 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16820,6 +17217,10 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16835,7 +17236,7 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -16877,7 +17278,7 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16907,7 +17308,7 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -16933,6 +17334,10 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -16966,7 +17371,7 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -16996,7 +17401,7 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17022,6 +17427,10 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17037,7 +17446,7 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -17079,7 +17488,7 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17106,7 +17515,7 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17132,6 +17541,10 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17147,7 +17560,7 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
                &vec![
                    TestSharedBatchState::Live {
                        msgs: vec![],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -17168,7 +17581,7 @@ fn test_send_from_outbound_msg_finish_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17193,7 +17606,7 @@ fn test_send_from_outbound_msg_finish_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17219,6 +17632,10 @@ fn test_send_from_outbound_msg_finish_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17254,7 +17671,7 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
     let when = now + Duration::from_secs(1);
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17282,7 +17699,7 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17308,6 +17725,10 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17329,7 +17750,7 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -17371,7 +17792,7 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17403,7 +17824,7 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17429,6 +17850,10 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17462,7 +17887,7 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17494,7 +17919,7 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17520,6 +17945,10 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17541,7 +17970,7 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
@@ -17583,7 +18012,7 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
 
     let script = TestSharedStreamScript {
         select: vec![
-            Ok(RetryIndefResult::Success(vec![0, 1, 2])),
+            Ok(RetryIndefResult::Success(vec![0])),
         ],
         create_batch: vec![
             Ok(RetryResult::Success(())),
@@ -17612,7 +18041,7 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
         inbound: vec![]
     };
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
-        TestSharedStream::new(script, vec![0, 1, 2].into_iter());
+        TestSharedStream::new(script, vec![0].into_iter());
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
@@ -17638,6 +18067,10 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
             SHA3Algo::default()
         ).expect("Expected success");
     let frag = LargeObjFrag::new(0, vec![0x11; 1024]);
+
+    proto.set_parties(Retry::default(), once((0, NullCred)))
+        .expect("Expected success");
+
     let res = proto.recv_offer_msg(&NullCred, hash.clone(), size as u64, frag)
         .expect("Expected success");
 
@@ -17659,7 +18092,7 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
                                hash: hash.clone()
                            }
                        ],
-                       parties: vec![0, 1, 2]
+                       parties: vec![0]
                    },
                ]);
     assert!(stream.frags.is_empty());
