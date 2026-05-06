@@ -19,5 +19,6 @@
 mod channels;
 mod frags;
 mod multicast;
+mod select;
 mod stream;
 mod threads;

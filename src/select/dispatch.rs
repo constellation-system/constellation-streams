@@ -30,6 +30,7 @@ use std::time::Instant;
 
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::MutexPoison;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::error::WithMutexPoison;
@@ -85,7 +86,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Default,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send {
+    Stream: Clone + PushStream<Ctx> {
     /// Mutable state.
     state: Arc<RwLock<DispatchSelectorState<Epochs, StreamID, Stream, Ctx>>>,
     /// When to next refresh the set of possible streams.
@@ -96,7 +97,7 @@ struct DispatchSelectorState<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Iterator,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send {
+    Stream: Clone + PushStream<Ctx> {
     ctx: PhantomData<Ctx>,
     /// Scheduler to use for selecting a raw stream.
     sched: Scheduler<Epochs, FarHistory, PassthruPolicy<StreamID>, ()>,
@@ -223,7 +224,7 @@ where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
     fn create(
         config: FarSchedulerConfig,
@@ -263,6 +264,16 @@ where
     #[inline]
     fn epoch(&self) -> Epochs::Item {
         self.sched.epoch().clone()
+    }
+
+    #[inline]
+    fn take(
+        self
+    ) -> Vec<(StreamID, Stream)> {
+        self.streams
+            .into_iter()
+            .map(|ent| (ent.id, ent.stream))
+            .collect()
     }
 
     fn add_stream(
@@ -445,7 +456,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Default,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
     fn clone(&self) -> Self {
         DispatchSelector {
@@ -462,8 +473,7 @@ where
     Epochs: Create + Iterator,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + Send + PushStream<Ctx>
-        + StreamReporter<Party, StreamID, Stream>
+    Stream: Clone + PushStream<Ctx>
 {
     type ReportStreamError = DispatchSelectorRefreshError<StreamID>;
 
@@ -508,8 +518,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
-        + StreamReporter<Party, StreamID, Stream>
+    Stream: Clone + PushStream<Ctx>
 {
     type ReportStreamError = WithMutexPoison<
         DispatchSelectorRefreshError<StreamID>
@@ -529,24 +538,19 @@ where
     }
 }
 
-
-impl<Epochs, StreamID, Stream, Ctx>
+impl<Epochs, StreamID, Stream, Ctx> Create for
     DispatchSelector<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
-    /// Create a new [StreamSelector] from a configuration and other
-    /// necessary objects.
-    ///
-    /// The `reporter` parameter is a [StreamReporter] instance that
-    /// will be used to report *both* newly-created streams as well as
-    /// incoming streams reported to *this* `StreamSelector` by a
-    /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
-    pub fn create(
+    type Config = DispatchConfig<Epochs::Config>;
+    type CreateError = DispatchSelectorCreateError<Epochs::CreateError>;
+
+    fn create(
         config: DispatchConfig<Epochs::Config>
     ) -> Result<Self, DispatchSelectorCreateError<Epochs::CreateError>> {
         let (scheduler, epochs, retry, size_hint) = config.take();
@@ -566,7 +570,17 @@ where
             refresh_when: Arc::new(RwLock::new(Some(now))),
         })
     }
+}
 
+impl<Epochs, StreamID, Stream, Ctx>
+    DispatchSelector<Epochs, StreamID, Stream, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Default + Display + Eq,
+    StreamID: Clone + Display + Eq + Hash,
+    Stream: Clone + PushStream<Ctx>
+{
     /// Report a success for a given stream.
     #[inline]
     pub fn success(
@@ -660,6 +674,17 @@ where
             Err(_) => Err(SelectorStreamError::MutexPoison)
         }
     }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> Result<Vec<(StreamID, Stream)>, MutexPoison> {
+        Ok(Arc::into_inner(self.state)
+            .ok_or(MutexPoison)?
+            .into_inner()
+            .map_err(|_| MutexPoison)?
+            .take())
+    }
 }
 
 // XXX Eliminate code duplication here
@@ -671,7 +696,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
     type BatchID =
         StreamSelectorBatch<Epochs::Item, <Stream as PushStream<Ctx>>::BatchID>;
@@ -812,7 +837,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
     type ReportError = StreamSelectorReportError<ReportError<StreamID>>;
 
@@ -836,7 +861,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send,
+    Stream: Clone + PushStream<Ctx>,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
 {
     type ReportError = StreamSelectorReportError<ReportError<StreamID>>;
@@ -863,7 +888,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx>
 {
     type ReportBatchError = StreamSelectorReportError<ReportError<StreamID>>;
 
@@ -886,7 +911,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStreamAdd<Msg, Ctx> + Send
+    Stream: Clone + PushStreamAdd<Msg, Ctx>
 {
     type AddError = SelectorBatchError<
         Epochs::Item,
@@ -943,7 +968,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Display + Default + Eq,
     StreamID: Clone + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send
+    Stream: Clone + PushStream<Ctx> + PushStreamPartyID
 {
     type PartyID = <Stream as PushStreamPartyID>::PartyID;
 }
@@ -955,7 +980,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
+    Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx>,
     Stream::PartyID: Debug
 {
     type IndefParties = Stream::IndefParties;
@@ -1442,7 +1467,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx>
 {
     type AbortBatchRetry = Infallible;
     type CreateBatchError = SelectionsError<
@@ -1861,7 +1886,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + LargeObjStream<Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + LargeObjStream<Ctx>
 {
     type Frags = <Stream as LargeObjStream<Ctx>>::Frags;
     type PushFragError = SelectorBatchError<
@@ -2010,7 +2035,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + LargeObjOfferStream<H, Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + LargeObjOfferStream<H, Ctx>
 {
     type PushOfferError = SelectorBatchError<
         Epochs::Item,
@@ -2157,7 +2182,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + PushStreamPrivateSingle<Msg, Ctx> + Send
+    Stream: Clone + PushStream<Ctx> + PushStreamPrivateSingle<Msg, Ctx>
 {
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
@@ -2441,7 +2466,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx> + PushStreamSharedSingle<Msg, Ctx> + Send,
+    Stream: Clone + PushStream<Ctx> + PushStreamSharedSingle<Msg, Ctx>,
     Stream::PartyID: Debug
 {
     type CancelPushError = SelectorBatchError<

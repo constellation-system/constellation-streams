@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::ops::Deref;
 use std::iter::once;
 use std::time::Instant;
 
@@ -108,7 +109,7 @@ fn test_test_stream_private_select_succeed() {
     assert_eq!(stream.select(&mut (), &mut ()),
                Ok(RetryIndefResult::Success(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -136,7 +137,7 @@ fn test_test_stream_private_select_indef() {
     assert_eq!(stream.select(&mut (), &mut ()),
                Ok(RetryIndefResult::Indef(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -176,7 +177,7 @@ fn test_test_stream_private_select_retry_succeed() {
     assert_eq!(stream.retry_select(&mut (), &mut (), retry),
                Ok(RetryIndefResult::Success(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -220,7 +221,7 @@ fn test_test_stream_private_select_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -267,7 +268,7 @@ fn test_test_stream_private_select_complete_succeed() {
     assert_eq!(stream.complete_select(&mut (), &mut (), completable),
                Ok(RetryIndefResult::Success(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -326,7 +327,7 @@ fn test_test_stream_private_select_complete_retry() {
     assert_eq!(stream.retry_select(&mut (), &mut (), retry),
                Ok(RetryIndefResult::Success(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -388,7 +389,7 @@ fn test_test_stream_private_select_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -453,7 +454,7 @@ fn test_test_stream_private_select_complete_complete() {
     assert_eq!(stream.complete_select(&mut (), &mut (), completable),
                Ok(RetryIndefResult::Success(())));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -483,7 +484,7 @@ fn test_test_stream_private_create_batch_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -525,14 +526,14 @@ fn test_test_stream_private_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_create_batch(&mut (), &mut (), &(), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -573,7 +574,7 @@ fn test_test_stream_private_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let permanent = permanent.expect("Expected Some");
@@ -583,7 +584,7 @@ fn test_test_stream_private_create_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -622,7 +623,7 @@ fn test_test_stream_private_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -634,7 +635,7 @@ fn test_test_stream_private_create_batch_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -682,7 +683,7 @@ fn test_test_stream_private_create_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -697,14 +698,14 @@ fn test_test_stream_private_create_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_create_batch(&mut (), &mut (), &(), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -752,7 +753,7 @@ fn test_test_stream_private_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -774,7 +775,7 @@ fn test_test_stream_private_create_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -820,7 +821,7 @@ fn test_test_stream_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -834,7 +835,7 @@ fn test_test_stream_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -846,7 +847,7 @@ fn test_test_stream_private_create_batch_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -883,7 +884,7 @@ fn test_test_stream_private_start_batch_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -927,14 +928,14 @@ fn test_test_stream_private_start_batch_select_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -978,14 +979,14 @@ fn test_test_stream_private_start_batch_create_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1032,7 +1033,7 @@ fn test_test_stream_private_start_batch_both_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let retry = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
@@ -1042,14 +1043,14 @@ fn test_test_stream_private_start_batch_both_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1083,7 +1084,7 @@ fn test_test_stream_private_start_batch_indef() {
 
     assert!(indef.is_indef());
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1132,7 +1133,7 @@ fn test_test_stream_private_start_batch_select_permanent() {
         ..
     }));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1182,7 +1183,7 @@ fn test_test_stream_private_start_batch_create_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestPrivateBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestPrivateBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1223,7 +1224,7 @@ fn test_test_stream_private_start_batch_select_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1235,7 +1236,7 @@ fn test_test_stream_private_start_batch_select_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1281,7 +1282,7 @@ fn test_test_stream_private_start_batch_create_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1293,7 +1294,7 @@ fn test_test_stream_private_start_batch_create_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1346,7 +1347,7 @@ fn test_test_stream_private_start_batch_both_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1360,7 +1361,7 @@ fn test_test_stream_private_start_batch_both_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1372,7 +1373,7 @@ fn test_test_stream_private_start_batch_both_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1425,7 +1426,7 @@ fn test_test_stream_private_start_batch_select_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1439,7 +1440,7 @@ fn test_test_stream_private_start_batch_select_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1451,7 +1452,7 @@ fn test_test_stream_private_start_batch_select_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1504,7 +1505,7 @@ fn test_test_stream_private_start_batch_create_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1518,7 +1519,7 @@ fn test_test_stream_private_start_batch_create_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1530,7 +1531,7 @@ fn test_test_stream_private_start_batch_create_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1597,7 +1598,7 @@ fn test_test_stream_private_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1611,7 +1612,7 @@ fn test_test_stream_private_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1625,7 +1626,7 @@ fn test_test_stream_private_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1639,7 +1640,7 @@ fn test_test_stream_private_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1651,7 +1652,7 @@ fn test_test_stream_private_start_batch_both_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1694,7 +1695,7 @@ fn test_test_stream_private_start_batch_select_complete_indef() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1706,7 +1707,7 @@ fn test_test_stream_private_start_batch_select_complete_indef() {
 
     assert!(indef.is_indef());
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1751,7 +1752,7 @@ fn test_test_stream_private_start_batch_select_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1766,14 +1767,14 @@ fn test_test_stream_private_start_batch_select_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1823,7 +1824,7 @@ fn test_test_stream_private_start_batch_create_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1838,14 +1839,14 @@ fn test_test_stream_private_start_batch_create_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1905,7 +1906,7 @@ fn test_test_stream_private_start_batch_both_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1920,7 +1921,7 @@ fn test_test_stream_private_start_batch_both_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let err = stream.retry_start_batch(&mut (), retry);
     let err = if let Err(err) = err {
@@ -1942,14 +1943,14 @@ fn test_test_stream_private_start_batch_both_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1998,7 +1999,7 @@ fn test_test_stream_private_start_batch_select_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2024,7 +2025,7 @@ fn test_test_stream_private_start_batch_select_complete_permanent() {
         ..
     }));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2069,7 +2070,7 @@ fn test_test_stream_private_start_batch_create_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2095,7 +2096,7 @@ fn test_test_stream_private_start_batch_create_complete_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestPrivateBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestPrivateBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2148,7 +2149,7 @@ fn test_test_stream_private_start_batch_both_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2162,7 +2163,7 @@ fn test_test_stream_private_start_batch_both_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2188,7 +2189,7 @@ fn test_test_stream_private_start_batch_both_complete_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestPrivateBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestPrivateBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2223,7 +2224,7 @@ fn test_test_stream_private_cancel_batch_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2233,7 +2234,7 @@ fn test_test_stream_private_cancel_batch_succeed() {
     assert_eq!(stream.cancel_batch(&mut (), &mut (), &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -2275,7 +2276,7 @@ fn test_test_stream_private_cancel_batch_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2290,7 +2291,7 @@ fn test_test_stream_private_cancel_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2300,7 +2301,7 @@ fn test_test_stream_private_cancel_batch_retry() {
     assert_eq!(stream.retry_cancel_batch(&mut (), &mut (), &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -2342,7 +2343,7 @@ fn test_test_stream_private_cancel_batch_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2364,7 +2365,7 @@ fn test_test_stream_private_cancel_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2411,7 +2412,7 @@ fn test_test_stream_private_cancel_batch_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2425,7 +2426,7 @@ fn test_test_stream_private_cancel_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2441,7 +2442,7 @@ fn test_test_stream_private_cancel_batch_complete_succeed() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -2490,7 +2491,7 @@ fn test_test_stream_private_cancel_batch_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2504,7 +2505,7 @@ fn test_test_stream_private_cancel_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2525,7 +2526,7 @@ fn test_test_stream_private_cancel_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2535,7 +2536,7 @@ fn test_test_stream_private_cancel_batch_complete_retry() {
     assert_eq!(stream.retry_cancel_batch(&mut (), &mut (), &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -2587,7 +2588,7 @@ fn test_test_stream_private_cancel_batch_complete_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2601,7 +2602,7 @@ fn test_test_stream_private_cancel_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2621,7 +2622,7 @@ fn test_test_stream_private_cancel_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2637,7 +2638,7 @@ fn test_test_stream_private_cancel_batch_complete_complete() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -2686,7 +2687,7 @@ fn test_test_stream_private_cancel_batch_complete_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2700,7 +2701,7 @@ fn test_test_stream_private_cancel_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2728,7 +2729,7 @@ fn test_test_stream_private_cancel_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2768,7 +2769,7 @@ fn test_test_stream_private_finish_batch_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2778,7 +2779,7 @@ fn test_test_stream_private_finish_batch_succeed() {
     assert_eq!(stream.finish_batch(&mut (), &mut (), &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -2822,7 +2823,7 @@ fn test_test_stream_private_finish_batch_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2837,7 +2838,7 @@ fn test_test_stream_private_finish_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2847,7 +2848,7 @@ fn test_test_stream_private_finish_batch_retry() {
     assert_eq!(stream.retry_finish_batch(&mut (), &mut (), &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -2891,7 +2892,7 @@ fn test_test_stream_private_finish_batch_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2913,7 +2914,7 @@ fn test_test_stream_private_finish_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2960,7 +2961,7 @@ fn test_test_stream_private_finish_batch_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2974,7 +2975,7 @@ fn test_test_stream_private_finish_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2990,7 +2991,7 @@ fn test_test_stream_private_finish_batch_complete_succeed() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -3041,7 +3042,7 @@ fn test_test_stream_private_finish_batch_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3055,7 +3056,7 @@ fn test_test_stream_private_finish_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3076,7 +3077,7 @@ fn test_test_stream_private_finish_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3086,7 +3087,7 @@ fn test_test_stream_private_finish_batch_complete_retry() {
     assert_eq!(stream.retry_finish_batch(&mut (), &mut (), &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -3140,7 +3141,7 @@ fn test_test_stream_private_finish_batch_complete_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3154,7 +3155,7 @@ fn test_test_stream_private_finish_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3174,7 +3175,7 @@ fn test_test_stream_private_finish_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3190,7 +3191,7 @@ fn test_test_stream_private_finish_batch_complete_complete() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -3241,7 +3242,7 @@ fn test_test_stream_private_finish_batch_complete_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3255,7 +3256,7 @@ fn test_test_stream_private_finish_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3283,7 +3284,7 @@ fn test_test_stream_private_finish_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3340,7 +3341,7 @@ fn test_test_stream_private_abort_start_batch_succeed() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::StartError
                ]);
@@ -3348,7 +3349,7 @@ fn test_test_stream_private_abort_start_batch_succeed() {
     assert_eq!(stream.abort_start_batch(&mut (), &mut (), permanent),
                RetryResult::Success(()));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
@@ -3405,7 +3406,7 @@ fn test_test_stream_private_abort_start_batch_retry() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::StartError
                ]);
@@ -3417,7 +3418,7 @@ fn test_test_stream_private_abort_start_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::StartError
                ]);
@@ -3425,7 +3426,7 @@ fn test_test_stream_private_abort_start_batch_retry() {
     assert_eq!(stream.retry_abort_start_batch(&mut (), &mut (), retry),
                RetryResult::Success(()));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
@@ -3460,7 +3461,7 @@ fn test_test_stream_private_add_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3470,7 +3471,7 @@ fn test_test_stream_private_add_succeed() {
     assert_eq!(stream.add(&mut (), &mut (), &"hello", &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -3514,7 +3515,7 @@ fn test_test_stream_private_add_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3529,7 +3530,7 @@ fn test_test_stream_private_add_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3539,7 +3540,7 @@ fn test_test_stream_private_add_retry() {
     assert_eq!(stream.retry_add(&mut (), &mut (), &"hello", &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -3583,7 +3584,7 @@ fn test_test_stream_private_add_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3605,7 +3606,7 @@ fn test_test_stream_private_add_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3652,7 +3653,7 @@ fn test_test_stream_private_add_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3666,7 +3667,7 @@ fn test_test_stream_private_add_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3684,7 +3685,7 @@ fn test_test_stream_private_add_complete_succeed() {
 
     assert!(res.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -3735,7 +3736,7 @@ fn test_test_stream_private_add_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3749,7 +3750,7 @@ fn test_test_stream_private_add_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3770,7 +3771,7 @@ fn test_test_stream_private_add_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3780,7 +3781,7 @@ fn test_test_stream_private_add_complete_retry() {
     assert_eq!(stream.retry_add(&mut (), &mut (), &"hello", &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -3835,7 +3836,7 @@ fn test_test_stream_private_add_complete_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3849,7 +3850,7 @@ fn test_test_stream_private_add_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3869,7 +3870,7 @@ fn test_test_stream_private_add_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3887,7 +3888,7 @@ fn test_test_stream_private_add_complete_complete() {
 
     assert!(res.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -3938,7 +3939,7 @@ fn test_test_stream_private_add_complete_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3952,7 +3953,7 @@ fn test_test_stream_private_add_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3980,7 +3981,7 @@ fn test_test_stream_private_add_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -4017,7 +4018,7 @@ fn test_test_stream_private_frags_succeed() {
                                  &mut frags),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
@@ -4026,12 +4027,12 @@ fn test_test_stream_private_frags_succeed() {
                                  &mut frags),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                    LargeObjID::from(2 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4060,8 +4061,8 @@ fn test_test_stream_private_frags_indef() {
                                  &mut frags),
                Ok(RetryIndefResult::Indef(Parties::All)));
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4099,17 +4100,17 @@ fn test_test_stream_private_frags_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4154,8 +4155,8 @@ fn test_test_stream_private_frags_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4196,7 +4197,7 @@ fn test_test_stream_private_frags_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4207,11 +4208,11 @@ fn test_test_stream_private_frags_complete_succeed() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4255,7 +4256,7 @@ fn test_test_stream_private_frags_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4271,17 +4272,17 @@ fn test_test_stream_private_frags_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4325,7 +4326,7 @@ fn test_test_stream_private_frags_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4348,8 +4349,8 @@ fn test_test_stream_private_frags_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4397,7 +4398,7 @@ fn test_test_stream_private_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4412,7 +4413,7 @@ fn test_test_stream_private_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4423,11 +4424,11 @@ fn test_test_stream_private_frags_complete_complete() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4460,7 +4461,7 @@ fn test_test_stream_private_offer_succeed() {
     assert_eq!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash_0.clone(),
                ]);
@@ -4468,12 +4469,12 @@ fn test_test_stream_private_offer_succeed() {
     assert_eq!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash_0,
                    hash_1
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4503,8 +4504,8 @@ fn test_test_stream_private_offer_indef() {
     assert_eq!(stream.push_offer(&mut (), hash.clone(), &mut frags),
                Ok(RetryIndefResult::Indef(Parties::All)));
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4543,17 +4544,17 @@ fn test_test_stream_private_offer_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash.clone()
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4599,8 +4600,8 @@ fn test_test_stream_private_offer_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4642,7 +4643,7 @@ fn test_test_stream_private_offer_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4653,11 +4654,11 @@ fn test_test_stream_private_offer_complete_succeed() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4702,7 +4703,7 @@ fn test_test_stream_private_offer_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4718,17 +4719,17 @@ fn test_test_stream_private_offer_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4773,7 +4774,7 @@ fn test_test_stream_private_offer_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4796,8 +4797,8 @@ fn test_test_stream_private_offer_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4846,7 +4847,7 @@ fn test_test_stream_private_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4861,7 +4862,7 @@ fn test_test_stream_private_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -4872,11 +4873,11 @@ fn test_test_stream_private_offer_complete_complete() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), ()))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -4936,7 +4937,7 @@ fn test_test_stream_shared_select_succeed() {
                Ok(RetryIndefResult::Success(vec![1, 2])));
     assert_eq!(selections, vec![1, 2]);
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -4967,7 +4968,7 @@ fn test_test_stream_shared_select_indef() {
 
     assert!(indef.is_indef());
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5008,7 +5009,7 @@ fn test_test_stream_shared_select_retry_succeed() {
     assert_eq!(stream.retry_select(&mut (), &mut selections, retry),
                Ok(RetryIndefResult::Success(vec![2])));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5053,7 +5054,7 @@ fn test_test_stream_shared_select_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5101,7 +5102,7 @@ fn test_test_stream_shared_select_complete_succeed() {
     assert_eq!(stream.complete_select(&mut (), &mut selections, completable),
                Ok(RetryIndefResult::Success(vec![1, 2, 3])));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5162,7 +5163,7 @@ fn test_test_stream_shared_select_complete_retry() {
     assert_eq!(stream.retry_select(&mut (), &mut selections, retry),
                Ok(RetryIndefResult::Success(vec![2, 3])));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5225,7 +5226,7 @@ fn test_test_stream_shared_select_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5291,7 +5292,7 @@ fn test_test_stream_shared_select_complete_complete() {
     assert_eq!(stream.complete_select(&mut (), &mut selections, completable),
                Ok(RetryIndefResult::Success(vec![1, 3])));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5321,7 +5322,7 @@ fn test_test_stream_shared_create_batch_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2, 3],
@@ -5364,7 +5365,7 @@ fn test_test_stream_shared_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_create_batch(&mut (), &mut (),
                                           &vec![0, 1, 2, 3], retry)
@@ -5372,7 +5373,7 @@ fn test_test_stream_shared_create_batch_retry_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -5414,7 +5415,7 @@ fn test_test_stream_shared_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let permanent = permanent.expect("Expected Some");
@@ -5424,7 +5425,7 @@ fn test_test_stream_shared_create_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5463,7 +5464,7 @@ fn test_test_stream_shared_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5476,7 +5477,7 @@ fn test_test_stream_shared_create_batch_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2],
@@ -5525,7 +5526,7 @@ fn test_test_stream_shared_create_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5541,7 +5542,7 @@ fn test_test_stream_shared_create_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_create_batch(&mut (), &mut (),
                                           &vec![0, 1, 2], retry)
@@ -5549,7 +5550,7 @@ fn test_test_stream_shared_create_batch_complete_retry() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2],
@@ -5598,7 +5599,7 @@ fn test_test_stream_shared_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5621,7 +5622,7 @@ fn test_test_stream_shared_create_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5667,7 +5668,7 @@ fn test_test_stream_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5682,7 +5683,7 @@ fn test_test_stream_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5695,7 +5696,7 @@ fn test_test_stream_shared_create_batch_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2],
@@ -5733,7 +5734,7 @@ fn test_test_stream_shared_start_batch_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2],
@@ -5778,14 +5779,14 @@ fn test_test_stream_shared_start_batch_select_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -5830,14 +5831,14 @@ fn test_test_stream_shared_start_batch_create_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2, 3],
@@ -5885,7 +5886,7 @@ fn test_test_stream_shared_start_batch_both_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let retry = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
@@ -5895,14 +5896,14 @@ fn test_test_stream_shared_start_batch_both_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2],
@@ -5938,7 +5939,7 @@ fn test_test_stream_shared_start_batch_indef() {
 
     assert!(indef.is_indef());
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -5987,7 +5988,7 @@ fn test_test_stream_shared_start_batch_select_permanent() {
         ..
     }));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -6037,7 +6038,7 @@ fn test_test_stream_shared_start_batch_create_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestSharedBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestSharedBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -6078,7 +6079,7 @@ fn test_test_stream_shared_start_batch_select_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6090,7 +6091,7 @@ fn test_test_stream_shared_start_batch_select_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -6137,7 +6138,7 @@ fn test_test_stream_shared_start_batch_create_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6149,7 +6150,7 @@ fn test_test_stream_shared_start_batch_create_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2],
@@ -6203,7 +6204,7 @@ fn test_test_stream_shared_start_batch_both_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6217,7 +6218,7 @@ fn test_test_stream_shared_start_batch_both_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6229,7 +6230,7 @@ fn test_test_stream_shared_start_batch_both_complete_succeed() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2, 3],
@@ -6283,7 +6284,7 @@ fn test_test_stream_shared_start_batch_select_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6297,7 +6298,7 @@ fn test_test_stream_shared_start_batch_select_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6309,7 +6310,7 @@ fn test_test_stream_shared_start_batch_select_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2],
@@ -6363,7 +6364,7 @@ fn test_test_stream_shared_start_batch_create_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6377,7 +6378,7 @@ fn test_test_stream_shared_start_batch_create_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6389,7 +6390,7 @@ fn test_test_stream_shared_start_batch_create_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -6457,7 +6458,7 @@ fn test_test_stream_shared_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6471,7 +6472,7 @@ fn test_test_stream_shared_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6485,7 +6486,7 @@ fn test_test_stream_shared_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6499,7 +6500,7 @@ fn test_test_stream_shared_start_batch_both_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6511,7 +6512,7 @@ fn test_test_stream_shared_start_batch_both_complete_complete() {
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -6557,7 +6558,7 @@ fn test_test_stream_shared_start_batch_select_complete_indef() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6569,7 +6570,7 @@ fn test_test_stream_shared_start_batch_select_complete_indef() {
 
     assert!(indef.is_indef());
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -6615,7 +6616,7 @@ fn test_test_stream_shared_start_batch_select_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6630,14 +6631,14 @@ fn test_test_stream_shared_start_batch_select_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2, 3],
@@ -6688,7 +6689,7 @@ fn test_test_stream_shared_start_batch_create_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6703,14 +6704,14 @@ fn test_test_stream_shared_start_batch_create_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2, 3],
@@ -6772,7 +6773,7 @@ fn test_test_stream_shared_start_batch_both_complete_retry() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6787,7 +6788,7 @@ fn test_test_stream_shared_start_batch_both_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let err = stream.retry_start_batch(&mut (), retry);
     let err = if let Err(err) = err {
@@ -6809,14 +6810,14 @@ fn test_test_stream_shared_start_batch_both_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let batch = stream.retry_start_batch(&mut (), retry)
         .expect("Expected success");
 
     assert!(batch.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![1, 2],
@@ -6866,7 +6867,7 @@ fn test_test_stream_shared_start_batch_select_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6892,7 +6893,7 @@ fn test_test_stream_shared_start_batch_select_complete_permanent() {
         ..
     }));
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -6937,7 +6938,7 @@ fn test_test_stream_shared_start_batch_create_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6963,7 +6964,7 @@ fn test_test_stream_shared_start_batch_create_complete_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestSharedBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestSharedBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -7016,7 +7017,7 @@ fn test_test_stream_shared_start_batch_both_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -7030,7 +7031,7 @@ fn test_test_stream_shared_start_batch_both_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -7056,7 +7057,7 @@ fn test_test_stream_shared_start_batch_both_complete_permanent() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(), &[TestSharedBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestSharedBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -7091,7 +7092,7 @@ fn test_test_stream_shared_cancel_batch_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7102,7 +7103,7 @@ fn test_test_stream_shared_cancel_batch_succeed() {
     assert_eq!(stream.cancel_batch(&mut (), &mut selected, &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -7144,7 +7145,7 @@ fn test_test_stream_shared_cancel_batch_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7160,7 +7161,7 @@ fn test_test_stream_shared_cancel_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7171,7 +7172,7 @@ fn test_test_stream_shared_cancel_batch_retry() {
     assert_eq!(stream.retry_cancel_batch(&mut (), &mut selected, &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -7213,7 +7214,7 @@ fn test_test_stream_shared_cancel_batch_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7236,7 +7237,7 @@ fn test_test_stream_shared_cancel_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7284,7 +7285,7 @@ fn test_test_stream_shared_cancel_batch_complete_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7299,7 +7300,7 @@ fn test_test_stream_shared_cancel_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7316,7 +7317,7 @@ fn test_test_stream_shared_cancel_batch_complete_succeed() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -7365,7 +7366,7 @@ fn test_test_stream_shared_cancel_batch_complete_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7380,7 +7381,7 @@ fn test_test_stream_shared_cancel_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7402,7 +7403,7 @@ fn test_test_stream_shared_cancel_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7413,7 +7414,7 @@ fn test_test_stream_shared_cancel_batch_complete_retry() {
     assert_eq!(stream.retry_cancel_batch(&mut (), &mut selected, &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -7465,7 +7466,7 @@ fn test_test_stream_shared_cancel_batch_complete_complete() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7480,7 +7481,7 @@ fn test_test_stream_shared_cancel_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7501,7 +7502,7 @@ fn test_test_stream_shared_cancel_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7518,7 +7519,7 @@ fn test_test_stream_shared_cancel_batch_complete_complete() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -7567,7 +7568,7 @@ fn test_test_stream_shared_cancel_batch_complete_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7582,7 +7583,7 @@ fn test_test_stream_shared_cancel_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7611,7 +7612,7 @@ fn test_test_stream_shared_cancel_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7652,7 +7653,7 @@ fn test_test_stream_shared_finish_batch_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7663,7 +7664,7 @@ fn test_test_stream_shared_finish_batch_succeed() {
     assert_eq!(stream.finish_batch(&mut (), &mut selected, &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![0, 1, 2, 3],
@@ -7708,7 +7709,7 @@ fn test_test_stream_shared_finish_batch_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7724,7 +7725,7 @@ fn test_test_stream_shared_finish_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7735,7 +7736,7 @@ fn test_test_stream_shared_finish_batch_retry() {
     assert_eq!(stream.retry_finish_batch(&mut (), &mut selected, &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![0, 1, 2, 3],
@@ -7780,7 +7781,7 @@ fn test_test_stream_shared_finish_batch_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7803,7 +7804,7 @@ fn test_test_stream_shared_finish_batch_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7851,7 +7852,7 @@ fn test_test_stream_shared_finish_batch_complete_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7866,7 +7867,7 @@ fn test_test_stream_shared_finish_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7883,7 +7884,7 @@ fn test_test_stream_shared_finish_batch_complete_succeed() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![0, 1, 2, 3],
@@ -7935,7 +7936,7 @@ fn test_test_stream_shared_finish_batch_complete_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7950,7 +7951,7 @@ fn test_test_stream_shared_finish_batch_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7972,7 +7973,7 @@ fn test_test_stream_shared_finish_batch_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -7983,7 +7984,7 @@ fn test_test_stream_shared_finish_batch_complete_retry() {
     assert_eq!(stream.retry_finish_batch(&mut (), &mut selected, &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![0, 1, 2, 3],
@@ -8038,7 +8039,7 @@ fn test_test_stream_shared_finish_batch_complete_complete() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8053,7 +8054,7 @@ fn test_test_stream_shared_finish_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8074,7 +8075,7 @@ fn test_test_stream_shared_finish_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8091,7 +8092,7 @@ fn test_test_stream_shared_finish_batch_complete_complete() {
                                             &batch, completable),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![0, 1, 2, 3],
@@ -8143,7 +8144,7 @@ fn test_test_stream_shared_finish_batch_complete_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8158,7 +8159,7 @@ fn test_test_stream_shared_finish_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8187,7 +8188,7 @@ fn test_test_stream_shared_finish_batch_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8245,7 +8246,7 @@ fn test_test_stream_shared_abort_start_batch_succeed() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::StartError
                ]);
@@ -8253,7 +8254,7 @@ fn test_test_stream_shared_abort_start_batch_succeed() {
     assert_eq!(stream.abort_start_batch(&mut (), &mut selected, permanent),
                RetryResult::Success(()));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Aborted,
                ]);
@@ -8310,7 +8311,7 @@ fn test_test_stream_shared_abort_start_batch_retry() {
         ..
     }));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::StartError
                ]);
@@ -8322,7 +8323,7 @@ fn test_test_stream_shared_abort_start_batch_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::StartError
                ]);
@@ -8330,7 +8331,7 @@ fn test_test_stream_shared_abort_start_batch_retry() {
     assert_eq!(stream.retry_abort_start_batch(&mut (), &mut selected, retry),
                RetryResult::Success(()));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Aborted,
                ]);
@@ -8365,7 +8366,7 @@ fn test_test_stream_shared_add_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8376,7 +8377,7 @@ fn test_test_stream_shared_add_succeed() {
     assert_eq!(stream.add(&mut (), &mut selected, &"hello", &batch),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8421,7 +8422,7 @@ fn test_test_stream_shared_add_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8437,7 +8438,7 @@ fn test_test_stream_shared_add_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8449,7 +8450,7 @@ fn test_test_stream_shared_add_retry() {
                                 &"hello", &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8494,7 +8495,7 @@ fn test_test_stream_shared_add_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8517,7 +8518,7 @@ fn test_test_stream_shared_add_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8565,7 +8566,7 @@ fn test_test_stream_shared_add_complete_succeed() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8580,7 +8581,7 @@ fn test_test_stream_shared_add_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8599,7 +8600,7 @@ fn test_test_stream_shared_add_complete_succeed() {
 
     assert!(res.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8651,7 +8652,7 @@ fn test_test_stream_shared_add_complete_retry() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8666,7 +8667,7 @@ fn test_test_stream_shared_add_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8688,7 +8689,7 @@ fn test_test_stream_shared_add_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8699,7 +8700,7 @@ fn test_test_stream_shared_add_complete_retry() {
     assert_eq!(stream.retry_add(&mut (), &mut selected, &"hello", &batch, retry),
                Ok(RetryResult::Success(())));
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8755,7 +8756,7 @@ fn test_test_stream_shared_add_complete_complete() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8770,7 +8771,7 @@ fn test_test_stream_shared_add_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8791,7 +8792,7 @@ fn test_test_stream_shared_add_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8810,7 +8811,7 @@ fn test_test_stream_shared_add_complete_complete() {
 
     assert!(res.is_success());
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8862,7 +8863,7 @@ fn test_test_stream_shared_add_complete_permanent() {
     };
     let mut selected = false;
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8877,7 +8878,7 @@ fn test_test_stream_shared_add_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8906,7 +8907,7 @@ fn test_test_stream_shared_add_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0, 1, 2, 3],
@@ -8944,7 +8945,7 @@ fn test_test_stream_shared_frags_succeed() {
                                  &mut frags),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
@@ -8953,12 +8954,12 @@ fn test_test_stream_shared_frags_succeed() {
                                  &mut frags),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                    LargeObjID::from(2 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -8987,8 +8988,8 @@ fn test_test_stream_shared_frags_indef() {
                                  &mut frags),
                Ok(RetryIndefResult::Indef(Parties::All)));
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9026,17 +9027,17 @@ fn test_test_stream_shared_frags_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9081,8 +9082,8 @@ fn test_test_stream_shared_frags_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9123,7 +9124,7 @@ fn test_test_stream_shared_frags_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9134,11 +9135,11 @@ fn test_test_stream_shared_frags_complete_succeed() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9182,7 +9183,7 @@ fn test_test_stream_shared_frags_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9198,17 +9199,17 @@ fn test_test_stream_shared_frags_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_frags(&mut (), LargeObjID::from(1 as u64),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9252,7 +9253,7 @@ fn test_test_stream_shared_frags_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9275,8 +9276,8 @@ fn test_test_stream_shared_frags_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9324,7 +9325,7 @@ fn test_test_stream_shared_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9339,7 +9340,7 @@ fn test_test_stream_shared_frags_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9350,11 +9351,11 @@ fn test_test_stream_shared_frags_complete_complete() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.deref(),
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9387,7 +9388,7 @@ fn test_test_stream_shared_offer_succeed() {
     assert_eq!(stream.push_offer(&mut (), hash_0.clone(), &mut frags),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash_0.clone(),
                ]);
@@ -9395,12 +9396,12 @@ fn test_test_stream_shared_offer_succeed() {
     assert_eq!(stream.push_offer(&mut (), hash_1.clone(), &mut frags),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash_0,
                    hash_1
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9430,8 +9431,8 @@ fn test_test_stream_shared_offer_indef() {
     assert_eq!(stream.push_offer(&mut (), hash.clone(), &mut frags),
                Ok(RetryIndefResult::Indef(Parties::All)));
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9470,17 +9471,17 @@ fn test_test_stream_shared_offer_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash.clone()
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9526,8 +9527,8 @@ fn test_test_stream_shared_offer_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9569,7 +9570,7 @@ fn test_test_stream_shared_offer_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9580,11 +9581,11 @@ fn test_test_stream_shared_offer_complete_succeed() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9629,7 +9630,7 @@ fn test_test_stream_shared_offer_complete_retry() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
+    assert_eq!(stream.frags.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9645,17 +9646,17 @@ fn test_test_stream_shared_offer_complete_retry() {
         panic!("Expected retry")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     assert_eq!(stream.retry_push_offer(&mut (), hash.clone(),
                                        &mut frags, retry),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9700,7 +9701,7 @@ fn test_test_stream_shared_offer_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9723,8 +9724,8 @@ fn test_test_stream_shared_offer_complete_permanent() {
         scope: ErrorScope::Session,
     });
 
-    assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert_eq!(stream.frags.deref(), &vec![]);
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9773,7 +9774,7 @@ fn test_test_stream_shared_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9788,7 +9789,7 @@ fn test_test_stream_shared_offer_complete_complete() {
         panic!("Expected error")
     };
 
-    assert_eq!(stream.offers.as_ref(), &vec![]);
+    assert_eq!(stream.offers.deref(), &vec![]);
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9799,11 +9800,11 @@ fn test_test_stream_shared_offer_complete_complete() {
                                           &mut frags, completable),
                Ok(RetryIndefResult::Success((Some(now), vec![0, 1, 2, 3]))));
 
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.deref(),
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }

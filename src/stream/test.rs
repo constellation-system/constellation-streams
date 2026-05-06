@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::cell::RefCell;
 use std::convert::Infallible;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -51,6 +52,7 @@ use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
+use crate::stream::StreamReporter;
 use crate::threads::private::PrivateLargeObjPushModeTypes;
 use crate::threads::shared::SharedLargeObjPushModeTypes;
 
@@ -99,7 +101,7 @@ pub struct TestPrivateStreamScript<In> {
 #[derive(Clone)]
 pub struct TestPrivateStream<In, Out, H>
 where H: HashID {
-    pub batches: Rc<Vec<TestPrivateBatchState<Out>>>,
+    pub batches: Rc<RefCell<Vec<TestPrivateBatchState<Out>>>>,
     pub frags: Rc<Vec<LargeObjID>>,
     pub offers: Rc<Vec<H>>,
     pub failures: Rc<Vec<usize>>,
@@ -163,7 +165,7 @@ pub struct TestSharedStreamScript<In> {
 #[derive(Clone)]
 pub struct TestSharedStream<In, Out, H>
 where H: HashID {
-    pub batches: Rc<Vec<TestSharedBatchState<Out>>>,
+    pub batches: Rc<RefCell<Vec<TestSharedBatchState<Out>>>>,
     pub frags: Rc<Vec<LargeObjID>>,
     pub offers: Rc<Vec<H>>,
     pub failures: Rc<Vec<usize>>,
@@ -476,7 +478,7 @@ where H: HashID {
 
         TestPrivateStream {
             failures: Rc::new(Vec::new()),
-            batches: Rc::new(Vec::new()),
+            batches: Rc::new(RefCell::new(Vec::new())),
             frags: Rc::new(Vec::new()),
             offers: Rc::new(Vec::new()),
             batch_reports: Rc::new(Vec::new()),
@@ -509,7 +511,7 @@ where H: HashID {
 
         TestSharedStream {
             failures: Rc::new(Vec::new()),
-            batches: Rc::new(Vec::new()),
+            batches: Rc::new(RefCell::new(Vec::new())),
             frags: Rc::new(Vec::new()),
             offers: Rc::new(Vec::new()),
             batch_reports: Rc::new(Vec::new()),
@@ -716,14 +718,14 @@ where Out: Clone,
 
         if matches!(out, Ok(RetryResult::Success(_))) {
             let msgs = if let TestPrivateBatchState::Live { msgs } = &self
-                .batches[*batch] {
+                .batches.try_borrow().expect("try_borrow failed")[*batch] {
                 msgs.clone()
             } else {
                 panic!("Expected live batch")
             };
 
-            Rc::get_mut(&mut self.batches)
-                .expect("get_mut failed")[*batch] =
+            self.batches.try_borrow_mut()
+                .expect("try_borrow failed")[*batch] =
                 TestPrivateBatchState::Finished { msgs: msgs };
         }
 
@@ -753,14 +755,14 @@ where Out: Clone,
         match err.action {
             TestAction::Success { .. } => {
                 let msgs = if let TestPrivateBatchState::Live { msgs } = &self
-                    .batches[*batch] {
+                    .batches.try_borrow().expect("try_borrow failed")[*batch] {
                     msgs.clone()
                 } else {
                     panic!("Expected live batch")
                 };
 
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] =
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] =
                     TestPrivateBatchState::Finished { msgs: msgs };
 
                 Ok(RetryResult::Success(()))
@@ -783,8 +785,8 @@ where Out: Clone,
             .pop().expect("Expected scripted action");
 
         if matches!(out, Ok(RetryResult::Success(_))) {
-            Rc::get_mut(&mut self.batches)
-                .expect("get_mut failed")[*batch] =
+            self.batches.try_borrow_mut()
+                .expect("try_borrow failed")[*batch] =
                 TestPrivateBatchState::Canceled;
         }
 
@@ -813,8 +815,8 @@ where Out: Clone,
                 Self::CancelBatchError> {
         match err.action {
             TestAction::Success { .. } => {
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] =
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] =
                     TestPrivateBatchState::Canceled;
 
                 Ok(RetryResult::Success(()))
@@ -825,10 +827,13 @@ where Out: Clone,
     }
 
     fn cancel_batches(&mut self) {
-        for i in 0..self.batches.len() {
-            if let TestPrivateBatchState::Live { .. } = &self.batches[i] {
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[i] = TestPrivateBatchState::Canceled;
+        for i in 0..self.batches.try_borrow()
+            .expect("try_borrow failed").len() {
+            if let TestPrivateBatchState::Live { .. } =
+                &self.batches.try_borrow().expect("try_borrow failed")[i] {
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[i] =
+                    TestPrivateBatchState::Canceled;
             }
         }
     }
@@ -879,14 +884,15 @@ where Out: Clone,
             if matches!(out, Ok(RetryResult::Success(_))) {
                 let (parties, msgs) = if let TestSharedBatchState::Live {
                     parties, msgs
-                } = &self.batches[*batch] {
+                } = &self.batches.try_borrow()
+                    .expect("try_borrow failed")[*batch] {
                     (parties.clone(), msgs.clone())
                 } else {
                     panic!("Expected live batch")
                 };
 
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] =
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] =
                     TestSharedBatchState::Finished {
                         parties: parties,
                         msgs: msgs
@@ -926,14 +932,15 @@ where Out: Clone,
                 TestAction::Success { .. } => {
                     let (parties, msgs) = if let TestSharedBatchState::Live {
                         parties, msgs
-                    } = &self.batches[*batch] {
+                    } = &self.batches.try_borrow_mut()
+                        .expect("try_borrow failed")[*batch] {
                         (parties.clone(), msgs.clone())
                     } else {
                         panic!("Expected live batch")
                     };
 
-                    Rc::get_mut(&mut self.batches)
-                        .expect("get_mut failed")[*batch] =
+                    self.batches.try_borrow_mut()
+                        .expect("try_borrow failed")[*batch] =
                         TestSharedBatchState::Finished {
                             parties: parties,
                             msgs: msgs
@@ -966,8 +973,8 @@ where Out: Clone,
                 .pop().expect("Expected scripted action");
 
             if matches!(out, Ok(RetryResult::Success(_))) {
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] =
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] =
                     TestSharedBatchState::Canceled;
 
                 *flags = true;
@@ -1002,8 +1009,8 @@ where Out: Clone,
         if !*flags {
             match err.action {
                 TestAction::Success { .. } => {
-                    Rc::get_mut(&mut self.batches)
-                        .expect("get_mut failed")[*batch] =
+                    self.batches.try_borrow_mut()
+                        .expect("try_borrow failed")[*batch] =
                         TestSharedBatchState::Canceled;
 
                     *flags = true;
@@ -1020,10 +1027,12 @@ where Out: Clone,
     }
 
     fn cancel_batches(&mut self) {
-        for i in 0..self.batches.len() {
-            if let TestSharedBatchState::Live { .. } = &self.batches[i] {
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[i] =
+        for i in 0..self.batches.try_borrow()
+            .expect("try_borrow failed").len() {
+            if let TestSharedBatchState::Live { .. } =
+                &self.batches.try_borrow().expect("try_borrow failed")[i] {
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[i] =
                     TestSharedBatchState::Canceled;
             }
         }
@@ -1068,8 +1077,8 @@ where Out: Clone,
 
         if matches!(out, Ok(RetryResult::Success(_))) {
             if let TestPrivateBatchState::Live { msgs } =
-                &mut Rc::get_mut(&mut self.batches)
-                .expect("get_mut failed")[*batch] {
+                &mut self.batches.try_borrow_mut()
+                .expect("try_borrow failed")[*batch] {
                 msgs.push(msg.clone())
             } else {
                 panic!("Expected live batch")
@@ -1102,8 +1111,8 @@ where Out: Clone,
         match err.action {
             TestAction::Success { .. } => {
                 if let TestPrivateBatchState::Live { msgs } =
-                    &mut Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] {
+                    &mut self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] {
                         msgs.push(msg.clone())
                     } else {
                         panic!("Expected live batch")
@@ -1138,8 +1147,8 @@ where Out: Clone,
 
             if matches!(out, Ok(RetryResult::Success(_))) {
                 if let TestSharedBatchState::Live { msgs, .. } =
-                    &mut Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[*batch] {
+                    &mut self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[*batch] {
                     msgs.push(msg.clone())
                 } else {
                     panic!("Expected live batch")
@@ -1178,8 +1187,8 @@ where Out: Clone,
             match err.action {
                 TestAction::Success { .. } => {
                     if let TestSharedBatchState::Live { msgs, .. } =
-                        &mut Rc::get_mut(&mut self.batches)
-                        .expect("get_mut failed")[*batch] {
+                        &mut self.batches.try_borrow_mut()
+                        .expect("try_borrow failed")[*batch] {
                             msgs.push(msg.clone())
                         } else {
                             panic!("Expected live batch")
@@ -1273,8 +1282,8 @@ where Out: Clone,
             .create_batch
             .pop().expect("Expected scripted action")
             .map(|res| res.map(|_| {
-                let batches = Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed");
+                let mut batches = self.batches.try_borrow_mut()
+                    .expect("try_borrow failed");
                 let out = batches.len();
 
                 batches.push(TestPrivateBatchState::Live {
@@ -1310,8 +1319,8 @@ where Out: Clone,
     > {
         match err.action {
             TestAction::Success { .. } => {
-                let batches = Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed");
+                let mut batches = self.batches.try_borrow_mut()
+                    .expect("try_borrow failed");
                 let out = batches.len();
 
                 batches.push(TestPrivateBatchState::Live {
@@ -1346,8 +1355,8 @@ where Out: Clone,
                  .map(RetryIndefResult::from)
                  .map_err(|err| match err {
                      TestError::Permanent { err } => {
-                         let batches = Rc::get_mut(&mut self.batches)
-                             .expect("get_mut failed");
+                         let mut batches = self.batches.try_borrow_mut()
+                             .expect("try_borrow failed");
                          let batch = batches.len();
 
                          batches.push(TestPrivateBatchState::StartError);
@@ -1400,8 +1409,8 @@ where Out: Clone,
                      .map(RetryIndefResult::from)
                      .map_err(|err| match err {
                          TestError::Permanent { err } => {
-                             let batches = Rc::get_mut(&mut self.batches)
-                                 .expect("get_mut failed");
+                             let mut batches = self.batches.try_borrow_mut()
+                                 .expect("try_borrow failed");
                              let batch = batches.len();
 
                              batches.push(TestPrivateBatchState::StartError);
@@ -1433,8 +1442,8 @@ where Out: Clone,
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
-                        let batches = Rc::get_mut(&mut self.batches)
-                            .expect("get_mut failed");
+                        let mut batches = self.batches.try_borrow_mut()
+                            .expect("try_borrow failed");
                         let batch = batches.len();
 
                         batches.push(TestPrivateBatchState::StartError);
@@ -1488,8 +1497,8 @@ where Out: Clone,
                      .map(RetryIndefResult::from)
                      .map_err(|err| match err {
                          TestError::Permanent { err } => {
-                             let batches = Rc::get_mut(&mut self.batches)
-                                 .expect("get_mut failed");
+                             let mut batches = self.batches.try_borrow_mut()
+                                 .expect("try_borrow failed");
                              let batch = batches.len();
 
                              batches.push(TestPrivateBatchState::StartError);
@@ -1521,8 +1530,8 @@ where Out: Clone,
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
-                        let batches = Rc::get_mut(&mut self.batches)
-                            .expect("get_mut failed");
+                        let mut batches = self.batches.try_borrow_mut()
+                            .expect("try_borrow failed");
                         let batch = batches.len();
 
                         batches.push(TestPrivateBatchState::StartError);
@@ -1569,8 +1578,8 @@ where Out: Clone,
                 });
 
             if out.is_success() {
-                Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed")[err.batch] =
+                self.batches.try_borrow_mut()
+                    .expect("try_borrow failed")[err.batch] =
                     TestPrivateBatchState::Aborted;
             }
 
@@ -1705,7 +1714,7 @@ where Out: Clone,
     ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
         if let TestSharedBatchState::Live {
             parties, ..
-        } = &self.batches[*batch_id] {
+        } = &self.batches.try_borrow().expect("try_borrow failed")[*batch_id] {
             Ok(parties.clone().into_iter())
         } else {
             panic!("batch is not live")
@@ -1823,8 +1832,8 @@ where Out: Clone,
             .create_batch
             .pop().expect("Expected scripted action")
             .map(|res| res.map(|_| {
-                let batches = Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed");
+                let mut batches = self.batches.try_borrow_mut()
+                    .expect("try_borrow failed");
                 let out = batches.len();
 
                 batches.push(TestSharedBatchState::Live {
@@ -1861,8 +1870,8 @@ where Out: Clone,
     > {
         match err.action {
             TestAction::Success { .. } => {
-                let batches = Rc::get_mut(&mut self.batches)
-                    .expect("get_mut failed");
+                let mut batches = self.batches.try_borrow_mut()
+                    .expect("try_borrow failed");
                 let out = batches.len();
 
                 batches.push(TestSharedBatchState::Live {
@@ -1906,8 +1915,8 @@ where Out: Clone,
                  .map(RetryIndefResult::from)
                  .map_err(|err| match err {
                      TestError::Permanent { err } => {
-                         let batches = Rc::get_mut(&mut self.batches)
-                             .expect("get_mut failed");
+                         let mut batches = self.batches.try_borrow_mut()
+                             .expect("try_borrow failed");
                          let batch = batches.len();
 
                          batches.push(TestSharedBatchState::StartError);
@@ -1960,8 +1969,8 @@ where Out: Clone,
                      .map(RetryIndefResult::from)
                      .map_err(|err| match err {
                          TestError::Permanent { err } => {
-                             let batches = Rc::get_mut(&mut self.batches)
-                                 .expect("get_mut failed");
+                             let mut batches = self.batches.try_borrow_mut()
+                                 .expect("try_borrow failed");
                              let batch = batches.len();
 
                              batches.push(TestSharedBatchState::StartError);
@@ -1993,8 +2002,8 @@ where Out: Clone,
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
-                        let batches = Rc::get_mut(&mut self.batches)
-                            .expect("get_mut failed");
+                        let mut batches = self.batches.try_borrow_mut()
+                            .expect("try_borrow failed");
                         let batch = batches.len();
 
                         batches.push(TestSharedBatchState::StartError);
@@ -2048,8 +2057,8 @@ where Out: Clone,
                      .map(RetryIndefResult::from)
                      .map_err(|err| match err {
                          TestError::Permanent { err } => {
-                             let batches = Rc::get_mut(&mut self.batches)
-                                 .expect("get_mut failed");
+                             let mut batches = self.batches.try_borrow_mut()
+                                 .expect("try_borrow failed");
                              let batch = batches.len();
 
                              batches.push(TestSharedBatchState::StartError);
@@ -2081,8 +2090,8 @@ where Out: Clone,
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
-                        let batches = Rc::get_mut(&mut self.batches)
-                            .expect("get_mut failed");
+                        let mut batches = self.batches.try_borrow_mut()
+                            .expect("try_borrow failed");
                         let batch = batches.len();
 
                         batches.push(TestSharedBatchState::StartError);
@@ -2130,8 +2139,8 @@ where Out: Clone,
                     });
 
                 if out.is_success() {
-                    Rc::get_mut(&mut self.batches)
-                        .expect("get_mut failed")[err.batch] =
+                    self.batches.try_borrow_mut()
+                        .expect("try_borrow failed")[err.batch] =
                         TestSharedBatchState::Aborted;
 
                     *flags = true;

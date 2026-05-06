@@ -17,6 +17,7 @@
 // <https://www.gnu.org/licenses/>.
 
 use std::iter::once;
+use std::ops::Deref;
 use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
@@ -39,7 +40,6 @@ use constellation_streams::stream::Parties;
 use constellation_streams::stream::PushStream;
 use constellation_streams::stream::PushStreamAdd;
 use constellation_streams::stream::PushStreamPrivate;
-use constellation_streams::stream::PushStreamShared;
 use constellation_streams::stream::test::TestCompletableError;
 use constellation_streams::stream::test::TestAbortRetry;
 use constellation_streams::stream::test::TestAction;
@@ -100,7 +100,7 @@ fn test_private_select_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -149,7 +149,7 @@ fn test_private_select_indef() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -207,7 +207,7 @@ fn test_private_select_retry_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -270,7 +270,7 @@ fn test_private_select_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -335,7 +335,7 @@ fn test_private_select_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -412,7 +412,7 @@ fn test_private_select_complete_retry() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -493,7 +493,7 @@ fn test_private_select_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -576,7 +576,7 @@ fn test_private_select_complete_complete() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -623,7 +623,7 @@ fn test_shared_select_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -672,7 +672,7 @@ fn test_shared_select_indef() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -731,7 +731,7 @@ fn test_shared_select_retry_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -795,7 +795,7 @@ fn test_shared_select_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -861,7 +861,7 @@ fn test_shared_select_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -940,7 +940,7 @@ fn test_shared_select_complete_retry() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1022,7 +1022,7 @@ fn test_shared_select_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1106,7 +1106,7 @@ fn test_shared_select_complete_complete() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1155,7 +1155,7 @@ fn test_private_create_batch_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1213,7 +1213,7 @@ fn test_private_create_batch_retry_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1230,7 +1230,7 @@ fn test_private_create_batch_retry_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1302,7 +1302,7 @@ fn test_private_create_batch_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1357,7 +1357,7 @@ fn test_private_create_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1379,7 +1379,7 @@ fn test_private_create_batch_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1443,7 +1443,7 @@ fn test_private_create_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1465,7 +1465,7 @@ fn test_private_create_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1482,7 +1482,7 @@ fn test_private_create_batch_complete_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1546,7 +1546,7 @@ fn test_private_create_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1582,7 +1582,7 @@ fn test_private_create_batch_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1644,7 +1644,7 @@ fn test_private_create_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1665,7 +1665,7 @@ fn test_private_create_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1687,7 +1687,7 @@ fn test_private_create_batch_complete_complete() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -1742,7 +1742,7 @@ fn test_shared_create_batch_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -1802,7 +1802,7 @@ fn test_shared_create_batch_retry_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -1819,7 +1819,7 @@ fn test_shared_create_batch_retry_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -1893,7 +1893,7 @@ fn test_shared_create_batch_permanent() {
         panic!("Expected shared")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -1949,7 +1949,7 @@ fn test_shared_create_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -1971,7 +1971,7 @@ fn test_shared_create_batch_complete_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -2037,7 +2037,7 @@ fn test_shared_create_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -2059,7 +2059,7 @@ fn test_shared_create_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -2076,7 +2076,7 @@ fn test_shared_create_batch_complete_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -2143,7 +2143,7 @@ fn test_shared_create_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -2179,7 +2179,7 @@ fn test_shared_create_batch_complete_permanent() {
         panic!("Expected shared")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2242,7 +2242,7 @@ fn test_shared_create_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -2263,7 +2263,7 @@ fn test_shared_create_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -2285,7 +2285,7 @@ fn test_shared_create_batch_complete_complete() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -2338,7 +2338,7 @@ fn test_private_start_batch_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2397,7 +2397,7 @@ fn test_private_start_batch_both_retry_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2413,7 +2413,7 @@ fn test_private_start_batch_both_retry_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2429,7 +2429,7 @@ fn test_private_start_batch_both_retry_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2480,7 +2480,7 @@ fn test_private_start_batch_indef() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2548,7 +2548,7 @@ fn test_private_start_batch_select_permanent() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2617,7 +2617,7 @@ fn test_private_start_batch_create_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(), &[TestPrivateBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestPrivateBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -2677,7 +2677,7 @@ fn test_private_start_batch_both_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2697,7 +2697,7 @@ fn test_private_start_batch_both_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2718,7 +2718,7 @@ fn test_private_start_batch_both_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2797,7 +2797,7 @@ fn test_private_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2817,7 +2817,7 @@ fn test_private_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2837,7 +2837,7 @@ fn test_private_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2857,7 +2857,7 @@ fn test_private_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2878,7 +2878,7 @@ fn test_private_start_batch_both_complete_complete() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -2933,7 +2933,7 @@ fn test_private_start_batch_select_complete_indef() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -2956,7 +2956,7 @@ fn test_private_start_batch_select_complete_indef() {
         panic!("Expected private")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -3023,7 +3023,7 @@ fn test_private_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3044,7 +3044,7 @@ fn test_private_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3059,7 +3059,7 @@ fn test_private_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3080,7 +3080,7 @@ fn test_private_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3096,7 +3096,7 @@ fn test_private_start_batch_both_complete_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -3167,7 +3167,7 @@ fn test_private_start_batch_both_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3187,7 +3187,7 @@ fn test_private_start_batch_both_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected private")
     };
@@ -3226,7 +3226,7 @@ fn test_private_start_batch_both_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(), &[TestPrivateBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestPrivateBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -3274,7 +3274,7 @@ fn test_shared_start_batch_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0],
@@ -3335,7 +3335,7 @@ fn test_shared_start_batch_both_retry_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3351,7 +3351,7 @@ fn test_shared_start_batch_both_retry_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3367,7 +3367,7 @@ fn test_shared_start_batch_both_retry_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0],
@@ -3420,7 +3420,7 @@ fn test_shared_start_batch_indef() {
         panic!("Expected shared")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -3490,7 +3490,7 @@ fn test_shared_start_batch_create_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(), &[TestSharedBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestSharedBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -3551,7 +3551,7 @@ fn test_shared_start_batch_both_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3571,7 +3571,7 @@ fn test_shared_start_batch_both_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3592,7 +3592,7 @@ fn test_shared_start_batch_both_complete_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0],
@@ -3673,7 +3673,7 @@ fn test_shared_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3693,7 +3693,7 @@ fn test_shared_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3713,7 +3713,7 @@ fn test_shared_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3733,7 +3733,7 @@ fn test_shared_start_batch_both_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3754,7 +3754,7 @@ fn test_shared_start_batch_both_complete_complete() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0],
@@ -3813,7 +3813,7 @@ fn test_shared_start_batch_select_complete_indef() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3836,7 +3836,7 @@ fn test_shared_start_batch_select_complete_indef() {
         panic!("Expected shared")
     };
 
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -3905,7 +3905,7 @@ fn test_shared_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3926,7 +3926,7 @@ fn test_shared_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3941,7 +3941,7 @@ fn test_shared_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3962,7 +3962,7 @@ fn test_shared_start_batch_both_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -3978,7 +3978,7 @@ fn test_shared_start_batch_both_complete_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![0],
@@ -4050,7 +4050,7 @@ fn test_shared_start_batch_both_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -4070,7 +4070,7 @@ fn test_shared_start_batch_both_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert!(stream.batches.is_empty());
+        assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     } else {
         panic!("Expected shared")
     };
@@ -4109,7 +4109,7 @@ fn test_shared_start_batch_both_complete_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(), &[TestSharedBatchState::StartError]);
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(), &[TestSharedBatchState::StartError]);
     assert!(stream.frags.is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
@@ -4160,7 +4160,7 @@ fn test_private_cancel_batch_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4181,7 +4181,7 @@ fn test_private_cancel_batch_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -4239,7 +4239,7 @@ fn test_private_cancel_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4260,7 +4260,7 @@ fn test_private_cancel_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4282,7 +4282,7 @@ fn test_private_cancel_batch_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -4340,7 +4340,7 @@ fn test_private_cancel_batch_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4375,7 +4375,7 @@ fn test_private_cancel_batch_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -4438,7 +4438,7 @@ fn test_private_cancel_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4458,7 +4458,7 @@ fn test_private_cancel_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4485,7 +4485,7 @@ fn test_private_cancel_batch_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -4550,7 +4550,7 @@ fn test_private_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4570,7 +4570,7 @@ fn test_private_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4597,7 +4597,7 @@ fn test_private_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4619,7 +4619,7 @@ fn test_private_cancel_batch_complete_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -4687,7 +4687,7 @@ fn test_private_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4707,7 +4707,7 @@ fn test_private_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4733,7 +4733,7 @@ fn test_private_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4760,7 +4760,7 @@ fn test_private_cancel_batch_complete_complete() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
@@ -4825,7 +4825,7 @@ fn test_private_cancel_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4845,7 +4845,7 @@ fn test_private_cancel_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -4886,7 +4886,7 @@ fn test_private_cancel_batch_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -4943,7 +4943,7 @@ fn test_shared_cancel_batch_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -4965,7 +4965,7 @@ fn test_shared_cancel_batch_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -5024,7 +5024,7 @@ fn test_shared_cancel_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5046,7 +5046,7 @@ fn test_shared_cancel_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5069,7 +5069,7 @@ fn test_shared_cancel_batch_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -5128,7 +5128,7 @@ fn test_shared_cancel_batch_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5164,7 +5164,7 @@ fn test_shared_cancel_batch_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -5229,7 +5229,7 @@ fn test_shared_cancel_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5250,7 +5250,7 @@ fn test_shared_cancel_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5278,7 +5278,7 @@ fn test_shared_cancel_batch_complete_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -5344,7 +5344,7 @@ fn test_shared_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5365,7 +5365,7 @@ fn test_shared_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5393,7 +5393,7 @@ fn test_shared_cancel_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5416,7 +5416,7 @@ fn test_shared_cancel_batch_complete_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -5485,7 +5485,7 @@ fn test_shared_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5506,7 +5506,7 @@ fn test_shared_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5533,7 +5533,7 @@ fn test_shared_cancel_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5561,7 +5561,7 @@ fn test_shared_cancel_batch_complete_complete() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Canceled,
                ]);
@@ -5627,7 +5627,7 @@ fn test_shared_cancel_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5648,7 +5648,7 @@ fn test_shared_cancel_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -5690,7 +5690,7 @@ fn test_shared_cancel_batch_complete_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -5747,7 +5747,7 @@ fn test_private_finish_batch_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -5768,7 +5768,7 @@ fn test_private_finish_batch_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -5828,7 +5828,7 @@ fn test_private_finish_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -5849,7 +5849,7 @@ fn test_private_finish_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -5871,7 +5871,7 @@ fn test_private_finish_batch_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -5931,7 +5931,7 @@ fn test_private_finish_batch_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -5966,7 +5966,7 @@ fn test_private_finish_batch_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -6029,7 +6029,7 @@ fn test_private_finish_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6049,7 +6049,7 @@ fn test_private_finish_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6076,7 +6076,7 @@ fn test_private_finish_batch_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -6143,7 +6143,7 @@ fn test_private_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6163,7 +6163,7 @@ fn test_private_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6190,7 +6190,7 @@ fn test_private_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6212,7 +6212,7 @@ fn test_private_finish_batch_complete_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -6282,7 +6282,7 @@ fn test_private_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6302,7 +6302,7 @@ fn test_private_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6328,7 +6328,7 @@ fn test_private_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6355,7 +6355,7 @@ fn test_private_finish_batch_complete_complete() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Finished {
                        msgs: vec![]
@@ -6422,7 +6422,7 @@ fn test_private_finish_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6442,7 +6442,7 @@ fn test_private_finish_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -6483,7 +6483,7 @@ fn test_private_finish_batch_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -6540,7 +6540,7 @@ fn test_shared_finish_batch_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6562,7 +6562,7 @@ fn test_shared_finish_batch_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![],
@@ -6624,7 +6624,7 @@ fn test_shared_finish_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6646,7 +6646,7 @@ fn test_shared_finish_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6669,7 +6669,7 @@ fn test_shared_finish_batch_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![],
@@ -6731,7 +6731,7 @@ fn test_shared_finish_batch_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6767,7 +6767,7 @@ fn test_shared_finish_batch_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -6832,7 +6832,7 @@ fn test_shared_finish_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6853,7 +6853,7 @@ fn test_shared_finish_batch_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6881,7 +6881,7 @@ fn test_shared_finish_batch_complete_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![],
@@ -6950,7 +6950,7 @@ fn test_shared_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6971,7 +6971,7 @@ fn test_shared_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -6999,7 +6999,7 @@ fn test_shared_finish_batch_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7022,7 +7022,7 @@ fn test_shared_finish_batch_complete_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![],
@@ -7094,7 +7094,7 @@ fn test_shared_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7115,7 +7115,7 @@ fn test_shared_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7142,7 +7142,7 @@ fn test_shared_finish_batch_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7170,7 +7170,7 @@ fn test_shared_finish_batch_complete_complete() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Finished {
                        parties: vec![],
@@ -7239,7 +7239,7 @@ fn test_shared_finish_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7260,7 +7260,7 @@ fn test_shared_finish_batch_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -7302,7 +7302,7 @@ fn test_shared_finish_batch_complete_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -7374,7 +7374,7 @@ fn test_private_abort_start_batch_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::StartError
                    ]);
@@ -7393,7 +7393,7 @@ fn test_private_abort_start_batch_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
@@ -7464,7 +7464,7 @@ fn test_private_abort_start_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::StartError
                    ]);
@@ -7482,7 +7482,7 @@ fn test_private_abort_start_batch_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::StartError
                    ]);
@@ -7501,7 +7501,7 @@ fn test_private_abort_start_batch_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
@@ -7567,7 +7567,7 @@ fn test_shared_abort_start_batch_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::StartError
                    ]);
@@ -7587,7 +7587,7 @@ fn test_shared_abort_start_batch_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Aborted,
                ]);
@@ -7658,7 +7658,7 @@ fn test_shared_abort_start_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::StartError
                    ]);
@@ -7676,7 +7676,7 @@ fn test_shared_abort_start_batch_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::StartError
                    ]);
@@ -7696,7 +7696,7 @@ fn test_shared_abort_start_batch_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Aborted,
                ]);
@@ -7747,7 +7747,7 @@ fn test_private_add_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -7768,7 +7768,7 @@ fn test_private_add_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -7828,7 +7828,7 @@ fn test_private_add_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -7849,7 +7849,7 @@ fn test_private_add_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -7871,7 +7871,7 @@ fn test_private_add_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -7931,7 +7931,7 @@ fn test_private_add_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -7966,7 +7966,7 @@ fn test_private_add_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -8029,7 +8029,7 @@ fn test_private_add_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8049,7 +8049,7 @@ fn test_private_add_complete_succeed() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8078,7 +8078,7 @@ fn test_private_add_complete_succeed() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -8145,7 +8145,7 @@ fn test_private_add_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8165,7 +8165,7 @@ fn test_private_add_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8192,7 +8192,7 @@ fn test_private_add_complete_retry() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8214,7 +8214,7 @@ fn test_private_add_complete_retry() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -8285,7 +8285,7 @@ fn test_private_add_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8305,7 +8305,7 @@ fn test_private_add_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8331,7 +8331,7 @@ fn test_private_add_complete_complete() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8360,7 +8360,7 @@ fn test_private_add_complete_complete() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec!["hello"]
@@ -8427,7 +8427,7 @@ fn test_private_add_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8447,7 +8447,7 @@ fn test_private_add_complete_permanent() {
     if let SharedPrivateChannelStream::Private {
         stream
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestPrivateBatchState::Live {
                            msgs: vec![]
@@ -8488,7 +8488,7 @@ fn test_private_add_complete_permanent() {
         panic!("Expected private")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPrivateBatchState::Live {
                        msgs: vec![]
@@ -8545,7 +8545,7 @@ fn test_shared_add_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8567,7 +8567,7 @@ fn test_shared_add_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -8629,7 +8629,7 @@ fn test_shared_add_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8651,7 +8651,7 @@ fn test_shared_add_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8674,7 +8674,7 @@ fn test_shared_add_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -8736,7 +8736,7 @@ fn test_shared_add_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8772,7 +8772,7 @@ fn test_shared_add_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -8837,7 +8837,7 @@ fn test_shared_add_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8858,7 +8858,7 @@ fn test_shared_add_complete_succeed() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8888,7 +8888,7 @@ fn test_shared_add_complete_succeed() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -8957,7 +8957,7 @@ fn test_shared_add_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -8978,7 +8978,7 @@ fn test_shared_add_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9006,7 +9006,7 @@ fn test_shared_add_complete_retry() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9029,7 +9029,7 @@ fn test_shared_add_complete_retry() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -9102,7 +9102,7 @@ fn test_shared_add_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9123,7 +9123,7 @@ fn test_shared_add_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9150,7 +9150,7 @@ fn test_shared_add_complete_complete() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9180,7 +9180,7 @@ fn test_shared_add_complete_complete() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -9249,7 +9249,7 @@ fn test_shared_add_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9270,7 +9270,7 @@ fn test_shared_add_complete_permanent() {
     if let SharedPrivateChannelStream::Shared {
         stream, ..
     } = &stream {
-        assert_eq!(stream.batches.as_ref(),
+        assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                    &vec![
                        TestSharedBatchState::Live {
                            parties: vec![],
@@ -9312,7 +9312,7 @@ fn test_shared_add_complete_permanent() {
         panic!("Expected shared")
     };
 
-    assert_eq!(stream.batches.as_ref(),
+    assert_eq!(stream.batches.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestSharedBatchState::Live {
                        parties: vec![],
@@ -9395,7 +9395,7 @@ fn test_private_frags_succeed() {
                    LargeObjID::from(1 as u64),
                    LargeObjID::from(2 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9442,7 +9442,7 @@ fn test_private_frags_indef() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9518,7 +9518,7 @@ fn test_private_frags_retry() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9583,7 +9583,7 @@ fn test_private_frags_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9667,7 +9667,7 @@ fn test_private_frags_complete_succeed() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9771,7 +9771,7 @@ fn test_private_frags_complete_retry() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9864,7 +9864,7 @@ fn test_private_frags_complete_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -9976,7 +9976,7 @@ fn test_private_frags_complete_complete() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10045,7 +10045,7 @@ fn test_shared_frags_succeed() {
                    LargeObjID::from(1 as u64),
                    LargeObjID::from(2 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10093,7 +10093,7 @@ fn test_shared_frags_indef() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10166,7 +10166,7 @@ fn test_shared_frags_retry() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10232,7 +10232,7 @@ fn test_shared_frags_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10315,7 +10315,7 @@ fn test_shared_frags_complete_succeed() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10416,7 +10416,7 @@ fn test_shared_frags_complete_retry() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10510,7 +10510,7 @@ fn test_shared_frags_complete_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10620,7 +10620,7 @@ fn test_shared_frags_complete_complete() {
                &vec![
                    LargeObjID::from(1 as u64),
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10697,7 +10697,7 @@ fn test_private_offer_succeed() {
                    hash_0,
                    hash_1
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10745,7 +10745,7 @@ fn test_private_offer_indef() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10821,7 +10821,7 @@ fn test_private_offer_retry() {
                &vec![
                    hash.clone()
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10887,7 +10887,7 @@ fn test_private_offer_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -10971,7 +10971,7 @@ fn test_private_offer_complete_succeed() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11075,7 +11075,7 @@ fn test_private_offer_complete_retry() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11169,7 +11169,7 @@ fn test_private_offer_complete_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11280,7 +11280,7 @@ fn test_private_offer_complete_complete() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11350,7 +11350,7 @@ fn test_shared_offer_succeed() {
                    hash_0,
                    hash_1
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11407,7 +11407,7 @@ fn test_shared_offer_indef() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.offers.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11480,7 +11480,7 @@ fn test_shared_offer_retry() {
                &vec![
                    hash.clone()
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11547,7 +11547,7 @@ fn test_shared_offer_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11628,7 +11628,7 @@ fn test_shared_offer_complete_succeed() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11729,7 +11729,7 @@ fn test_shared_offer_complete_retry() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11824,7 +11824,7 @@ fn test_shared_offer_complete_permanent() {
     };
 
     assert_eq!(stream.frags.as_ref(), &vec![]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
@@ -11933,7 +11933,7 @@ fn test_shared_offer_complete_complete() {
                &vec![
                    hash
                ]);
-    assert!(stream.batches.is_empty());
+    assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.frags.is_empty());
     assert!(stream.failures.is_empty());
 }
