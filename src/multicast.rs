@@ -2266,7 +2266,7 @@ where
                     Some(errs) => Err(CompoundBatchError::Batch {
                         errs: ErrorSet::create(results, errs)
                     }),
-                    // No errors, check if there are retries.
+                    // No errors.
                     None => Ok(())
                 }
             }

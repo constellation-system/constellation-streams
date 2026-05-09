@@ -115,14 +115,14 @@ fn test_send_from_outbound_offer_succeed() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -133,17 +133,17 @@ fn test_send_from_outbound_offer_succeed() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -207,11 +207,11 @@ fn test_send_from_outbound_offer_retry() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -219,14 +219,14 @@ fn test_send_from_outbound_offer_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -237,17 +237,17 @@ fn test_send_from_outbound_offer_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -309,11 +309,11 @@ fn test_send_from_outbound_offer_indef() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -321,14 +321,14 @@ fn test_send_from_outbound_offer_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -339,17 +339,17 @@ fn test_send_from_outbound_offer_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -417,14 +417,14 @@ fn test_send_from_outbound_offer_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -435,17 +435,17 @@ fn test_send_from_outbound_offer_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -513,11 +513,11 @@ fn test_send_from_outbound_offer_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -525,14 +525,14 @@ fn test_send_from_outbound_offer_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -543,17 +543,17 @@ fn test_send_from_outbound_offer_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -614,11 +614,11 @@ fn test_send_from_outbound_offer_permanent() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -686,11 +686,11 @@ fn test_send_from_outbound_offer_retry_retry() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -699,11 +699,11 @@ fn test_send_from_outbound_offer_retry_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -711,14 +711,14 @@ fn test_send_from_outbound_offer_retry_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -729,17 +729,17 @@ fn test_send_from_outbound_offer_retry_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -811,11 +811,11 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -823,14 +823,14 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -841,17 +841,17 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -923,11 +923,11 @@ fn test_send_from_outbound_offer_retry_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -936,11 +936,11 @@ fn test_send_from_outbound_offer_retry_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -948,14 +948,14 @@ fn test_send_from_outbound_offer_retry_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -966,17 +966,17 @@ fn test_send_from_outbound_offer_retry_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1042,11 +1042,11 @@ fn test_send_from_outbound_offer_retry_indef() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -1055,11 +1055,11 @@ fn test_send_from_outbound_offer_retry_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1067,14 +1067,14 @@ fn test_send_from_outbound_offer_retry_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1085,17 +1085,17 @@ fn test_send_from_outbound_offer_retry_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1162,11 +1162,11 @@ fn test_send_from_outbound_offer_retry_permanent() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -1175,11 +1175,11 @@ fn test_send_from_outbound_offer_retry_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1244,11 +1244,11 @@ fn test_send_from_outbound_offer_indef_retry() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1257,11 +1257,11 @@ fn test_send_from_outbound_offer_indef_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -1269,14 +1269,14 @@ fn test_send_from_outbound_offer_indef_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1287,17 +1287,17 @@ fn test_send_from_outbound_offer_indef_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1360,11 +1360,11 @@ fn test_send_from_outbound_offer_indef_indef() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1373,11 +1373,11 @@ fn test_send_from_outbound_offer_indef_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1385,14 +1385,14 @@ fn test_send_from_outbound_offer_indef_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1403,17 +1403,17 @@ fn test_send_from_outbound_offer_indef_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1483,11 +1483,11 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1495,14 +1495,14 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
 
     assert_eq!(next, None);
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1513,17 +1513,17 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1592,11 +1592,11 @@ fn test_send_from_outbound_offer_indef_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1605,11 +1605,11 @@ fn test_send_from_outbound_offer_indef_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -1617,14 +1617,14 @@ fn test_send_from_outbound_offer_indef_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1635,17 +1635,17 @@ fn test_send_from_outbound_offer_indef_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1711,11 +1711,11 @@ fn test_send_from_outbound_offer_indef_permanent() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -1724,11 +1724,11 @@ fn test_send_from_outbound_offer_indef_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1799,11 +1799,11 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -1811,14 +1811,14 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1829,17 +1829,17 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -1910,11 +1910,11 @@ fn test_send_from_outbound_offer_complete_retry() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -1923,11 +1923,11 @@ fn test_send_from_outbound_offer_complete_retry() {
     assert_eq!(next, Some(now));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -1935,14 +1935,14 @@ fn test_send_from_outbound_offer_complete_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -1953,17 +1953,17 @@ fn test_send_from_outbound_offer_complete_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2030,11 +2030,11 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -2042,14 +2042,14 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2060,17 +2060,17 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2137,11 +2137,11 @@ fn test_send_from_outbound_offer_complete_indef() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -2150,11 +2150,11 @@ fn test_send_from_outbound_offer_complete_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -2162,14 +2162,14 @@ fn test_send_from_outbound_offer_complete_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2180,17 +2180,17 @@ fn test_send_from_outbound_offer_complete_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2264,14 +2264,14 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2282,17 +2282,17 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2367,11 +2367,11 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -2379,14 +2379,14 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2397,17 +2397,17 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2482,11 +2482,11 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -2494,14 +2494,14 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2512,17 +2512,17 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2597,11 +2597,11 @@ fn test_send_from_outbound_offer_complete_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -2610,11 +2610,11 @@ fn test_send_from_outbound_offer_complete_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -2622,14 +2622,14 @@ fn test_send_from_outbound_offer_complete_complete() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2640,17 +2640,17 @@ fn test_send_from_outbound_offer_complete_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2722,11 +2722,11 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2737,14 +2737,14 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert!(stream.offers.is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2816,11 +2816,11 @@ fn test_send_from_outbound_offer_complete_permanent() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2831,14 +2831,14 @@ fn test_send_from_outbound_offer_complete_permanent() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert!(stream.offers.is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -2901,14 +2901,14 @@ fn test_send_from_outbound_frags_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -2919,14 +2919,14 @@ fn test_send_from_outbound_frags_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -2935,17 +2935,17 @@ fn test_send_from_outbound_frags_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3006,14 +3006,14 @@ fn test_send_from_outbound_frags_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3024,14 +3024,14 @@ fn test_send_from_outbound_frags_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -3040,17 +3040,17 @@ fn test_send_from_outbound_frags_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3118,14 +3118,14 @@ fn test_send_from_outbound_frags_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3136,17 +3136,17 @@ fn test_send_from_outbound_frags_complete_imm() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3213,14 +3213,14 @@ fn test_send_from_outbound_frags_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3231,14 +3231,14 @@ fn test_send_from_outbound_frags_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -3247,17 +3247,17 @@ fn test_send_from_outbound_frags_complete() {
     assert_eq!(next, Some(when));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3321,14 +3321,14 @@ fn test_send_from_outbound_frags_permanent() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3339,14 +3339,14 @@ fn test_send_from_outbound_frags_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 
@@ -3414,14 +3414,14 @@ fn test_send_from_outbound_frags_retry_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3431,14 +3431,14 @@ fn test_send_from_outbound_frags_retry_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3447,14 +3447,14 @@ fn test_send_from_outbound_frags_retry_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3463,17 +3463,17 @@ fn test_send_from_outbound_frags_retry_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3544,14 +3544,14 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3562,14 +3562,14 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3578,17 +3578,17 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3659,14 +3659,14 @@ fn test_send_from_outbound_frags_retry_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3677,14 +3677,14 @@ fn test_send_from_outbound_frags_retry_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3693,14 +3693,14 @@ fn test_send_from_outbound_frags_retry_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -3709,17 +3709,17 @@ fn test_send_from_outbound_frags_retry_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3784,14 +3784,14 @@ fn test_send_from_outbound_frags_retry_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3802,14 +3802,14 @@ fn test_send_from_outbound_frags_retry_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3818,14 +3818,14 @@ fn test_send_from_outbound_frags_retry_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -3834,17 +3834,17 @@ fn test_send_from_outbound_frags_retry_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -3912,14 +3912,14 @@ fn test_send_from_outbound_frags_retry_permanent() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -3930,14 +3930,14 @@ fn test_send_from_outbound_frags_retry_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -3946,14 +3946,14 @@ fn test_send_from_outbound_frags_retry_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4017,14 +4017,14 @@ fn test_send_from_outbound_frags_indef_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4035,14 +4035,14 @@ fn test_send_from_outbound_frags_indef_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4051,14 +4051,14 @@ fn test_send_from_outbound_frags_indef_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -4067,17 +4067,17 @@ fn test_send_from_outbound_frags_indef_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4139,14 +4139,14 @@ fn test_send_from_outbound_frags_indef_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4157,14 +4157,14 @@ fn test_send_from_outbound_frags_indef_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4173,14 +4173,14 @@ fn test_send_from_outbound_frags_indef_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4189,17 +4189,17 @@ fn test_send_from_outbound_frags_indef_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4267,14 +4267,14 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4285,14 +4285,14 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4301,17 +4301,17 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4379,14 +4379,14 @@ fn test_send_from_outbound_frags_indef_complete() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4397,14 +4397,14 @@ fn test_send_from_outbound_frags_indef_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4413,14 +4413,14 @@ fn test_send_from_outbound_frags_indef_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -4429,17 +4429,17 @@ fn test_send_from_outbound_frags_indef_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4504,14 +4504,14 @@ fn test_send_from_outbound_frags_indef_permanent() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4522,14 +4522,14 @@ fn test_send_from_outbound_frags_indef_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4538,14 +4538,14 @@ fn test_send_from_outbound_frags_indef_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4615,14 +4615,14 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4633,14 +4633,14 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -4649,17 +4649,17 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4729,14 +4729,14 @@ fn test_send_from_outbound_frags_complete_retry() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4747,14 +4747,14 @@ fn test_send_from_outbound_frags_complete_retry() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -4763,14 +4763,14 @@ fn test_send_from_outbound_frags_complete_retry() {
     assert_eq!(next, Some(now));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
@@ -4779,17 +4779,17 @@ fn test_send_from_outbound_frags_complete_retry() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4855,14 +4855,14 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4873,14 +4873,14 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -4889,17 +4889,17 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -4965,14 +4965,14 @@ fn test_send_from_outbound_frags_complete_indef() {
 
     assert_eq!(next, Some(when));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -4983,14 +4983,14 @@ fn test_send_from_outbound_frags_complete_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -4999,14 +4999,14 @@ fn test_send_from_outbound_frags_complete_indef() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -5015,17 +5015,17 @@ fn test_send_from_outbound_frags_complete_indef() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5099,14 +5099,14 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5117,17 +5117,17 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5201,14 +5201,14 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5219,14 +5219,14 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -5235,17 +5235,17 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5319,14 +5319,14 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5337,14 +5337,14 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -5353,17 +5353,17 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5437,14 +5437,14 @@ fn test_send_from_outbound_frags_complete_complete() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5455,14 +5455,14 @@ fn test_send_from_outbound_frags_complete_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -5471,14 +5471,14 @@ fn test_send_from_outbound_frags_complete_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -5487,17 +5487,17 @@ fn test_send_from_outbound_frags_complete_complete() {
     assert_eq!(next, Some(later));
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert_eq!(stream.frags.as_ref(),
+    assert_eq!(stream.frags.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    LargeObjID::from(0 as u64)
                ]);
-    assert_eq!(stream.offers.as_ref(),
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5568,14 +5568,14 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5586,14 +5586,14 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5664,14 +5664,14 @@ fn test_send_from_outbound_frags_complete_permanent() {
 
     assert_eq!(next, Some(now));
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let id = LargeObjID::from(0 as u64);
     let _ = proto.recv_req_obj_msg(hash.clone(), id).expect("Expected success");
@@ -5682,14 +5682,14 @@ fn test_send_from_outbound_frags_complete_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -5698,14 +5698,14 @@ fn test_send_from_outbound_frags_complete_permanent() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert_eq!(stream.offers.as_ref(),
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.offers.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    hash.clone()
                ]);
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5782,11 +5782,11 @@ fn test_send_from_outbound_msg_succeed() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5858,11 +5858,11 @@ fn test_send_from_outbound_msg_select_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -5882,11 +5882,11 @@ fn test_send_from_outbound_msg_select_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -5958,11 +5958,11 @@ fn test_send_from_outbound_msg_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -5982,11 +5982,11 @@ fn test_send_from_outbound_msg_create_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6063,11 +6063,11 @@ fn test_send_from_outbound_msg_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6087,11 +6087,11 @@ fn test_send_from_outbound_msg_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6174,11 +6174,11 @@ fn test_send_from_outbound_msg_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6198,11 +6198,11 @@ fn test_send_from_outbound_msg_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6277,11 +6277,11 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6290,11 +6290,11 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6314,11 +6314,11 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6393,11 +6393,11 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6411,11 +6411,11 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6435,11 +6435,11 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6514,11 +6514,11 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6538,11 +6538,11 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6562,11 +6562,11 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6641,11 +6641,11 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6659,11 +6659,11 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6683,11 +6683,11 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6762,11 +6762,11 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6786,11 +6786,11 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6810,11 +6810,11 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -6894,11 +6894,11 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6918,11 +6918,11 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -6942,11 +6942,11 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7025,11 +7025,11 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7049,11 +7049,11 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7132,11 +7132,11 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7145,11 +7145,11 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -7169,11 +7169,11 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7252,11 +7252,11 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7276,11 +7276,11 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7359,11 +7359,11 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7377,11 +7377,11 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -7401,11 +7401,11 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7484,11 +7484,11 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7508,11 +7508,11 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7591,11 +7591,11 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7615,11 +7615,11 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -7639,11 +7639,11 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 
@@ -7723,11 +7723,11 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7747,11 +7747,11 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7830,11 +7830,11 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7848,11 +7848,11 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -7872,11 +7872,11 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -7955,11 +7955,11 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -7979,11 +7979,11 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -8062,11 +8062,11 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8086,11 +8086,11 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -8110,11 +8110,11 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -8198,11 +8198,11 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8222,11 +8222,11 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -8310,11 +8310,11 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8334,11 +8334,11 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -8358,11 +8358,11 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -8436,11 +8436,11 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8452,11 +8452,11 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -8537,11 +8537,11 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8553,11 +8553,11 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -8640,11 +8640,11 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8656,11 +8656,11 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -8741,11 +8741,11 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8757,11 +8757,11 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -8844,11 +8844,11 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8860,11 +8860,11 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -8952,11 +8952,11 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -8972,11 +8972,11 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -9048,11 +9048,11 @@ fn test_send_from_outbound_msg_select_indef() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9072,11 +9072,11 @@ fn test_send_from_outbound_msg_select_indef() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9149,11 +9149,11 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9162,11 +9162,11 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -9186,11 +9186,11 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9263,11 +9263,11 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9281,11 +9281,11 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -9305,11 +9305,11 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9382,11 +9382,11 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9406,11 +9406,11 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -9430,11 +9430,11 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9508,11 +9508,11 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9532,11 +9532,11 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9610,11 +9610,11 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9623,11 +9623,11 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -9647,11 +9647,11 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9725,11 +9725,11 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9749,11 +9749,11 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9827,11 +9827,11 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9845,11 +9845,11 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -9869,11 +9869,11 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -9947,11 +9947,11 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -9971,11 +9971,11 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10049,11 +10049,11 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_indefs(&mut (), &mut proto, &mut stream)
@@ -10073,11 +10073,11 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -10097,11 +10097,11 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10185,11 +10185,11 @@ fn test_send_from_outbound_msg_select_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10262,11 +10262,11 @@ fn test_send_from_outbound_msg_select_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -10286,11 +10286,11 @@ fn test_send_from_outbound_msg_select_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10374,11 +10374,11 @@ fn test_send_from_outbound_msg_create_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10451,11 +10451,11 @@ fn test_send_from_outbound_msg_create_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -10475,11 +10475,11 @@ fn test_send_from_outbound_msg_create_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10563,11 +10563,11 @@ fn test_send_from_outbound_msg_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10645,11 +10645,11 @@ fn test_send_from_outbound_msg_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -10669,11 +10669,11 @@ fn test_send_from_outbound_msg_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10757,11 +10757,11 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10845,11 +10845,11 @@ fn test_send_from_outbound_msg_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -10869,11 +10869,11 @@ fn test_send_from_outbound_msg_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -10952,11 +10952,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -10976,11 +10976,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11059,11 +11059,11 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -11072,11 +11072,11 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11096,11 +11096,11 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11184,11 +11184,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11208,11 +11208,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11291,11 +11291,11 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -11309,11 +11309,11 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11333,11 +11333,11 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11427,11 +11427,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11451,11 +11451,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11534,11 +11534,11 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -11558,11 +11558,11 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11582,11 +11582,11 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11670,11 +11670,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11694,11 +11694,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11777,11 +11777,11 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -11795,11 +11795,11 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11819,11 +11819,11 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -11913,11 +11913,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -11937,11 +11937,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12020,11 +12020,11 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12044,11 +12044,11 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -12068,11 +12068,11 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12162,11 +12162,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -12186,11 +12186,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12274,11 +12274,11 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12298,11 +12298,11 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
@@ -12322,11 +12322,11 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12417,11 +12417,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12501,11 +12501,11 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12525,11 +12525,11 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12609,11 +12609,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12633,11 +12633,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12717,11 +12717,11 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12730,11 +12730,11 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
     assert_eq!(next, None);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12754,11 +12754,11 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12849,11 +12849,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -12933,11 +12933,11 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -12957,11 +12957,11 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13046,11 +13046,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13070,11 +13070,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13154,11 +13154,11 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13172,11 +13172,11 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13196,11 +13196,11 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13291,11 +13291,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13375,11 +13375,11 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13399,11 +13399,11 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13494,11 +13494,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13518,11 +13518,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13602,11 +13602,11 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13626,11 +13626,11 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13650,11 +13650,11 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13745,11 +13745,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13829,11 +13829,11 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13853,11 +13853,11 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -13942,11 +13942,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -13966,11 +13966,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14050,11 +14050,11 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14068,11 +14068,11 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14092,11 +14092,11 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14187,11 +14187,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14271,11 +14271,11 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14295,11 +14295,11 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14390,11 +14390,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14414,11 +14414,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14498,11 +14498,11 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14522,11 +14522,11 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14546,11 +14546,11 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14641,11 +14641,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14730,11 +14730,11 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14754,11 +14754,11 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14849,11 +14849,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14873,11 +14873,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -14962,11 +14962,11 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -14986,11 +14986,11 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15010,11 +15010,11 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -15092,11 +15092,11 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
                &vec![
                    TestPrivateBatchState::Aborted
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15176,11 +15176,11 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15192,11 +15192,11 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
                &vec![
                    TestPrivateBatchState::Aborted
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15281,11 +15281,11 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15367,11 +15367,11 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15383,11 +15383,11 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15474,11 +15474,11 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15562,11 +15562,11 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15578,11 +15578,11 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15669,11 +15669,11 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15757,11 +15757,11 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15773,11 +15773,11 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15864,11 +15864,11 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -15952,11 +15952,11 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -15968,11 +15968,11 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16059,11 +16059,11 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16152,11 +16152,11 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 
     let next = mode
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
@@ -16168,11 +16168,11 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16241,16 +16241,16 @@ fn test_send_from_outbound_msg_select_permanent() {
     assert!(next.is_some());
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert_eq!(stream.reports.as_ref(),
+    assert_eq!(stream.reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    TestPermanentError {
                        scope: ErrorScope::Session,
                    }
                ]);
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
 
 #[test]
@@ -16321,11 +16321,11 @@ fn test_send_from_outbound_msg_create_permanent() {
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16407,11 +16407,11 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
                &vec![
                    TestPrivateBatchState::StartError,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16428,11 +16428,11 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
                &vec![
                    TestPrivateBatchState::Aborted,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16510,11 +16510,11 @@ fn test_send_from_outbound_msg_add_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16599,11 +16599,11 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16620,11 +16620,11 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16709,11 +16709,11 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16800,11 +16800,11 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16821,11 +16821,11 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16909,11 +16909,11 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
                        msgs: vec![]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -16993,11 +16993,11 @@ fn test_send_from_outbound_msg_finish_permanent() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17090,11 +17090,11 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17111,11 +17111,11 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17202,11 +17202,11 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17301,11 +17301,11 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17322,11 +17322,11 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
                &vec![
                    TestPrivateBatchState::Canceled,
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,
@@ -17418,11 +17418,11 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
                        ]
                    },
                ]);
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert_eq!(stream.batch_reports.as_ref(),
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert_eq!(stream.batch_reports.try_borrow().expect("try_borrow failed").deref(),
                &vec![
                    (0, TestPermanentError {
                        scope: ErrorScope::Session,

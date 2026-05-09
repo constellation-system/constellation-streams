@@ -52,7 +52,6 @@ use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
-use crate::stream::StreamReporter;
 use crate::threads::private::PrivateLargeObjPushModeTypes;
 use crate::threads::shared::SharedLargeObjPushModeTypes;
 
@@ -102,12 +101,12 @@ pub struct TestPrivateStreamScript<In> {
 pub struct TestPrivateStream<In, Out, H>
 where H: HashID {
     pub batches: Rc<RefCell<Vec<TestPrivateBatchState<Out>>>>,
-    pub frags: Rc<Vec<LargeObjID>>,
-    pub offers: Rc<Vec<H>>,
+    pub frags: Rc<RefCell<Vec<LargeObjID>>>,
+    pub offers: Rc<RefCell<Vec<H>>>,
     pub failures: Rc<Vec<usize>>,
-    pub batch_reports: Rc<Vec<(usize, TestPermanentError)>>,
-    pub reports: Rc<Vec<TestPermanentError>>,
-    script: Rc<TestPrivateStreamScript<In>>
+    pub batch_reports: Rc<RefCell<Vec<(usize, TestPermanentError)>>>,
+    pub reports: Rc<RefCell<Vec<TestPermanentError>>>,
+    script: Rc<RefCell<TestPrivateStreamScript<In>>>
 }
 
 #[derive(Copy, Clone, Default)]
@@ -166,12 +165,12 @@ pub struct TestSharedStreamScript<In> {
 pub struct TestSharedStream<In, Out, H>
 where H: HashID {
     pub batches: Rc<RefCell<Vec<TestSharedBatchState<Out>>>>,
-    pub frags: Rc<Vec<LargeObjID>>,
-    pub offers: Rc<Vec<H>>,
+    pub frags: Rc<RefCell<Vec<LargeObjID>>>,
+    pub offers: Rc<RefCell<Vec<H>>>,
     pub failures: Rc<Vec<usize>>,
-    pub batch_reports: Rc<Vec<(usize, TestPermanentError)>>,
-    pub reports: Rc<Vec<TestPermanentError>>,
-    script: Rc<TestSharedStreamScript<In>>,
+    pub batch_reports: Rc<RefCell<Vec<(usize, TestPermanentError)>>>,
+    pub reports: Rc<RefCell<Vec<TestPermanentError>>>,
+    script: Rc<RefCell<TestSharedStreamScript<In>>>,
     parties: Vec<(usize, ())>
 }
 
@@ -393,8 +392,9 @@ where H: HashID {
         batch: &usize,
         error: &TestPermanentError
     ) -> Result<(), Self::ReportBatchError> {
-        Rc::get_mut(&mut self.batch_reports)
-            .expect("get_mut failed")
+       self.batch_reports
+            .try_borrow_mut()
+            .expect("try_borrow failed")
             .push((*batch, error.clone()));
 
         Ok(())
@@ -409,8 +409,9 @@ where H: HashID {
         &mut self,
         error: &TestPermanentError
     ) -> Result<(), Self::ReportError> {
-        Rc::get_mut(&mut self.reports)
-            .expect("get_mut failed")
+       self.reports
+            .try_borrow_mut()
+            .expect("try_borrow failed")
             .push(error.clone());
 
         Ok(())
@@ -479,11 +480,11 @@ where H: HashID {
         TestPrivateStream {
             failures: Rc::new(Vec::new()),
             batches: Rc::new(RefCell::new(Vec::new())),
-            frags: Rc::new(Vec::new()),
-            offers: Rc::new(Vec::new()),
-            batch_reports: Rc::new(Vec::new()),
-            reports: Rc::new(Vec::new()),
-            script: Rc::new(script)
+            frags: Rc::new(RefCell::new(Vec::new())),
+            offers: Rc::new(RefCell::new(Vec::new())),
+            batch_reports: Rc::new(RefCell::new(Vec::new())),
+            reports: Rc::new(RefCell::new(Vec::new())),
+            script: Rc::new(RefCell::new(script))
         }
     }
 }
@@ -512,11 +513,11 @@ where H: HashID {
         TestSharedStream {
             failures: Rc::new(Vec::new()),
             batches: Rc::new(RefCell::new(Vec::new())),
-            frags: Rc::new(Vec::new()),
-            offers: Rc::new(Vec::new()),
-            batch_reports: Rc::new(Vec::new()),
-            reports: Rc::new(Vec::new()),
-            script: Rc::new(script),
+            frags: Rc::new(RefCell::new(Vec::new())),
+            offers: Rc::new(RefCell::new(Vec::new())),
+            batch_reports: Rc::new(RefCell::new(Vec::new())),
+            reports: Rc::new(RefCell::new(Vec::new())),
+            script: Rc::new(RefCell::new(script)),
             parties: parties
         }
     }
@@ -674,8 +675,7 @@ where H: HashID {
     type PullError = TestPermanentError;
 
     fn pull(&mut self) -> Result<In, Self::PullError> {
-        Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        self.script.try_borrow_mut().expect("try_borrow failed")
             .inbound
             .pop().expect("Expected scripted action")
     }
@@ -686,8 +686,7 @@ where H: HashID {
     type PullError = TestPermanentError;
 
     fn pull(&mut self) -> Result<In, Self::PullError> {
-        Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        self.script.try_borrow_mut().expect("try_borrow failed")
             .inbound
             .pop().expect("Expected scripted action")
     }
@@ -711,8 +710,7 @@ where Out: Clone,
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>,
                 Self::FinishBatchError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .finish_batch
             .pop().expect("Expected scripted action");
 
@@ -779,8 +777,7 @@ where Out: Clone,
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>,
                 Self::CancelBatchError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .cancel_batch
             .pop().expect("Expected scripted action");
 
@@ -842,8 +839,7 @@ where Out: Clone,
         &mut self,
         batch: &Self::BatchID
     ) -> Result<(), Self::ReportError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .report_failure
             .pop().expect("Expected scripted action");
 
@@ -876,8 +872,7 @@ where Out: Clone,
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>,
                 Self::FinishBatchError> {
         if !*flags {
-            let out = Rc::get_mut(&mut self.script)
-                .expect("get_mut failed")
+            let out = self.script.try_borrow_mut().expect("try_borrow failed")
                 .finish_batch
                 .pop().expect("Expected scripted action");
 
@@ -967,8 +962,7 @@ where Out: Clone,
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>,
                 Self::CancelBatchError> {
         if !*flags {
-            let out = Rc::get_mut(&mut self.script)
-                .expect("get_mut failed")
+            let out = self.script.try_borrow_mut().expect("try_borrow failed")
                 .cancel_batch
                 .pop().expect("Expected scripted action");
 
@@ -1042,8 +1036,7 @@ where Out: Clone,
         &mut self,
         batch: &Self::BatchID
     ) -> Result<(), Self::ReportError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .report_failure
             .pop().expect("Expected scripted action");
 
@@ -1070,8 +1063,7 @@ where Out: Clone,
         msg: &Out,
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .add
             .pop().expect("Expected scripted action");
 
@@ -1140,8 +1132,7 @@ where Out: Clone,
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         if !*flags {
-            let out = Rc::get_mut(&mut self.script)
-                .expect("get_mut failed")
+            let out = self.script.try_borrow_mut().expect("try_borrow failed")
                 .add
                 .pop().expect("Expected scripted action");
 
@@ -1234,8 +1225,7 @@ where Out: Clone,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .select
             .pop().expect("Expected scripted action");
 
@@ -1277,8 +1267,7 @@ where Out: Clone,
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        self.script.try_borrow_mut().expect("try_borrow failed")
             .create_batch
             .pop().expect("Expected scripted action")
             .map(|res| res.map(|_| {
@@ -1568,8 +1557,7 @@ where Out: Clone,
         err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         if let TestStartBatchError::Create { err, .. } = err {
-            let out = Rc::get_mut(&mut self.script)
-                .expect("get_mut failed")
+            let out = self.script.try_borrow_mut().expect("try_borrow failed")
                 .abort_start_batch
                 .pop().expect("Expected scripted action")
                 .map_retry(|res| TestAbortRetry {
@@ -1733,8 +1721,7 @@ where Out: Clone,
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .select
             .pop().expect("Expected scripted action");
 
@@ -1827,8 +1814,7 @@ where Out: Clone,
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        self.script.try_borrow_mut().expect("try_borrow failed")
             .create_batch
             .pop().expect("Expected scripted action")
             .map(|res| res.map(|_| {
@@ -2129,8 +2115,8 @@ where Out: Clone,
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         if !*flags {
             if let TestStartBatchError::Create { err, .. } = err {
-                let out = Rc::get_mut(&mut self.script)
-                    .expect("get_mut failed")
+                let out = self.script.try_borrow_mut()
+                    .expect("try_borrow failed")
                     .abort_start_batch
                     .pop().expect("Expected scripted action")
                     .map_retry(|res| TestAbortRetry {
@@ -2193,13 +2179,12 @@ where Out: Clone,
                          Parties<Self::Parties>>,
         Self::PushFragError
     > {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .push_frags
             .pop().expect("Expected scripted action");
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
-            Rc::get_mut(&mut self.frags).expect("get_mut failed").push(id)
+            self.frags.try_borrow_mut().expect("try_borrow failed").push(id);
         }
 
         out
@@ -2235,8 +2220,10 @@ where Out: Clone,
     > {
         match err.action {
             TestIndefAction::Success { val } => {
-                Rc::get_mut(&mut self.frags)
-                    .expect("get_mut failed").push(id);
+                self.frags
+                    .try_borrow_mut()
+                    .expect("try_borrow failed")
+                    .push(id);
 
                 Ok(RetryIndefResult::Success((val, ())))
             }
@@ -2268,13 +2255,12 @@ where Out: Clone,
                          Parties<Self::Parties>>,
         Self::PushFragError
     > {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .push_frags
             .pop().expect("Expected scripted action");
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
-            Rc::get_mut(&mut self.frags).expect("get_mut failed").push(id)
+            self.frags.try_borrow_mut().expect("try_borrow failed").push(id);
         }
 
         out.map(|res| res.map(|out| {
@@ -2315,8 +2301,10 @@ where Out: Clone,
     > {
         match err.action {
             TestIndefAction::Success { val } => {
-                Rc::get_mut(&mut self.frags)
-                    .expect("get_mut failed").push(id);
+                self.frags
+                    .try_borrow_mut()
+                    .expect("try_borrow failed")
+                    .push(id);
 
                 let parties = self.parties.iter().cloned()
                     .map(|(party, ())| party).collect();
@@ -2342,8 +2330,9 @@ where H: HashID {
         batch: &usize,
         error: &TestPermanentError
     ) -> Result<(), Self::ReportBatchError> {
-       Rc::get_mut(&mut self.batch_reports)
-            .expect("get_mut failed")
+       self.batch_reports
+            .try_borrow_mut()
+            .expect("try_borrow failed")
             .push((*batch, error.clone()));
 
        Ok(())
@@ -2359,8 +2348,9 @@ where H: HashID {
         &mut self,
         error: &TestPermanentError
     ) -> Result<(), Self::ReportError> {
-        Rc::get_mut(&mut self.reports)
-           .expect("get_mut failed")
+       self.reports
+            .try_borrow_mut()
+            .expect("try_borrow failed")
             .push(error.clone());
 
         Ok(())
@@ -2427,13 +2417,15 @@ where Out: Clone,
                          Parties<Self::Parties>>,
         Self::PushOfferError
     > {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .push_offers
             .pop().expect("Expected scripted action");
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
-            Rc::get_mut(&mut self.offers).expect("get_mut failed").push(hash)
+            self.offers
+                .try_borrow_mut()
+                .expect("try_borrow failed")
+                .push(hash)
         }
 
         out
@@ -2469,8 +2461,10 @@ where Out: Clone,
     > {
         match err.action {
             TestIndefAction::Success { val } => {
-                Rc::get_mut(&mut self.offers)
-                    .expect("get_mut failed").push(hash);
+                self.offers
+                    .try_borrow_mut()
+                    .expect("try_borrow failed")
+                    .push(hash);
 
                 Ok(RetryIndefResult::Success((val, ())))
             }
@@ -2501,13 +2495,15 @@ where Out: Clone,
                          Parties<Self::Parties>>,
         Self::PushOfferError
     > {
-        let out = Rc::get_mut(&mut self.script)
-            .expect("get_mut failed")
+        let out = self.script.try_borrow_mut().expect("try_borrow failed")
             .push_offers
             .pop().expect("Expected scripted action");
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
-            Rc::get_mut(&mut self.offers).expect("get_mut failed").push(hash)
+            self.offers
+                .try_borrow_mut()
+                .expect("try_borrow failed")
+                .push(hash)
         }
 
         out.map(|res| res.map(|out| {
@@ -2548,8 +2544,10 @@ where Out: Clone,
     > {
         match err.action {
             TestIndefAction::Success { val } => {
-                Rc::get_mut(&mut self.offers)
-                    .expect("get_mut failed").push(hash);
+                self.offers
+                    .try_borrow_mut()
+                    .expect("try_borrow failed")
+                    .push(hash);
 
                 let parties = self.parties.iter().cloned()
                     .map(|(party, ())| party).collect();

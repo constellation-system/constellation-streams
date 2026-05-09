@@ -85,9 +85,9 @@ fn test_private_select_succeed() {
     assert_eq!(id, test_id);
 
     assert!(stream.batches.try_borrow().expect("try_borrow failed").is_empty());
-    assert!(stream.frags.is_empty());
-    assert!(stream.offers.is_empty());
+    assert!(stream.frags.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.offers.try_borrow().expect("try_borrow failed").is_empty());
     assert!(stream.failures.is_empty());
-    assert!(stream.reports.is_empty());
-    assert!(stream.batch_reports.is_empty());
+    assert!(stream.reports.try_borrow().expect("try_borrow failed").is_empty());
+    assert!(stream.batch_reports.try_borrow().expect("try_borrow failed").is_empty());
 }
