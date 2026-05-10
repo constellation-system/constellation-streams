@@ -1709,7 +1709,8 @@ impl<Epoch, Stream> SelectorAbortRetry<Epoch, Stream> {
 }
 
 impl<Epoch, Stream> RetryWhen for SelectorAbortRetry<Epoch, Stream>
-where Stream: RetryWhen
+where
+    Stream: RetryWhen
 {
     #[inline]
     fn when(&self) -> Instant {

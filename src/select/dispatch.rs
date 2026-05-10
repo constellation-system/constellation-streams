@@ -979,8 +979,8 @@ where
     Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx>,
     Stream::PartyID: Debug
 {
-    type AbortBatchRetry = SelectorAbortRetry<Epochs::Item,
-                                              Stream::AbortBatchRetry>;
+    type AbortBatchRetry =
+        SelectorAbortRetry<Epochs::Item, Stream::AbortBatchRetry>;
     type BatchPartiesError =
         SelectorBatchError<Epochs::Item, Stream::BatchPartiesError>;
     type BatchPartiesIter = Stream::BatchPartiesIter;
@@ -1462,16 +1462,20 @@ where
         SelectorAbortRetry<Epochs::Item, Stream::AbortBatchRetry>
     > {
         if let SelectorBatchError::Batch {
-            batch: SelectorBatchSelectError::Stream { selected, stream: err }
-        } = err {
-            match self.dense_id_stream(&selected) {
-                Ok(mut stream) => {
-                    stream.abort_start_batch(ctx, flags, err)
-                        .map_retry(|retry| SelectorAbortRetry {
-                            selected: selected,
-                            stream: retry,
-                        })
+            batch:
+                SelectorBatchSelectError::Stream {
+                    selected,
+                    stream: err
                 }
+        } = err
+        {
+            match self.dense_id_stream(&selected) {
+                Ok(mut stream) => stream
+                    .abort_start_batch(ctx, flags, err)
+                    .map_retry(|retry| SelectorAbortRetry {
+                        selected: selected,
+                        stream: retry
+                    }),
                 Err(err) => {
                     error!(target: "dispatch-selector",
                            "error aborting create batch on stream {}: {}",
@@ -1498,13 +1502,12 @@ where
         let (selected, retry) = retry.take();
 
         match self.dense_id_stream(&selected) {
-            Ok(mut stream) => {
-                stream.retry_abort_start_batch(ctx, flags, retry)
-                    .map_retry(|retry| SelectorAbortRetry {
-                        selected: selected,
-                        stream: retry,
-                    })
-            }
+            Ok(mut stream) => stream
+                .retry_abort_start_batch(ctx, flags, retry)
+                .map_retry(|retry| SelectorAbortRetry {
+                    selected: selected,
+                    stream: retry
+                }),
             Err(err) => {
                 error!(target: "dispatch-selector",
                        "error aborting create batch on stream {}: {}",
@@ -1525,8 +1528,8 @@ where
     StreamID: Clone + Debug + Display + Eq + Hash,
     Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx>
 {
-    type AbortBatchRetry = SelectorAbortRetry<Epochs::Item,
-                                              Stream::AbortBatchRetry>;
+    type AbortBatchRetry =
+        SelectorAbortRetry<Epochs::Item, Stream::AbortBatchRetry>;
     type CreateBatchError = SelectionsError<
         SelectorBatchError<
             Epochs::Item,
@@ -1924,16 +1927,20 @@ where
         SelectorAbortRetry<Epochs::Item, Stream::AbortBatchRetry>
     > {
         if let SelectorBatchError::Batch {
-            batch: SelectorBatchSelectError::Stream { selected, stream: err }
-        } = err {
-            match self.dense_id_stream(&selected) {
-                Ok(mut stream) => {
-                    stream.abort_start_batch(ctx, flags, err)
-                        .map_retry(|retry| SelectorAbortRetry {
-                            selected: selected,
-                            stream: retry,
-                        })
+            batch:
+                SelectorBatchSelectError::Stream {
+                    selected,
+                    stream: err
                 }
+        } = err
+        {
+            match self.dense_id_stream(&selected) {
+                Ok(mut stream) => stream
+                    .abort_start_batch(ctx, flags, err)
+                    .map_retry(|retry| SelectorAbortRetry {
+                        selected: selected,
+                        stream: retry
+                    }),
                 Err(err) => {
                     error!(target: "dispatch-selector",
                            "error aborting create batch on stream {}: {}",
@@ -1960,13 +1967,12 @@ where
         let (selected, retry) = retry.take();
 
         match self.dense_id_stream(&selected) {
-            Ok(mut stream) => {
-                stream.retry_abort_start_batch(ctx, flags, retry)
-                    .map_retry(|retry| SelectorAbortRetry {
-                        selected: selected,
-                        stream: retry,
-                    })
-            }
+            Ok(mut stream) => stream
+                .retry_abort_start_batch(ctx, flags, retry)
+                .map_retry(|retry| SelectorAbortRetry {
+                    selected: selected,
+                    stream: retry
+                }),
             Err(err) => {
                 error!(target: "dispatch-selector",
                        "error aborting create batch on stream {}: {}",
