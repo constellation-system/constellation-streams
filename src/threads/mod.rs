@@ -18,8 +18,8 @@
 
 //! Manager threads for various kinds of push and pull streams.
 
-use std::collections::HashSet;
 use std::collections::BinaryHeap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::time::Instant;
@@ -43,7 +43,7 @@ use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
-//pub mod dispatch;
+// pub mod dispatch;
 pub mod poll;
 pub mod private;
 pub mod shared;
@@ -68,7 +68,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         msgs: &mut Msgs,
         stream: &mut Stream,
         live: &HashSet<Token>,
-        now: Instant,
+        now: Instant
     ) -> Result<Option<Instant>, Self::RetryError>;
 
     fn complete_pending(
@@ -76,7 +76,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         ctx: &mut Ctx,
         msgs: &mut Msgs,
         stream: &mut Stream,
-        live: &HashSet<Token>,
+        live: &HashSet<Token>
     ) -> Result<Option<Instant>, Self::RetryError>;
 
     fn has_complete_pending(&self) -> bool;
@@ -161,7 +161,7 @@ impl Tokens {
     pub fn new() -> Tokens {
         Tokens {
             freed: BinaryHeap::new(),
-            curr: 0,
+            curr: 0
         }
     }
 
@@ -169,7 +169,7 @@ impl Tokens {
     pub fn with_capacity(hint: usize) -> Tokens {
         Tokens {
             freed: BinaryHeap::with_capacity(hint),
-            curr: 0,
+            curr: 0
         }
     }
 }
@@ -196,18 +196,20 @@ impl TokensCtx for Tokens {
             self.curr -= 1;
 
             // Clear out any tokens that can be merged back into curr.
-            while self.freed.peek()
-                .map_or(false, |head| {
-
-                    head.0 + 1 == self.curr
-                }) {
+            while self
+                .freed
+                .peek()
+                .map_or(false, |head| head.0 + 1 == self.curr)
+            {
                 self.curr -= 1;
 
                 // Smoke-check
                 match self.freed.pop() {
-                    Some(head) => if head.0 + 1 != self.curr {
-                        error!(target: "tokens",
+                    Some(head) => {
+                        if head.0 + 1 != self.curr {
+                            error!(target: "tokens",
                                "wrong result for pop from freed")
+                        }
                     }
                     None => {
                         error!(target: "tokens",
@@ -238,9 +240,11 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Stream::Parties),
-                         Self,
-                         Parties<Stream::Parties>>,
+        RetryIndefResult<
+            (Option<Instant>, Stream::Parties),
+            Self,
+            Parties<Stream::Parties>
+        >,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
@@ -280,9 +284,11 @@ where
             <Stream::PushOfferError as RecoverableError>::Completable
         >
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>),
-                         Self,
-                         Parties<Stream::Parties>>,
+        RetryIndefResult<
+            (Option<Instant>, Option<Stream::Parties>),
+            Self,
+            Parties<Stream::Parties>
+        >,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
@@ -294,19 +300,19 @@ where
         PartyID: Clone {
         match err {
             FragsOrOffer::Frags { err, id } => Ok(proto
-               .complete_push_frags(ctx, stream, id.clone(), err)?
-               .map(|(when, parties)| (when, Some(parties)))
-               .map_retry(|retry| LargeObjEntry::PushFrags {
-                   retry: retry,
-                   id: id
-               })),
+                .complete_push_frags(ctx, stream, id.clone(), err)?
+                .map(|(when, parties)| (when, Some(parties)))
+                .map_retry(|retry| LargeObjEntry::PushFrags {
+                    retry: retry,
+                    id: id
+                })),
             FragsOrOffer::Offer { err, hash } => Ok(proto
-               .complete_push_offer(ctx, stream, hash.clone(), err)?
-               .map(|(when, parties)| (when, Some(parties)))
-               .map_retry(|retry| LargeObjEntry::PushOffer {
-                   retry: retry,
-                   hash: hash
-               }))
+                .complete_push_offer(ctx, stream, hash.clone(), err)?
+                .map(|(when, parties)| (when, Some(parties)))
+                .map_retry(|retry| LargeObjEntry::PushOffer {
+                    retry: retry,
+                    hash: hash
+                }))
         }
     }
 
@@ -315,9 +321,11 @@ where
         stream: &mut Stream,
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, Option<Stream::Parties>),
-                         Self,
-                         Parties<Stream::Parties>>,
+        RetryIndefResult<
+            (Option<Instant>, Option<Stream::Parties>),
+            Self,
+            Parties<Stream::Parties>
+        >,
         LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
@@ -328,24 +336,24 @@ where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         Ok(proto
-           .try_push(ctx, stream)?
-           .map(|(when, parties)| (when, Some(parties)))
-           .flat_map_retry(|retry| match retry {
-               LargeObjPushRetry::Frags { retry, id } => {
-                   RetryIndefResult::Retry(LargeObjEntry::PushFrags {
-                       retry: retry,
-                       id: id
-                   })
-               }
-               LargeObjPushRetry::Offer { retry, hash } => {
-                   RetryIndefResult::Retry(LargeObjEntry::PushOffer {
-                       retry: retry,
-                       hash: hash
-                   })
-               }
-               LargeObjPushRetry::Retry { when } => {
-                   RetryIndefResult::Success((Some(when), None))
-               }
-           }))
+            .try_push(ctx, stream)?
+            .map(|(when, parties)| (when, Some(parties)))
+            .flat_map_retry(|retry| match retry {
+                LargeObjPushRetry::Frags { retry, id } => {
+                    RetryIndefResult::Retry(LargeObjEntry::PushFrags {
+                        retry: retry,
+                        id: id
+                    })
+                }
+                LargeObjPushRetry::Offer { retry, hash } => {
+                    RetryIndefResult::Retry(LargeObjEntry::PushOffer {
+                        retry: retry,
+                        hash: hash
+                    })
+                }
+                LargeObjPushRetry::Retry { when } => {
+                    RetryIndefResult::Success((Some(when), None))
+                }
+            }))
     }
 }

@@ -16,10 +16,10 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::convert::Infallible;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -55,7 +55,7 @@ pub struct TestChannelParam {
 pub struct TestStream<Stream> {
     id: TestStreamID,
     stream: Stream,
-    shutdown: Vec<Result<RetryResult<()>,  TestChannelsError>>
+    shutdown: Vec<Result<RetryResult<()>, TestChannelsError>>
 }
 
 #[derive(Debug)]
@@ -66,24 +66,29 @@ pub struct TestChannelsError {
 pub struct TestChannels<Stream> {
     req_streams: HashMap<
         TestStreamID,
-        Vec<(Result<
-            RetryResult<(Option<Stream>, bool, Option<Instant>)>,
-            TestChannelsError
-        >, Option<Instant>)>
-    >,
-    listen: Vec<Result<
-        RetryResult<(
-            Vec<TestStream<Stream>>,
-            Vec<TestStreamID>,
-            Option<Vec<(String, TestChannelParam)>>,
+        Vec<(
+            Result<
+                RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+                TestChannelsError
+            >,
             Option<Instant>
-        )>,
-        TestChannelsError
-    >>,
+        )>
+    >,
+    listen: Vec<
+        Result<
+            RetryResult<(
+                Vec<TestStream<Stream>>,
+                Vec<TestStreamID>,
+                Option<Vec<(String, TestChannelParam)>>,
+                Option<Instant>
+            )>,
+            TestChannelsError
+        >
+    >,
     shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>,
     pub actives: HashMap<
         (String, TestChannelParam),
-        Vec<Result<RetryResult<()>,  TestChannelsError>>
+        Vec<Result<RetryResult<()>, TestChannelsError>>
     >
 }
 
@@ -96,15 +101,17 @@ pub struct TestChannelsScript<Stream> {
         >,
         Option<Instant>
     )>,
-    pub listen: Vec<Result<
-        RetryResult<(
-            Vec<TestStream<Stream>>,
-            Vec<TestStreamID>,
-            Option<Vec<(String, TestChannelParam)>>,
-            Option<Instant>
-        )>,
-        TestChannelsError
-    >>,
+    pub listen: Vec<
+        Result<
+            RetryResult<(
+                Vec<TestStream<Stream>>,
+                Vec<TestStreamID>,
+                Option<Vec<(String, TestChannelParam)>>,
+                Option<Instant>
+            )>,
+            TestChannelsError
+        >
+    >,
     pub shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>
 }
 
@@ -122,7 +129,8 @@ impl Hash for TestChannelParam {
     fn hash<H>(
         &self,
         hash: &mut H
-    ) where H: Hasher {
+    ) where
+        H: Hasher {
         let mut strs: Vec<&String> = self.accepts.iter().collect();
 
         strs.sort();
@@ -137,7 +145,9 @@ impl ScopedError for TestChannelsError {
 }
 
 impl<Stream, Ctx, Srcs> ChannelsCreate<Ctx, Srcs> for TestChannels<Stream>
-where Stream: Clone {
+where
+    Stream: Clone
+{
     type Config = TestChannelsScript<Stream>;
     type CreateError = Infallible;
 
@@ -147,21 +157,24 @@ where Stream: Clone {
         _srcs: Srcs
     ) -> Result<Self, Self::CreateError> {
         let TestChannelsScript {
-            req_streams, mut listen, mut shutdown_listen
+            req_streams,
+            mut listen,
+            mut shutdown_listen
         } = config;
         let mut reqs: HashMap<
             TestStreamID,
-            Vec<(Result<
-                RetryResult<(Option<Stream>, bool, Option<Instant>)>,
-                TestChannelsError
-            >, Option<Instant>)>
+            Vec<(
+                Result<
+                    RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+                    TestChannelsError
+                >,
+                Option<Instant>
+            )>
         > = HashMap::with_capacity(req_streams.len());
 
         for (id, res, when) in req_streams {
             match reqs.entry(id) {
-                Entry::Occupied(mut ent) => {
-                    ent.get_mut().push((res, when))
-                }
+                Entry::Occupied(mut ent) => ent.get_mut().push((res, when)),
                 Entry::Vacant(ent) => {
                     let mut streams = Vec::new();
 
@@ -188,17 +201,21 @@ where Stream: Clone {
 }
 
 impl<Ctx, Stream> Channels<Ctx> for TestChannels<Stream>
-where Stream: Clone {
-    type ChannelID = String;
+where
+    Stream: Clone
+{
     type Addr = String;
-    type Param = TestChannelParam;
-    type Stream = Stream;
+    type ChannelID = String;
     type OutNegoParam = ();
-    type SelectParamIter<'a> = IntoIter<(String, TestChannelParam)>
-    where Self: 'a,
-          Ctx: 'a;
-    type ReqStreamError = TestChannelsError;
+    type Param = TestChannelParam;
     type ParamError = Infallible;
+    type ReqStreamError = TestChannelsError;
+    type SelectParamIter<'a>
+        = IntoIter<(String, TestChannelParam)>
+    where
+        Self: 'a,
+        Ctx: 'a;
+    type Stream = Stream;
 
     fn req_stream(
         &mut self,
@@ -208,11 +225,7 @@ where Stream: Clone {
         endpoint: &Self::Addr,
         _nego_param: &Self::OutNegoParam
     ) -> Result<
-        RetryResult<(
-            Option<Self::Stream>,
-            bool,
-            Option<Instant>
-        )>,
+        RetryResult<(Option<Self::Stream>, bool, Option<Instant>)>,
         Self::ReqStreamError
     > {
         let id = TestStreamID {
@@ -233,9 +246,12 @@ where Stream: Clone {
         &'a mut self,
         _ctx: &'a mut Ctx,
         channels: I
-    ) -> Result<RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
-                Self::ParamError>
-    where I: 'a + Iterator<Item = Self::ChannelID> {
+    ) -> Result<
+        RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
+        Self::ParamError
+    >
+    where
+        I: 'a + Iterator<Item = Self::ChannelID> {
         let channels: HashSet<String> = channels.collect();
         let mut params: Vec<(String, TestChannelParam)> =
             Vec::with_capacity(self.req_streams.len());
@@ -262,10 +278,12 @@ where Stream: Clone {
 }
 
 impl<Stream, Ctx> ChannelsListen<Ctx> for TestChannels<Stream>
-where Stream: Clone {
+where
+    Stream: Clone
+{
     type EndpointIter = IntoIter<(String, String, TestChannelParam)>;
-    type StreamIter = IntoIter<(String, String, TestChannelParam, Stream)>;
     type ListenError = TestChannelsError;
+    type StreamIter = IntoIter<(String, String, TestChannelParam, Stream)>;
 
     fn listen(
         &mut self,
@@ -280,50 +298,65 @@ where Stream: Clone {
         )>,
         Self::ListenError
     > {
-        self.listen.pop()
+        self.listen
+            .pop()
             .expect("Expected scripted action")
-            .map(|res| res.map(|(streams, ids, refreshes, when)| {
-                let streams: Vec<(String, String, TestChannelParam, Stream)> =
-                    streams.into_iter()
-                    .map(|mut val| {
-                        let key = (val.id.channel.clone(),
-                                   val.id.param.clone());
+            .map(|res| {
+                res.map(|(streams, ids, refreshes, when)| {
+                    let streams: Vec<(
+                        String,
+                        String,
+                        TestChannelParam,
+                        Stream
+                    )> = streams
+                        .into_iter()
+                        .map(|mut val| {
+                            let key =
+                                (val.id.channel.clone(), val.id.param.clone());
 
-                        val.shutdown.reverse();
+                            val.shutdown.reverse();
 
-                        if self.actives.insert(key, val.shutdown).is_some() {
-                            panic!("Stream {:?} already exists", val.id)
-                        }
+                            if self.actives.insert(key, val.shutdown).is_some()
+                            {
+                                panic!("Stream {:?} already exists", val.id)
+                            }
 
-                        (val.id.endpoint, val.id.channel,
-                         val.id.param, val.stream)
-                    })
-                    .collect();
-                let ids: Vec<(String, String, TestChannelParam)> =
-                    ids.into_iter()
-                    .map(|id| (id.endpoint, id.channel, id.param))
-                    .collect();
-                let refreshed = if let Some(refreshes) = refreshes {
-                    let refreshes: HashSet<(String, TestChannelParam)> =
-                        refreshes.into_iter().collect();
+                            (
+                                val.id.endpoint,
+                                val.id.channel,
+                                val.id.param,
+                                val.stream
+                            )
+                        })
+                        .collect();
+                    let ids: Vec<(String, String, TestChannelParam)> = ids
+                        .into_iter()
+                        .map(|id| (id.endpoint, id.channel, id.param))
+                        .collect();
+                    let refreshed = if let Some(refreshes) = refreshes {
+                        let refreshes: HashSet<(String, TestChannelParam)> =
+                            refreshes.into_iter().collect();
 
-                    self.actives.retain(|key, _| refreshes.contains(key));
+                        self.actives.retain(|key, _| refreshes.contains(key));
 
-                    true
-                } else {
-                    false
-                };
+                        true
+                    } else {
+                        false
+                    };
 
-                (streams.into_iter(), ids.into_iter(), refreshed, when)
-            }))
+                    (streams.into_iter(), ids.into_iter(), refreshed, when)
+                })
+            })
     }
 }
 
 impl<Stream, Ctx> ChannelsShutdown<Ctx> for TestChannels<Stream>
-where Stream: Clone {
-    type ShutdownStreamError = TestChannelsError;
-    type ShutdownListenError = TestChannelsError;
+where
+    Stream: Clone
+{
     type ShutdownError = Infallible;
+    type ShutdownListenError = TestChannelsError;
+    type ShutdownStreamError = TestChannelsError;
 
     fn shutdown_stream(
         &mut self,
@@ -331,7 +364,7 @@ where Stream: Clone {
         channel: &Self::ChannelID,
         param: &Self::Param,
         _session: Self::Stream
-    ) -> Result<RetryResult<()>,  Self::ShutdownStreamError> {
+    ) -> Result<RetryResult<()>, Self::ShutdownStreamError> {
         self.actives
             .get_mut(&(channel.clone(), param.clone()))
             .expect("Stream not active")
@@ -341,7 +374,7 @@ where Stream: Clone {
 
     fn shutdown(
         self,
-        _ctx: &mut Ctx,
+        _ctx: &mut Ctx
     ) -> Result<(), Self::ShutdownError> {
         Ok(())
     }
@@ -351,7 +384,8 @@ where Stream: Clone {
         _ctx: &mut Ctx,
         _tokens: &HashSet<Token>
     ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
-        self.shutdown_listen.pop()
+        self.shutdown_listen
+            .pop()
             .expect("Expected scripted action")
     }
 }

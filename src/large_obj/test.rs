@@ -22,15 +22,15 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::time::Instant;
 
+use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::authn::BasicAuthNed;
 use constellation_auth::authn::MsgAuthNTypes;
 use constellation_auth::authn::PassthruMsgAuthN;
-use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::cred::NullCred;
-use constellation_common::codec::Encoder;
 use constellation_common::codec::test::TestBytesCodec;
 use constellation_common::codec::test::TestDecodeError;
 use constellation_common::codec::test::TooShort;
+use constellation_common::codec::Encoder;
 use constellation_common::config::Create;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::SHA3Algo;
@@ -40,8 +40,8 @@ use constellation_common::ids::AscendingCount;
 use crate::frags::Frags;
 use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsgs;
-use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjProtoAddOutboundError;
+use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjSender;
 
 #[derive(Default)]
@@ -59,38 +59,39 @@ pub struct TestLargeObjMsgs<Msg> {
 }
 
 impl MsgAuthNTypes<Vec<u8>> for TestLargeObjProtoMsgAuthNTypes {
-    type Wrapper = Vec<u8>;
-    type Prin = NullCred;
-    type SessionPrin = NullCred;
-    type DecoderConfig = ();
+    type AuthNError = Infallible;
     type DecodeError = TestDecodeError;
     type Decoder = TestBytesCodec;
+    type DecoderConfig = ();
     type MsgAuthN = PassthruMsgAuthN<Vec<u8>, NullCred>;
-    type AuthNError = Infallible;
+    type Prin = NullCred;
+    type SessionPrin = NullCred;
+    type Wrapper = Vec<u8>;
 }
 
 impl<Msgs> LargeObjProtoTypes<Vec<u8>, Vec<u8>> for TestLargeObjProtoTypes<Msgs>
 where
-    Msgs: LargeObjMsgs<SHA3Algo, Vec<u8>> {
-    type Prin = NullCred;
-    type SessionPrin = NullCred;
-    type IDsConfig = ();
-    type IDs = AscendingCount<LargeObjID>;
-    type HashID = SHA3ID;
-    type Hash = SHA3Algo;
-    type Wrapper = Vec<u8>;
-    type DecoderConfig = ();
+    Msgs: LargeObjMsgs<SHA3Algo, Vec<u8>>
+{
+    type AuthNError = Infallible;
+    type AuthNMsg = BasicAuthNed<NullCred, Vec<u8>>;
+    type AuthNTypes = TestLargeObjProtoMsgAuthNTypes;
     type DecodeError = TestDecodeError;
     type Decoder = TestBytesCodec;
-    type EncoderConfig = ();
+    type DecoderConfig = ();
     type EncodeError = TooShort;
     type Encoder = TestBytesCodec;
-    type Msgs = Msgs;
+    type EncoderConfig = ();
+    type Hash = SHA3Algo;
+    type HashID = SHA3ID;
+    type IDs = AscendingCount<LargeObjID>;
+    type IDsConfig = ();
     type MsgAuthN = PassthruMsgAuthN<Vec<u8>, NullCred>;
-    type AuthNError = Infallible;
-    type AuthNTypes = TestLargeObjProtoMsgAuthNTypes;
+    type Msgs = Msgs;
+    type Prin = NullCred;
     type Recv = TestAuthNMsgRecv<Vec<u8>>;
-    type AuthNMsg = BasicAuthNed<NullCred, Vec<u8>>;
+    type SessionPrin = NullCred;
+    type Wrapper = Vec<u8>;
 }
 
 impl<Msg> TestLargeObjMsgs<Msg> {
@@ -98,15 +99,15 @@ impl<Msg> TestLargeObjMsgs<Msg> {
     pub fn new(mut msgs: Vec<(Option<Msg>, Option<Instant>)>) -> Self {
         msgs.reverse();
 
-        TestLargeObjMsgs {
-            msgs: msgs
-        }
+        TestLargeObjMsgs { msgs: msgs }
     }
 }
 
 impl<Msg> LargeObjMsgs<SHA3Algo, Msg> for TestLargeObjMsgs<Msg> {
-    type AddMsgsError<Encode> = LargeObjProtoAddOutboundError<Encode>
-    where Encode: Debug + Display + ScopedError;
+    type AddMsgsError<Encode>
+        = LargeObjProtoAddOutboundError<Encode>
+    where
+        Encode: Debug + Display + ScopedError;
 
     /// Use `sender` to add outbound large object messages.
     fn add_msgs<Enc, F>(

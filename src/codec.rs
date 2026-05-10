@@ -589,9 +589,10 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         Ok(RetryIndefResult::Success(()))
     }
 
@@ -601,9 +602,10 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         error!(target: "datagram-codec-stream",
                "should never call retry_select");
 
@@ -616,9 +618,10 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         error!(target: "datagram-codec-stream",
                "should never call complete_select");
 
@@ -767,9 +770,10 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         Ok(RetryIndefResult::Success(()))
     }
 
@@ -779,9 +783,10 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         error!(target: "datagram-codec-stream",
                "should never call retry_select");
 
@@ -794,9 +799,10 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::SelectRetry>,
-                Self::SelectError>
-    {
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::SelectRetry>,
+        Self::SelectError
+    > {
         error!(target: "datagram-codec-stream",
                "should never call complete_select");
 
@@ -969,8 +975,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         msg: &Msg
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push_stream(msg).map(RetryIndefResult::from)
     }
@@ -981,8 +986,7 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         _retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         error!(target: "datagram-codec-stream",
                "should never call retry_push");
@@ -996,8 +1000,7 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         _err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push(ctx, msg).map(|_| RetryIndefResult::Success(()))
     }
@@ -1052,8 +1055,7 @@ where
         &mut self,
         _ctx: &mut Ctx,
         msg: &Msg
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push_datagram(msg).map(RetryIndefResult::from)
     }
@@ -1064,8 +1066,7 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         _retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         error!(target: "datagram-codec-stream",
                "should never call retry_push");
@@ -1079,8 +1080,7 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         _err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
         self.push(ctx, msg)
     }
@@ -1126,10 +1126,10 @@ where
     Stream: Write
 {
     type Frags = OutboundFrags;
+    type Parties = ();
     type PushFragError =
         DatagramCodecFragError<CodecStreamError<LargeObjMsgEncodeError, Error>>;
     type PushFragRetry = Instant;
-    type Parties = ();
 
     fn push_frags(
         &mut self,
@@ -1137,9 +1137,11 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushFragRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushFragRetry,
+            Parties<()>
+        >,
         Self::PushFragError
     > {
         LargeObjMsg::frags(frags, id, 1024)
@@ -1164,9 +1166,11 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushFragRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushFragRetry,
+            Parties<()>
+        >,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1179,9 +1183,11 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushFragRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushFragRetry,
+            Parties<()>
+        >,
         Self::PushFragError
     > {
         self.push_frags(ctx, id, frags)
@@ -1204,9 +1210,11 @@ where
         hash: H::HashID,
         frags: &mut Self::Frags
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushOfferRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushOfferRetry,
+            Parties<()>
+        >,
         Self::PushOfferError
     > {
         LargeObjMsg::offer(frags, hash, 1024)
@@ -1228,9 +1236,11 @@ where
         frags: &mut Self::Frags,
         _retry: Self::PushOfferRetry
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushOfferRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushOfferRetry,
+            Parties<()>
+        >,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)
@@ -1243,9 +1253,11 @@ where
         frags: &mut Self::Frags,
         _err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<(Option<Instant>, ()),
-                         Self::PushOfferRetry,
-                         Parties<()>>,
+        RetryIndefResult<
+            (Option<Instant>, ()),
+            Self::PushOfferRetry,
+            Parties<()>
+        >,
         Self::PushOfferError
     > {
         self.push_offer(ctx, hash, frags)
@@ -1261,9 +1273,10 @@ where
     fn push_datagram(
         &mut self,
         msg: &Msg
-    ) -> Result<RetryResult<(), Infallible>,
-                CodecStreamError<Codec::EncodeError, Error>>
-    {
+    ) -> Result<
+        RetryResult<(), Infallible>,
+        CodecStreamError<Codec::EncodeError, Error>
+    > {
         // ISSUE #5: Find a way to avoid repeatedly encoding messages
         // like this
         let buf = self

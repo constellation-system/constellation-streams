@@ -283,11 +283,13 @@ where
                             }
 
                             if let Some(err) = completable {
-                                return Err(RawStateMachineError::Completable {
-                                    params: params,
-                                    state: state,
-                                    err: err
-                                });
+                                return Err(
+                                    RawStateMachineError::Completable {
+                                        params: params,
+                                        state: state,
+                                        err: err
+                                    }
+                                );
                             }
                         }
                     }
@@ -347,11 +349,13 @@ where
                             }
 
                             if let Some(err) = completable {
-                                return Err(RawStateMachineError::Completable {
-                                    params: params,
-                                    state: state,
-                                    err: err
-                                });
+                                return Err(
+                                    RawStateMachineError::Completable {
+                                        params: params,
+                                        state: state,
+                                        err: err
+                                    }
+                                );
                             }
                         }
                     }

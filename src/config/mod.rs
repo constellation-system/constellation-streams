@@ -662,8 +662,7 @@ impl Default for FarSchedulerConfig {
     }
 }
 
-impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint>
-{
+impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint> {
     /// Create a new `ConnectionConfig` from its components.
     ///
     /// The arguments of this function correspond to similarly-named
@@ -847,9 +846,7 @@ where
 
     /// Get the set of possible connections.
     #[inline]
-    pub fn connections(
-        &self
-    ) -> &[ConnectionConfig<Channel, Endpoint>] {
+    pub fn connections(&self) -> &[ConnectionConfig<Channel, Endpoint>] {
         &self.connections
     }
 
