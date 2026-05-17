@@ -820,6 +820,25 @@ where
     Resolver: Default,
     Epochs: Default
 {
+    #[inline]
+    pub fn new(
+        scheduler: FarSchedulerConfig,
+        resolve: Resolver,
+        epochs: Epochs,
+        retry: Retry,
+        connections: Vec<ConnectionConfig<Channel, Endpoint>>,
+        size_hint: Option<usize>
+    ) -> Self {
+        PartyConfig {
+            scheduler: scheduler,
+            resolve: resolve,
+            epochs: epochs,
+            retry: retry,
+            connections: connections,
+            size_hint: size_hint
+        }
+    }
+
     /// Get the scheduler configuration.
     #[inline]
     pub fn scheduler(&self) -> &FarSchedulerConfig {

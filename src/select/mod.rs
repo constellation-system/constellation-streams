@@ -210,7 +210,7 @@ where
     Epochs::Item: Default,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr> {
     /// The set of connection options.
     ///
@@ -228,7 +228,7 @@ where
     Epochs: Iterator,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send {
+    Ctx::Stream: Clone + PushStream<Ctx> {
     /// Scheduler to use for selecting a raw stream.
     sched: Scheduler<
         Epochs,
@@ -483,6 +483,9 @@ where
             OutboundEndpointConfig<Resolve::OriginConfig, Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
+        debug!(target: "stream-selector-connections",
+               "creating threaded stream selector connections");
+
         let (srcs, endpoints) = config.take();
         let origins =
             endpoints.iter().map(|endpoint| endpoint.endpoint().clone());
@@ -502,6 +505,10 @@ where
         let mut channels = Vec::with_capacity(srcs.len());
 
         for src in srcs {
+            trace!(target: "stream-selector-connections",
+                   "getting channel for {}",
+                   src);
+
             let id = ctx.channel_id(&src).ok_or(
                 StreamSelectorConnectionCreateError::BadName { name: src }
             )?;
@@ -529,6 +536,9 @@ where
         )>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
+        trace!(target: "stream-selector-connections",
+               "converting refresh params");
+
         let (addrs, refresh_addrs_when) = match self
             .addrs
             .lock()
@@ -542,6 +552,10 @@ where
         };
         let addrs: Vec<(Resolve::Addr, Ctx::OutNegoParam)> = addrs
             .flat_map(|(addr, endpoint, _)| {
+                trace!(target: "stream-selector-connections",
+                       "looking up params for {}",
+                       endpoint);
+
                 if let Some(param) = self.params.get(&endpoint) {
                     Some((addr, param.clone()))
                 } else {
@@ -574,6 +588,9 @@ where
         )>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
+        trace!(target: "stream-selector-connections",
+               "getting refresh params");
+
         match ctx
             .params(&mut (), self.channels.iter().cloned())
             .map_err(|err| ThreadedStreamSelectorError::Param { err: err })?
@@ -611,7 +628,7 @@ where
     Epochs::Item: Clone + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send
+    Ctx::Stream: Clone + PushStream<Ctx>
 {
     fn create(
         config: FarSchedulerConfig,
@@ -659,9 +676,15 @@ where
             Ctx::OutNegoParam
         >
     ) {
+        debug!(target: "stream-selector-state",
+               "changing epoch");
+
         let (_, dense_ids, _, _) = epoch.take();
         let mut new_stream_ids = HashMap::with_capacity(dense_ids.len());
         let mut new_streams = Vec::with_capacity(dense_ids.len());
+
+        trace!(target: "stream-selector-state",
+               "building stream ID map");
 
         // Build the new stream IDs map.
         for (i, stream) in dense_ids.iter().enumerate() {
@@ -671,12 +694,19 @@ where
                 stream.0.param().clone()
             );
 
+            trace!(target: "stream-selector-state",
+                   "mapping {} to {}",
+                   stream_id, i);
+
             new_stream_ids.insert(stream_id.clone(), StreamsIdx(i));
             new_streams.push(StreamEntry {
                 id: stream_id,
                 stream: None
             })
         }
+
+        trace!(target: "stream-selector-state",
+               "filtering existing streams");
 
         for ent in self.streams.drain(..) {
             let StreamEntry {
@@ -723,6 +753,9 @@ where
         refresh_when: Option<Instant>,
         now: Instant
     ) -> Result<RetryResult<Option<Instant>>, RefreshError> {
+        trace!(target: "stream-selector-state",
+               "updating from refresh");
+
         // Update the scheduler, possibly get a new epoch
         match self.sched.refresh(now, pairs.drain(..))? {
             // The epoch changed.
@@ -751,6 +784,10 @@ where
         >
     > {
         let stream_id = StreamID::new(party_addr, channel, param);
+
+        trace!(target: "stream-selector-state",
+               "reporting success for {}",
+               stream_id);
 
         match self.stream_ids.get(&stream_id) {
             Some(idx) => {
@@ -796,6 +833,10 @@ where
         >
     > {
         let stream_id = StreamID::new(party_addr, channel, param);
+
+        trace!(target: "stream-selector-state",
+               "reporting failure for {}",
+               stream_id);
 
         match self.stream_ids.get(&stream_id) {
             Some(idx) => {
@@ -843,9 +884,12 @@ where
     where
         Resolve: Addrs<Addr = Ctx::Addr>,
         Resolve::Origin: Clone + Display + Eq + Hash {
+        trace!(target: "stream-selector-state",
+               "handling selection {}",
+               stream_id);
+
         let (party_addr, ConnChannelID { conn_idx, channel }, param) =
             stream_id.take();
-
         let out = match &mut self.streams[dense_id.idx()] {
             // If the stream already exists, then just return it.
             StreamEntry {
@@ -1008,7 +1052,7 @@ where
     Epochs::Item: Clone + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send
+    Ctx::Stream: Clone + PushStream<Ctx>
 {
     type ReportStreamError = StreamSelectorReportError<Infallible>;
 
@@ -1018,6 +1062,10 @@ where
         stream_id: StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         stream: Ctx::Stream
     ) -> Result<Option<Ctx::Stream>, Self::ReportStreamError> {
+        trace!(target: "stream-selector-state",
+               "reporting new stream {}",
+               stream_id);
+
         match self.stream_ids.get(&stream_id) {
             Some(idx) => match &self.streams[idx.0].stream {
                 Some(stream) => {
@@ -1054,7 +1102,7 @@ where
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -1081,7 +1129,7 @@ where
     Ctx: Channels<()>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send
+    Ctx::Stream: Clone + PushStream<Ctx>
 {
     fn clone(&self) -> Self {
         StreamSelector {
@@ -1099,7 +1147,7 @@ where
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -1127,6 +1175,9 @@ where
             OutboundEndpointConfig<Resolve::OriginConfig, Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone + Default {
+        debug!(target: "stream-selector",
+               "creating stream selector");
+
         let (scheduler, resolver, epochs, retry, size_hint, connections) =
             config.take();
         let epochs = Epochs::create(epochs)
@@ -1175,6 +1226,9 @@ where
         ),
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     > {
+        trace!(target: "stream-selector",
+               "collecting refresh info");
+
         let mut refreshes = Vec::with_capacity(self.connections.len());
         let mut min_retry: Option<Instant> = None;
         let mut min_refresh: Option<Instant> = None;
@@ -1216,10 +1270,21 @@ where
         let mut pairs = Vec::with_capacity(size_hint);
         let mut dedup = HashSet::with_capacity(size_hint);
 
+        trace!(target: "stream-selector",
+               "processing refresh pairs");
+
         // Go through each of the refresh results, and pair up all
         // the addresses and params.
         for (conn_idx, addrs, params) in refreshes {
+            trace!(target: "stream-selector",
+                   "processing pairs for {}",
+                   conn_idx);
+
             for (addr, endpoint) in addrs {
+                trace!(target: "stream-selector",
+                       "processing address {}",
+                       addr);
+
                 for (channel, param) in &params {
                     trace!(target: "stream-selector",
                            "trying to pair {} over {}",
@@ -1254,9 +1319,8 @@ where
                             pairs.push((sched_stream_id, endpoint.clone()));
                         } else {
                             warn!(target: "stream-selector",
-                                  concat!("duplicate stream from ",
-                                          "configuration: to {} ",
-                                          "over channel {} ({})"),
+                                  "duplicate stream from configuration: to {} \
+                                   over channel {} ({})",
                                   addr, channel, param);
                         }
                     } else {
@@ -1314,6 +1378,9 @@ where
                 Err(_) => Err(ThreadedStreamSelectorError::MutexPoison)
             }
         } else {
+            debug!(target: "stream-selector",
+                   "no refreshes were generated");
+
             // There should have been a retry time set if we get here.
             let min_retry = match min_retry {
                 Some(time) => time,
@@ -1439,6 +1506,10 @@ where
             .do_select(ctx, &self.connections)?;
 
         res.flat_map_ok(|(id, refresh, stream)| {
+            debug!(target: "stream-selector",
+                   "selected stream {}",
+                   id);
+
             // XXX what should we do with this time?
             let _ = if refresh {
                 let now = Instant::now();
@@ -1826,7 +1897,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -1971,7 +2042,7 @@ where
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -2001,7 +2072,7 @@ where
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
     Error: ErrorReportInfo<DenseItemID<Epochs::Item>>
@@ -2038,7 +2109,7 @@ where
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -2068,7 +2139,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -2142,7 +2213,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -2202,7 +2273,7 @@ where
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPartyID + Send,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPartyID,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -2217,12 +2288,15 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx>,
     <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
-    type AbortBatchRetry = Infallible;
+    type AbortBatchRetry = SelectorAbortRetry<
+        Epochs::Item,
+        <Ctx::Stream as PushStreamShared<Ctx>>::AbortBatchRetry
+    >;
     type BatchPartiesError = SelectorBatchError<
         Epochs::Item,
         <Ctx::Stream as PushStreamShared<Ctx>>::BatchPartiesError
@@ -2325,10 +2399,17 @@ where
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
+        trace!(target: "stream-selector",
+               "selecting shared stream");
+
         // Try to select a stream.
         match self.select_stream(ctx) {
             // We succeeded, now create a batch on that stream.
             Ok(RetryIndefResult::Success((mut stream, id))) => {
+                debug!(target: "stream-selector",
+                       "selected substream {}",
+                       id);
+
                 selections.id = Some(id.clone());
 
                 Ok(stream
@@ -2376,6 +2457,9 @@ where
         >,
         Self::SelectError
     > {
+        trace!(target: "stream-selector",
+               "retrying shared stream selection");
+
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { parties, .. } => {
@@ -2386,6 +2470,10 @@ where
                 selected,
                 stream: retry
             } => {
+                trace!(target: "stream-selector",
+                       "selected stream was {}",
+                       selected);
+
                 let mut stream = self
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
@@ -2419,6 +2507,9 @@ where
         >,
         Self::SelectError
     > {
+        trace!(target: "stream-selector",
+               "completing shared stream selection");
+
         match err {
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
@@ -2430,6 +2521,10 @@ where
                 selected,
                 stream: err
             } => {
+                trace!(target: "stream-selector",
+                       "selected stream was {}",
+                       selected);
+
                 let mut stream = self
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
@@ -2715,27 +2810,77 @@ where
     #[inline]
     fn abort_start_batch(
         &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as RecoverableError>::Permanent
-    ) -> RetryResult<(), Infallible> {
-        // We don't actually have to do anything here.  There's no
-        // state prior to creating a batch on the underlying stream.
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<
+        (),
+        SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamShared<Ctx>>::AbortBatchRetry
+        >
+    > {
+        if let SelectorBatchError::Batch {
+            batch:
+                SelectorBatchSelectError::Stream {
+                    selected,
+                    stream: err
+                }
+        } = err
+        {
+            match self.dense_id_stream(&selected) {
+                Ok(mut stream) => stream
+                    .abort_start_batch(ctx, flags, err)
+                    .map_retry(|retry| SelectorAbortRetry {
+                        selected: selected,
+                        stream: retry
+                    }),
+                Err(err) => {
+                    error!(target: "stream-selector",
+                           "error aborting create batch on stream {}: {}",
+                           selected, err);
 
-        RetryResult::Success(())
+                    RetryResult::Success(())
+                }
+            }
+        } else {
+            RetryResult::Success(())
+        }
     }
 
     #[inline]
     fn retry_abort_start_batch(
         &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _retry: Infallible
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        error!(target: "stream-selector",
-               "should never call retry_abort_start_batch on this stream");
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamShared<Ctx>>::AbortBatchRetry
+        >
+    ) -> RetryResult<
+        (),
+        SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamShared<Ctx>>::AbortBatchRetry
+        >
+    > {
+        let (selected, retry) = retry.take();
 
-        RetryResult::Success(())
+        match self.dense_id_stream(&selected) {
+            Ok(mut stream) => stream
+                .retry_abort_start_batch(ctx, flags, retry)
+                .map_retry(|retry| SelectorAbortRetry {
+                    selected: selected,
+                    stream: retry
+                }),
+            Err(err) => {
+                error!(target: "stream-selector",
+                       "error aborting create batch on stream {}: {}",
+                       selected, err);
+
+                RetryResult::Success(())
+            }
+        }
     }
 }
 
@@ -2747,11 +2892,14 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx> + Send,
+    Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
-    type AbortBatchRetry = Infallible;
+    type AbortBatchRetry = SelectorAbortRetry<
+        Epochs::Item,
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::AbortBatchRetry
+    >;
     type CreateBatchError = SelectionsError<
         SelectorBatchError<
             Epochs::Item,
@@ -2827,6 +2975,9 @@ where
         selections: &mut Self::Selections
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "stream-selector",
+               "selecting private stream");
+
         // Try to select a stream.
         self.select_stream(ctx)
             .map_err(|err| {
@@ -2843,6 +2994,10 @@ where
             })
             // Record the selection and descend.
             .flat_map_ok(|(mut stream, id)| {
+                debug!(target: "stream-selector",
+                       "selected substream {}",
+                       id);
+
                 selections.id = Some(id.clone());
 
                 Ok(stream.select(ctx, &mut selections.inner)
@@ -2866,6 +3021,9 @@ where
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "stream-selector",
+               "retrying private stream selection");
+
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -2876,6 +3034,10 @@ where
                 selected,
                 stream: retry
             } => {
+                trace!(target: "stream-selector",
+                       "selected stream was {}",
+                       selected);
+
                 let mut stream = self
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
@@ -2903,6 +3065,9 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "stream-selector",
+               "complete private stream selection");
+
         match err {
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
@@ -2914,6 +3079,10 @@ where
                 selected,
                 stream: err
             } => {
+                trace!(target: "stream-selector",
+                       "selected stream was {}",
+                       selected);
+
                 let mut stream = self
                     .dense_id_stream(&selected)
                     .map_err(|err| SelectorBatchError::Stream { err: err })?;
@@ -3175,27 +3344,77 @@ where
     #[inline]
     fn abort_start_batch(
         &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _err: <Self::StartBatchError as RecoverableError>::Permanent
-    ) -> RetryResult<(), Infallible> {
-        // We don't actually have to do anything here.  There's no
-        // state prior to creating a batch on the underlying stream.
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<
+        (),
+        SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::AbortBatchRetry
+        >
+    > {
+        if let SelectorBatchError::Batch {
+            batch:
+                SelectorBatchSelectError::Stream {
+                    selected,
+                    stream: err
+                }
+        } = err
+        {
+            match self.dense_id_stream(&selected) {
+                Ok(mut stream) => stream
+                    .abort_start_batch(ctx, flags, err)
+                    .map_retry(|retry| SelectorAbortRetry {
+                        selected: selected,
+                        stream: retry
+                    }),
+                Err(err) => {
+                    error!(target: "stream-selector",
+                           "error aborting create batch on stream {}: {}",
+                           selected, err);
 
-        RetryResult::Success(())
+                    RetryResult::Success(())
+                }
+            }
+        } else {
+            RetryResult::Success(())
+        }
     }
 
     #[inline]
     fn retry_abort_start_batch(
         &mut self,
-        _ctx: &mut Ctx,
-        _flags: &mut Self::StreamFlags,
-        _retry: Infallible
-    ) -> RetryResult<(), Self::AbortBatchRetry> {
-        error!(target: "stream-selector",
-               "should never call retry_abort_start_batch on this stream");
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::AbortBatchRetry
+        >
+    ) -> RetryResult<
+        (),
+        SelectorAbortRetry<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::AbortBatchRetry
+        >
+    > {
+        let (selected, retry) = retry.take();
 
-        RetryResult::Success(())
+        match self.dense_id_stream(&selected) {
+            Ok(mut stream) => stream
+                .retry_abort_start_batch(ctx, flags, retry)
+                .map_retry(|retry| SelectorAbortRetry {
+                    selected: selected,
+                    stream: retry
+                }),
+            Err(err) => {
+                error!(target: "stream-selector",
+                       "error aborting create batch on stream {}: {}",
+                       selected, err);
+
+                RetryResult::Success(())
+            }
+        }
     }
 }
 
@@ -3207,7 +3426,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -3369,7 +3588,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + LargeObjOfferStream<H, Ctx> + PushStream<Ctx> + Send,
+    Ctx::Stream: Clone + LargeObjOfferStream<H, Ctx> + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -3528,7 +3747,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx> + Send,
+    Ctx::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -3834,7 +4053,7 @@ where
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream:
-        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID + Send,
+        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID,
     <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -4028,8 +4247,7 @@ where
         match err {
             SelectorBatchSelectError::Select { select, .. } => {
                 error!(target: "stream-selector",
-                       concat!("should never call complete_push ",
-                               "with select error"));
+                       "should never call complete_push with select error");
 
                 self.push(ctx, select.take_parties().iter(), msg)
             }

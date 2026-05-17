@@ -280,6 +280,10 @@ where
         stream_id: StreamID,
         stream: Stream
     ) -> Result<(), DispatchSelectorRefreshError<StreamID>> {
+        trace!(target: "dispatch-selector-state",
+               "adding stream {}",
+               stream_id);
+
         self.streams.push(StreamEntry {
             id: stream_id,
             stream: stream
@@ -304,6 +308,9 @@ where
         &mut self,
         epoch: EpochChange<Epochs::Item, StreamID, ()>
     ) -> Result<(), DispatchSelectorRefreshError<StreamID>> {
+        debug!(target: "dispatch-selector-state",
+               "changing epoch");
+
         let (_, dense_ids, _, _) = epoch.take();
         let mut old_streams: HashMap<StreamID, Stream> = self
             .streams
@@ -314,6 +321,10 @@ where
         let mut new_stream_ids = HashMap::with_capacity(dense_ids.len());
 
         for (i, (id, ())) in dense_ids.into_iter().enumerate() {
+            trace!(target: "dispatch-selector-state",
+                   "assigning {} index {}",
+                   id, i);
+
             let stream = old_streams.remove(&id).ok_or(
                 DispatchSelectorRefreshError::BadID { id: id.clone() }
             )?;
@@ -338,6 +349,10 @@ where
         &mut self,
         stream_id: StreamID
     ) -> Result<(), StreamSelectorReportError<ReportError<StreamID>>> {
+        trace!(target: "dispatch-selector-state",
+               "recording success for {}",
+               stream_id);
+
         let idx = self
             .stream_ids
             .get(&stream_id)
@@ -365,6 +380,10 @@ where
         &mut self,
         stream_id: StreamID
     ) -> Result<(), StreamSelectorReportError<ReportError<StreamID>>> {
+        trace!(target: "dispatch-selector-state",
+               "recording failure for {}",
+               stream_id);
+
         let idx = self
             .stream_ids
             .get(&stream_id)
@@ -1071,10 +1090,17 @@ where
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
+        trace!(target: "dispatch-selector",
+               "selecting shared stream");
+
         // Try to select a stream.
         match self.select_stream() {
             // We succeeded, now create a batch on that stream.
             Ok(RetryIndefResult::Success((mut stream, id))) => {
+                debug!(target: "dispatch-selector",
+                       "selected substream {}",
+                       id);
+
                 selections.id = Some(id.clone());
 
                 match stream
@@ -1135,6 +1161,9 @@ where
         >,
         Self::SelectError
     > {
+        trace!(target: "dispatch-selector",
+               "retrying shared stream selection");
+
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { parties, .. } => {
@@ -1144,20 +1173,26 @@ where
             SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
-            } => Ok(self
-                .dense_id_stream(&selected)
-                .map_err(|err| SelectorBatchError::Stream { err: err })?
-                .retry_select(ctx, &mut selections.inner, retry)
-                .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchSelectError::Stream {
-                        selected: selected.clone(),
-                        stream: err
-                    }
-                })?
-                .map_retry(|retry| SelectorBatchSelectError::Stream {
-                    selected: selected,
-                    stream: retry
-                }))
+            } => {
+                trace!(target: "dispatch-selector",
+                       "selected stream was {}",
+                       selected);
+
+                Ok(self
+                   .dense_id_stream(&selected)
+                   .map_err(|err| SelectorBatchError::Stream { err: err })?
+                   .retry_select(ctx, &mut selections.inner, retry)
+                   .map_err(|err| SelectorBatchError::Batch {
+                       batch: SelectorBatchSelectError::Stream {
+                           selected: selected.clone(),
+                           stream: err
+                       }
+                   })?
+                   .map_retry(|retry| SelectorBatchSelectError::Stream {
+                       selected: selected,
+                       stream: retry
+                   }))
+            }
         }
     }
 
@@ -1174,6 +1209,9 @@ where
         >,
         Self::SelectError
     > {
+        trace!(target: "dispatch-selector",
+               "completing shared stream selection");
+
         match err {
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
@@ -1184,20 +1222,26 @@ where
             SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
-            } => Ok(self
-                .dense_id_stream(&selected)
-                .map_err(|err| SelectorBatchError::Stream { err: err })?
-                .complete_select(ctx, &mut selections.inner, err)
-                .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchSelectError::Stream {
-                        selected: selected.clone(),
-                        stream: err
-                    }
-                })?
-                .map_retry(|retry| SelectorBatchSelectError::Stream {
-                    selected: selected,
-                    stream: retry
-                }))
+            } => {
+                trace!(target: "dispatch-selector",
+                       "selected stream was {}",
+                       selected);
+
+                Ok(self
+                   .dense_id_stream(&selected)
+                   .map_err(|err| SelectorBatchError::Stream { err: err })?
+                   .complete_select(ctx, &mut selections.inner, err)
+                   .map_err(|err| SelectorBatchError::Batch {
+                       batch: SelectorBatchSelectError::Stream {
+                           selected: selected.clone(),
+                           stream: err
+                       }
+                   })?
+                   .map_retry(|retry| SelectorBatchSelectError::Stream {
+                       selected: selected,
+                       stream: retry
+                   }))
+            }
         }
     }
 
@@ -1597,6 +1641,9 @@ where
         selections: &mut Self::Selections
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "dispatch-selector",
+               "selecting private stream");
+
         // Try to select a stream.
         self.select_stream()
             .map_err(|err| SelectorBatchError::Batch {
@@ -1610,6 +1657,10 @@ where
                 select: retry
             })
             .flat_map_ok(|(mut stream, id)| {
+                debug!(target: "dispatch-selector",
+                       "selected substream {}",
+                       id);
+
                 selections.id = Some(id.clone());
 
                 Ok(stream
@@ -1634,6 +1685,9 @@ where
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "dispatch-selector",
+               "retrying private stream selection");
+
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -1643,20 +1697,26 @@ where
             SelectorBatchSelectError::Stream {
                 selected,
                 stream: retry
-            } => Ok(self
-                .dense_id_stream(&selected)
-                .map_err(|err| SelectorBatchError::Stream { err: err })?
-                .retry_select(ctx, &mut selections.inner, retry)
-                .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchSelectError::Stream {
-                        selected: selected.clone(),
-                        stream: err
-                    }
-                })?
-                .map_retry(|retry| SelectorBatchSelectError::Stream {
-                    selected: selected,
-                    stream: retry
-                }))
+            } => {
+                trace!(target: "dispatch-selector",
+                       "selected stream was {}",
+                       selected);
+
+                Ok(self
+                   .dense_id_stream(&selected)
+                   .map_err(|err| SelectorBatchError::Stream { err: err })?
+                   .retry_select(ctx, &mut selections.inner, retry)
+                   .map_err(|err| SelectorBatchError::Batch {
+                       batch: SelectorBatchSelectError::Stream {
+                           selected: selected.clone(),
+                           stream: err
+                       }
+                   })?
+                   .map_retry(|retry| SelectorBatchSelectError::Stream {
+                       selected: selected,
+                       stream: retry
+                   }))
+            }
         }
     }
 
@@ -1667,6 +1727,9 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
+        trace!(target: "dispatch-selector",
+               "completing private stream selection");
+
         match err {
             // This is here as a placeholder; this type is
             // uninhabited, and Rust > 1.81 clippy generates an error
@@ -1677,20 +1740,26 @@ where
             SelectorBatchSelectError::Stream {
                 selected,
                 stream: err
-            } => Ok(self
-                .dense_id_stream(&selected)
-                .map_err(|err| SelectorBatchError::Stream { err: err })?
-                .complete_select(ctx, &mut selections.inner, err)
-                .map_err(|err| SelectorBatchError::Batch {
-                    batch: SelectorBatchSelectError::Stream {
-                        selected: selected.clone(),
-                        stream: err
-                    }
-                })?
-                .map_retry(|retry| SelectorBatchSelectError::Stream {
-                    selected: selected,
-                    stream: retry
-                }))
+            } => {
+                trace!(target: "dispatch-selector",
+                       "selected stream was {}",
+                       selected);
+
+                Ok(self
+                   .dense_id_stream(&selected)
+                   .map_err(|err| SelectorBatchError::Stream { err: err })?
+                   .complete_select(ctx, &mut selections.inner, err)
+                   .map_err(|err| SelectorBatchError::Batch {
+                       batch: SelectorBatchSelectError::Stream {
+                           selected: selected.clone(),
+                           stream: err
+                       }
+                   })?
+                   .map_retry(|retry| SelectorBatchSelectError::Stream {
+                       selected: selected,
+                       stream: retry
+                   }))
+            }
         }
     }
 
@@ -2746,8 +2815,7 @@ where
         match err {
             SelectorBatchSelectError::Select { select, .. } => {
                 error!(target: "dispatch-selector",
-                       concat!("should never call complete_push ",
-                               "with select error"));
+                       "should never call complete_push with select error");
 
                 self.push(ctx, select.take_parties().iter(), msg)
             }

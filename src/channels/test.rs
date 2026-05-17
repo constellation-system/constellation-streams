@@ -34,6 +34,7 @@ use constellation_common::retry::next_retry;
 use constellation_common::retry::RetryResult;
 use mio::Token;
 
+use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsCreate;
@@ -44,12 +45,12 @@ use crate::channels::ChannelsShutdown;
 pub struct TestStreamID {
     pub channel: String,
     pub param: TestChannelParam,
-    pub endpoint: String
+    pub endpoint: TestEndpoint
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestChannelParam {
-    pub accepts: HashSet<String>
+    pub accepts: HashSet<TestEndpoint>
 }
 
 pub struct TestStream<Stream> {
@@ -60,7 +61,7 @@ pub struct TestStream<Stream> {
 
 #[derive(Debug)]
 pub struct TestChannelsError {
-    scope: ErrorScope
+    pub scope: ErrorScope
 }
 
 pub struct TestChannels<Stream> {
@@ -98,8 +99,7 @@ pub struct TestChannelsScript<Stream> {
         Result<
             RetryResult<(Option<Stream>, bool, Option<Instant>)>,
             TestChannelsError
-        >,
-        Option<Instant>
+        >
     )>,
     pub listen: Vec<
         Result<
@@ -115,11 +115,11 @@ pub struct TestChannelsScript<Stream> {
     pub shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>
 }
 
-impl ChannelParam<String> for TestChannelParam {
+impl ChannelParam<TestEndpoint> for TestChannelParam {
     #[inline]
     fn accepts_addr(
         &self,
-        addr: &String
+        addr: &TestEndpoint
     ) -> bool {
         self.accepts.contains(addr)
     }
@@ -131,7 +131,7 @@ impl Hash for TestChannelParam {
         hash: &mut H
     ) where
         H: Hasher {
-        let mut strs: Vec<&String> = self.accepts.iter().collect();
+        let mut strs: Vec<&TestEndpoint> = self.accepts.iter().collect();
 
         strs.sort();
         strs.hash(hash);
@@ -171,8 +171,15 @@ where
                 Option<Instant>
             )>
         > = HashMap::with_capacity(req_streams.len());
+        let mut when: Option<Instant>;
 
-        for (id, res, when) in req_streams {
+        for (id, res) in req_streams {
+            when = match res {
+                Ok(RetryResult::Success((_, _, next))) => next,
+                Ok(RetryResult::Retry(next)) => Some(next),
+                _ => None
+            };
+
             match reqs.entry(id) {
                 Entry::Occupied(mut ent) => ent.get_mut().push((res, when)),
                 Entry::Vacant(ent) => {
@@ -204,7 +211,7 @@ impl<Ctx, Stream> Channels<Ctx> for TestChannels<Stream>
 where
     Stream: Clone
 {
-    type Addr = String;
+    type Addr = TestEndpoint;
     type ChannelID = String;
     type OutNegoParam = ();
     type Param = TestChannelParam;
@@ -281,9 +288,10 @@ impl<Stream, Ctx> ChannelsListen<Ctx> for TestChannels<Stream>
 where
     Stream: Clone
 {
-    type EndpointIter = IntoIter<(String, String, TestChannelParam)>;
+    type EndpointIter = IntoIter<(TestEndpoint, String, TestChannelParam)>;
     type ListenError = TestChannelsError;
-    type StreamIter = IntoIter<(String, String, TestChannelParam, Stream)>;
+    type StreamIter =
+        IntoIter<(TestEndpoint, String, TestChannelParam, Stream)>;
 
     fn listen(
         &mut self,
@@ -304,7 +312,7 @@ where
             .map(|res| {
                 res.map(|(streams, ids, refreshes, when)| {
                     let streams: Vec<(
-                        String,
+                        TestEndpoint,
                         String,
                         TestChannelParam,
                         Stream
@@ -329,7 +337,7 @@ where
                             )
                         })
                         .collect();
-                    let ids: Vec<(String, String, TestChannelParam)> = ids
+                    let ids: Vec<(TestEndpoint, String, TestChannelParam)> = ids
                         .into_iter()
                         .map(|id| (id.endpoint, id.channel, id.param))
                         .collect();
@@ -411,5 +419,15 @@ impl Display for TestChannelParam {
         }
 
         Ok(())
+    }
+}
+
+impl Display for TestStreamID {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "test stream, channel: {}, {}, addr: {}",
+               self.channel, self.param, self.endpoint)
     }
 }

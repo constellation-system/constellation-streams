@@ -32,6 +32,8 @@ use std::time::Instant;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 
+pub mod test;
+
 /// Trait for sources of addresses that may need to be periodically
 /// refreshed.
 ///
