@@ -1179,19 +1179,19 @@ where
                        selected);
 
                 Ok(self
-                   .dense_id_stream(&selected)
-                   .map_err(|err| SelectorBatchError::Stream { err: err })?
-                   .retry_select(ctx, &mut selections.inner, retry)
-                   .map_err(|err| SelectorBatchError::Batch {
-                       batch: SelectorBatchSelectError::Stream {
-                           selected: selected.clone(),
-                           stream: err
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?
+                    .retry_select(ctx, &mut selections.inner, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }
@@ -1228,19 +1228,19 @@ where
                        selected);
 
                 Ok(self
-                   .dense_id_stream(&selected)
-                   .map_err(|err| SelectorBatchError::Stream { err: err })?
-                   .complete_select(ctx, &mut selections.inner, err)
-                   .map_err(|err| SelectorBatchError::Batch {
-                       batch: SelectorBatchSelectError::Stream {
-                           selected: selected.clone(),
-                           stream: err
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?
+                    .complete_select(ctx, &mut selections.inner, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }
@@ -1703,19 +1703,19 @@ where
                        selected);
 
                 Ok(self
-                   .dense_id_stream(&selected)
-                   .map_err(|err| SelectorBatchError::Stream { err: err })?
-                   .retry_select(ctx, &mut selections.inner, retry)
-                   .map_err(|err| SelectorBatchError::Batch {
-                       batch: SelectorBatchSelectError::Stream {
-                           selected: selected.clone(),
-                           stream: err
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?
+                    .retry_select(ctx, &mut selections.inner, retry)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }
@@ -1746,19 +1746,19 @@ where
                        selected);
 
                 Ok(self
-                   .dense_id_stream(&selected)
-                   .map_err(|err| SelectorBatchError::Stream { err: err })?
-                   .complete_select(ctx, &mut selections.inner, err)
-                   .map_err(|err| SelectorBatchError::Batch {
-                       batch: SelectorBatchSelectError::Stream {
-                           selected: selected.clone(),
-                           stream: err
-                       }
-                   })?
-                   .map_retry(|retry| SelectorBatchSelectError::Stream {
-                       selected: selected,
-                       stream: retry
-                   }))
+                    .dense_id_stream(&selected)
+                    .map_err(|err| SelectorBatchError::Stream { err: err })?
+                    .complete_select(ctx, &mut selections.inner, err)
+                    .map_err(|err| SelectorBatchError::Batch {
+                        batch: SelectorBatchSelectError::Stream {
+                            selected: selected.clone(),
+                            stream: err
+                        }
+                    })?
+                    .map_retry(|retry| SelectorBatchSelectError::Stream {
+                        selected: selected,
+                        stream: retry
+                    }))
             }
         }
     }

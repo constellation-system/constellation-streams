@@ -16,8 +16,8 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::convert::Infallible;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
@@ -38,15 +38,19 @@ pub struct TestEndpoint(String);
 #[derive(Clone, Default)]
 pub struct TestAddrsScript {
     pub addrs: Vec<
-        Result<RetryResult<(Vec<(TestEndpoint, String)>, Option<Instant>)>,
-               TestAddrsError>
+        Result<
+            RetryResult<(Vec<(TestEndpoint, String)>, Option<Instant>)>,
+            TestAddrsError
+        >
     >
 }
 
 pub struct TestAddrs {
     addrs: Vec<
-        Result<RetryResult<(Vec<(TestEndpoint, String)>, Option<Instant>)>,
-               TestAddrsError>
+        Result<
+            RetryResult<(Vec<(TestEndpoint, String)>, Option<Instant>)>,
+            TestAddrsError
+        >
     >,
     origins: HashSet<String>,
     curr: Option<(Vec<(TestEndpoint, String)>, Option<Instant>, Instant)>
@@ -99,8 +103,8 @@ impl OutboundEndpointConfig<String, ()> for TestEndpoint {
 
 impl<Ctx> AddrsCreate<Ctx> for TestAddrs {
     type Config = TestAddrsScript;
-    type OriginConfig = String;
     type CreateError = Infallible;
+    type OriginConfig = String;
 
     #[inline]
     fn create<I>(
@@ -123,10 +127,10 @@ impl<Ctx> AddrsCreate<Ctx> for TestAddrs {
 }
 
 impl Addrs for TestAddrs {
-    type Origin = String;
     type Addr = TestEndpoint;
-    type AddrsIter = IntoIter<(Self::Addr, Self::Origin, Instant)>;
     type AddrsError = TestAddrsError;
+    type AddrsIter = IntoIter<(Self::Addr, Self::Origin, Instant)>;
+    type Origin = String;
 
     #[inline]
     fn refresh_when(&self) -> Option<Instant> {
@@ -135,16 +139,15 @@ impl Addrs for TestAddrs {
 
     fn addrs(
         &mut self
-    ) -> Result<
-        RetryResult<(Self::AddrsIter, Option<Instant>)>,
-        Self::AddrsError
-    > {
+    ) -> Result<RetryResult<(Self::AddrsIter, Option<Instant>)>, Self::AddrsError>
+    {
         let now = Instant::now();
 
         let (addrs, next, last) = match &self.curr {
             Some((addrs, None, last)) => (addrs, None, *last),
-            Some((addrs, Some(when), last)) if *when > now =>
-                (addrs, Some(*when), *last),
+            Some((addrs, Some(when), last)) if *when > now => {
+                (addrs, Some(*when), *last)
+            }
             _ => match self.addrs.pop().expect("Expected scripted action")? {
                 RetryResult::Success((mut addrs, when)) => {
                     addrs.retain(|(_, origin)| self.origins.contains(origin));
@@ -156,8 +159,7 @@ impl Addrs for TestAddrs {
                         panic!("Shouldn't be empty")
                     }
                 }
-                RetryResult::Retry(when) =>
-                    return Ok(RetryResult::Retry(when))
+                RetryResult::Retry(when) => return Ok(RetryResult::Retry(when))
             }
         };
 

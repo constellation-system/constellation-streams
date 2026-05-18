@@ -337,10 +337,10 @@ where
                             )
                         })
                         .collect();
-                    let ids: Vec<(TestEndpoint, String, TestChannelParam)> = ids
-                        .into_iter()
-                        .map(|id| (id.endpoint, id.channel, id.param))
-                        .collect();
+                    let ids: Vec<(TestEndpoint, String, TestChannelParam)> =
+                        ids.into_iter()
+                            .map(|id| (id.endpoint, id.channel, id.param))
+                            .collect();
                     let refreshed = if let Some(refreshes) = refreshes {
                         let refreshes: HashSet<(String, TestChannelParam)> =
                             refreshes.into_iter().collect();
@@ -427,7 +427,10 @@ impl Display for TestStreamID {
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
-        write!(f, "test stream, channel: {}, {}, addr: {}",
-               self.channel, self.param, self.endpoint)
+        write!(
+            f,
+            "test stream, channel: {}, {}, addr: {}",
+            self.channel, self.param, self.endpoint
+        )
     }
 }

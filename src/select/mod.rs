@@ -4052,8 +4052,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
     Ctx::OutNegoParam: Clone + Eq + Hash,
-    Ctx::Stream:
-        Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID,
+    Ctx::Stream: Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID,
     <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
