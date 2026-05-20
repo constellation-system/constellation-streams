@@ -336,7 +336,7 @@ where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         Ok(proto
-            .try_push(ctx, stream)?
+            .try_push(ctx, stream, Instant::now())?
             .map(|(when, parties)| (when, Some(parties)))
             .flat_map_retry(|retry| match retry {
                 LargeObjPushRetry::Frags { retry, id } => {

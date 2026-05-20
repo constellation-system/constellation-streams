@@ -25,6 +25,8 @@ use std::time::Instant;
 use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::authn::PassthruMsgAuthN;
 use constellation_auth::cred::NullCred;
+use constellation_common::codec::test::TestBytesCodec;
+use constellation_common::codec::Encoder;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::hashid::HashAlgo;
@@ -83,7 +85,12 @@ fn test_send_from_outbound_offer_succeed() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -212,7 +219,12 @@ fn test_send_from_outbound_offer_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -373,7 +385,12 @@ fn test_send_from_outbound_offer_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -536,7 +553,12 @@ fn test_send_from_outbound_offer_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -667,7 +689,12 @@ fn test_send_from_outbound_offer_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -911,7 +938,12 @@ fn test_send_from_outbound_offer_retry_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -1114,7 +1146,12 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -1284,7 +1321,12 @@ fn test_send_from_outbound_offer_retry_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -1483,7 +1525,12 @@ fn test_send_from_outbound_offer_retry_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -1804,7 +1851,12 @@ fn test_send_from_outbound_offer_indef_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -1999,7 +2051,12 @@ fn test_send_from_outbound_offer_indef_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -2199,7 +2256,12 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -2365,7 +2427,12 @@ fn test_send_from_outbound_offer_indef_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -2685,7 +2752,12 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -2853,7 +2925,12 @@ fn test_send_from_outbound_offer_complete_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3052,7 +3129,12 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3218,7 +3300,12 @@ fn test_send_from_outbound_offer_complete_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3421,7 +3508,12 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3558,7 +3650,12 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3728,7 +3825,12 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -3898,7 +4000,12 @@ fn test_send_from_outbound_offer_complete_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4100,7 +4207,12 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4231,7 +4343,12 @@ fn test_send_from_outbound_offer_complete_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4354,7 +4471,12 @@ fn test_send_from_outbound_frags_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4518,7 +4640,12 @@ fn test_send_from_outbound_frags_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4684,7 +4811,12 @@ fn test_send_from_outbound_frags_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4815,7 +4947,12 @@ fn test_send_from_outbound_frags_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -4980,7 +5117,12 @@ fn test_send_from_outbound_frags_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -5106,7 +5248,12 @@ fn test_send_from_outbound_frags_retry_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -5314,7 +5461,12 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -5487,7 +5639,12 @@ fn test_send_from_outbound_frags_retry_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -5692,7 +5849,12 @@ fn test_send_from_outbound_frags_retry_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -5900,7 +6062,12 @@ fn test_send_from_outbound_frags_retry_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![
         (Some(msg), Some(when)),
         (None, None),
@@ -6066,7 +6233,12 @@ fn test_send_from_outbound_frags_indef_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -6267,7 +6439,12 @@ fn test_send_from_outbound_frags_indef_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -6472,7 +6649,12 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -6641,7 +6823,12 @@ fn test_send_from_outbound_frags_indef_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -6845,7 +7032,12 @@ fn test_send_from_outbound_frags_indef_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7013,7 +7205,12 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7184,7 +7381,12 @@ fn test_send_from_outbound_frags_complete_retry() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7389,7 +7591,12 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7558,7 +7765,12 @@ fn test_send_from_outbound_frags_complete_indef() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7769,7 +7981,12 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -7908,7 +8125,12 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -8083,7 +8305,12 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -8258,7 +8485,12 @@ fn test_send_from_outbound_frags_complete_complete() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -8466,7 +8698,12 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -8599,7 +8836,12 @@ fn test_send_from_outbound_frags_complete_permanent() {
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -8755,7 +8997,12 @@ fn test_send_from_outbound_msg_succeed() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -8859,7 +9106,12 @@ fn test_send_from_outbound_msg_select_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -8996,7 +9248,12 @@ fn test_send_from_outbound_msg_create_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9133,7 +9390,12 @@ fn test_send_from_outbound_msg_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9276,7 +9538,12 @@ fn test_send_from_outbound_msg_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9426,7 +9693,12 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9599,7 +9871,12 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9778,7 +10055,12 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -9961,7 +10243,12 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10140,7 +10427,12 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10323,7 +10615,12 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10514,7 +10811,12 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10656,7 +10958,12 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10831,7 +11138,12 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -10973,7 +11285,12 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11154,7 +11471,12 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11296,7 +11618,12 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11481,7 +11808,12 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11623,7 +11955,12 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11804,7 +12141,12 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -11946,7 +12288,12 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12131,7 +12478,12 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12279,7 +12631,12 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12469,7 +12826,12 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12611,7 +12973,12 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12753,7 +13120,12 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -12895,7 +13267,12 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13037,7 +13414,12 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13179,7 +13561,12 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13324,7 +13711,12 @@ fn test_send_from_outbound_msg_select_indef() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13464,7 +13856,12 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13637,7 +14034,12 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13816,7 +14218,12 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -13998,7 +14405,12 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14137,7 +14549,12 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14309,7 +14726,12 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14448,7 +14870,12 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14626,7 +15053,12 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14765,7 +15197,12 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -14944,7 +15381,12 @@ fn test_send_from_outbound_msg_select_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15047,7 +15489,12 @@ fn test_send_from_outbound_msg_select_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15183,7 +15630,12 @@ fn test_send_from_outbound_msg_create_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15286,7 +15738,12 @@ fn test_send_from_outbound_msg_create_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15422,7 +15879,12 @@ fn test_send_from_outbound_msg_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15525,7 +15987,12 @@ fn test_send_from_outbound_msg_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15667,7 +16134,12 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15770,7 +16242,12 @@ fn test_send_from_outbound_msg_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -15922,7 +16399,12 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16064,7 +16546,12 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16239,7 +16726,12 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16387,7 +16879,12 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16568,7 +17065,12 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16720,7 +17222,12 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -16905,7 +17412,12 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17053,7 +17565,12 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17234,7 +17751,12 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17386,7 +17908,12 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17571,7 +18098,12 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17723,7 +18255,12 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -17913,7 +18450,12 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18021,7 +18563,12 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18162,7 +18709,12 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18303,7 +18855,12 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18477,7 +19034,12 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18585,7 +19147,12 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18726,7 +19293,12 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -18873,7 +19445,12 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19053,7 +19630,12 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19161,7 +19743,12 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19302,7 +19889,12 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19453,7 +20045,12 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19637,7 +20234,12 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19745,7 +20347,12 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -19886,7 +20493,12 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20033,7 +20645,12 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20213,7 +20830,12 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20321,7 +20943,12 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20462,7 +21089,12 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20613,7 +21245,12 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20797,7 +21434,12 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -20905,7 +21547,12 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21052,7 +21699,12 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21203,7 +21855,12 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21392,7 +22049,12 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21500,7 +22162,12 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21641,7 +22308,12 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21749,7 +22421,12 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21890,7 +22567,12 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -21998,7 +22680,12 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22139,7 +22826,12 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22247,7 +22939,12 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22388,7 +23085,12 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22496,7 +23198,12 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22637,7 +23344,12 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22745,7 +23457,12 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22887,7 +23604,12 @@ fn test_send_from_outbound_msg_select_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -22984,7 +23706,12 @@ fn test_send_from_outbound_msg_create_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23095,7 +23822,12 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23242,7 +23974,12 @@ fn test_send_from_outbound_msg_add_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23350,7 +24087,12 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23505,7 +24247,12 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23613,7 +24360,12 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23767,7 +24519,12 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23873,7 +24630,12 @@ fn test_send_from_outbound_msg_finish_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -23981,7 +24743,12 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -24140,7 +24907,12 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -24248,7 +25020,12 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();
@@ -24406,7 +25183,12 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
     let size = 4096;
     let msg = vec![0x11; size];
     let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(msg.as_slice()));
+    let hash = hasher.hash_bytes(once(
+        TestBytesCodec
+            .encode_to_vec(&msg)
+            .expect("Expected success")
+            .as_slice()
+    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let msgs = TestLargeObjMsgs::new(script);
     let config = SharedLargeObjModeConfig::default();

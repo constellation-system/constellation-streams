@@ -169,9 +169,11 @@ pub type LargeObjFragHeaderPERCodec =
 pub type LargeObjMetadataPERCodec =
     PERCodec<LargeObjMetadata, LARGE_OBJ_METADATA_BITS>;
 
+/// Type of IDs for large-object transfers.
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct LargeObjID(u64);
 
+/// Message codec for large-object transfer protocol messages.
 #[derive(Clone)]
 pub struct LargeObjMsgCodec<H>
 where
@@ -181,41 +183,106 @@ where
     hash: H
 }
 
+/// Representation of a fragment of a large object.
 #[derive(Clone, Debug, Hash, PartialEq)]
 pub struct LargeObjFrag {
+    /// Offset of the fragment into the large object.
     offset: u64,
+    /// The data fragment.
     data: Vec<u8>
 }
 
+/// Abstracted representaton of large-object protocol messages.
 #[derive(Clone, Debug, Hash, PartialEq)]
 pub enum LargeObjMsg<H>
 where
     H: HashID {
+    /// Large object offer message.
+    ///
+    /// This initiates a large object transfer for an object.  This
+    /// doubles as an initial `Frags` message, and delivers one
+    /// fragment.  The counterparty should reply with a `ReqObj` to
+    /// initiate the transfer.
+    ///
+    /// If the total object is small enough, then the entire object
+    /// can be delivered by the `Offer` message.  If this happens, the
+    /// counterparty should reply with an `Accept` message instead.
     Offer {
+        /// The hash of the entire encoded large object.
         hash: H,
+        /// The size of the entire encoded large object.
         size: u64,
+        /// An initial fragment.
         frag: LargeObjFrag
     },
+    /// Accept an `Offer` message and complete the transfer.
+    ///
+    /// This responds to one or more `Offer` messages, accepting the
+    /// transfer, but also indicates the transfer to be complete.  In
+    /// essence, this message functions as both a `ReqObj` and
+    /// `Finished` message.
     Accept {
+        /// The hash corresponding to the `Offer` messages to which
+        /// this responds.
         hash: H,
+        /// The size of the entire encoded large object.
         size: u64,
+        /// An ID given to this transfer.
+        ///
+        /// This ID is valid only between the two counterparties in
+        /// this transfer.
         id: LargeObjID
     },
+    /// Accept an `Offer` message and initiate a large-object transfer.
+    ///
+    /// This responds to one or more `Offer` messages, accepting the
+    /// transfer and assigning an ID to it.  Following this, the
+    /// exchange will consist solely of `Frags`, `Req`, and `Finished`
+    /// messages.
     ReqObj {
+        /// The hash corresponding to the `Offer` messages to which
+        /// this responds.
         hash: H,
+        /// The size of the entire encoded large object.
         size: u64,
+        /// An ID given to this transfer.
+        ///
+        /// This ID is valid only between the two counterparties in
+        /// this transfer.
         id: LargeObjID
     },
+    /// Fragment-transfer message.
+    ///
+    /// This delivers one or more data fragments in a large-object
+    /// transfer.  This message should be sent exclusively by the
+    /// senderr in the transfer.
     Frags {
+        /// The ID of the transfer.
         id: LargeObjID,
+        /// The transferred data fragments.
         frags: Vec<LargeObjFrag>
     },
+    /// Fragment-request message.
+    ///
+    /// This updates the sender on the state of the transfer,
+    /// acknowledging delivery of fragments, or requesting delivery of
+    /// them.  This is sent periodically by the receiver of the
+    /// transfer to indicate which fragments do or do not need to be
+    /// sent.
     Req {
+        /// The ID of the transfer.
         id: LargeObjID,
+        /// The fragment status updates.
         reqs: Vec<LargeObjFragReq>
     },
+    /// Transfer complete message.
+    ///
+    /// This is sent by the receiver of a transfer to indicate that
+    /// the transfer is complete.
     Finish {
+        /// The hash of the transferred object.
         hash: H,
+        /// The ID of the transfer.
         id: LargeObjID
     }
 }
@@ -675,7 +742,8 @@ where
 
     fn msgs(
         &mut self,
-        parties: &HashSet<PartyID>
+        parties: &HashSet<PartyID>,
+        now: Instant
     ) -> Result<
         (
             Option<Vec<(Vec<PartyID>, Vec<LargeObjMsg<Types::HashID>>)>>,
@@ -695,7 +763,6 @@ where
             .lock()
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
-        let now = Instant::now();
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
@@ -850,7 +917,8 @@ where
     >;
 
     fn msgs(
-        &mut self
+        &mut self,
+        now: Instant
     ) -> Result<
         (Option<Vec<LargeObjMsg<Types::HashID>>>, Option<Instant>),
         Self::MsgsError
@@ -867,7 +935,6 @@ where
             .lock()
             .map_err(|_| LargeObjSendError::MutexPoison)?;
         let size = inbound.hashes.len();
-        let now = Instant::now();
         let when = now + self.tombstone_duration;
         let mut msgs = Vec::with_capacity(size);
         let mut deletes = Vec::with_capacity(size);
@@ -1540,7 +1607,8 @@ where
     pub(crate) fn try_push<Stream, Ctx>(
         &mut self,
         ctx: &mut Ctx,
-        stream: &mut Stream
+        stream: &mut Stream,
+        now: Instant
     ) -> Result<
         RetryIndefResult<
             (Option<Instant>, Stream::Parties),
@@ -1587,7 +1655,7 @@ where
             let ents_len = ents.len();
 
             match ents[0].1.when {
-                Some(when) if when <= Instant::now() => {
+                Some(when) if when <= now => {
                     if let Some(id) = ents[0].1.id.clone() {
                         trace!(target: "large-obj-proto",
                                "pushing fragments for {}",
@@ -1861,6 +1929,95 @@ where
                 hash: hash,
                 err: err
             })
+    }
+
+    fn recv_msg(
+        &mut self,
+        prin: Types::SessionPrin,
+        msg: LargeObjMsg<Types::HashID>
+    ) -> Result<
+        (),
+        LargeObjRecvError<
+            Types::HashID,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+            <Types::Recv as AuthNMsgRecv<
+                Types::Prin,
+                InMsg,
+                Types::AuthNMsg
+            >>::RecvError,
+            F::RecvReqError
+        >
+    > {
+        let data = match msg {
+            // Inbound messages.
+            LargeObjMsg::Offer { hash, size, frag } => {
+                self.recv_offer_msg(&prin, hash, size, frag)
+            }
+            LargeObjMsg::Frags { id, frags } => self.recv_frags_msg(id, frags),
+            // Outbound messages.
+            LargeObjMsg::Accept { hash, id, .. } => {
+                self.recv_accept_msg(hash, id)
+            }
+            LargeObjMsg::ReqObj { hash, id, .. } => {
+                self.recv_req_obj_msg(hash, id)
+            }
+            LargeObjMsg::Req { id, reqs } => self.recv_reqs_msg(id, reqs),
+            LargeObjMsg::Finish { id, hash } => {
+                self.recv_finish_msg(hash, id)?;
+
+                Ok(None)
+            }
+        }?;
+
+        // Complete the message and send it upstream.
+        if let Some(data) = data {
+            debug!(target: "large-obj-proto",
+                   "processing complete message");
+
+            trace!(target: "large-obj-proto",
+                   "decoding message of length {}",
+                   data.len());
+
+            // Decode the complete message.
+            let (wrapper, _) = self.decoder.decode(&data).map_err(|err| {
+                error!(target: "large-obj-proto",
+                           "error decoding message: {}",
+                           err);
+
+                LargeObjRecvError::Decode { err: err }
+            })?;
+
+            trace!(target: "large-obj-proto",
+                   "authenticating message");
+
+            // Authenticate the complete message.
+            match self
+                .auth
+                .msg_authn(&prin, wrapper)
+                .map_err(|err| LargeObjRecvError::Auth { err: err })?
+            {
+                AuthNResult::Accept(msg) => {
+                    trace!(target: "large-obj-proto",
+                           "message authenticated");
+
+                    // Send it upstream.
+                    self.upstream.recv_auth_msg(msg).map_err(|err| {
+                        LargeObjRecvError::Upstream { err: err }
+                    })?;
+
+                    Ok(())
+                }
+                AuthNResult::Reject(_) => {
+                    trace!(target: "large-obj-proto",
+                           "message authentication failed");
+
+                    Err(LargeObjRecvError::AuthNFail)
+                }
+            }
+        } else {
+            Ok(())
+        }
     }
 
     pub fn recv_offer_msg(
@@ -2437,75 +2594,7 @@ where
     ) -> Result<(), Self::RecvError> {
         let (prin, msg) = msg.take();
 
-        let data = match msg {
-            // Inbound messages.
-            LargeObjMsg::Offer { hash, size, frag } => {
-                self.recv_offer_msg(&prin, hash, size, frag)
-            }
-            LargeObjMsg::Frags { id, frags } => self.recv_frags_msg(id, frags),
-            // Outbound messages.
-            LargeObjMsg::Accept { hash, id, .. } => {
-                self.recv_accept_msg(hash, id)
-            }
-            LargeObjMsg::ReqObj { hash, id, .. } => {
-                self.recv_req_obj_msg(hash, id)
-            }
-            LargeObjMsg::Req { id, reqs } => self.recv_reqs_msg(id, reqs),
-            LargeObjMsg::Finish { id, hash } => {
-                self.recv_finish_msg(hash, id)?;
-
-                Ok(None)
-            }
-        }?;
-
-        // Complete the message and send it upstream.
-        if let Some(data) = data {
-            debug!(target: "large-obj-proto",
-                   "processing complete message");
-
-            trace!(target: "large-obj-proto",
-                   "decoding message of length {}",
-                   data.len());
-
-            // Decode the complete message.
-            let (wrapper, _) = self.decoder.decode(&data).map_err(|err| {
-                error!(target: "large-obj-proto",
-                           "error decoding message: {}",
-                           err);
-
-                LargeObjRecvError::Decode { err: err }
-            })?;
-
-            trace!(target: "large-obj-proto",
-                   "authenticating message");
-
-            // Authenticate the complete message.
-            match self
-                .auth
-                .msg_authn(&prin, wrapper)
-                .map_err(|err| LargeObjRecvError::Auth { err: err })?
-            {
-                AuthNResult::Accept(msg) => {
-                    trace!(target: "large-obj-proto",
-                           "message authenticated");
-
-                    // Send it upstream.
-                    self.upstream.recv_auth_msg(msg).map_err(|err| {
-                        LargeObjRecvError::Upstream { err: err }
-                    })?;
-
-                    Ok(())
-                }
-                AuthNResult::Reject(_) => {
-                    trace!(target: "large-obj-proto",
-                           "message authentication failed");
-
-                    Err(LargeObjRecvError::AuthNFail)
-                }
-            }
-        } else {
-            Ok(())
-        }
+        self.recv_msg(prin, msg)
     }
 }
 
@@ -3293,4 +3382,612 @@ fn test_encode_decode_msg_finish() {
     let (decoded, _) = codec.decode(&buf).expect("Expected success");
 
     assert_eq!(msg, decoded);
+}
+
+#[cfg(test)]
+use std::ops::Deref;
+
+#[cfg(test)]
+use constellation_auth::authn::test::TestAuthNMsgRecv;
+#[cfg(test)]
+use constellation_auth::authn::PassthruMsgAuthN;
+#[cfg(test)]
+use constellation_auth::cred::NullCred;
+#[cfg(test)]
+use constellation_common::codec::test::TestBytesCodec;
+
+#[cfg(test)]
+use crate::init;
+#[cfg(test)]
+use crate::large_obj::test::TestLargeObjMsgs;
+#[cfg(test)]
+use crate::large_obj::test::TestLargeObjProtoTypes;
+#[cfg(test)]
+use crate::stream::LargeObjStream;
+
+#[cfg(test)]
+struct TestStream {
+    msgs: Vec<LargeObjMsg<SHA3ID>>
+}
+
+#[cfg(test)]
+impl PushStreamReportError<Infallible> for TestStream {
+    type ReportError = Infallible;
+
+    fn report_error(
+        &mut self,
+        _error: &Infallible
+    ) -> Result<(), Self::ReportError> {
+        panic!("Should not call this")
+    }
+}
+
+#[cfg(test)]
+impl LargeObjStream<()> for TestStream {
+    type Frags = OutboundFrags;
+    type Parties = ();
+    type PushFragError = Infallible;
+    type PushFragRetry = Instant;
+
+    fn push_frags(
+        &mut self,
+        _ctx: &mut (),
+        id: LargeObjID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        LargeObjMsg::frags(frags, id, 1024)
+            .expect("Expected success")
+            .map_ok(|res| match res {
+                Some((msg, when)) => {
+                    self.msgs.push(msg);
+
+                    Ok((Some(when), ()))
+                }
+                None => Ok((None, ()))
+            })
+            .map(RetryIndefResult::from)
+    }
+
+    fn retry_push_frags(
+        &mut self,
+        _ctx: &mut (),
+        _id: LargeObjID,
+        _frags: &mut Self::Frags,
+        _retry: Self::PushFragRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        panic!("Should not call this")
+    }
+
+    fn complete_push_frags(
+        &mut self,
+        _ctx: &mut (),
+        _id: LargeObjID,
+        _frags: &mut Self::Frags,
+        _err: <Self::PushFragError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        panic!("Should not call this")
+    }
+}
+
+#[cfg(test)]
+impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
+    type PushOfferError = Infallible;
+    type PushOfferRetry = Instant;
+
+    fn push_offer(
+        &mut self,
+        _ctx: &mut (),
+        id: SHA3ID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        LargeObjMsg::offer(frags, id, 1024)
+            .expect("Expected success")
+            .map_ok(|(msg, when)| {
+                self.msgs.push(msg);
+
+                Ok((Some(when), ()))
+            })
+            .map(RetryIndefResult::from)
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        _ctx: &mut (),
+        _id: SHA3ID,
+        _frags: &mut Self::Frags,
+        _retry: Self::PushFragRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        panic!("Should not call this")
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        _ctx: &mut (),
+        _id: SHA3ID,
+        _frags: &mut Self::Frags,
+        _err: <Self::PushFragError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        panic!("Should not call this")
+    }
+}
+
+#[test]
+fn test_offer_complete() {
+    init();
+
+    let msg = vec![0xaa; 512];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate accept.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+}
+
+#[test]
+fn test_offer_complete_repeat() {
+    init();
+
+    let msg = vec![0xaa; 512];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    let when = if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        when.expect("Expected some")
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_1 = sender_stream.msgs.pop().expect("Expect some");
+
+    // Deliver to receiver.
+    receiver
+        .recv_msg(NullCred, recved_1)
+        .expect("Expected success");
+
+    // Have sender generate second offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, when)
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_2 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver to receiver.
+    receiver
+        .recv_msg(NullCred, recved_2)
+        .expect("Expected success");
+
+    // Check for completed message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate accept.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+}
+
+#[test]
+fn test_offer_complete_repeat_multi_finish() {
+    init();
+
+    let msg = vec![0xaa; 512];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(None, None), (None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    let when = if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        when.expect("Expected some")
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_1 = sender_stream.msgs.pop().expect("Expect some");
+
+    // Have sender generate second offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, when)
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_2 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved_2)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate accept.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver accept to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    // Deliver second offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved_1)
+        .expect("Expected success");
+
+    // Have receiver generate second accept.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver second accept to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+}
+
+#[test]
+fn test_long_offer_complete_repeat() {
+    init();
+
+    let msg = vec![0xaa; 1536];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    let when = if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        when.expect("Expected some")
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_1 = sender_stream.msgs.pop().expect("Expect some");
+
+    // Deliver to receiver.
+    receiver
+        .recv_msg(NullCred, recved_1)
+        .expect("Expected success");
+
+    // Have sender generate second offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, when)
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_2 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver to receiver.
+    receiver
+        .recv_msg(NullCred, recved_2)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate accept.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver accept to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
 }

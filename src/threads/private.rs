@@ -1358,7 +1358,7 @@ where
             debug!(target: "private-datagram-push-mode",
                    "fetching new outbound messages");
 
-            let (msgs, next) = msgs.msgs()?;
+            let (msgs, next) = msgs.msgs(Instant::now())?;
 
             let retry = if let Some(msgs) = msgs {
                 match PushEntry::try_send(ctx, stream, msgs) {
@@ -2048,7 +2048,7 @@ where
                    "fetching new outbound protocol messages");
 
             // Send the low-level protocol messages.
-            let (msgs, next) = proto.msgs().map_err(|err| {
+            let (msgs, next) = proto.msgs(Instant::now()).map_err(|err| {
                 PrivateLargeObjPushModeSendError::Msgs { err: err }
             })?;
 

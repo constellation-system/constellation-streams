@@ -1392,7 +1392,7 @@ where
             debug!(target: "shared-small-obj-push-mode",
                    "fetching new outbound messages");
 
-            let (groups, mut next) = msgs.msgs(&self.live)?;
+            let (groups, mut next) = msgs.msgs(&self.live, Instant::now())?;
 
             if let Some(groups) = groups {
                 // Go through each group and try sending it
@@ -2054,7 +2054,7 @@ where
 
             // Send the low-level protocol messages.
             let (groups, msgs_next) =
-                proto.msgs(&self.live).map_err(|err| {
+                proto.msgs(&self.live, Instant::now()).map_err(|err| {
                     SharedLargeObjPushModeSendError::Msgs { err: err }
                 })?;
 
