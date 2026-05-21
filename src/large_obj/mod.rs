@@ -2079,11 +2079,13 @@ where
 
                         frags.is_finished()
                     }
+                    // XXX Possibly rate-limit the resending of finished.
                     InboundFragsState::Finished { send, .. } => {
                         // This is ok, it can happen due to delayed
                         // messages.
                         trace!(target: "large-obj-proto",
-                               "redundant offer message for ID {} ({})",
+                               "redundant offer message for ID {} ({}),
+                                resending finished",
                                id, hash);
 
                         *send = true;
@@ -2249,31 +2251,38 @@ where
         match inbound.objs.get_mut(&id) {
             Some(RecvEntry { frags, hash, .. }) => {
                 // Receive the fragments and see if it completes the message.
-                let closeout = if let InboundFragsState::Active { frags, req } =
-                    frags
-                {
-                    // If we get a frags message, that means our req
-                    // has been acknowledged.
-                    *req = None;
+                let closeout = match frags {
+                    InboundFragsState::Active { frags, req } => {
+                        // If we get a frags message, that means our req
+                        // has been acknowledged.
+                        *req = None;
 
-                    // Receive all of the fragments
-                    for frag in recv {
-                        frags
-                            .recv(frag.offset() as usize, frag.data())
-                            .map_err(|err| LargeObjRecvError::InboundRecv {
-                                hash: hash.clone(),
-                                id: id.clone(),
-                                err: err
-                            })?;
+                        // Receive all of the fragments
+                        for frag in recv {
+                            frags
+                                .recv(frag.offset() as usize, frag.data())
+                                .map_err(|err| {
+                                    LargeObjRecvError::InboundRecv {
+                                        hash: hash.clone(),
+                                        id: id.clone(),
+                                        err: err
+                                    }
+                                })?;
+                        }
+
+                        frags.is_finished()
                     }
+                    // XXX Possibly rate-limit the resending of finished.
+                    InboundFragsState::Finished { send, .. } => {
+                        trace!(target: "large-obj-proto",
+                               "redunant frags message for ID {} ({}),
+                                resending finished",
+                               id, hash);
 
-                    frags.is_finished()
-                } else {
-                    trace!(target: "large-obj-proto",
-                           "redundant fragments message for ID {} ({})",
-                           id, hash);
+                        *send = true;
 
-                    false
+                        false
+                    }
                 };
 
                 // Check if the entry is finished and report if it is.
@@ -3643,6 +3652,11 @@ fn test_offer_complete() {
 
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
 }
 
 #[test]
@@ -3754,6 +3768,11 @@ fn test_offer_complete_repeat() {
 
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
 }
 
 #[test]
@@ -3879,6 +3898,11 @@ fn test_offer_complete_repeat_multi_finish() {
 
     // Deliver second accept to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
 }
 
 #[test]
@@ -3990,4 +4014,595 @@ fn test_long_offer_complete_repeat() {
 
     // Deliver accept to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
+}
+
+#[test]
+fn test_offer_req_obj_frag_complete() {
+    init();
+
+    let msg = vec![0xaa; 1536];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None), (None, None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(None, None), (None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have receiver generate req obj.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let recvwhen = when.expect("Expected some");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate frags.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver frags to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate finish.
+    let (msgs, when) =
+        PrivateMsgs::msgs(&mut receiver, recvwhen).expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
+}
+
+#[test]
+fn test_offer_req_obj_offer_complete() {
+    init();
+
+    let msg = vec![0xaa; 1536];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(None, None), (None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    let when = if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        when.expect("Expected some")
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_1 = sender_stream.msgs.pop().expect("Expect some");
+
+    // Deliver to receiver.
+    receiver
+        .recv_msg(NullCred, recved_1)
+        .expect("Expected success");
+
+    // Have sender generate second offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, when)
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved_2 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Have receiver generate req obj.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_some());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    // Deliver second offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved_2)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate finish.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver finish to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
+}
+
+#[test]
+fn test_offer_req_frag_complete_repeat() {
+    init();
+
+    let msg = vec![0xaa; 1536];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None), (None, None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(None, None), (None, None), (None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have receiver generate req obj.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_some());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate frags.
+    let when = if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        when.expect("Expected some")
+    } else {
+        panic!("Expected success")
+    };
+
+    let frags_1 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Have sender generate frags.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, when)
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some())
+    } else {
+        panic!("Expected success")
+    };
+
+    let frags_2 = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver first frags to receiver.
+    receiver
+        .recv_msg(NullCred, frags_1)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg.clone()]);
+
+    // Have receiver generate finish.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef());
+
+    // Deliver second frags to receiver.
+    receiver
+        .recv_msg(NullCred, frags_2)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate finish.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
+}
+
+#[test]
+fn test_offer_req_obj_frag_req_complete() {
+    init();
+
+    let msg = vec![0xaa; 1536];
+    let mut codec = TestBytesCodec;
+    let msg = codec.encode_to_vec(&msg).expect("Expected success");
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(Some(msg.clone()), None), (None, None)];
+    let sender_msgs = TestLargeObjMsgs::new(script);
+    let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut sender: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        sender_recv.clone(),
+        sender_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+    let mut sender_stream = TestStream { msgs: Vec::new() };
+    let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
+        vec![(None, None), (None, None)];
+    let receiver_msgs = TestLargeObjMsgs::new(script);
+    let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let mut receiver: LargeObjProto<
+        _,
+        _,
+        (),
+        OutboundFrags,
+        TestLargeObjProtoTypes<_>
+    > = LargeObjProto::create(
+        LargeObjProtoConfig::default(),
+        Notify::new(),
+        receiver_recv.clone(),
+        receiver_msgs,
+        PassthruMsgAuthN::default(),
+        SHA3Algo::default()
+    )
+    .expect("Expected success");
+
+    let (msgs, when) = PrivateMsgs::msgs(&mut sender, Instant::now())
+        .expect("Expected success");
+
+    assert!(when.is_none());
+    assert!(msgs.is_none());
+    assert!(sender_recv.msgs().is_empty());
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate offer.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver offer to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have receiver generate req obj.
+    let (msgs, when) = PrivateMsgs::msgs(&mut receiver, Instant::now())
+        .expect("Expected success");
+    let recvwhen = when.expect("Expected some");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    // Check for no complete messages.
+    assert!(receiver_recv.msgs().is_empty());
+
+    // Have sender generate frags.
+    if let RetryIndefResult::Success(res) = sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+    {
+        let (when, ()) = res;
+
+        assert!(when.is_some());
+    } else {
+        panic!("Expected success")
+    };
+
+    let recved = sender_stream.msgs.pop().expect("Expect some");
+
+    assert!(sender_stream.msgs.is_empty());
+
+    // Deliver frags to receiver.
+    receiver
+        .recv_msg(NullCred, recved)
+        .expect("Expected success");
+
+    // Check for complete message.
+    assert_eq!(receiver_recv.msgs().deref(), &[msg]);
+
+    // Have receiver generate finish.
+    let (msgs, when) =
+        PrivateMsgs::msgs(&mut receiver, recvwhen).expect("Expected success");
+    let mut msgs = msgs.expect("Expected some");
+    let recved = msgs.pop().expect("Expected some");
+
+    assert!(when.is_none());
+    assert!(msgs.is_empty());
+    assert!(sender_recv.msgs().is_empty());
+
+    // Deliver to sender.
+    sender.recv_msg(NullCred, recved).expect("Expected success");
+
+    assert!(sender
+        .try_push(&mut (), &mut sender_stream, Instant::now())
+        .expect("Expected success")
+        .is_indef())
 }
