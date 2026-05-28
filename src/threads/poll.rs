@@ -555,14 +555,12 @@ where
 
                 RetryResult::Success(None)
             }
-            (Some(err), _) => {
-                if err.scope() == ErrorScope::WouldBlock {
-                    self.refresh_complete = Some(err);
+            (Some(err), _) => if err.scope() == ErrorScope::WouldBlock {
+                self.refresh_complete = Some(err);
 
-                    RetryResult::Success(None)
-                } else {
-                    self.complete_refresh_stream(err)
-                }
+                RetryResult::Success(None)
+            } else {
+                self.complete_refresh_stream(err)
             }
             (None, None) => {
                 error!(target: "poll-thread",
@@ -599,6 +597,31 @@ where
             .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
+    /// Do one round of event handling.
+    ///
+    /// # Parameters
+    ///
+    /// - `events`: The [Events] structure.
+    ///
+    /// - `retry_refresh`: Mutable reference to the retry value for
+    ///   refreshing streams, if there is one.  This should be updated
+    ///   if necessary.
+    ///
+    /// - `next_pending`: The next time to push pending messages, if
+    ///   there is one.  This should be updated if necessary.
+    ///
+    /// - `next_listen`: The next time to listen for messages.  This
+    ///   should be updated if necessary.
+    ///
+    /// - `next_refresh`: The next time to refresh the streams.  This
+    ///   should be updated if necessary.
+    ///
+    /// - `next_outbound`: The next time to get new outbound messages.
+    ///   This should be updated if necessary.
+    ///
+    /// # Return Value
+    ///
+    /// Whether the event loop should continue.
     fn handle_events(
         &mut self,
         events: &mut Events,
@@ -633,6 +656,8 @@ where
                        err)
             }
         }
+
+        // XXX Uncertain when next_pending is actually going to get set.
 
         // Push all pending messages.
         if next_pending.map_or(false, |when| when <= now) {
@@ -778,6 +803,9 @@ where
                 RetryResult::Retry(retry) => *retry_refresh = Some(retry)
             }
         }
+
+        // XXX will need to have a mailbox to allow application layer
+        // to signal that outbound messages are ready.
 
         // Push new messages.
         if this_outbound.map_or(false, |when| when <= now) ||

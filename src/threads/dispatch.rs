@@ -16,8 +16,6 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::cmp::Reverse;
-use std::convert::Infallible;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
@@ -28,6 +26,8 @@ use std::hash::Hash;
 use std::io::Error;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::thread::Builder;
+use std::thread::JoinHandle;
 use std::time::Instant;
 
 use constellation_auth::authn::AuthNed;
@@ -35,6 +35,7 @@ use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::cred::Credentials;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::net::PrivateMsgs;
@@ -72,8 +73,8 @@ use crate::threads::TokensCtx;
 pub trait DispatchInboundTypes {
     type InMsg;
     type Wrapper;
-    type OutMsg;
-    type SessionPrin: Clone + Display + Eq + Hash;
+    type OutMsg: Send;
+    type SessionPrin: Clone + Display + Eq + Hash + Send;
     type MsgPrin: Clone + Display + Eq + Hash;
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type MsgAuthError: Debug + Display + ScopedError;
@@ -81,17 +82,17 @@ pub trait DispatchInboundTypes {
                                    Prin = Self::MsgPrin,
                                    SessionPrin = Self::SessionPrin,
                                    AuthNMsg = Self::AuthNMsg,
-                                   Error = Self::MsgAuthError>;
+                                   Error = Self::MsgAuthError> + Send;
 }
 
 pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
-    type Addr: Clone + Debug + Display + Eq + Hash;
+    type Addr: Clone + Debug + Display + Eq + Hash + Send;
     type ChannelParam: Clone + Debug + Display + Eq + Hash
-        + ChannelParam<Self::Addr>;
-    type ChannelID: Clone + Debug + Display + Eq + Hash;
+        + ChannelParam<Self::Addr> + Send;
+    type ChannelID: Clone + Debug + Display + Eq + Hash + Send;
     type PullError: Debug + Display + ScopedError;
-    type RefreshRetry: RetryWhen;
-    type RefreshCompletableError: ScopedError;
+    type RefreshRetry: RetryWhen + Send;
+    type RefreshCompletableError: ScopedError + Send;
     type RefreshPermanentError: Debug + Display + ScopedError;
     type RefreshError: Debug
         + RecoverableError<Completable = Self::RefreshCompletableError,
@@ -106,24 +107,25 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
         StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
         Self::AuthNChan,
         ReportStreamError = Self::ReportStreamError
-    >;
-    type Msgs: PrivateMsgs<Self::OutMsg>;
+    > + Send;
+    type Msgs: PrivateMsgs<Self::OutMsg> + Send;
     type RecvError: Debug + Display + ScopedError;
     type Recv: AuthNMsgRecv<Self::MsgPrin, Self::InMsg, Self::AuthNMsg,
-                            RecvError = Self::RecvError>;
+                            RecvError = Self::RecvError> + Send;
     type Chan: Credentials
         + PullStream<Self::Wrapper,
                      PullError = Self::PullError>;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
-    type ModeConfig: Clone;
+    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan> + Send;
+    type ModeConfig: Clone + Send;
     type ModeCreateError: Debug + Display;
     type Mode: PushMode<
         Self::Stream,
         Self::Msgs,
-        DispatchThreadCtx<Self::Chans, Ctx>,
+        DispatchThreadCtx<Self::Chans, Ctx>
+    > + for<'a> CreateWithParam<&'a Self::Stream,
         Config = Self::ModeConfig,
         CreateError = Self::ModeCreateError
-    >;
+    > + Send;
     type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
@@ -139,7 +141,8 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
                    ChannelID = Self::ChannelID>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx,
-                           ShutdownStreamError = Self::ChanShutdownError>;
+                           ShutdownStreamError = Self::ChanShutdownError>
+        + Send;
 }
 
 pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
@@ -151,7 +154,7 @@ pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
         Recv = Self::Recv,
         PushStream = Self::Stream,
         DispatchError = Self::DispatchError
-    >;
+    > + Send;
 }
 
 /// Trait for session dispatchers.
@@ -281,6 +284,9 @@ where
     tokens: Tokens
 }
 
+// XXX Put the Tokens for wakers, that correspond to a DispatchEntry
+// into newtypes to distinguish them from stream Tokens.
+
 pub struct DispatchThread<Types, Ctx>
 where
     Types: DispatchTypes<Ctx>,
@@ -397,6 +403,19 @@ where
         }
     }
 
+    /// Process one incoming message.
+    ///
+    /// This will perform message authentication, and if successful,
+    /// will deliver the message up to the [AuthNMsgRecv].
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Identifier for the session in which `msg` was
+    ///   received.  This is used solely for logging.
+    ///
+    /// - `session_prin`: Session principal for the session.
+    ///
+    /// - `msg`: The wrapped incoming message.
     fn handle_msg<ID>(
         &mut self,
         id: &ID,
@@ -539,7 +558,8 @@ where
 {
     type ChannelID = Chans::ChannelID;
     type Param = Chans::Param;
-    type ParamIter = Chans::ParamIter;
+    type SelectParamIter<'a> = Chans::SelectParamIter<'a>
+    where Self: 'a;
     type ParamError = Chans::ParamError;
     type OutNegoParam = Chans::OutNegoParam;
     type Addr = Chans::Addr;
@@ -567,13 +587,13 @@ where
     }
 
     #[inline]
-    fn params<I>(
-        &mut self,
-        _ctx: &mut (),
+    fn params<'a, I>(
+        &'a mut self,
+        _ctx: &'a mut (),
         channels: I
-    ) -> Result<RetryResult<(Self::ParamIter, Option<Instant>)>,
+    ) -> Result<RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
                 Self::ParamError>
-    where I: Iterator<Item = Self::ChannelID> {
+    where I: 'a + Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
     }
 
@@ -642,6 +662,15 @@ impl<Types, Ctx> DispatchedEntry<Types, Ctx>
 where
     Types: DispatchEntryTypes<Ctx>,
 {
+    /// Report a new stream for a given principal.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `id`: The ID of the new stream.
+    ///
+    /// - `stream`: The stream being reported.
     fn recv_stream(
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
@@ -677,6 +706,7 @@ where
             None => stream
         };
 
+        // Insert into the pull streams.
         if self
             .pull_streams
             .insert(id.clone(), stream.clone())
@@ -689,12 +719,18 @@ where
         Ok(())
     }
 
+    /// Get the time of the next refresh.
     #[inline]
     fn next_refresh(&self) -> Option<Instant> {
         self.refresh_retry.as_ref().map(|retry| retry.when())
             .or(self.next_refresh)
     }
 
+    /// Pull messages from a given stream.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: Stream from which to pull messages.
     fn pull_msgs(
         &mut self,
         id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>
@@ -799,58 +835,59 @@ where
             .unwrap_or_else(|err| self.handle_refresh_stream_error(ctx, err))
     }
 
+    /// Do necessary state updates for a refresh result.
+    fn handle_refresh_result(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        res: RetryResult<Option<Instant>, Types::RefreshRetry>
+    ) {
+        match res {
+            RetryResult::Success(when) => {
+                self.next_refresh = when;
+
+                // We succeeded; retry indefinites.
+                if let Err(err) = self.mode.retry_indefs(
+                    ctx,
+                    &mut self.dispatched.msgs,
+                    &mut self.dispatched.stream,
+                ) {
+                    error!(target: "dispatch-entry",
+                           "error retrying refresh: {}",
+                           err)
+                }
+            }
+            RetryResult::Retry(retry) => {
+                self.refresh_retry = Some(retry)
+            }
+        }
+    }
+
     fn refresh_stream(
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         need_refresh: bool,
         now: Instant
     ) -> Option<Instant> {
-        // Refresh the stream if needed.
+        // Check if there's a pending completion.
         if let Some(refresh_complete) = self.refresh_complete.take() {
-            match self.complete_refresh_stream(ctx, refresh_complete) {
-                RetryResult::Success(when) => {
-                    self.next_refresh = when;
+            // There's a pending completion; run it.
+            let res = self.complete_refresh_stream(ctx, refresh_complete);
 
-                    if let Err(err) = self.mode.retry_indefs(
-                        ctx,
-                        &mut self.dispatched.msgs,
-                        &mut self.dispatched.stream,
-                    ) {
-                        error!(target: "dispatched-entry",
-                               "error completing refresh: {}",
-                               err)
-                    }
-                }
-                RetryResult::Retry(retry) => {
-                    self.refresh_retry = Some(retry)
-                }
-            }
+            self.handle_refresh_result(ctx, res)
+        // Check if there's a pending retry.
         } else if let Some(retry) = self.refresh_retry.take() {
+            // There's a pending retry; see if it's time yet.
             if retry.when() < now {
                 trace!(target: "dispatch-entry",
                        "retrying stream refresh");
 
-                match self.dispatched.retry_refresh_stream(ctx, retry) {
-                    RetryResult::Success(when) => {
-                        self.next_refresh = when;
+                let res = self.dispatched.retry_refresh_stream(ctx, retry);
 
-                        if let Err(err) = self.mode.retry_indefs(
-                            ctx,
-                            &mut self.dispatched.msgs,
-                            &mut self.dispatched.stream,
-                        ) {
-                            error!(target: "dispatch-entry",
-                                   "error retrying refresh: {}",
-                                   err)
-                        }
-                    }
-                    RetryResult::Retry(retry) => {
-                        self.refresh_retry = Some(retry)
-                    }
-                }
+                self.handle_refresh_result(ctx, res)
             } else {
                 self.refresh_retry = Some(retry)
             }
+        // Check if we need to start a new retry.
         } else if self.next_refresh.map_or(false, |when| when <= now) ||
             need_refresh {
             trace!(target: "dispatch-entry",
@@ -858,29 +895,38 @@ where
 
             self.next_refresh = None;
 
-            match self.dispatched.refresh_stream(ctx) {
-                RetryResult::Success(when) => {
-                    self.next_refresh = when;
+            let res = self.dispatched.refresh_stream(ctx);
 
-                    if let Err(err) = self.mode.retry_indefs(
-                        ctx,
-                        &mut self.dispatched.msgs,
-                        &mut self.dispatched.stream,
-                    ) {
-                        error!(target: "dispatch-entry",
-                               "error retrying refresh: {}",
-                               err)
-                    }
-                }
-                RetryResult::Retry(retry) => {
-                    self.refresh_retry = Some(retry)
-                }
-            }
+            self.handle_refresh_result(ctx, res);
         }
 
         self.next_refresh()
     }
 
+    /// Complete pending push operations if necessary.
+    fn complete_pending(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        live: &HashSet<Token>,
+    ) -> Option<Instant> {
+        match self.mode.complete_pending(
+            ctx,
+            &mut self.dispatched.msgs,
+            &mut self.dispatched.stream,
+            &live
+        ) {
+            Ok(next) => next,
+            Err(err) => {
+                error!(target: "dispatched-entry",
+                       "error completing stalled sends: {}",
+                       err);
+
+                None
+            }
+        }
+    }
+
+    /// Retry pending push operations if necessary.
     fn retry_pending(
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
@@ -914,29 +960,8 @@ where
         self.next_pending
     }
 
-    fn complete_pending(
-        &mut self,
-        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
-        live: &HashSet<Token>,
-    ) -> Option<Instant> {
-        match self.mode.complete_pending(
-            ctx,
-            &mut self.dispatched.msgs,
-            &mut self.dispatched.stream,
-            &live
-        ) {
-            Ok(next) => next,
-            Err(err) => {
-                error!(target: "dispatched-entry",
-                       "error completing stalled sends: {}",
-                       err);
-
-                None
-            }
-        }
-    }
-
-    fn push_msgs(
+    /// Push messages if it's time to do so.
+    fn push_outbound_msgs(
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
@@ -968,8 +993,9 @@ where
         self.next_outbound
     }
 
+
     fn shutdown(
-        self,
+        mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>
     ) {
         // Shut down all streams.
@@ -987,14 +1013,17 @@ where
 
             }
         }
+
+        self.dispatched.shutdown()
     }
 }
 
 impl<Types, Ctx> DispatchThread<Types, Ctx>
 where
-    Types: DispatchTypes<Ctx>,
+    Types: 'static + DispatchTypes<Ctx>,
+    Ctx: 'static + Send
 {
-    fn create(
+    pub fn create(
         mode_config: Types::ModeConfig,
         chans_config: Types::ChansConfig,
         srcs: Types::ChansSrcs,
@@ -1050,6 +1079,7 @@ where
         self.notify.clone()
     }
 
+    /// Install a newly dispatched session into the tables.
     fn setup_dispatched(
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         ents: &mut HashMap<Token, DispatchedEntry<Types, Ctx>>,
@@ -1080,8 +1110,7 @@ where
         };
 
         match dispatched.recv_stream(ctx, id.clone(), stream) {
-            // Receive went through; add the
-            // stream ID entry.
+            // Receive went through; add the stream ID entry.
             Ok(()) => if let Some(token) = stream_ids
                 .insert(id.clone(), token) {
                 error!(target: "dispatch-thread",
@@ -1102,108 +1131,144 @@ where
         }
     }
 
-    fn recv_stream(
+    /// Take a new session and install it into the system.
+    ///
+    /// If the session corresponds to an existing principal, no
+    /// dispatch will be performed; rather, the session will be
+    /// installed into that principal's [DispatchedEntry].
+    ///
+    /// If the session corresponds to a new principal, then a dispatch
+    /// will be performed to set up the application layer processing.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The ID of the stream.
+    ///
+    /// - `session`: The authenticated session.
+    fn recv_session(
         &mut self,
         id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-        stream: Types::AuthNChan
-    ) {
-        match self.parties.entry(stream.prin().clone()) {
+        session: Types::AuthNChan
+    ) -> Option<Token> {
+        match self.parties.entry(session.prin().clone()) {
             Entry::Occupied(token) => match self
                 .dispatched.get_mut(token.get()) {
                 Some(ent) => match ent
-                    .recv_stream(&mut self.ctx, id.clone(), stream) {
+                    .recv_stream(&mut self.ctx, id.clone(), session) {
                     // Receive went through; add the stream ID entry.
-                    Ok(()) => if let Some(token) = self
-                        .stream_ids.insert(id.clone(), *token.get()) {
-                        error!(target: "dispatch-thread",
-                               "existing stream ID entry for {}: token {}",
-                               id, token.0);
+                    Ok(()) => {
+                        if let Some(token) = self
+                            .stream_ids.insert(id.clone(), *token.get()) {
+                            error!(target: "dispatch-thread",
+                                   "existing stream ID entry for {}: token {}",
+                                   id, token.0);
+                        }
+
+                        Some(*token.get())
                     },
                     Err(err) => {
                         error!(target: "dispatch-thread",
                                "error reporting stream {}: {}",
                                id, err);
+
+                        None
                     }
                 },
                 None => {
                     error!(target: "dispatch-thread",
                            "missing dispatch entry for {} (token {})",
-                           stream.prin(), token.get().0);
+                           session.prin(), token.get().0);
 
                     if let Err(err) = self.ctx.channels
                         .shutdown_stream(&mut self.ctx.ctx, id.channel(),
-                                         id.param(), stream) {
+                                         id.param(), session) {
                         error!(target: "dispatch-thread",
                                "error shutting down stream {}: {}",
                                id, err);
 
                     }
+
+                    Some(*token.get())
                 }
             }
             Entry::Vacant(ent) => {
                 debug!(target: "dispatch-thread",
                        "dispatching for {}",
-                       stream.prin());
+                       session.prin());
 
                 let token = self.ctx.tokens.token();
 
                 match Waker::new(self.ctx.poll.registry(), token.clone()) {
                     Ok(notify) => match self.dispatcher
-                        .dispatch(&mut self.ctx, stream.prin(),
+                        .dispatch(&mut self.ctx, session.prin(),
                                   Arc::new(notify)) {
                         Ok(dispatched) => match Types::Mode
-                            ::create(&dispatched.stream,
-                                     self.mode_config.clone()) {
+                            ::create(self.mode_config.clone(),
+                                     &dispatched.stream) {
                             Ok(mode) => {
                                 Self::setup_dispatched(&mut self.ctx,
                                                        &mut self.dispatched,
                                                        &mut self.stream_ids,
                                                        id, dispatched, mode,
-                                                       stream, token);
-
+                                                       session, token);
                                 ent.insert(token);
+
+                                Some(token)
                             }
                             Err(err) => {
                                 error!(target: "dispatch-thread",
                                        "error creating push mode for {}: {}",
-                                       stream.prin(), err);
+                                       session.prin(), err);
+
+                                self.ctx.tokens.free_token(token);
+
+                                None
                             }
                         }
                         Err(err) => {
                             error!(target: "dispatch-thread",
                                    "error dispatching for {}: {}",
-                                   stream.prin(), err);
+                                   session.prin(), err);
 
                             if let Err(err) = self.ctx.channels
                                 .shutdown_stream(&mut self.ctx.ctx,
                                                  id.channel(),
-                                                 id.param(), stream) {
+                                                 id.param(), session) {
                                 error!(target: "dispatch-thread",
                                        "error shutting down stream {}: {}",
                                        id, err);
 
                             }
+
+                            self.ctx.tokens.free_token(token);
+
+                            None
                         }
                     },
                     Err(err) => {
                         error!(target: "dispatch-thread",
                                "error creating notifier for {}: {}",
-                               stream.prin(), err);
+                               session.prin(), err);
 
                         if let Err(err) = self.ctx.channels
                             .shutdown_stream(&mut self.ctx.ctx, id.channel(),
-                                             id.param(), stream) {
+                                             id.param(), session) {
                             error!(target: "dispatch-thread",
                                    "error shutting down stream {}: {}",
                                    id, err);
 
                         }
+
+                        self.ctx.tokens.free_token(token);
+
+                        None
                     }
                 }
             }
         }
     }
 
+    /// Pull messages from the given stream.
     fn pull_msgs(
         &mut self,
         id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>
@@ -1229,45 +1294,301 @@ where
         })
     }
 
+    fn handle_events(
+        &mut self,
+        pending_retries: &mut Option<HashMap<Token, Instant>>,
+        pending_refreshes: &mut Option<HashMap<Token, Instant>>,
+        pending_outbounds: &mut Option<HashMap<Token, Instant>>,
+        next_listen: &mut Option<Instant>,
+        live: HashSet<Token>,
+        retries: Option<Vec<(Token, Instant)>>,
+        refreshes: Option<Vec<(Token, Instant)>>,
+        outbounds: Option<Vec<(Token, Instant)>>,
+        now: Instant
+    ) -> bool {
+        let mut valid = true;
+        let ndispatched = self.dispatched.len();
+
+        // XXX We ought to be able to filter the dispatched sessions
+        // by the tokens in live.
+
+        // If we have pending completes, run them.
+        for (token, ent) in self.dispatched.iter_mut() {
+            // Complete the pending operation; record a new
+            // pending operation if it returns a time.
+            if let Some(when) = ent
+                .complete_pending(&mut self.ctx, &live) {
+                // Record the pending operation
+                match pending_outbounds {
+                    Some(completes) => {
+                        if completes.insert(*token, when).is_some() {
+                            error!(target: "dispatch-thread",
+                                   "pending complete token {} exists",
+                                   token.0);
+                        }
+                    }
+                    None => {
+                        let mut map = HashMap::with_capacity(ndispatched);
+
+                        map.insert(*token, when);
+
+                        *pending_outbounds = Some(map);
+                    }
+                }
+            }
+        }
+
+        // XXX Uncertain when next_pending is actually going to get set.
+
+        // If we have pending retries, run them.
+        if let Some(retries) = retries {
+            for (token, _) in retries.into_iter() {
+                // Look up the dispatched entry.
+                if let Some(ent) = self.dispatched.get_mut(&token) {
+                    // Retry the pending operation; record a new
+                    // pending operation if it returns a time.
+                    if let Some(when) = ent
+                        .retry_pending(&mut self.ctx, &live, now) {
+                        // Record the pending operation
+                        match pending_retries {
+                            Some(pending) => {
+                                if pending.insert(token, when).is_some() {
+                                    error!(target: "dispatch-thread",
+                                           "pending retry token {} exists",
+                                           token.0);
+                                }
+                            },
+                            None => {
+                                let size = self.dispatched.len();
+                                let mut map = HashMap::with_capacity(size);
+
+                                map.insert(token, when);
+
+                                *pending_retries = Some(map);
+                            }
+                        }
+                    }
+                } else {
+                    // This shouldn't happen.
+                    error!(target: "dispatch-thread",
+                           "entry for pending token {} not found",
+                           token.0);
+                }
+            }
+        }
+
+        // Do pulls before pushing new messages.
+
+        let need_refreshes = if next_listen.map_or(false, |when| when <= now) {
+            let mut need_refreshes =
+                HashSet::with_capacity(self.dispatched.len());
+
+            trace!(target: "dispatch-thread",
+                   "listening");
+
+            match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
+                Ok(RetryResult::Success((streams, endpoints,
+                                         refresh, when))) => {
+                    *next_listen = when;
+
+                    // XXX Uncertain relationship here with the refresh field.
+
+                    // Report new streams.
+                    for (addr, channel_id, param, stream) in streams {
+                        let id = StreamID::new(addr, channel_id, param);
+
+                        if let Some(token) = self.recv_session(id, stream) {
+                            if need_refreshes.insert(token) {
+                                error!(target: "dispatch-thread",
+                                       "token {} already in needed refreshes",
+                                       token.0);
+                            }
+                        }
+                    }
+
+                    // Pull in messages from all active streams.
+                    for (addr, channel_id, param) in endpoints {
+                        let id = StreamID::new(addr, channel_id, param);
+
+                        if let Err(err) = self.pull_msgs(&id) {
+                            error!(target: "dispatch-thread",
+                                   "error receiving messages from {}: {}",
+                                   id, err);
+
+                            valid = false;
+                        }
+                    }
+                },
+                Ok(RetryResult::Retry(when)) => {
+                    *next_listen = Some(when);
+                }
+                Err(err) => {
+                    error!(target: "dispatch-thread",
+                           "error listening: {}",
+                           err);
+                }
+            }
+
+            Some(need_refreshes)
+        } else {
+            None
+        };
+
+        // If we have pending refreshes, run them.
+        if let Some(refreshes) = refreshes {
+            // Deduplicate the refreshed tokens from both the incoming
+            // refreshes, as well as the new tokens in need_refreshes.
+            let refreshes: HashSet<Token> =
+                if let Some(need_refreshes) = &need_refreshes {
+                    refreshes
+                        .into_iter()
+                        .map(|(token, _)| token)
+                        .chain(need_refreshes.iter().cloned())
+                        .collect()
+                } else {
+                    refreshes
+                        .into_iter()
+                        .map(|(token, _)| token)
+                        .collect()
+                };
+
+            // XXX This is wrong; we need to get the individual
+            // Dispatched objects and deduplicate them, otherwise
+            // we'll end up possibly refreshing one multiple times.
+
+            for token in refreshes.into_iter() {
+                if let Some(ent) = self.dispatched.get_mut(&token) {
+                    // Complete the pending operation; record a new
+                    // pending operation if it returns a time.
+                    let need_refresh = need_refreshes.as_ref()
+                        .map_or(false,
+                                |need_refreshes| need_refreshes.contains(&token)
+                        );
+
+                    if let Some(when) = ent
+                        .refresh_stream(&mut self.ctx, need_refresh, now) {
+                        // Record the pending operation
+                        match pending_refreshes {
+                            Some(refreshes) => {
+                                if refreshes.insert(token, when).is_some() {
+                                    error!(target: "dispatch-thread",
+                                           "pending refresh token {} exists",
+                                           token.0);
+                                }
+                            }
+                            None => {
+                                let size = self.dispatched.len();
+                                let mut map = HashMap::with_capacity(size);
+
+                                map.insert(token, when);
+
+                                *pending_refreshes = Some(map);
+                            }
+                        }
+                    }
+                } else {
+                    // This shouldn't happen.
+                    error!(target: "dispatch-thread",
+                           "entry for pending token {} not found",
+                           token.0);
+                }
+            }
+        }
+
+        // XXX will need to have a mailbox to allow application layer
+        // to signal that outbound messages are ready.
+
+        // Finally, if there are outbound messages pending, send them.
+        if let Some(outbounds) = outbounds {
+            for (token, _) in outbounds.into_iter() {
+                if let Some(ent) = self.dispatched.get_mut(&token) {
+                    // Try to push messages; record a new pending
+                    // operation if it returns a time.
+                    if let Some(when) = ent
+                        .push_outbound_msgs(&mut self.ctx, &live, now) {
+                        // Record the pending operation
+                        match pending_outbounds {
+                            Some(pending) => {
+                                if pending.insert(token, when).is_some() {
+                                    error!(target: "dispatch-thread",
+                                           "pending outbound token {} exists",
+                                           token.0);
+                                }
+                            },
+                            None => {
+                                let size = self.dispatched.len();
+                                let mut map = HashMap::with_capacity(size);
+
+                                map.insert(token, when);
+
+                                *pending_retries = Some(map);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        valid
+    }
+
+    fn filter_pending(
+        pending: &mut Option<HashMap<Token, Instant>>,
+        next: &mut Option<Instant>,
+        now: Instant
+    ) -> Option<Vec<(Token, Instant)>> {
+        if let Some(mut sends) = pending.take() {
+            let mut curr = Vec::with_capacity(sends.len());
+
+            sends.retain(|token, when| if *when < now {
+                curr.push((*token, *when));
+                *next = Some(next_retry_definite(&next, &when));
+
+                false
+            } else {
+                true
+            });
+
+            if !sends.is_empty() {
+                *pending = Some(sends)
+            }
+
+            if !curr.is_empty() {
+                Some(curr)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
-        let mut valid = true;
         let mut next_listen = None;
-        let mut next_outbound = None;
-        let mut pending: Option<HashMap<Token, Instant>> = None;
-        let mut pending_completes: Option<HashSet<Tokens>> = None;
-        let mut now_pending = None;
+        // XXX Maybe don't allocate and deallocate these all the time.
+        let mut pending_outbounds: Option<HashMap<Token, Instant>> = None;
+        let mut pending_refreshes: Option<HashMap<Token, Instant>> = None;
+        let mut pending_retries: Option<HashMap<Token, Instant>> = None;
+        let mut outbounds;
+        let mut refreshes;
+        let mut retries;
         let mut now;
 
         info!(target: "dispatch-thread",
               "mio polling thread starting");
 
         while {
-            let next = next_retry(&next_listen, &next_outbound);
+            let mut next = next_listen;
 
             now = Instant::now();
 
-            // Separate out all the pending sends that are current.
-            if let Some(mut sends) = pending.take() {
-                let mut curr = Vec::with_capacity(sends.len());
-
-                sends.retain(|token, when| if *when < now {
-                    curr.push((*when, *token));
-                    next = Some(next_retry_definite(&next, &when));
-
-                    false
-                } else {
-                    true
-                });
-
-                if !curr.is_empty() {
-                    now_pending = Some(curr)
-                }
-
-                if !sends.is_empty() {
-                    pending = Some(sends)
-                }
-            }
+            retries = Self::filter_pending(&mut pending_retries,
+                                           &mut next, now);
+            refreshes = Self::filter_pending(&mut pending_refreshes,
+                                             &mut next, now);
+            outbounds = Self::filter_pending(&mut pending_outbounds,
+                                             &mut next, now);
 
             self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
@@ -1293,8 +1614,7 @@ where
                                     err)
                          })
                          .is_ok()
-                 } ||
-                 pending_completes.is_some())
+                 })
 
         } {
             // Gather up all the events.
@@ -1303,130 +1623,19 @@ where
                 .map(|event| event.token())
                 .collect();
 
-            // First deal with stalled and pending sends.
-            let this_outbound = next_outbound.take();
-
-            // If we have current pending operations, run them.
-            if let Some(tokens) = now_pending.take() {
-                // Go through each pending token.
-                for (_, token) in tokens {
-                    // Look up the dispatched entry.
-                    if let Some(ent) = self.dispatched.get_mut(&token) {
-                        // Retry the pending operation; record a new
-                        // pending operation if it returns a time.
-                        if let Some(when) = ent
-                            .retry_pending(&mut self.ctx, &live, now) {
-                            // Record the pending operation
-                            match pending {
-                                Some(pending) => {
-                                    if pending.insert(token, when).is_some() {
-                                        trace!(target: "dispatch-thread",
-                                               "pending entry token {} exists",
-                                               token.0);
-                                    }
-                                },
-                                None => {
-                                    let size = self.dispatched.len();
-                                    let mut map = HashMap::with_capacity(size);
-
-                                    map.insert(token, when);
-
-                                    pending = Some(map);
-                                }
-                            }
-                        }
-                    } else {
-                        // This shouldn't happen.
-                        trace!(target: "dispatch-thread",
-                               "entry for pending token {} not found",
-                               token.0);
-                    }
-                }
+            if !self.handle_events(
+                &mut pending_retries,
+                &mut pending_refreshes,
+                &mut pending_outbounds,
+                &mut next_listen,
+                live,
+                retries.take(),
+                refreshes.take(),
+                outbounds.take(),
+                now
+            ) {
+                break
             }
-
-            // Run all the stalled completes.
-            if let Some(tokens) = pending_completes.take() {
-                // Note: these tokens *are not* the same tokens that
-                // will show up in a poll.  They corresponding to the
-                // wakers for the dispatced entries.
-                for token in tokens {
-                    if let Some(ent) = self.dispatched.get_mut(&token) {
-                        // Complete the pending operation; record a new
-                        // pending operation if it returns a time.
-                        if let Some(when) = ent
-                            .complete_pending(&mut self.ctx, &live, now) {
-                            // Record the pending operation
-                            match pending_completes {
-                                Some(completes) => pending.insert(token),
-                                None => {
-                                    let size = self.dispatched.len();
-                                    let mut map = HashSet::with_capacity(size);
-
-                                    map.insert(token);
-
-                                    pending = Some(map);
-                                }
-                            }
-                        }
-                    } else {
-                        // This shouldn't happen.
-                        trace!(target: "dispatch-thread",
-                               "entry for pending token {} not found",
-                               token.0);
-                    }
-                }
-            }
-
-            // Do pulls before pushing new messages.
-            let need_refresh = if next_listen
-                .map_or(false, |when| when <= now) {
-                trace!(target: "dispatch-thread",
-                       "listening");
-
-                match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
-                    Ok(RetryResult::Success((streams, endpoints,
-                                             refresh, when))) => {
-                        next_listen = when;
-
-                        // Report new streams.
-                        for (addr, channel_id, param, stream) in streams {
-                            let id = StreamID::new(addr, channel_id, param);
-
-                            self.recv_stream(id, stream)
-                        }
-
-                        // Pull in messages from all active streams.
-                        for (addr, channel_id, param) in endpoints {
-                            let id = StreamID::new(addr, channel_id, param);
-
-                            if let Err(err) = self.pull_msgs(&id) {
-                                error!(target: "dispatch-thread",
-                                       "error receiving messages from {}: {}",
-                                       id, err);
-
-                                valid = false;
-                            }
-                        }
-
-                        refresh
-                    },
-                    Ok(RetryResult::Retry(when)) => {
-                        next_listen = Some(when);
-
-                        false
-                    }
-                    Err(err) => {
-                        error!(target: "dispatch-thread",
-                               "error listening: {}",
-                               err);
-
-                        false
-                    }
-                }
-            } else {
-                false
-            };
-
         }
 
         self.shutdown(events)
@@ -1529,316 +1738,13 @@ where
         info!(target: "dispatch-thread",
               "mio dispatch thread exiting");
     }
-}
 
-/*
-
-pub struct PullStreamsDispatchThread<
-    Msg,
-    AuthN,
-    Dispatcher,
-    Listener,
-    Mode,
-    Ctx
-> where
-    Msg: 'static + Clone + Send,
-    Mode: PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx> + Send,
-    Listener: PullStreamListener<Msg>,
-    Listener::Stream: 'static + ConcurrentStream + Credentials,
-    Listener::Addr: 'static + Send,
-    Dispatcher: Dispatch<Msg, Listener::Addr, Listener::Stream, AuthN, Ctx>,
-    Dispatcher::PushStream: PushStreamReporter,
-    Dispatcher::Recv: Clone,
-    AuthN: 'static
-        + Clone
-        + MsgAuthN<Msg, Msg, SessionPrin = Listener::Prin>
-        + Send,
-    AuthN::SessionPrin: Send,
-    Ctx: Clone {
-    msg: PhantomData<Msg>,
-    mode: Mode::Config,
-    dispatcher: Dispatcher,
-    listener: Listener,
-    shutdown: ShutdownFlag,
-    recvs: Arc<
-        Mutex<
-            HashMap<
-                Listener::Prin,
-                DispatchEntry<
-                    Msg,
-                    Listener::Addr,
-                    Listener::Stream,
-                    AuthN,
-                    Dispatcher::Recv,
-                    <Dispatcher::PushStream as PushStreamReporter>::Reporter
-                >
-            >
-        >
-    >,
-    ctx: Ctx
-}
-
-#[derive(Debug)]
-pub enum DispatchHandlerError<Dispatch> {
-    Dispatch { err: Dispatch },
-    IO { err: Error },
-    MutexPoison
-}
-
-impl<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
-    PullStreamsDispatchThread<Msg, AuthN, Dispatcher, Listener, Mode, Ctx>
-where
-    Msg: 'static + Clone + Send,
-    Mode: 'static
-        + PushMode<Dispatcher::PushStream, Dispatcher::Msgs, Ctx>
-        + Send,
-    Mode::Config: Send,
-    Listener: 'static + PullStreamListener<Msg> + Send,
-    Listener::Stream: ConcurrentStream + Credentials,
-    Listener::Addr: Send,
-    Listener::Prin: Clone + Eq + Hash + Send,
-    Dispatcher: 'static
-        + Dispatch<Msg, Listener::Addr, Listener::Stream, AuthN, Ctx>
-        + Send,
-    Dispatcher::PushStream: PushStreamReporter,
-    <Dispatcher::PushStream as PushStreamReporter>::Reporter: StreamReporter<
-            Stream = ThreadedStream<Listener::Stream>,
-            Prin = Listener::Prin,
-            Src = Listener::Addr
-        > + Send,
-    Dispatcher::Recv: Clone,
-    AuthN: 'static
-        + Clone
-        + MsgAuthN<Msg, Msg, SessionPrin = Listener::Prin>
-        + Send,
-    AuthN::SessionPrin: Send,
-    Ctx: 'static + Clone + Send + Sync
-{
-    fn create(
-        mode: Mode::Config,
-        dispatcher: Dispatcher,
-        listener: Listener,
-        shutdown: ShutdownFlag,
-        ctx: Ctx,
-        recvs: Arc<
-        Mutex<
-            HashMap<
-                Listener::Prin,
-                DispatchEntry<
-                    Msg,
-                    Listener::Addr,
-                    Listener::Stream,
-                    AuthN,
-                    Dispatcher::Recv,
-                    <Dispatcher::PushStream as PushStreamReporter>::Reporter
-                >
-            >
-        >
-    >
-    ) -> Self {
-        PullStreamsDispatchThread {
-            msg: PhantomData,
-            mode: mode,
-            dispatcher: dispatcher,
-            listener: listener,
-            shutdown: shutdown,
-            recvs: recvs,
-            ctx: ctx
-        }
-    }
-
-    pub fn new(
-        mode: Mode::Config,
-        dispatcher: Dispatcher,
-        listener: Listener,
-        shutdown: ShutdownFlag,
-        ctx: Ctx
-    ) -> Self {
-        let recvs = Arc::new(Mutex::new(HashMap::new()));
-
-        Self::create(mode, dispatcher, listener, shutdown, ctx, recvs)
-    }
-
-    pub fn with_capacity(
-        mode: Mode::Config,
-        dispatcher: Dispatcher,
-        listener: Listener,
-        shutdown: ShutdownFlag,
-        ctx: Ctx,
-        size: usize
-    ) -> Self {
-        let recvs = Arc::new(Mutex::new(HashMap::with_capacity(size)));
-
-        Self::create(mode, dispatcher, listener, shutdown, ctx, recvs)
-    }
-
-    fn report(
-        ent: &mut DispatchEntry<
-            Msg,
-            Listener::Addr,
-            Listener::Stream,
-            AuthN,
-            Dispatcher::Recv,
-            <Dispatcher::PushStream as PushStreamReporter>::Reporter
-        >,
-        stream: Listener::Stream,
-        addr: Listener::Addr,
-        prin: Listener::Prin
-    ) {
-        let stream = ThreadedStream::new(ent.inner.shutdown.clone(), stream);
-
-        match ent.reporter.report(addr.clone(), prin, stream) {
-            Ok(None) => {
-                debug!(target: "pull-streams-dispatch-thread",
-                       "incoming stream registered for {}",
-                       addr);
-            }
-            Ok(Some(_)) => {
-                debug!(target: "pull-streams-dispatch-thread",
-                       "stream already exists for {}, aborting",
-                       addr);
-            }
-            Err(err) => {
-                error!(target: "pull-streams-dispatch-thread",
-                       "error reporting new stream: {}",
-                       err)
-            }
-        }
-    }
-
-    fn handle(
-        &mut self,
-        stream: Listener::Stream,
-        addr: Listener::Addr,
-        prin: Listener::Prin
-    ) -> Result<(), DispatchHandlerError<Dispatcher::DispatchError>> {
-        match self
-            .recvs
-            .lock()
-            .map_err(|_| DispatchHandlerError::MutexPoison)?
-            .entry(prin.clone())
-        {
-            Entry::Occupied(mut ent) => {
-                let ent = ent.get_mut();
-
-                Self::report(ent, stream, addr, prin);
-
-                Ok(())
-            }
-            Entry::Vacant(ent) => {
-                debug!(target: "pull-streams-dispatch-thread",
-                       "no dispatcher entry for {}",
-                       prin);
-
-                let (push_stream, msgs, notify, dispatched) = self
-                    .dispatcher
-                    .dispatch(&mut self.ctx, prin.clone())
-                    .map_err(|err| DispatchHandlerError::Dispatch {
-                        err: err
-                    })?;
-                let reporter = push_stream.reporter();
-                let push_thread: PushStreamThread<_, _, Mode, _> =
-                    PushStreamThread::create(
-                        self.mode.clone(),
-                        self.ctx.clone(),
-                        msgs,
-                        notify,
-                        push_stream,
-                        dispatched.shutdown.clone()
-                    );
-                let join = push_thread
-                    .start()
-                    .map_err(|err| DispatchHandlerError::IO { err: err })?;
-                let ent = ent.insert(DispatchEntry {
-                    inner: dispatched,
-                    reporter: reporter,
-                    push_thread: join
-                });
-
-                Self::report(ent, stream, addr, prin);
-
-                Ok(())
-            }
-        }
-    }
-
-    fn run(&mut self) {
-        let mut valid = true;
-
-        debug!(target: "pull-streams-dispatch-thread",
-               "listen thread starting");
-
-        while self.shutdown.is_live() && valid {
-            trace!(target: "pull-streams-dispatch-thread",
-                   "listening for connection");
-
-            match self.listener.listen() {
-                Ok(RetryResult::Success((stream, addr, prin))) => {
-                    info!(target: "pull-streams-dispatch-thread",
-                          "received new incoming stream from {}",
-                          addr);
-
-                    if let Err(err) = self.handle(stream, addr, prin) {
-                        error!(target: "pull-streams-dispatch-thread",
-                               "error handling new stream: {}",
-                               err);
-
-                        valid = false
-                    }
-                }
-                Ok(RetryResult::Retry(until)) => {
-                    let now = Instant::now();
-
-                    if now < until {
-                        let delay = until - now;
-
-                        debug!(
-                            "retrying listen in {}.{:03}s",
-                            delay.as_secs(),
-                            delay.subsec_millis()
-                        );
-
-                        sleep(delay)
-                    }
-                }
-                Err(err) => {
-                    error!(target: "pull-streams-dispatch-thread",
-                           "error listening for new sessions: {}",
-                           err);
-
-                    valid = false;
-                }
-            }
-        }
-
-        info!(target: "pull-streams-dispatch-thread",
-              "listener thread exiting");
-    }
-
-    #[inline]
-    pub fn start(mut self) -> Result<JoinHandle<()>, Error> {
+    pub fn start(self) -> Result<JoinHandle<()>, Error> {
         Builder::new()
-            .name(String::from("pull-streams-dispatch-thread"))
+            .name(String::from("poll-thread"))
             .spawn(move || self.run())
     }
 }
-
-impl<Dispatch> Display for DispatchHandlerError<Dispatch>
-where
-    Dispatch: Display
-{
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
-        match self {
-            DispatchHandlerError::Dispatch { err } => err.fmt(f),
-            DispatchHandlerError::IO { err } => write!(f, "{}", err),
-            DispatchHandlerError::MutexPoison => write!(f, "mutex poisoned")
-        }
-    }
-}
-*/
 
 impl<Channels> Display for DispatchThreadCreateError<Channels>
 where
