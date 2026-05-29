@@ -555,12 +555,14 @@ where
 
                 RetryResult::Success(None)
             }
-            (Some(err), _) => if err.scope() == ErrorScope::WouldBlock {
-                self.refresh_complete = Some(err);
+            (Some(err), _) => {
+                if err.scope() == ErrorScope::WouldBlock {
+                    self.refresh_complete = Some(err);
 
-                RetryResult::Success(None)
-            } else {
-                self.complete_refresh_stream(err)
+                    RetryResult::Success(None)
+                } else {
+                    self.complete_refresh_stream(err)
+                }
             }
             (None, None) => {
                 error!(target: "poll-thread",
@@ -603,21 +605,20 @@ where
     ///
     /// - `events`: The [Events] structure.
     ///
-    /// - `retry_refresh`: Mutable reference to the retry value for
-    ///   refreshing streams, if there is one.  This should be updated
-    ///   if necessary.
+    /// - `retry_refresh`: Mutable reference to the retry value for refreshing
+    ///   streams, if there is one.  This should be updated if necessary.
     ///
-    /// - `next_pending`: The next time to push pending messages, if
-    ///   there is one.  This should be updated if necessary.
+    /// - `next_pending`: The next time to push pending messages, if there is
+    ///   one.  This should be updated if necessary.
     ///
-    /// - `next_listen`: The next time to listen for messages.  This
+    /// - `next_listen`: The next time to listen for messages.  This should be
+    ///   updated if necessary.
+    ///
+    /// - `next_refresh`: The next time to refresh the streams.  This should be
+    ///   updated if necessary.
+    ///
+    /// - `next_outbound`: The next time to get new outbound messages. This
     ///   should be updated if necessary.
-    ///
-    /// - `next_refresh`: The next time to refresh the streams.  This
-    ///   should be updated if necessary.
-    ///
-    /// - `next_outbound`: The next time to get new outbound messages.
-    ///   This should be updated if necessary.
     ///
     /// # Return Value
     ///
