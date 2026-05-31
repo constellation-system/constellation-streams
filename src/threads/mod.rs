@@ -27,6 +27,8 @@ use std::time::Instant;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryWhen;
 use log::error;
@@ -60,7 +62,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         msgs: &mut Msgs,
         stream: &mut Stream,
         live: &HashSet<Token>
-    ) -> Result<Option<Instant>, Self::SendError>;
+    ) -> Result<PushModeResult, Self::SendError>;
 
     fn retry_pending(
         &mut self,
@@ -69,7 +71,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         stream: &mut Stream,
         live: &HashSet<Token>,
         now: Instant
-    ) -> Result<Option<Instant>, Self::RetryError>;
+    ) -> Result<PushModeResult, Self::RetryError>;
 
     fn complete_pending(
         &mut self,
@@ -77,9 +79,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         msgs: &mut Msgs,
         stream: &mut Stream,
         live: &HashSet<Token>
-    ) -> Result<Option<Instant>, Self::RetryError>;
-
-    fn has_complete_pending(&self) -> bool;
+    ) -> Result<PushModeResult, Self::RetryError>;
 
     /// Retry all stored indefinite retries.
     ///
@@ -100,7 +100,7 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         ctx: &mut Ctx,
         msgs: &mut Msgs,
         stream: &mut Stream
-    ) -> Result<Option<Instant>, Self::RetryIndefError>;
+    ) -> Result<PushModeResult, Self::RetryIndefError>;
 }
 
 pub trait RegistryCtx {
@@ -122,6 +122,17 @@ pub trait TokensCtx {
     );
 }
 
+/// Result from [PushMode] operations.
+///
+/// This records times for the next operations, and whether there are
+/// any operations that need to be completed.
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct PushModeResult {
+    next_outbound: Option<Instant>,
+    next_retry: Option<Instant>,
+    has_completes: bool
+}
+
 pub struct Tokens {
     /// Current count for generating new tokens.
     curr: usize,
@@ -140,6 +151,166 @@ where
     PushOffer {
         hash: H::HashID,
         retry: Stream::PushOfferRetry
+    }
+}
+
+impl Default for PushModeResult {
+    #[inline]
+    fn default() -> Self {
+        PushModeResult {
+            next_outbound: None,
+            next_retry: None,
+            has_completes: false
+        }
+    }
+}
+
+impl PushModeResult {
+    #[inline]
+    pub(crate) fn new(
+        next_outbound: Option<Instant>,
+        next_retry: Option<Instant>,
+        has_completes: bool
+    ) -> Self {
+        PushModeResult {
+            next_outbound: next_outbound,
+            next_retry: next_retry,
+            has_completes: has_completes
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_next_outbound(
+        next_outbound: Instant,
+    ) -> Self {
+        PushModeResult {
+            next_outbound: Some(next_outbound),
+            next_retry: None,
+            has_completes: false
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_next_retry(
+        next_retry: Instant,
+    ) -> Self {
+        PushModeResult {
+            next_outbound: None,
+            next_retry: Some(next_retry),
+            has_completes: false
+        }
+    }
+
+    #[inline]
+    pub(crate) fn from_has_completes() -> Self {
+        PushModeResult {
+            next_outbound: None,
+            next_retry: None,
+            has_completes: true
+        }
+    }
+
+    /// Get the next time to send outbound messages.
+    ///
+    /// This indicates when next to call
+    /// (send_from_outbound)[PushMode::send_from_outbound].
+    #[inline]
+    pub fn next_outbound(&self) -> Option<Instant> {
+        self.next_outbound
+    }
+
+    /// Get the next time to retry sending messages.
+    ///
+    /// This indicates when next to call
+    /// (retry_pending)[PushMode::retry_pending].
+    #[inline]
+    pub fn retry_pending(&self) -> Option<Instant> {
+        self.next_retry
+    }
+
+    /// Indicate whether there are sends that need to be completed.
+    ///
+    /// This indicates whether
+    /// (complete_pending)[PushMode::complete_pending] needs to be
+    /// called after the next wait.
+    #[inline]
+    pub fn has_completes(&self) -> bool {
+        self.has_completes
+    }
+
+    #[inline]
+    pub fn take_next_outbound(&mut self) -> Option<Instant> {
+        self.next_outbound.take()
+    }
+
+    #[inline]
+    pub fn take_retry_pending(&mut self) -> Option<Instant> {
+        self.next_outbound.take()
+    }
+
+    #[inline]
+    pub fn take_has_completes(&mut self) -> bool {
+        let out = self.has_completes;
+
+        self.has_completes = false;
+
+        out
+    }
+
+    #[inline]
+    pub fn merge_next_outbound(
+        &mut self,
+        next: &Option<Instant>
+    ) {
+        self.next_outbound = next_retry(&self.next_outbound, next)
+    }
+
+    #[inline]
+    pub fn merge_next_outbound_definite(
+        &mut self,
+        next: &Instant
+    ) {
+        self.next_outbound =
+            Some(next_retry_definite(&self.next_outbound, next))
+    }
+
+    #[inline]
+    pub fn merge_next_retry(
+        &mut self,
+        next: &Option<Instant>
+    ) {
+        self.next_retry = next_retry(&self.next_retry, next)
+    }
+
+    #[inline]
+    pub fn merge_next_retry_definite(
+        &mut self,
+        next: &Instant
+    ) {
+        self.next_retry = Some(next_retry_definite(&self.next_retry, next))
+    }
+
+    #[inline]
+    pub fn merge_has_completes(
+        &mut self,
+        has_completes: bool
+    ) {
+        self.has_completes |= has_completes
+    }
+
+    #[inline]
+    pub fn set_has_completes(&mut self) {
+        self.has_completes = true
+    }
+
+    #[inline]
+    pub fn merge(
+        &mut self,
+        other: &Self
+    ) {
+        self.merge_next_outbound(&other.next_outbound);
+        self.merge_next_retry(&other.next_retry);
+        self.merge_has_completes(other.has_completes);
     }
 }
 

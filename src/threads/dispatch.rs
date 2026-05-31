@@ -40,7 +40,6 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::net::PrivateMsgs;
-use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -66,6 +65,7 @@ use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::threads::PushMode;
+use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
 use crate::threads::Tokens;
 use crate::threads::TokensCtx;
@@ -291,9 +291,8 @@ where
     mode: Types::Mode,
     refresh_complete: Option<Types::RefreshCompletableError>,
     refresh_retry: Option<Types::RefreshRetry>,
-    next_pending: Option<Instant>,
     next_refresh: Option<Instant>,
-    next_outbound: Option<Instant>
+    pending: PushModeResult
 }
 
 pub struct DispatchThreadCtx<Chans, Ctx>
@@ -738,15 +737,6 @@ where
         Ok(())
     }
 
-    /// Get the time of the next refresh.
-    #[inline]
-    fn next_refresh(&self) -> Option<Instant> {
-        self.refresh_retry
-            .as_ref()
-            .map(|retry| retry.when())
-            .or(self.next_refresh)
-    }
-
     /// Pull messages from a given stream.
     ///
     /// # Parameters
@@ -886,12 +876,22 @@ where
         }
     }
 
+    fn needs_refresh(
+        &self,
+        now: Instant
+    ) -> bool {
+        self.refresh_complete.is_some() ||
+            self.next_refresh.map_or(false, |when| when <= now) ||
+            self.refresh_retry.as_ref()
+            .map_or(false, |retry| retry.when() <= now)
+    }
+
     fn refresh_stream(
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         need_refresh: bool,
         now: Instant
-    ) -> Option<Instant> {
+    ) {
         // Check if there's a pending completion.
         if let Some(refresh_complete) = self.refresh_complete.take() {
             // There's a pending completion; run it.
@@ -924,8 +924,6 @@ where
 
             self.handle_refresh_result(ctx, res);
         }
-
-        self.next_refresh()
     }
 
     /// Complete pending push operations if necessary.
@@ -933,20 +931,22 @@ where
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>
-    ) -> Option<Instant> {
-        match self.mode.complete_pending(
-            ctx,
-            &mut self.dispatched.msgs,
-            &mut self.dispatched.stream,
-            &live
-        ) {
-            Ok(next) => next,
-            Err(err) => {
-                error!(target: "dispatched-entry",
-                       "error completing stalled sends: {}",
-                       err);
-
-                None
+    ) {
+        if self.pending.take_has_completes() {
+            match self.mode.complete_pending(
+                ctx,
+                &mut self.dispatched.msgs,
+                &mut self.dispatched.stream,
+                &live
+            ) {
+                Ok(res) => {
+                    self.pending.merge(&res)
+                },
+                Err(err) => {
+                    error!(target: "dispatched-entry",
+                           "error completing stalled sends: {}",
+                           err);
+                }
             }
         }
     }
@@ -957,9 +957,9 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
         now: Instant
-    ) -> Option<Instant> {
-        if self.next_pending.map_or(false, |when| when <= now) {
-            self.next_pending = None;
+    ) {
+        if self.pending.retry_pending().map_or(false, |when| when <= now) {
+            let _ = self.pending.take_retry_pending();
 
             trace!(target: "dispatch-entry",
                    "retrying pending messages");
@@ -971,8 +971,8 @@ where
                 &live,
                 now
             ) {
-                Ok(next) => {
-                    self.next_pending = next;
+                Ok(res) => {
+                    self.pending.merge(&res);
                 }
                 Err(err) => {
                     error!(target: "dispatch-entry",
@@ -981,8 +981,6 @@ where
                 }
             }
         }
-
-        self.next_pending
     }
 
     /// Push messages if it's time to do so.
@@ -991,12 +989,12 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
         now: Instant
-    ) -> Option<Instant> {
-        if self.next_outbound.map_or(false, |when| when <= now) {
+    ) {
+        if self.pending.next_outbound().map_or(false, |when| when <= now) {
             trace!(target: "dispatch-entry",
                    "pushing messages");
 
-            self.next_outbound = None;
+            let _ = self.pending.take_next_outbound();
 
             match self.mode.send_from_outbound(
                 ctx,
@@ -1004,8 +1002,8 @@ where
                 &mut self.dispatched.stream,
                 live
             ) {
-                Ok(next) => {
-                    self.next_outbound = next_retry(&self.next_outbound, &next);
+                Ok(res) => {
+                    self.pending.merge(&res);
                 }
                 Err(err) => {
                     error!(target: "dispatch-entry",
@@ -1014,8 +1012,6 @@ where
                 }
             }
         }
-
-        self.next_outbound
     }
 
     fn shutdown(
@@ -1129,14 +1125,14 @@ where
         // XXX use a size hint here.
         let pull_streams = HashMap::new();
         let now = Instant::now();
+        let pending = PushModeResult::new(Some(now), None, false);
         let mut dispatched = DispatchedEntry {
             ctx: PhantomData,
             dispatched: dispatched,
             pull_streams: pull_streams,
             mode: mode,
-            next_outbound: Some(now),
+            pending: pending,
             next_refresh: Some(now),
-            next_pending: None,
             refresh_retry: None,
             refresh_complete: None
         };
@@ -1354,84 +1350,44 @@ where
 
     fn handle_events(
         &mut self,
-        pending_retries: &mut Option<HashMap<DispatchedID, Instant>>,
-        pending_refreshes: &mut Option<HashMap<DispatchedID, Instant>>,
-        pending_outbounds: &mut Option<HashMap<DispatchedID, Instant>>,
         next_listen: &mut Option<Instant>,
         live: HashSet<Token>,
-        retries: Option<Vec<(DispatchedID, Instant)>>,
-        refreshes: Option<Vec<(DispatchedID, Instant)>>,
-        outbounds: Option<Vec<(DispatchedID, Instant)>>,
+        refreshes: Option<Vec<DispatchedID>>,
+        outbounds: Option<Vec<DispatchedID>>,
+        retries: Option<Vec<DispatchedID>>,
+        completes: Option<Vec<DispatchedID>>,
         now: Instant
     ) -> bool {
         let mut valid = true;
-        let ndispatched = self.dispatched.len();
 
         // XXX We ought to be able to filter the dispatched sessions
         // by the tokens in live.  Note that this is not just
         // filtering them by the keys for self.dispatched.
 
         // If we have pending completes, run them.
-        for (token, ent) in self.dispatched.iter_mut() {
-            // Complete the pending operation; record a new
-            // pending operation if it returns a time.
-            if let Some(when) = ent.complete_pending(&mut self.ctx, &live) {
-                // Record the pending operation
-                match pending_outbounds {
-                    Some(completes) => {
-                        if completes.insert(token.clone(), when).is_some() {
-                            error!(target: "dispatch-thread",
-                                   "pending complete for {} exists",
-                                   token);
-                        }
-                    }
-                    None => {
-                        let mut map = HashMap::with_capacity(ndispatched);
-
-                        map.insert(token.clone(), when);
-
-                        *pending_outbounds = Some(map);
-                    }
+        if let Some(completes) = completes {
+            for token in completes.into_iter() {
+                if let Some(ent) = self.dispatched.get_mut(&token) {
+                    ent.complete_pending(&mut self.ctx, &live)
+                } else {
+                    // This shouldn't happen.
+                    error!(target: "dispatch-thread",
+                           "entry for complete for {} not found",
+                           token);
                 }
             }
         }
 
-        // XXX Uncertain when next_pending is actually going to get set.
-
         // If we have pending retries, run them.
         if let Some(retries) = retries {
-            for (token, _) in retries.into_iter() {
+            for token in retries.into_iter() {
                 // Look up the dispatched entry.
                 if let Some(ent) = self.dispatched.get_mut(&token) {
-                    // Retry the pending operation; record a new
-                    // pending operation if it returns a time.
-                    if let Some(when) =
-                        ent.retry_pending(&mut self.ctx, &live, now)
-                    {
-                        // Record the pending operation
-                        match pending_retries {
-                            Some(pending) => {
-                                if pending.insert(token.clone(), when).is_some()
-                                {
-                                    error!(target: "dispatch-thread",
-                                           "pending retry for {} exists",
-                                           token);
-                                }
-                            }
-                            None => {
-                                let size = self.dispatched.len();
-                                let mut map = HashMap::with_capacity(size);
-
-                                map.insert(token, when);
-
-                                *pending_retries = Some(map);
-                            }
-                        }
-                    }
+                    ent.retry_pending(&mut self.ctx, &live, now)
                 } else {
                     // This shouldn't happen.
                     error!(target: "dispatch-thread",
-                           "entry for pending for {} not found",
+                           "entry for retry for {} not found",
                            token);
                 }
             }
@@ -1506,11 +1462,10 @@ where
             if let Some(need_refreshes) = &need_refreshes {
                 refreshes
                     .into_iter()
-                    .map(|(token, _)| token)
                     .chain(need_refreshes.iter().cloned())
                     .collect()
             } else {
-                refreshes.into_iter().map(|(token, _)| token).collect()
+                refreshes.into_iter().collect()
             }
         } else {
             need_refreshes
@@ -1527,28 +1482,7 @@ where
                         need_refreshes.contains(&token)
                     });
 
-                if let Some(when) =
-                    ent.refresh_stream(&mut self.ctx, need_refresh, now)
-                {
-                    // Record the pending operation
-                    match pending_refreshes {
-                        Some(refreshes) => {
-                            if refreshes.insert(token.clone(), when).is_some() {
-                                error!(target: "dispatch-thread",
-                                       "pending refresh for {} exists",
-                                       token);
-                            }
-                        }
-                        None => {
-                            let size = self.dispatched.len();
-                            let mut map = HashMap::with_capacity(size);
-
-                            map.insert(token, when);
-
-                            *pending_refreshes = Some(map);
-                        }
-                    }
-                }
+                ent.refresh_stream(&mut self.ctx, need_refresh, now)
             } else {
                 // This shouldn't happen.
                 error!(target: "dispatch-thread",
@@ -1561,7 +1495,6 @@ where
         let outbounds: Vec<DispatchedID> = if let Some(outbounds) = outbounds {
             outbounds
                 .into_iter()
-                .map(|(token, _)| token)
                 .chain(
                     live.iter()
                         .cloned()
@@ -1579,81 +1512,25 @@ where
 
         for token in outbounds.into_iter() {
             if let Some(ent) = self.dispatched.get_mut(&token) {
-                // Try to push messages; record a new pending
-                // operation if it returns a time.
-                if let Some(when) =
-                    ent.push_outbound_msgs(&mut self.ctx, &live, now)
-                {
-                    // Record the pending operation
-                    match pending_outbounds {
-                        Some(pending) => {
-                            if pending.insert(token.clone(), when).is_some() {
-                                error!(target: "dispatch-thread",
-                                       "pending outbound for {} exists",
-                                       token);
-                            }
-                        }
-                        None => {
-                            let size = self.dispatched.len();
-                            let mut map = HashMap::with_capacity(size);
-
-                            map.insert(token, when);
-
-                            *pending_retries = Some(map);
-                        }
-                    }
-                }
+                ent.push_outbound_msgs(&mut self.ctx, &live, now)
+            } else {
+                // This shouldn't happen.
+                error!(target: "dispatch-thread",
+                       "entry for send for {} not found",
+                       token);
             }
         }
 
         valid
     }
 
-    fn filter_pending(
-        pending: &mut Option<HashMap<DispatchedID, Instant>>,
-        next: &mut Option<Instant>,
-        now: Instant
-    ) -> Option<Vec<(DispatchedID, Instant)>> {
-        if let Some(mut sends) = pending.take() {
-            let mut curr = Vec::with_capacity(sends.len());
-
-            sends.retain(|token, when| {
-                if *when < now {
-                    curr.push((token.clone(), *when));
-                    *next = Some(next_retry_definite(&next, &when));
-
-                    false
-                } else {
-                    true
-                }
-            });
-
-            if !sends.is_empty() {
-                *pending = Some(sends)
-            }
-
-            if !curr.is_empty() {
-                Some(curr)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
         let mut next_listen = None;
-        // XXX Maybe don't allocate and deallocate these all the time.
-        let mut pending_outbounds: Option<HashMap<DispatchedID, Instant>> =
-            None;
-        let mut pending_refreshes: Option<HashMap<DispatchedID, Instant>> =
-            None;
-        let mut pending_retries: Option<HashMap<DispatchedID, Instant>> = None;
-        let mut outbounds;
-        let mut refreshes;
-        let mut retries;
+        let mut outbounds: Option<Vec<DispatchedID>> = None;
+        let mut retries: Option<Vec<DispatchedID>> = None;
+        let mut completes: Option<Vec<DispatchedID>> = None;
+        let mut refreshes: Option<Vec<DispatchedID>> = None;
         let mut now;
 
         info!(target: "dispatch-thread",
@@ -1661,19 +1538,80 @@ where
 
         while {
             let mut next = next_listen;
+            let nents = self.dispatched.len();
 
             now = Instant::now();
 
-            retries =
-                Self::filter_pending(&mut pending_retries, &mut next, now);
-            refreshes =
-                Self::filter_pending(&mut pending_refreshes, &mut next, now);
-            outbounds =
-                Self::filter_pending(&mut pending_outbounds, &mut next, now);
+            for (id, ent) in self.dispatched.iter() {
+                if ent.needs_refresh(now) {
+                    match &mut refreshes {
+                        Some(completes) => {
+                            completes.push(id.clone())
+                        }
+                        None => {
+                            let mut vec = Vec::with_capacity(nents);
+
+                            vec.push(id.clone());
+                            refreshes = Some(vec);
+                        }
+                    }
+                }
+
+                if ent.pending.has_completes() {
+                    match &mut completes {
+                        Some(completes) => {
+                            completes.push(id.clone())
+                        }
+                        None => {
+                            let mut vec = Vec::with_capacity(nents);
+
+                            vec.push(id.clone());
+                            completes = Some(vec);
+                        }
+                    }
+                }
+
+                if let Some(when) = ent.pending.next_outbound() {
+                    if when < now {
+                        match &mut outbounds {
+                            Some(outbounds) => {
+                                next = Some(next_retry_definite(&next, &when));
+                                outbounds.push(id.clone())
+                            }
+                            None => {
+                                let mut vec = Vec::with_capacity(nents);
+
+                                next = Some(next_retry_definite(&next, &when));
+                                vec.push(id.clone());
+                                outbounds = Some(vec);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(when) = ent.pending.retry_pending() {
+                    if when < now {
+                        match &mut retries {
+                            Some(retries) => {
+                                next = Some(next_retry_definite(&next, &when));
+                                retries.push(id.clone())
+                            }
+                            None => {
+                                let mut vec = Vec::with_capacity(nents);
+
+                                next = Some(next_retry_definite(&next, &when));
+                                vec.push(id.clone());
+                                retries = Some(vec);
+                            }
+                        }
+                    }
+                }
+            }
 
             self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
-                (next.is_some_and(|next: Instant| next < now) ||
+                (completes.is_some() ||
+                 next.is_some_and(|next: Instant| next < now) ||
                  {
                      let duration = next.map(|next| next - now);
 
@@ -1702,14 +1640,12 @@ where
                 events.iter().map(|event| event.token()).collect();
 
             if !self.handle_events(
-                &mut pending_retries,
-                &mut pending_refreshes,
-                &mut pending_outbounds,
                 &mut next_listen,
                 live,
-                retries.take(),
                 refreshes.take(),
                 outbounds.take(),
+                retries.take(),
+                completes.take(),
                 now
             ) {
                 break;

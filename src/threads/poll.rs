@@ -61,6 +61,7 @@ use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::threads::PushMode;
+use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
 
 pub trait PollThreadTypes<Ctx>
@@ -608,17 +609,13 @@ where
     /// - `retry_refresh`: Mutable reference to the retry value for refreshing
     ///   streams, if there is one.  This should be updated if necessary.
     ///
-    /// - `next_pending`: The next time to push pending messages, if there is
-    ///   one.  This should be updated if necessary.
-    ///
     /// - `next_listen`: The next time to listen for messages.  This should be
     ///   updated if necessary.
     ///
     /// - `next_refresh`: The next time to refresh the streams.  This should be
     ///   updated if necessary.
     ///
-    /// - `next_outbound`: The next time to get new outbound messages. This
-    ///   should be updated if necessary.
+    /// - `pending`: The status of pending messages.
     ///
     /// # Return Value
     ///
@@ -627,10 +624,9 @@ where
         &mut self,
         events: &mut Events,
         retry_refresh: &mut Option<Types::RefreshRetry>,
-        next_pending: &mut Option<Instant>,
-        next_listen: &mut Option<Instant>,
         next_refresh: &mut Option<Instant>,
-        next_outbound: &mut Option<Instant>,
+        next_listen: &mut Option<Instant>,
+        pending: &mut PushModeResult,
         now: Instant
     ) -> bool {
         // Gather up all the events.
@@ -639,33 +635,35 @@ where
         let mut valid = true;
 
         // First deal with stalled and pending sends.
-        let this_outbound = next_outbound.take();
+        let this_outbound = pending.take_next_outbound();
 
         // Complete any stalled sends first.
-        match self.mode.complete_pending(
-            &mut self.ctx,
-            &mut self.msgs,
-            &mut self.stream,
-            &live
-        ) {
-            Ok(next) => {
-                *next_outbound = next_retry(next_outbound, &next);
-            }
-            Err(err) => {
-                error!(target: "poll-thread",
-                       "error completing stalled sends: {}",
-                       err)
+        if pending.take_has_completes() {
+            match self.mode.complete_pending(
+                &mut self.ctx,
+                &mut self.msgs,
+                &mut self.stream,
+                &live
+            ) {
+                Ok(res) => {
+                    pending.merge(&res);
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error completing stalled sends: {}",
+                           err)
+                }
             }
         }
 
-        // XXX Uncertain when next_pending is actually going to get set.
+        // XXX Uncertain when next_retry is actually going to get set.
 
         // Push all pending messages.
-        if next_pending.map_or(false, |when| when <= now) {
+        if pending.retry_pending().map_or(false, |when| when <= now) {
             trace!(target: "poll-thread",
                    "retrying pending messages");
 
-            *next_pending = None;
+            let _ = pending.take_retry_pending();
 
             match self.mode.retry_pending(
                 &mut self.ctx,
@@ -674,8 +672,8 @@ where
                 &live,
                 now
             ) {
-                Ok(next) => {
-                    *next_pending = next;
+                Ok(res) => {
+                    pending.merge(&res);
                 }
                 Err(err) => {
                     error!(target: "poll-thread",
@@ -821,8 +819,8 @@ where
                 &mut self.stream,
                 &live
             ) {
-                Ok(next) => {
-                    *next_outbound = next_retry(&next_outbound, &next);
+                Ok(res) => {
+                    pending.merge(&res);
                 }
                 Err(err) => {
                     error!(target: "poll-thread",
@@ -837,11 +835,11 @@ where
 
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
-        let mut next_pending = None;
-        let mut next_outbound = None;
         let mut next_listen = None;
         let mut next_refresh = None;
         let mut retry_refresh: Option<Types::RefreshRetry> = None;
+        let mut pending =
+            PushModeResult::new(Some(Instant::now()), None, false);
         let mut now;
 
         info!(target: "poll-thread",
@@ -849,7 +847,8 @@ where
 
         // Loop until told to shut down.
         while {
-            let next = next_retry(&next_pending, &next_outbound);
+            let next = next_retry(&pending.next_outbound(),
+                                  &pending.retry_pending());
             let next = next_retry(&next, &next_listen);
             let next = next_retry(&next, &next_refresh);
 
@@ -880,11 +879,10 @@ where
                          })
                          .is_ok()
                  } ||
-                 self.refresh_complete.is_some() ||
-                 self.mode.has_complete_pending()) &&
+                 self.refresh_complete.is_some()) &&
                 self.handle_events(&mut events, &mut retry_refresh,
-                                   &mut next_pending, &mut next_listen,
-                                   &mut next_refresh, &mut next_outbound, now)
+                                   &mut next_refresh, &mut next_listen,
+                                   &mut pending, now)
         } {}
 
         self.shutdown(events)
