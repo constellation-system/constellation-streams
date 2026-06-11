@@ -1143,8 +1143,9 @@ where
                     }
 
                     match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
-                        Ok(RetryResult::Success(())) =>
-                            PushModeResult::default(),
+                        Ok(RetryResult::Success(())) => {
+                            PushModeResult::default()
+                        }
                         Ok(RetryResult::Retry(retry)) => {
                             let when = retry.when();
 
@@ -1165,8 +1166,9 @@ where
                     }
 
                     match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
-                        Ok(RetryResult::Success(())) =>
-                            PushModeResult::default(),
+                        Ok(RetryResult::Success(())) => {
+                            PushModeResult::default()
+                        }
                         Ok(RetryResult::Retry(retry)) => {
                             let when = retry.when();
 
@@ -1178,8 +1180,7 @@ where
                     }
                 }
                 // Don't report cancel errors.
-                PushEntryError::Cancel { .. } =>
-                    PushModeResult::default(),
+                PushEntryError::Cancel { .. } => PushModeResult::default()
             }
         } else {
             PushModeResult::default()
@@ -1210,7 +1211,7 @@ where
 
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {},
+                    Ok(RetryIndefResult::Success(())) => {}
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "shared-datagram-push-mode",
@@ -1523,7 +1524,7 @@ where
             for complete in completes.into_iter() {
                 match PushEntry::complete(ctx, stream, complete) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {},
+                    Ok(RetryIndefResult::Success(())) => {}
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "shared-datagram-push-mode",
@@ -1663,7 +1664,7 @@ where
                     }
 
                     match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
-                        Ok(RetryResult::Success(())) => {},
+                        Ok(RetryResult::Success(())) => {}
                         Ok(RetryResult::Retry(retry)) => {
                             let when = retry.when();
 
@@ -1690,7 +1691,7 @@ where
                     }
 
                     match PushEntry::try_cancel_batch(ctx, stream, batch_id) {
-                        Ok(RetryResult::Success(())) => {},
+                        Ok(RetryResult::Success(())) => {}
                         Ok(RetryResult::Retry(retry)) => {
                             let when = retry.when();
 
@@ -1735,7 +1736,7 @@ where
 
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {},
+                    Ok(RetryIndefResult::Success(())) => {}
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "shared-large-obj-push-mode",
@@ -2044,7 +2045,7 @@ where
                 for (parties, msgs) in groups {
                     match PushEntry::try_send(ctx, stream, parties, msgs) {
                         // Send succeeded; nothing to do.
-                        Ok(RetryIndefResult::Success(())) => {},
+                        Ok(RetryIndefResult::Success(())) => {}
                         // Retry delay; store to pending.
                         Ok(RetryIndefResult::Retry(retry)) => {
                             trace!(target: "shared-large-obj-push-mode",
@@ -2340,7 +2341,7 @@ where
             for complete in completes.into_iter() {
                 match PushEntry::complete(ctx, stream, complete) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {},
+                    Ok(RetryIndefResult::Success(())) => {}
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "shared-large-obj-push-mode",
@@ -2374,13 +2375,12 @@ where
         if let Some(completes) = self.frags_completes.take() {
             // First complete any pending messages.
             for complete in completes.into_iter() {
-                match LargeObjEntry::complete_send(
-                    ctx, stream, proto, complete
-                ) {
+                match LargeObjEntry::complete_send(ctx, stream, proto, complete)
+                {
                     // Send succeeded; nothing to do.
                     Ok(RetryIndefResult::Success((when, _))) => {
                         next.merge_next_outbound(&when);
-                    },
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "shared-large-obj-push-mode",
@@ -2480,10 +2480,9 @@ where
                     }
                     // Error occurred.
                     Err(err) => {
-                        let res = self
-                            .handle_msg_error::<_, _, LargeObjTypes>(
-                                ctx, stream, err
-                            );
+                        let res = self.handle_msg_error::<_, _, LargeObjTypes>(
+                            ctx, stream, err
+                        );
 
                         out.merge(&res);
                     }

@@ -168,7 +168,9 @@ pub trait PushStream<Ctx> {
 
     /// Create an empty
     /// [StreamFlags](PushStream::StreamFlags).
-    fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags {
+    fn empty_flags_with_capacity(
+        #[allow(unused_variables)] size: usize
+    ) -> Self::StreamFlags {
         Self::StreamFlags::default()
     }
 
@@ -564,7 +566,9 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
 
     /// Create an empty
     /// [Selections](PushStreamShared::Selections).
-    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+    fn empty_selections_with_capacity(
+        #[allow(unused_variables)] size: usize
+    ) -> Self::Selections {
         Self::Selections::default()
     }
 
@@ -578,7 +582,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     /// Create an empty
     /// [StartBatchStreamBatches](PushStreamShared::StartBatchStreamBatches).
     fn empty_batches_with_capacity(
-        size: usize
+        #[allow(unused_variables)] size: usize
     ) -> Self::StartBatchStreamBatches {
         Self::StartBatchStreamBatches::default()
     }
@@ -825,7 +829,9 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
 
     /// Create an empty
     /// [Selections](PushStreamPrivate::Selections).
-    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+    fn empty_selections_with_capacity(
+        #[allow(unused_variables)] size: usize
+    ) -> Self::Selections {
         Self::Selections::default()
     }
 
@@ -839,7 +845,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     /// Create an empty
     /// [StartBatchStreamBatches](PushStreamPrivate::StartBatchStreamBatches).
     fn empty_batches_with_capacity(
-        size: usize
+        #[allow(unused_variables)] size: usize
     ) -> Self::StartBatchStreamBatches {
         Self::StartBatchStreamBatches::default()
     }

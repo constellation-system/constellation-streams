@@ -197,23 +197,27 @@ where
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
     type ParamError = Chans::ParamError;
-    type ReqStreamError = Chans::ReqStreamError;
-    type SelectParamIter<'a>
-        = Chans::SelectParamIter<'a>
+    type ParamsIter<'a>
+        = Chans::ParamsIter<'a>
     where
         Self: 'a;
+    type ReqStreamError = Chans::ReqStreamError;
     type Stream = Chans::Stream;
 
     #[inline]
-    fn req_stream(
-        &mut self,
-        _ctx: &mut (),
+    fn req_stream<'a>(
+        &'a mut self,
+        _ctx: &'a mut (),
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
         nego_param: &Self::OutNegoParam
     ) -> Result<
-        RetryResult<(Option<Self::Stream>, bool, Option<Instant>)>,
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
         Self::ReqStreamError
     > {
         self.channels.req_stream(
@@ -230,10 +234,7 @@ where
         &'a mut self,
         _ctx: &'a mut (),
         channels: I
-    ) -> Result<
-        RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
-        Self::ParamError
-    >
+    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
@@ -847,8 +848,8 @@ where
 
         // Loop until told to shut down.
         while {
-            let next = next_retry(&pending.next_outbound(),
-                                  &pending.retry_pending());
+            let next =
+                next_retry(&pending.next_outbound(), &pending.retry_pending());
             let next = next_retry(&next, &next_listen);
             let next = next_retry(&next, &next_refresh);
 

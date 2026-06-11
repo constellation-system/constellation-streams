@@ -569,23 +569,27 @@ where
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
     type ParamError = Chans::ParamError;
-    type ReqStreamError = Chans::ReqStreamError;
-    type SelectParamIter<'a>
-        = Chans::SelectParamIter<'a>
+    type ParamsIter<'a>
+        = Chans::ParamsIter<'a>
     where
         Self: 'a;
+    type ReqStreamError = Chans::ReqStreamError;
     type Stream = Chans::Stream;
 
     #[inline]
-    fn req_stream(
-        &mut self,
-        _ctx: &mut (),
+    fn req_stream<'a>(
+        &'a mut self,
+        _ctx: &'a mut (),
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
         nego_param: &Self::OutNegoParam
     ) -> Result<
-        RetryResult<(Option<Self::Stream>, bool, Option<Instant>)>,
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
         Self::ReqStreamError
     > {
         self.channels.req_stream(
@@ -602,10 +606,7 @@ where
         &'a mut self,
         _ctx: &'a mut (),
         channels: I
-    ) -> Result<
-        RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
-        Self::ParamError
-    >
+    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
@@ -882,8 +883,9 @@ where
     ) -> bool {
         self.refresh_complete.is_some() ||
             self.next_refresh.map_or(false, |when| when <= now) ||
-            self.refresh_retry.as_ref()
-            .map_or(false, |retry| retry.when() <= now)
+            self.refresh_retry
+                .as_ref()
+                .map_or(false, |retry| retry.when() <= now)
     }
 
     fn refresh_stream(
@@ -939,9 +941,7 @@ where
                 &mut self.dispatched.stream,
                 &live
             ) {
-                Ok(res) => {
-                    self.pending.merge(&res)
-                },
+                Ok(res) => self.pending.merge(&res),
                 Err(err) => {
                     error!(target: "dispatched-entry",
                            "error completing stalled sends: {}",
@@ -958,7 +958,11 @@ where
         live: &HashSet<Token>,
         now: Instant
     ) {
-        if self.pending.retry_pending().map_or(false, |when| when <= now) {
+        if self
+            .pending
+            .retry_pending()
+            .map_or(false, |when| when <= now)
+        {
             let _ = self.pending.take_retry_pending();
 
             trace!(target: "dispatch-entry",
@@ -990,7 +994,11 @@ where
         live: &HashSet<Token>,
         now: Instant
     ) {
-        if self.pending.next_outbound().map_or(false, |when| when <= now) {
+        if self
+            .pending
+            .next_outbound()
+            .map_or(false, |when| when <= now)
+        {
             trace!(target: "dispatch-entry",
                    "pushing messages");
 
@@ -1405,12 +1413,16 @@ where
                 Ok(RetryResult::Success((
                     streams,
                     endpoints,
+                    // XXX Uncertain relationship here with the refresh field.
+                    //
+                    // This appears to signal the need to do a refresh
+                    // for a single stream, but this doesn't
+                    // generalize to multiple sessions.  We would need
+                    // to indicate stream IDs here or something.
                     refresh,
                     when
                 ))) => {
                     *next_listen = when;
-
-                    // XXX Uncertain relationship here with the refresh field.
 
                     // Report new streams.
                     for (addr, channel_id, param, stream) in streams {
@@ -1545,9 +1557,7 @@ where
             for (id, ent) in self.dispatched.iter() {
                 if ent.needs_refresh(now) {
                     match &mut refreshes {
-                        Some(completes) => {
-                            completes.push(id.clone())
-                        }
+                        Some(completes) => completes.push(id.clone()),
                         None => {
                             let mut vec = Vec::with_capacity(nents);
 
@@ -1559,9 +1569,7 @@ where
 
                 if ent.pending.has_completes() {
                     match &mut completes {
-                        Some(completes) => {
-                            completes.push(id.clone())
-                        }
+                        Some(completes) => completes.push(id.clone()),
                         None => {
                             let mut vec = Vec::with_capacity(nents);
 

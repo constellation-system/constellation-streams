@@ -69,7 +69,11 @@ pub struct TestChannels<Stream> {
         TestStreamID,
         Vec<(
             Result<
-                RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+                RetryResult<(
+                    Option<Stream>,
+                    Option<Vec<TestChannelParam>>,
+                    Option<Instant>
+                )>,
                 TestChannelsError
             >,
             Option<Instant>
@@ -97,7 +101,11 @@ pub struct TestChannelsScript<Stream> {
     pub req_streams: Vec<(
         TestStreamID,
         Result<
-            RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+            RetryResult<(
+                Option<Stream>,
+                Option<Vec<TestChannelParam>>,
+                Option<Instant>
+            )>,
             TestChannelsError
         >
     )>,
@@ -165,7 +173,11 @@ where
             TestStreamID,
             Vec<(
                 Result<
-                    RetryResult<(Option<Stream>, bool, Option<Instant>)>,
+                    RetryResult<(
+                        Option<Stream>,
+                        Option<Vec<TestChannelParam>>,
+                        Option<Instant>
+                    )>,
                     TestChannelsError
                 >,
                 Option<Instant>
@@ -216,12 +228,12 @@ where
     type OutNegoParam = ();
     type Param = TestChannelParam;
     type ParamError = Infallible;
-    type ReqStreamError = TestChannelsError;
-    type SelectParamIter<'a>
-        = IntoIter<(String, TestChannelParam)>
+    type ParamsIter<'a>
+        = IntoIter<(String, TestChannelParam, Option<Instant>)>
     where
         Self: 'a,
         Ctx: 'a;
+    type ReqStreamError = TestChannelsError;
     type Stream = Stream;
 
     fn req_stream(
@@ -232,7 +244,11 @@ where
         endpoint: &Self::Addr,
         _nego_param: &Self::OutNegoParam
     ) -> Result<
-        RetryResult<(Option<Self::Stream>, bool, Option<Instant>)>,
+        RetryResult<(
+            Option<Self::Stream>,
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
         Self::ReqStreamError
     > {
         let id = TestStreamID {
@@ -253,27 +269,22 @@ where
         &'a mut self,
         _ctx: &'a mut Ctx,
         channels: I
-    ) -> Result<
-        RetryResult<(Self::SelectParamIter<'a>, Option<Instant>)>,
-        Self::ParamError
-    >
+    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         let channels: HashSet<String> = channels.collect();
-        let mut params: Vec<(String, TestChannelParam)> =
+        let mut params: Vec<(String, TestChannelParam, Option<Instant>)> =
             Vec::with_capacity(self.req_streams.len());
-        let mut min = None;
 
         for (id, script) in self.req_streams.iter() {
             if channels.contains(&id.channel) {
                 if let Some((_, when)) = script.last() {
-                    min = next_retry(&min, when);
-                    params.push((id.channel.clone(), id.param.clone()));
+                    params.push((id.channel.clone(), id.param.clone(), *when));
                 }
             }
         }
 
-        Ok(RetryResult::Success((params.into_iter(), min)))
+        Ok(RetryResult::Success(params.into_iter()))
     }
 
     fn channel_id(

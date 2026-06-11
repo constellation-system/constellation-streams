@@ -47,6 +47,7 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
+use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
@@ -332,12 +333,7 @@ pub enum StreamSelectorReportError<Report> {
 
 /// Errors that can occur when selecting a stream on a [StreamSelector].
 #[derive(Debug)]
-pub enum StreamSelectorSelectError<Addrs, Param, Item> {
-    /// Error occurred while refreshing the connections.
-    Selector {
-        /// Error while refreshing the connections.
-        err: ThreadedStreamSelectorError<Addrs, Param>
-    },
+pub enum StreamSelectorSelectError<Item> {
     /// Error occurred while selecting the stream.
     Select {
         /// Error while selecting the stream.
@@ -347,6 +343,21 @@ pub enum StreamSelectorSelectError<Addrs, Param, Item> {
     Report {
         /// Error while reporting failure.
         err: ReportError<Item>
+    }
+}
+
+/// Errors that can occur when selecting a stream on a [StreamSelector].
+#[derive(Debug)]
+pub enum StreamSelectorSelectRefreshError<Addrs, Param, Item> {
+    /// Error occurred while refreshing the connections.
+    Refresh {
+        /// Error while refreshing the connections.
+        err: ThreadedStreamSelectorError<Addrs, Param>
+    },
+    /// Error occurred while selecting the stream.
+    Select {
+        /// Error while selecting the stream.
+        err: StreamSelectorSelectError<Item>
     },
     /// Mutex poisoned.
     MutexPoison
@@ -524,10 +535,9 @@ where
         })
     }
 
-    fn handle_refresh_params(
+    fn handle_refresh_params<I>(
         &self,
-        params: Vec<(Ctx::ChannelID, Ctx::Param)>,
-        refresh_channels_when: Option<Instant>
+        params: I
     ) -> Result<
         RetryResult<(
             Vec<(Ctx::Addr, Ctx::OutNegoParam)>,
@@ -535,11 +545,13 @@ where
             Option<Instant>
         )>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
-    > {
+    >
+    where
+        I: Iterator<Item = (Ctx::ChannelID, Ctx::Param, Option<Instant>)> {
         trace!(target: "stream-selector-connections",
                "converting refresh params");
 
-        let (addrs, refresh_addrs_when) = match self
+        let (addrs, mut refresh_when) = match self
             .addrs
             .lock()
             .map_err(|_| ThreadedStreamSelectorError::MutexPoison)?
@@ -567,12 +579,13 @@ where
                 }
             })
             .collect();
+        let params = params
+            .map(|(id, param, when)| {
+                refresh_when = next_retry(&refresh_when, &when);
 
-        let refresh_when = match (refresh_channels_when, refresh_addrs_when) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (None, out) => out,
-            (out, None) => out
-        };
+                (id, param)
+            })
+            .collect();
 
         Ok(RetryResult::Success((addrs, params, refresh_when)))
     }
@@ -595,30 +608,10 @@ where
             .params(&mut (), self.channels.iter().cloned())
             .map_err(|err| ThreadedStreamSelectorError::Param { err: err })?
         {
-            RetryResult::Success((params, refresh_channels_when)) => {
-                let params: Vec<(Ctx::ChannelID, Ctx::Param)> =
-                    params.collect();
-
-                self.handle_refresh_params(params, refresh_channels_when)
-            }
+            RetryResult::Success(params) => self.handle_refresh_params(params),
             // Pass through retries.
             RetryResult::Retry(when) => Ok(RetryResult::Retry(when))
         }
-    }
-
-    #[inline]
-    fn stream(
-        &self,
-        ctx: &mut Ctx,
-        channel: &Ctx::ChannelID,
-        addr: &Ctx::Addr,
-        param: &Ctx::Param,
-        origin: &Ctx::OutNegoParam
-    ) -> Result<
-        RetryResult<(Option<Ctx::Stream>, bool, Option<Instant>)>,
-        Ctx::ReqStreamError
-    > {
-        ctx.req_stream(&mut (), channel, param, addr, origin)
     }
 }
 
@@ -864,10 +857,9 @@ where
         self.sched.failure_id(id)
     }
 
-    fn handle_selected<Resolve>(
+    fn handle_selected(
         &mut self,
         ctx: &mut Ctx,
-        connections: &[ThreadedStreamSelectorConnections<Resolve, Ctx>],
         stream_id: StreamID<
             Ctx::Addr,
             ConnChannelID<Ctx::ChannelID>,
@@ -876,19 +868,20 @@ where
         origin: Ctx::OutNegoParam,
         dense_id: DenseItemID<Epochs::Item>
     ) -> Result<
-        RetryResult<(DenseItemID<Epochs::Item>, bool, Option<Ctx::Stream>)>,
+        RetryResult<(
+            DenseItemID<Epochs::Item>,
+            Option<Vec<Ctx::Param>>,
+            Option<Ctx::Stream>
+        )>,
         ReportError<
             StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
-    >
-    where
-        Resolve: Addrs<Addr = Ctx::Addr>,
-        Resolve::Origin: Clone + Display + Eq + Hash {
+    > {
         trace!(target: "stream-selector-state",
                "handling selection {}",
                stream_id);
 
-        let (party_addr, ConnChannelID { conn_idx, channel }, param) =
+        let (party_addr, ConnChannelID { channel, .. }, param) =
             stream_id.take();
         let out = match &mut self.streams[dense_id.idx()] {
             // If the stream already exists, then just return it.
@@ -900,14 +893,14 @@ where
                        "stream for {} over channel {} ({}) already exists",
                        party_addr, channel, param);
 
-                Ok(RetryResult::Success((Some(stream.clone()), false, None)))
+                Ok(RetryResult::Success((Some(stream.clone()), None, None)))
             }
             // If the stream does not exist, create it.
-            StreamEntry { stream, .. } => match connections[conn_idx.0].stream(
-                ctx,
+            StreamEntry { stream, .. } => match ctx.req_stream(
+                &mut (),
                 &channel,
-                &party_addr,
                 &param,
+                &party_addr,
                 &origin
             ) {
                 Ok(val) => {
@@ -946,38 +939,28 @@ where
         Ok(out.map(|(stream, refresh, _)| (dense_id, refresh, stream)))
     }
 
-    fn do_select<Resolve>(
+    fn do_select(
         &mut self,
-        ctx: &mut Ctx,
-        connections: &[ThreadedStreamSelectorConnections<Resolve, Ctx>]
+        ctx: &mut Ctx
     ) -> Result<
         RetryIndefResult<(
             DenseItemID<Epochs::Item>,
-            bool,
+            Option<Vec<Ctx::Param>>,
             Option<Ctx::Stream>
         )>,
         StreamSelectorSelectError<
-            Resolve::AddrsError,
-            Ctx::ParamError,
             StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
-    >
-    where
-        Resolve: Addrs<Addr = Ctx::Addr>,
-        Resolve::Origin: Clone + Display + Eq + Hash {
+    > {
         self.sched
             .select()
             .map_err(|err| StreamSelectorSelectError::Select { err: err })?
             .flat_map_ok(move |(stream_id, origin, dense_id)| {
-                self.handle_selected(
-                    ctx,
-                    connections,
-                    stream_id,
-                    origin,
-                    dense_id
-                )
-                .map_err(|err| StreamSelectorSelectError::Report { err: err })
-                .map(RetryIndefResult::from)
+                self.handle_selected(ctx, stream_id, origin, dense_id)
+                    .map_err(|err| StreamSelectorSelectError::Report {
+                        err: err
+                    })
+                    .map(RetryIndefResult::from)
             })
     }
 
@@ -1493,7 +1476,7 @@ where
         ctx: &mut Ctx
     ) -> Result<
         RetryIndefResult<(Ctx::Stream, DenseItemID<Epochs::Item>)>,
-        StreamSelectorSelectError<
+        StreamSelectorSelectRefreshError<
             Resolve::AddrsError,
             Ctx::ParamError,
             StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -1502,20 +1485,24 @@ where
         let res = self
             .state
             .write()
-            .map_err(|_| StreamSelectorSelectError::MutexPoison)?
-            .do_select(ctx, &self.connections)?;
+            .map_err(|_| StreamSelectorSelectRefreshError::MutexPoison)?
+            .do_select(ctx)
+            .map_err(|err| StreamSelectorSelectRefreshError::Select {
+                err: err
+            })?;
 
         res.flat_map_ok(|(id, refresh, stream)| {
             debug!(target: "stream-selector",
                    "selected stream {}",
                    id);
 
+            // XXX implement a more targeted refresh.
             // XXX what should we do with this time?
-            let _ = if refresh {
+            let _ = if refresh.is_some() {
                 let now = Instant::now();
 
                 match self.do_refresh(ctx, now).map_err(|err| {
-                    StreamSelectorSelectError::Selector { err: err }
+                    StreamSelectorSelectRefreshError::Refresh { err: err }
                 })? {
                     RetryResult::Success(when) => when,
                     RetryResult::Retry(when) => Some(when)
@@ -1857,8 +1844,17 @@ where
     }
 }
 
+impl<Item> ScopedError for StreamSelectorSelectError<Item> {
+    fn scope(&self) -> ErrorScope {
+        match self {
+            StreamSelectorSelectError::Select { err } => err.scope(),
+            StreamSelectorSelectError::Report { err } => err.scope()
+        }
+    }
+}
+
 impl<Addrs, Param, StreamID> ScopedError
-    for StreamSelectorSelectError<Addrs, Param, StreamID>
+    for StreamSelectorSelectRefreshError<Addrs, Param, StreamID>
 where
     Param: ScopedError,
     Addrs: ScopedError,
@@ -1866,16 +1862,17 @@ where
 {
     fn scope(&self) -> ErrorScope {
         match self {
-            StreamSelectorSelectError::Selector { err } => err.scope(),
-            StreamSelectorSelectError::Select { err } => err.scope(),
-            StreamSelectorSelectError::Report { err } => err.scope(),
-            StreamSelectorSelectError::MutexPoison => ErrorScope::Unrecoverable
+            StreamSelectorSelectRefreshError::Refresh { err } => err.scope(),
+            StreamSelectorSelectRefreshError::Select { err } => err.scope(),
+            StreamSelectorSelectRefreshError::MutexPoison => {
+                ErrorScope::Unrecoverable
+            }
         }
     }
 }
 
 impl<Addrs, Param, StreamID> RecoverableError
-    for StreamSelectorSelectError<Addrs, Param, StreamID>
+    for StreamSelectorSelectRefreshError<Addrs, Param, StreamID>
 where
     Param: Debug + Display + ScopedError,
     Addrs: Debug + Display + ScopedError,
@@ -2158,10 +2155,12 @@ where
 
         let when = match self.refresh_when.read() {
             Ok(guard) => {
-                if let Some(when) = *guard &&
-                    when <= now
-                {
-                    Ok(None)
+                if let Some(when) = *guard {
+                    if when <= now {
+                        Ok(None)
+                    } else {
+                        Ok(Some(*guard))
+                    }
                 } else {
                     Ok(Some(*guard))
                 }
@@ -2316,7 +2315,7 @@ where
     type SelectError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -2339,7 +2338,7 @@ where
     type StartBatchError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -2912,7 +2911,7 @@ where
     type SelectError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -2935,7 +2934,7 @@ where
     type StartBatchError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -3435,7 +3434,7 @@ where
     type PushFragError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -3595,7 +3594,7 @@ where
     type PushOfferError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -3754,7 +3753,7 @@ where
     type CancelPushError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -3773,7 +3772,7 @@ where
     type PushError = SelectorBatchError<
         Epochs::Item,
         SelectorBatchSelectError<
-            StreamSelectorSelectError<
+            StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
                 Ctx::ParamError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
@@ -4062,7 +4061,7 @@ where
         SelectorBatchSelectError<
             PartiesBatchError<
                 Vec<Self::PartyID>,
-                StreamSelectorSelectError<
+                StreamSelectorSelectRefreshError<
                     Resolve::AddrsError,
                     Ctx::ParamError,
                     StreamID<
@@ -4088,7 +4087,7 @@ where
         SelectorBatchSelectError<
             PartiesBatchError<
                 Vec<Self::PartyID>,
-                StreamSelectorSelectError<
+                StreamSelectorSelectRefreshError<
                     Resolve::AddrsError,
                     Ctx::ParamError,
                     StreamID<
@@ -4519,8 +4518,23 @@ where
     }
 }
 
+impl<Item> Display for StreamSelectorSelectError<Item>
+where
+    Item: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamSelectorSelectError::Select { err } => write!(f, "{}", err),
+            StreamSelectorSelectError::Report { err } => err.fmt(f)
+        }
+    }
+}
+
 impl<Addrs, Param, Item> Display
-    for StreamSelectorSelectError<Addrs, Param, Item>
+    for StreamSelectorSelectRefreshError<Addrs, Param, Item>
 where
     Addrs: Display,
     Param: Display,
@@ -4531,10 +4545,11 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
-            StreamSelectorSelectError::Selector { err } => err.fmt(f),
-            StreamSelectorSelectError::Select { err } => write!(f, "{}", err),
-            StreamSelectorSelectError::Report { err } => err.fmt(f),
-            StreamSelectorSelectError::MutexPoison => {
+            StreamSelectorSelectRefreshError::Refresh { err } => err.fmt(f),
+            StreamSelectorSelectRefreshError::Select { err } => {
+                write!(f, "{}", err)
+            }
+            StreamSelectorSelectRefreshError::MutexPoison => {
                 write!(f, "mutex poisoned")
             }
         }

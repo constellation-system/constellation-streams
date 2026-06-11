@@ -180,33 +180,11 @@ impl PushModeResult {
     }
 
     #[inline]
-    pub(crate) fn from_next_outbound(
-        next_outbound: Instant,
-    ) -> Self {
-        PushModeResult {
-            next_outbound: Some(next_outbound),
-            next_retry: None,
-            has_completes: false
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_next_retry(
-        next_retry: Instant,
-    ) -> Self {
+    pub(crate) fn from_next_retry(next_retry: Instant) -> Self {
         PushModeResult {
             next_outbound: None,
             next_retry: Some(next_retry),
             has_completes: false
-        }
-    }
-
-    #[inline]
-    pub(crate) fn from_has_completes() -> Self {
-        PushModeResult {
-            next_outbound: None,
-            next_retry: None,
-            has_completes: true
         }
     }
 

@@ -76,8 +76,6 @@
 //! The API also manages message-level authentication on incoming
 //! messages.  Messages delivered to the upper layer are then
 //! identified by a *counterparty*, not an address.
-#![feature(let_chains)]
-#![allow(incomplete_features)]
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
