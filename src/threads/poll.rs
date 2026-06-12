@@ -234,7 +234,7 @@ where
         &'a mut self,
         _ctx: &'a mut (),
         channels: I
-    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)

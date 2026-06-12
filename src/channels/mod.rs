@@ -123,7 +123,10 @@ pub trait Channels<Ctx> {
     /// This provides both the ID of the originating channel, and the
     /// channel parameter.
     type ParamsIter<'a>: Iterator<
-        Item = (Self::ChannelID, Self::Param, Option<Instant>)
+        Item = (
+            Self::ChannelID,
+            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+        )
     >
     where
         Self: 'a,
@@ -205,19 +208,11 @@ pub trait Channels<Ctx> {
     /// - `ctx`: The context to use.
     ///
     /// - `channels`: [Iterator] for channel IDs for which to get parameters.
-    ///
-    /// # Return Value
-    ///
-    /// - `(params, Some(when))`: The current set of parameters is `params`, and
-    ///   will be refresh again at `when`.
-    ///
-    /// - `(params, None)`: The current set of parameters is `params`, and does
-    ///   not need to be refreshed.
     fn params<'a, I>(
         &'a mut self,
         ctx: &'a mut Ctx,
         channels: I
-    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID>;
 
@@ -621,7 +616,10 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     type Param = NullChannelsParam;
     type ParamError = Infallible;
     type ParamsIter<'a>
-        = Empty<(NullChannelsID, NullChannelsParam, Option<Instant>)>
+        = Empty<(
+        NullChannelsID,
+        RetryResult<Vec<(Self::Param, Option<Instant>)>>
+    )>
     where
         Self: 'a,
         Ctx: 'a;
@@ -633,10 +631,10 @@ impl<Ctx> Channels<Ctx> for NullChannels {
         &'a mut self,
         _ctx: &'a mut Ctx,
         _channels: I
-    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
-        Ok(RetryResult::Success(empty()))
+        Ok(empty())
     }
 
     #[inline]
@@ -752,9 +750,8 @@ where
         SharedPrivateError<Private::ParamError, Shared::ParamError>;
     type ParamsIter<'a>
         = IntoIter<(
-        SharedPrivateValue<Private::ChannelID, Shared::ChannelID>,
-        SharedPrivateValue<Private::Param, Shared::Param>,
-        Option<Instant>
+        Self::ChannelID,
+        RetryResult<Vec<(Self::Param, Option<Instant>)>>
     )>
     where
         Self: 'a,
@@ -773,7 +770,7 @@ where
         &'a mut self,
         ctx: &'a mut Ctx,
         channels: I
-    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         let (_, hint) = channels.size_hint();
@@ -797,44 +794,52 @@ where
             }
         }
 
-        let private = match self
+        let private = self
             .private
             .params(ctx, private_channels.into_iter())
-            .map_err(|err| SharedPrivateError::Private { err: err })?
-        {
-            RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
-            RetryResult::Success(private) => private
-        };
-        let private: Vec<(Self::ChannelID, Self::Param, Option<Instant>)> =
-            private
-                .map(|(id, param, when)| {
-                    (
-                        SharedPrivateValue::Private { private: id },
-                        SharedPrivateValue::Private { private: param },
-                        when
-                    )
-                })
-                .collect();
-        let shared = match self
+            .map_err(|err| SharedPrivateError::Private { err: err })?;
+        let private: Vec<(
+            Self::ChannelID,
+            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+        )> = private
+            .map(|(id, res)| {
+                let res = res.map(|vec| {
+                    vec.into_iter()
+                        .map(|(param, when)| {
+                            (
+                                SharedPrivateValue::Private { private: param },
+                                when
+                            )
+                        })
+                        .collect()
+                });
+
+                (SharedPrivateValue::Private { private: id }, res)
+            })
+            .collect();
+        let shared = self
             .shared
             .params(ctx, shared_channels.into_iter())
-            .map_err(|err| SharedPrivateError::Shared { err: err })?
-        {
-            RetryResult::Retry(when) => return Ok(RetryResult::Retry(when)),
-            RetryResult::Success(shared) => shared
-        };
-        let out: Vec<(Self::ChannelID, Self::Param, Option<Instant>)> = private
+            .map_err(|err| SharedPrivateError::Shared { err: err })?;
+        let out: Vec<(
+            Self::ChannelID,
+            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+        )> = private
             .into_iter()
-            .chain(shared.map(|(id, param, when)| {
-                (
-                    SharedPrivateValue::Shared { shared: id },
-                    SharedPrivateValue::Shared { shared: param },
-                    when
-                )
+            .chain(shared.map(|(id, res)| {
+                let res = res.map(|vec| {
+                    vec.into_iter()
+                        .map(|(param, when)| {
+                            (SharedPrivateValue::Shared { shared: param }, when)
+                        })
+                        .collect()
+                });
+
+                (SharedPrivateValue::Shared { shared: id }, res)
             }))
             .collect();
 
-        Ok(RetryResult::Success(out.into_iter()))
+        Ok(out.into_iter())
     }
 
     fn req_stream(

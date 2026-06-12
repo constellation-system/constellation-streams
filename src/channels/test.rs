@@ -229,7 +229,10 @@ where
     type Param = TestChannelParam;
     type ParamError = Infallible;
     type ParamsIter<'a>
-        = IntoIter<(String, TestChannelParam, Option<Instant>)>
+        = IntoIter<(
+        String,
+        RetryResult<Vec<(TestChannelParam, Option<Instant>)>>
+    )>
     where
         Self: 'a,
         Ctx: 'a;
@@ -269,22 +272,27 @@ where
         &'a mut self,
         _ctx: &'a mut Ctx,
         channels: I
-    ) -> Result<RetryResult<Self::ParamsIter<'a>>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
     where
         I: 'a + Iterator<Item = Self::ChannelID> {
         let channels: HashSet<String> = channels.collect();
-        let mut params: Vec<(String, TestChannelParam, Option<Instant>)> =
-            Vec::with_capacity(self.req_streams.len());
+        let mut params: Vec<(
+            String,
+            RetryResult<Vec<(TestChannelParam, Option<Instant>)>>
+        )> = Vec::with_capacity(self.req_streams.len());
 
         for (id, script) in self.req_streams.iter() {
             if channels.contains(&id.channel) {
                 if let Some((_, when)) = script.last() {
-                    params.push((id.channel.clone(), id.param.clone(), *when));
+                    params.push((
+                        id.channel.clone(),
+                        RetryResult::Success(vec![(id.param.clone(), *when)])
+                    ));
                 }
             }
         }
 
-        Ok(RetryResult::Success(params.into_iter()))
+        Ok(params.into_iter())
     }
 
     fn channel_id(

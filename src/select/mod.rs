@@ -547,7 +547,12 @@ where
         ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
     >
     where
-        I: Iterator<Item = (Ctx::ChannelID, Ctx::Param, Option<Instant>)> {
+        I: Iterator<
+            Item = (
+                Ctx::ChannelID,
+                RetryResult<Vec<(Ctx::Param, Option<Instant>)>>
+            )
+        > {
         trace!(target: "stream-selector-connections",
                "converting refresh params");
 
@@ -580,11 +585,22 @@ where
             })
             .collect();
         let params = params
-            .map(|(id, param, when)| {
-                refresh_when = next_retry(&refresh_when, &when);
+            .flat_map(|(id, res)| match res {
+                RetryResult::Success(params) => {
+                    Some(params.into_iter().map(move |(param, when)| {
+                        refresh_when = next_retry(&refresh_when, &when);
 
-                (id, param)
+                        (id.clone(), param)
+                    }))
+                }
+                RetryResult::Retry(when) => {
+                    refresh_when =
+                        Some(next_retry_definite(&refresh_when, &when));
+
+                    None
+                }
             })
+            .flatten()
             .collect();
 
         Ok(RetryResult::Success((addrs, params, refresh_when)))
@@ -604,14 +620,9 @@ where
         trace!(target: "stream-selector-connections",
                "getting refresh params");
 
-        match ctx
-            .params(&mut (), self.channels.iter().cloned())
-            .map_err(|err| ThreadedStreamSelectorError::Param { err: err })?
-        {
-            RetryResult::Success(params) => self.handle_refresh_params(params),
-            // Pass through retries.
-            RetryResult::Retry(when) => Ok(RetryResult::Retry(when))
-        }
+        ctx.params(&mut (), self.channels.iter().cloned())
+            .map_err(|err| ThreadedStreamSelectorError::Param { err: err })
+            .and_then(|params| self.handle_refresh_params(params))
     }
 }
 
