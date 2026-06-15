@@ -544,13 +544,13 @@ where
             Vec<(Ctx::ChannelID, Ctx::Param)>,
             Option<Instant>
         )>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>
     >
     where
         I: Iterator<
             Item = (
                 Ctx::ChannelID,
-                RetryResult<Vec<(Ctx::Param, Option<Instant>)>>
+                RetryResult<(Vec<Ctx::Param>, Option<Instant>)>
             )
         > {
         trace!(target: "stream-selector-connections",
@@ -586,8 +586,8 @@ where
             .collect();
         let params = params
             .flat_map(|(id, res)| match res {
-                RetryResult::Success(params) => {
-                    Some(params.into_iter().map(move |(param, when)| {
+                RetryResult::Success((params, when)) => {
+                    Some(params.into_iter().map(move |param| {
                         refresh_when = next_retry(&refresh_when, &when);
 
                         (id.clone(), param)
@@ -615,7 +615,7 @@ where
             Vec<(Ctx::ChannelID, Ctx::Param)>,
             Option<Instant>
         )>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>
     > {
         trace!(target: "stream-selector-connections",
                "getting refresh params");
@@ -1218,7 +1218,7 @@ where
             Option<Instant>,
             usize
         ),
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>
     > {
         trace!(target: "stream-selector",
                "collecting refresh info");
@@ -1335,7 +1335,7 @@ where
         now: Instant
     ) -> Result<
         RetryResult<Option<Instant>>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>
     > {
         let (refreshes, min_retry, min_refresh, size_hint) =
             self.get_refreshes(ctx)?;
@@ -1489,7 +1489,7 @@ where
         RetryIndefResult<(Ctx::Stream, DenseItemID<Epochs::Item>)>,
         StreamSelectorSelectRefreshError<
             Resolve::AddrsError,
-            Ctx::ParamError,
+            Ctx::ParamsError,
             StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
         >
     > {
@@ -2152,7 +2152,7 @@ where
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type RefreshError =
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>;
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>;
     type RefreshRetry = Instant;
 
     fn refresh(
@@ -2160,7 +2160,7 @@ where
         ctx: &mut Ctx
     ) -> Result<
         RetryResult<Option<Instant>>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamError>
+        ThreadedStreamSelectorError<Resolve::AddrsError, Ctx::ParamsError>
     > {
         let now = Instant::now();
 
@@ -2328,7 +2328,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
@@ -2351,7 +2351,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             Vec<<Ctx::Stream as PushStreamPartyID>::PartyID>,
@@ -2924,7 +2924,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -2947,7 +2947,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -3447,7 +3447,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -3607,7 +3607,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -3766,7 +3766,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -3785,7 +3785,7 @@ where
         SelectorBatchSelectError<
             StreamSelectorSelectRefreshError<
                 Resolve::AddrsError,
-                Ctx::ParamError,
+                Ctx::ParamsError,
                 StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
             >,
             (),
@@ -4074,7 +4074,7 @@ where
                 Vec<Self::PartyID>,
                 StreamSelectorSelectRefreshError<
                     Resolve::AddrsError,
-                    Ctx::ParamError,
+                    Ctx::ParamsError,
                     StreamID<
                         Ctx::Addr,
                         ConnChannelID<Ctx::ChannelID>,
@@ -4100,7 +4100,7 @@ where
                 Vec<Self::PartyID>,
                 StreamSelectorSelectRefreshError<
                     Resolve::AddrsError,
-                    Ctx::ParamError,
+                    Ctx::ParamsError,
                     StreamID<
                         Ctx::Addr,
                         ConnChannelID<Ctx::ChannelID>,

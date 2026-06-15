@@ -30,7 +30,6 @@ use std::vec::IntoIter;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
-use constellation_common::retry::next_retry;
 use constellation_common::retry::RetryResult;
 use mio::Token;
 
@@ -84,7 +83,7 @@ pub struct TestChannels<Stream> {
             RetryResult<(
                 Vec<TestStream<Stream>>,
                 Vec<TestStreamID>,
-                Option<Vec<(String, TestChannelParam)>>,
+                Option<Vec<(String, Option<Vec<TestChannelParam>>)>>,
                 Option<Instant>
             )>,
             TestChannelsError
@@ -114,7 +113,7 @@ pub struct TestChannelsScript<Stream> {
             RetryResult<(
                 Vec<TestStream<Stream>>,
                 Vec<TestStreamID>,
-                Option<Vec<(String, TestChannelParam)>>,
+                Option<Vec<(String, Option<Vec<TestChannelParam>>)>>,
                 Option<Instant>
             )>,
             TestChannelsError
@@ -227,15 +226,14 @@ where
     type ChannelID = String;
     type OutNegoParam = ();
     type Param = TestChannelParam;
-    type ParamError = Infallible;
-    type ParamsIter<'a>
+    type ParamsError = Infallible;
+    type ParamsIter<I>
         = IntoIter<(
         String,
-        RetryResult<Vec<(TestChannelParam, Option<Instant>)>>
+        RetryResult<(Vec<TestChannelParam>, Option<Instant>)>
     )>
     where
-        Self: 'a,
-        Ctx: 'a;
+        I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = TestChannelsError;
     type Stream = Stream;
 
@@ -268,17 +266,17 @@ where
             .0
     }
 
-    fn params<'a, I>(
-        &'a mut self,
-        _ctx: &'a mut Ctx,
+    fn params<I>(
+        &mut self,
+        _ctx: &mut Ctx,
         channels: I
-    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
-        I: 'a + Iterator<Item = Self::ChannelID> {
+        I: Iterator<Item = Self::ChannelID> {
         let channels: HashSet<String> = channels.collect();
         let mut params: Vec<(
             String,
-            RetryResult<Vec<(TestChannelParam, Option<Instant>)>>
+            RetryResult<(Vec<TestChannelParam>, Option<Instant>)>
         )> = Vec::with_capacity(self.req_streams.len());
 
         for (id, script) in self.req_streams.iter() {
@@ -286,7 +284,7 @@ where
                 if let Some((_, when)) = script.last() {
                     params.push((
                         id.channel.clone(),
-                        RetryResult::Success(vec![(id.param.clone(), *when)])
+                        RetryResult::Success((vec![id.param.clone()], *when))
                     ));
                 }
             }
@@ -320,7 +318,7 @@ where
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            bool,
+            Option<Vec<(Self::ChannelID, Option<Vec<Self::Param>>)>>,
             Option<Instant>
         )>,
         Self::ListenError
@@ -360,18 +358,27 @@ where
                         ids.into_iter()
                             .map(|id| (id.endpoint, id.channel, id.param))
                             .collect();
-                    let refreshed = if let Some(refreshes) = refreshes {
+
+                    if let Some(refreshes) = &refreshes {
                         let refreshes: HashSet<(String, TestChannelParam)> =
-                            refreshes.into_iter().collect();
+                            refreshes
+                            .iter()
+                            .flat_map(|(id, params)| {
+                                params
+                                    .iter()
+                                    .flat_map(move |params| {
+                                        params
+                                            .iter()
+                                            .map(move |param|
+                                                 (id.clone(), param.clone()))
+                                    })
+                            })
+                            .collect();
 
                         self.actives.retain(|key, _| refreshes.contains(key));
+                    }
 
-                        true
-                    } else {
-                        false
-                    };
-
-                    (streams.into_iter(), ids.into_iter(), refreshed, when)
+                    (streams.into_iter(), ids.into_iter(), refreshes, when)
                 })
             })
     }

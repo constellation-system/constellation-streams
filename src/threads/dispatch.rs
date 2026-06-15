@@ -568,18 +568,17 @@ where
     type ChannelID = Chans::ChannelID;
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
-    type ParamError = Chans::ParamError;
-    type ParamsIter<'a>
-        = Chans::ParamsIter<'a>
+    type ParamsError = Chans::ParamsError;
+    type ParamsIter<I> = Chans::ParamsIter<I>
     where
-        Self: 'a;
+        I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = Chans::ReqStreamError;
     type Stream = Chans::Stream;
 
     #[inline]
-    fn req_stream<'a>(
-        &'a mut self,
-        _ctx: &'a mut (),
+    fn req_stream(
+        &mut self,
+        _ctx: &mut (),
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
@@ -602,13 +601,13 @@ where
     }
 
     #[inline]
-    fn params<'a, I>(
-        &'a mut self,
-        _ctx: &'a mut (),
+    fn params<I>(
+        &mut self,
+        _ctx: &mut (),
         channels: I
-    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
-        I: 'a + Iterator<Item = Self::ChannelID> {
+        I: Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
     }
 

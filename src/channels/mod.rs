@@ -122,17 +122,16 @@ pub trait Channels<Ctx> {
     ///
     /// This provides both the ID of the originating channel, and the
     /// channel parameter.
-    type ParamsIter<'a>: Iterator<
+    type ParamsIter<I>: Iterator<
         Item = (
             Self::ChannelID,
-            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+            RetryResult<(Vec<Self::Param>, Option<Instant>)>
         )
     >
     where
-        Self: 'a,
-        Ctx: 'a;
+        I: Iterator<Item = Self::ChannelID>;
     /// Type of errors that can occur when obtaining parameters.
-    type ParamError: Debug + Display + ScopedError;
+    type ParamsError: Debug + Display + ScopedError;
     /// Outbound negotiator parameter.
     ///
     /// This usually corresponds to verify endpoints for TLS streams.
@@ -181,9 +180,9 @@ pub trait Channels<Ctx> {
     /// 1. Whether a refresh occurred.
     ///
     /// 1. When the next refresh occurs.
-    fn req_stream<'a>(
-        &'a mut self,
-        ctx: &'a mut Ctx,
+    fn req_stream(
+        &mut self,
+        ctx: &mut Ctx,
         channel: &Self::ChannelID,
         param: &Self::Param,
         endpoint: &Self::Addr,
@@ -208,13 +207,13 @@ pub trait Channels<Ctx> {
     /// - `ctx`: The context to use.
     ///
     /// - `channels`: [Iterator] for channel IDs for which to get parameters.
-    fn params<'a, I>(
-        &'a mut self,
-        ctx: &'a mut Ctx,
+    fn params<I>(
+        &mut self,
+        ctx: &mut Ctx,
         channels: I
-    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
-        I: 'a + Iterator<Item = Self::ChannelID>;
+        I: Iterator<Item = Self::ChannelID>;
 
     /// Get a channel's ID from its name.
     ///
@@ -232,14 +231,59 @@ pub trait Channels<Ctx> {
 }
 
 pub trait ChannelsListen<Ctx>: Channels<Ctx> {
+    /// Type of iterators indicating which streams have available messoges.
+    ///
+    /// This produces a triple containing the following items:
+    ///
+    /// 1. The endpoint address of the incoming messages.
+    ///
+    /// 1. The ID of the channel on which messages were received.
+    ///
+    /// 1. The channel parameter for which messages were received.
     type EndpointIter: Iterator<
         Item = (Self::Addr, Self::ChannelID, Self::Param)
     >;
+    /// Type of iterators over new incoming streams (sessions).
+    ///
+    /// This produces a 4-tuple containing the following items:
+    ///
+    /// 1. The endpoint address of the incoming session.
+    ///
+    /// 1. The ID of the channel on which this session was received.
+    ///
+    /// 1. The channel parameter for which this session was received.
+    ///
+    /// 1. The [Stream](Channels::Stream) representing the session.
     type StreamIter: Iterator<
         Item = (Self::Addr, Self::ChannelID, Self::Param, Self::Stream)
     >;
+    /// Type of errors that can occur when
+    /// [listen](ChannelsListen::listen)ing.
     type ListenError: Debug + Display + ScopedError;
 
+    /// Listen for new messages and/or incoming sessions.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `tokens`: The set of live [Token]s.
+    ///
+    /// # Return Value
+    ///
+    /// A tuple containing four elements;
+    ///
+    /// 1. An [Iterator](ChannelsListen::StreamIter) of new incoming sessions.
+    ///
+    /// 1. An [Iterator](ChannelsListen::EndpointsIter) containing
+    ///    endpoints for existing sessions that have received new messages.
+    ///
+    /// 1. Optionally, a [Vec] containing
+    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
+    ///
+    /// 1. If `Some`, then he earliest next time at which a `listen`
+    ///    should take place, regardless of polling; if `None`, then
+    ///    the next listen should take place as indicated by polling.
     fn listen(
         &mut self,
         ctx: &mut Ctx,
@@ -248,15 +292,13 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            bool,
+            Option<Vec<(Self::ChannelID, Option<Vec<Self::Param>>)>>,
             Option<Instant>
         )>,
         Self::ListenError
     >;
 }
 
-// XXX It would probably be better to have a mode-switch that consumes
-// a type and returns a new one.
 pub trait ChannelsShutdown<Ctx>: Channels<Ctx> {
     type ShutdownStreamError: Debug + Display + ScopedError;
     type ShutdownListenError: Debug + Display + ScopedError;
@@ -614,33 +656,32 @@ impl<Ctx> Channels<Ctx> for NullChannels {
     type ChannelID = NullChannelsID;
     type OutNegoParam = ();
     type Param = NullChannelsParam;
-    type ParamError = Infallible;
-    type ParamsIter<'a>
+    type ParamsError = Infallible;
+    type ParamsIter<I>
         = Empty<(
         NullChannelsID,
-        RetryResult<Vec<(Self::Param, Option<Instant>)>>
+        RetryResult<(Vec<Self::Param>, Option<Instant>)>
     )>
     where
-        Self: 'a,
-        Ctx: 'a;
+        I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = Infallible;
     type Stream = ();
 
     #[inline]
-    fn params<'a, I>(
-        &'a mut self,
-        _ctx: &'a mut Ctx,
+    fn params<I>(
+        &mut self,
+        _ctx: &mut Ctx,
         _channels: I
-    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
-        I: 'a + Iterator<Item = Self::ChannelID> {
+        I: Iterator<Item = Self::ChannelID> {
         Ok(empty())
     }
 
     #[inline]
-    fn req_stream<'a>(
-        &'a mut self,
-        _ctx: &'a mut Ctx,
+    fn req_stream(
+        &mut self,
+        _ctx: &mut Ctx,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
         _endpoint: &Self::Addr,
@@ -680,12 +721,12 @@ impl<Ctx> ChannelsListen<Ctx> for NullChannels {
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            bool,
+            Option<Vec<(Self::ChannelID, Option<Vec<Self::Param>>)>>,
             Option<Instant>
         )>,
         Self::ListenError
     > {
-        Ok(RetryResult::Success((empty(), empty(), false, None)))
+        Ok(RetryResult::Success((empty(), empty(), None, None)))
     }
 }
 
@@ -746,16 +787,15 @@ where
     type OutNegoParam =
         SharedPrivateValue<Private::OutNegoParam, Shared::OutNegoParam>;
     type Param = SharedPrivateValue<Private::Param, Shared::Param>;
-    type ParamError =
-        SharedPrivateError<Private::ParamError, Shared::ParamError>;
-    type ParamsIter<'a>
+    type ParamsError =
+        SharedPrivateError<Private::ParamsError, Shared::ParamsError>;
+    type ParamsIter<I>
         = IntoIter<(
         Self::ChannelID,
-        RetryResult<Vec<(Self::Param, Option<Instant>)>>
+        RetryResult<(Vec<Self::Param>, Option<Instant>)>
     )>
     where
-        Self: 'a,
-        Ctx: 'a;
+        I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = SharedPrivateMatchError<
         Private::ReqStreamError,
         Shared::ReqStreamError
@@ -766,13 +806,13 @@ where
         Shared::Addr
     >;
 
-    fn params<'a, I>(
-        &'a mut self,
-        ctx: &'a mut Ctx,
+    fn params<I>(
+        &mut self,
+        ctx: &mut Ctx,
         channels: I
-    ) -> Result<Self::ParamsIter<'a>, Self::ParamError>
+    ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
-        I: 'a + Iterator<Item = Self::ChannelID> {
+        I: Iterator<Item = Self::ChannelID> {
         let (_, hint) = channels.size_hint();
         let mut private_channels = match hint {
             Some(hint) => Vec::with_capacity(hint),
@@ -800,18 +840,17 @@ where
             .map_err(|err| SharedPrivateError::Private { err: err })?;
         let private: Vec<(
             Self::ChannelID,
-            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+            RetryResult<(Vec<Self::Param>, Option<Instant>)>
         )> = private
             .map(|(id, res)| {
-                let res = res.map(|vec| {
-                    vec.into_iter()
-                        .map(|(param, when)| {
-                            (
-                                SharedPrivateValue::Private { private: param },
-                                when
-                            )
+                let res = res.map(|(vec, when)| {
+                    let vec = vec.into_iter()
+                        .map(|param| SharedPrivateValue::Private {
+                            private: param
                         })
-                        .collect()
+                        .collect();
+
+                    (vec, when)
                 });
 
                 (SharedPrivateValue::Private { private: id }, res)
@@ -823,16 +862,18 @@ where
             .map_err(|err| SharedPrivateError::Shared { err: err })?;
         let out: Vec<(
             Self::ChannelID,
-            RetryResult<Vec<(Self::Param, Option<Instant>)>>
+            RetryResult<(Vec<Self::Param>, Option<Instant>)>
         )> = private
             .into_iter()
             .chain(shared.map(|(id, res)| {
-                let res = res.map(|vec| {
-                    vec.into_iter()
-                        .map(|(param, when)| {
-                            (SharedPrivateValue::Shared { shared: param }, when)
+                let res = res.map(|(vec, when)| {
+                    let vec = vec.into_iter()
+                        .map(|param| SharedPrivateValue::Shared {
+                            shared: param
                         })
-                        .collect()
+                        .collect();
+
+                    (vec, when)
                 });
 
                 (SharedPrivateValue::Shared { shared: id }, res)
@@ -972,7 +1013,7 @@ where
         RetryResult<(
             Self::StreamIter,
             Self::EndpointIter,
-            bool,
+            Option<Vec<(Self::ChannelID, Option<Vec<Self::Param>>)>>,
             Option<Instant>
         )>,
         Self::ListenError
@@ -1007,7 +1048,81 @@ where
                     private: Some(private_addrs),
                     shared: Some(shared_addrs)
                 };
-                let refresh = private_refresh || shared_refresh;
+                let refresh = match (private_refresh, shared_refresh) {
+                    (Some(private_refresh), Some(shared_refresh)) => {
+                        let private_refresh = private_refresh
+                            .into_iter()
+                            .map(|(id, params)| {
+                                let id = SharedPrivateValue::Private {
+                                    private: id
+                                };
+                                let params = params
+                                    .map(|params| params
+                                         .into_iter()
+                                         .map(|param|
+                                              SharedPrivateValue::Private {
+                                                  private: param
+                                              }).collect());
+
+                                (id, params)
+                            });
+                        let shared_refresh = shared_refresh
+                            .into_iter()
+                            .map(|(id, params)| {
+                                let id = SharedPrivateValue::Shared {
+                                    shared: id
+                                };
+                                let params = params
+                                    .map(|params| params
+                                         .into_iter()
+                                         .map(|param|
+                                              SharedPrivateValue::Shared {
+                                                  shared: param
+                                              }).collect());
+
+                                (id, params)
+                            });
+
+                        Some(private_refresh.chain(shared_refresh).collect())
+                    }
+                    (Some(private_refresh), None) =>
+                        Some(private_refresh
+                             .into_iter()
+                             .map(|(id, params)| {
+                                 let id = SharedPrivateValue::Private {
+                                     private: id
+                                 };
+                                 let params = params
+                                     .map(|params| params
+                                          .into_iter()
+                                          .map(|param|
+                                               SharedPrivateValue::Private {
+                                                   private: param
+                                               }).collect());
+
+                                 (id, params)
+                             })
+                             .collect()),
+                    (None, Some(shared_refresh)) =>
+                        Some(shared_refresh
+                             .into_iter()
+                             .map(|(id, params)| {
+                                 let id = SharedPrivateValue::Shared {
+                                     shared: id
+                                 };
+                                 let params = params
+                                     .map(|params| params
+                                          .into_iter()
+                                          .map(|param|
+                                               SharedPrivateValue::Shared {
+                                                   shared: param
+                                               }).collect());
+
+                                 (id, params)
+                             })
+                             .collect()),
+                    _ => None
+                };
                 let when = next_retry(&private_when, &shared_when);
 
                 Ok(RetryResult::Success((streams, addrs, refresh, when)))
@@ -1032,6 +1147,23 @@ where
                     private: Some(private_addrs),
                     shared: None
                 };
+                let refresh = refresh
+                    .map(|refresh| refresh
+                         .into_iter()
+                         .map(|(id, params)| {
+                             let id = SharedPrivateValue::Private {
+                                 private: id
+                             };
+                             let params = params
+                                 .map(|params| params
+                                      .into_iter()
+                                      .map(|param| SharedPrivateValue::Private {
+                                          private: param
+                                      }).collect());
+
+                             (id, params)
+                         })
+                         .collect());
                 let when =
                     Some(next_retry_definite(&private_when, &shared_when));
 
@@ -1054,6 +1186,23 @@ where
                     private: None,
                     shared: Some(shared_addrs)
                 };
+                let refresh = refresh
+                    .map(|refresh| refresh
+                         .into_iter()
+                         .map(|(id, params)| {
+                             let id = SharedPrivateValue::Shared {
+                                 shared: id
+                             };
+                             let params = params
+                                 .map(|params| params
+                                      .into_iter()
+                                      .map(|param| SharedPrivateValue::Shared {
+                                          shared: param
+                                      }).collect());
+
+                             (id, params)
+                         })
+                         .collect());
                 let when =
                     Some(next_retry_definite(&shared_when, &private_when));
 
