@@ -1412,26 +1412,34 @@ where
                 Ok(RetryResult::Success((
                     streams,
                     endpoints,
-                    // XXX Uncertain relationship here with the refresh field.
-                    //
-                    // This appears to signal the need to do a refresh
-                    // for a single stream, but this doesn't
-                    // generalize to multiple sessions.  We would need
-                    // to indicate stream IDs here or something.
-                    refresh,
+                    refreshed,
                     when
                 ))) => {
                     *next_listen = when;
+
+                    // Pull in any streams for channels that were refreshed.
+                    if let Some(refreshed) = refreshed {
+                        let refreshed: HashSet<Types::ChannelID> = refreshed
+                            .into_iter()
+                            .map(|(id, _)| id)
+                            .collect();
+
+                        for (stream_id, disp) in self.stream_ids.iter() {
+                            if refreshed.contains(stream_id.channel()) {
+                                need_refreshes.insert(disp.clone());
+                            }
+                        }
+                    }
 
                     // Report new streams.
                     for (addr, channel_id, param, stream) in streams {
                         let id = StreamID::new(addr, channel_id, param);
 
-                        if let Some(token) = self.recv_session(id, stream) {
-                            if need_refreshes.insert(token.clone()) {
+                        if let Some(disp) = self.recv_session(id, stream) {
+                            if need_refreshes.insert(disp.clone()) {
                                 error!(target: "dispatch-thread",
                                        "{} already in needed refreshes",
-                                       token);
+                                       disp);
                             }
                         }
                     }
