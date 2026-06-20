@@ -53,7 +53,6 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
-use crate::channels::ChannelsCreate;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::stream::PullStream;
@@ -102,14 +101,12 @@ where
     type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
     type Wrapper;
     type Msgs: 'static + Send;
-    type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
     type ChanShutdownError: Debug + Display;
     type Chans: 'static
-        + ChannelsCreate<
-            Ctx,
-            Self::ChansSrcs,
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
             Config = Self::ChansConfig,
             CreateError = Self::ChansCreateError
         >
@@ -299,7 +296,6 @@ where
         mode_config: Types::ModeConfig,
         chans_config: Types::ChansConfig,
         authn_config: Types::MsgAuthConfig,
-        srcs: Types::ChansSrcs,
         mut ctx: Ctx,
         poll: Poll,
         recv: Types::Recv,
@@ -324,7 +320,7 @@ where
             Config = Types::ModeConfig,
             CreateError = Types::ModeCreateError
         > {
-        let channels = Types::Chans::create(&mut ctx, chans_config, srcs)
+        let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
         let mode = Types::Mode::create(mode_config, &stream)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;

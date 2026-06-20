@@ -28,6 +28,7 @@ use std::hash::Hasher;
 use std::time::Instant;
 use std::vec::IntoIter;
 
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
@@ -36,7 +37,6 @@ use mio::Token;
 use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
-use crate::channels::ChannelsCreate;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 
@@ -151,7 +151,7 @@ impl ScopedError for TestChannelsError {
     }
 }
 
-impl<Stream, Ctx, Srcs> ChannelsCreate<Ctx, Srcs> for TestChannels<Stream>
+impl<'a, Ctx, Stream> CreateWithParam<&'a mut Ctx> for TestChannels<Stream>
 where
     Stream: Clone
 {
@@ -159,9 +159,8 @@ where
     type CreateError = Infallible;
 
     fn create(
-        _ctx: &mut Ctx,
         config: Self::Config,
-        _srcs: Srcs
+        _ctx: &'a mut Ctx
     ) -> Result<Self, Self::CreateError> {
         let TestChannelsScript {
             req_streams,
@@ -362,18 +361,15 @@ where
                     if let Some(refreshes) = &refreshes {
                         let refreshes: HashSet<(String, TestChannelParam)> =
                             refreshes
-                            .iter()
-                            .flat_map(|(id, params)| {
-                                params
-                                    .iter()
-                                    .flat_map(move |params| {
-                                        params
-                                            .iter()
-                                            .map(move |param|
-                                                 (id.clone(), param.clone()))
+                                .iter()
+                                .flat_map(|(id, params)| {
+                                    params.iter().flat_map(move |params| {
+                                        params.iter().map(move |param| {
+                                            (id.clone(), param.clone())
+                                        })
                                     })
-                            })
-                            .collect();
+                                })
+                                .collect();
 
                         self.actives.retain(|key, _| refreshes.contains(key));
                     }

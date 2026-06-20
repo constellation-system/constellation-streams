@@ -275,15 +275,15 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     ///
     /// 1. An [Iterator](ChannelsListen::StreamIter) of new incoming sessions.
     ///
-    /// 1. An [Iterator](ChannelsListen::EndpointsIter) containing
-    ///    endpoints for existing sessions that have received new messages.
+    /// 1. An [Iterator](ChannelsListen::EndpointsIter) containing endpoints for
+    ///    existing sessions that have received new messages.
     ///
-    /// 1. Optionally, a [Vec] containing
-    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
+    /// 1. Optionally, a [Vec] containing [ChannelID](Channels::ChannelID)s that
+    ///    have been refreshed.
     ///
-    /// 1. If `Some`, then he earliest next time at which a `listen`
-    ///    should take place, regardless of polling; if `None`, then
-    ///    the next listen should take place as indicated by polling.
+    /// 1. If `Some`, then he earliest next time at which a `listen` should take
+    ///    place, regardless of polling; if `None`, then the next listen should
+    ///    take place as indicated by polling.
     fn listen(
         &mut self,
         ctx: &mut Ctx,
@@ -322,26 +322,6 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> {
         ctx: &mut Ctx,
         tokens: &HashSet<Token>
     ) -> Result<RetryResult<bool>, Self::ShutdownListenError>;
-}
-
-/// Trait for instances of `Channels` that can be created from a
-/// configuration object.
-pub trait ChannelsCreate<Ctx, Srcs>: Sized + Channels<Ctx> {
-    /// Type of configuration from which this instance can be created.
-    ///
-    /// This will be supplemented by `Srcs`, which is assumed to
-    /// provide a set of channels.  This configuration type is assumed
-    /// to carry any additional information.
-    type Config;
-    /// Type of errors that can occur during creation.
-    type CreateError: Debug + Display;
-
-    /// Create an instance of this `Channels`.
-    fn create(
-        ctx: &mut Ctx,
-        config: Self::Config,
-        srcs: Srcs
-    ) -> Result<Self, Self::CreateError>;
 }
 
 /// An implementation of [Channels] that is always empty.
@@ -844,7 +824,8 @@ where
         )> = private
             .map(|(id, res)| {
                 let res = res.map(|(vec, when)| {
-                    let vec = vec.into_iter()
+                    let vec = vec
+                        .into_iter()
                         .map(|param| SharedPrivateValue::Private {
                             private: param
                         })
@@ -867,7 +848,8 @@ where
             .into_iter()
             .chain(shared.map(|(id, res)| {
                 let res = res.map(|(vec, when)| {
-                    let vec = vec.into_iter()
+                    let vec = vec
+                        .into_iter()
                         .map(|param| SharedPrivateValue::Shared {
                             shared: param
                         })
@@ -1050,77 +1032,85 @@ where
                 };
                 let refresh = match (private_refresh, shared_refresh) {
                     (Some(private_refresh), Some(shared_refresh)) => {
-                        let private_refresh = private_refresh
-                            .into_iter()
-                            .map(|(id, params)| {
-                                let id = SharedPrivateValue::Private {
-                                    private: id
-                                };
-                                let params = params
-                                    .map(|params| params
-                                         .into_iter()
-                                         .map(|param|
-                                              SharedPrivateValue::Private {
-                                                  private: param
-                                              }).collect());
+                        let private_refresh =
+                            private_refresh.into_iter().map(|(id, params)| {
+                                let id =
+                                    SharedPrivateValue::Private { private: id };
+                                let params = params.map(|params| {
+                                    params
+                                        .into_iter()
+                                        .map(|param| {
+                                            SharedPrivateValue::Private {
+                                                private: param
+                                            }
+                                        })
+                                        .collect()
+                                });
 
                                 (id, params)
                             });
-                        let shared_refresh = shared_refresh
-                            .into_iter()
-                            .map(|(id, params)| {
-                                let id = SharedPrivateValue::Shared {
-                                    shared: id
-                                };
-                                let params = params
-                                    .map(|params| params
-                                         .into_iter()
-                                         .map(|param|
-                                              SharedPrivateValue::Shared {
-                                                  shared: param
-                                              }).collect());
+                        let shared_refresh =
+                            shared_refresh.into_iter().map(|(id, params)| {
+                                let id =
+                                    SharedPrivateValue::Shared { shared: id };
+                                let params = params.map(|params| {
+                                    params
+                                        .into_iter()
+                                        .map(|param| {
+                                            SharedPrivateValue::Shared {
+                                                shared: param
+                                            }
+                                        })
+                                        .collect()
+                                });
 
                                 (id, params)
                             });
 
                         Some(private_refresh.chain(shared_refresh).collect())
                     }
-                    (Some(private_refresh), None) =>
-                        Some(private_refresh
-                             .into_iter()
-                             .map(|(id, params)| {
-                                 let id = SharedPrivateValue::Private {
-                                     private: id
-                                 };
-                                 let params = params
-                                     .map(|params| params
-                                          .into_iter()
-                                          .map(|param|
-                                               SharedPrivateValue::Private {
-                                                   private: param
-                                               }).collect());
+                    (Some(private_refresh), None) => Some(
+                        private_refresh
+                            .into_iter()
+                            .map(|(id, params)| {
+                                let id =
+                                    SharedPrivateValue::Private { private: id };
+                                let params = params.map(|params| {
+                                    params
+                                        .into_iter()
+                                        .map(|param| {
+                                            SharedPrivateValue::Private {
+                                                private: param
+                                            }
+                                        })
+                                        .collect()
+                                });
 
-                                 (id, params)
-                             })
-                             .collect()),
-                    (None, Some(shared_refresh)) =>
-                        Some(shared_refresh
-                             .into_iter()
-                             .map(|(id, params)| {
-                                 let id = SharedPrivateValue::Shared {
-                                     shared: id
-                                 };
-                                 let params = params
-                                     .map(|params| params
-                                          .into_iter()
-                                          .map(|param|
-                                               SharedPrivateValue::Shared {
-                                                   shared: param
-                                               }).collect());
+                                (id, params)
+                            })
+                            .collect()
+                    ),
+                    (None, Some(shared_refresh)) => Some(
+                        shared_refresh
+                            .into_iter()
+                            .map(|(id, params)| {
+                                let id =
+                                    SharedPrivateValue::Shared { shared: id };
+                                let params = params.map(|params| {
+                                    params
+                                        .into_iter()
+                                        .map(|param| {
+                                            SharedPrivateValue::Shared {
+                                                shared: param
+                                            }
+                                        })
+                                        .collect()
+                                });
 
-                                 (id, params)
-                             })
-                             .collect()),
+                                (id, params)
+                            })
+                            .collect()
+                    ),
                     _ => None
                 };
                 let when = next_retry(&private_when, &shared_when);
@@ -1147,23 +1137,25 @@ where
                     private: Some(private_addrs),
                     shared: None
                 };
-                let refresh = refresh
-                    .map(|refresh| refresh
-                         .into_iter()
-                         .map(|(id, params)| {
-                             let id = SharedPrivateValue::Private {
-                                 private: id
-                             };
-                             let params = params
-                                 .map(|params| params
-                                      .into_iter()
-                                      .map(|param| SharedPrivateValue::Private {
-                                          private: param
-                                      }).collect());
+                let refresh = refresh.map(|refresh| {
+                    refresh
+                        .into_iter()
+                        .map(|(id, params)| {
+                            let id =
+                                SharedPrivateValue::Private { private: id };
+                            let params = params.map(|params| {
+                                params
+                                    .into_iter()
+                                    .map(|param| SharedPrivateValue::Private {
+                                        private: param
+                                    })
+                                    .collect()
+                            });
 
-                             (id, params)
-                         })
-                         .collect());
+                            (id, params)
+                        })
+                        .collect()
+                });
                 let when =
                     Some(next_retry_definite(&private_when, &shared_when));
 
@@ -1186,23 +1178,24 @@ where
                     private: None,
                     shared: Some(shared_addrs)
                 };
-                let refresh = refresh
-                    .map(|refresh| refresh
-                         .into_iter()
-                         .map(|(id, params)| {
-                             let id = SharedPrivateValue::Shared {
-                                 shared: id
-                             };
-                             let params = params
-                                 .map(|params| params
-                                      .into_iter()
-                                      .map(|param| SharedPrivateValue::Shared {
-                                          shared: param
-                                      }).collect());
+                let refresh = refresh.map(|refresh| {
+                    refresh
+                        .into_iter()
+                        .map(|(id, params)| {
+                            let id = SharedPrivateValue::Shared { shared: id };
+                            let params = params.map(|params| {
+                                params
+                                    .into_iter()
+                                    .map(|param| SharedPrivateValue::Shared {
+                                        shared: param
+                                    })
+                                    .collect()
+                            });
 
-                             (id, params)
-                         })
-                         .collect());
+                            (id, params)
+                        })
+                        .collect()
+                });
                 let when =
                     Some(next_retry_definite(&shared_when, &private_when));
 

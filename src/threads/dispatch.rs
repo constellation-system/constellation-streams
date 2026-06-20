@@ -57,7 +57,6 @@ use mio::Waker;
 
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
-use crate::channels::ChannelsCreate;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::stream::PullStream;
@@ -142,9 +141,8 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
     type ChansConfig;
     type ChansCreateError: Debug + Display;
     type ChanShutdownError: Debug + Display;
-    type Chans: ChannelsCreate<
-            Ctx,
-            Self::ChansSrcs,
+    type Chans: for<'a> CreateWithParam<
+            &'a mut Ctx,
             Config = Self::ChansConfig,
             CreateError = Self::ChansCreateError
         > + Channels<
@@ -569,7 +567,8 @@ where
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
     type ParamsError = Chans::ParamsError;
-    type ParamsIter<I> = Chans::ParamsIter<I>
+    type ParamsIter<I>
+        = Chans::ParamsIter<I>
     where
         I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = Chans::ReqStreamError;
@@ -1055,7 +1054,6 @@ where
     pub fn create(
         mode_config: Types::ModeConfig,
         chans_config: Types::ChansConfig,
-        srcs: Types::ChansSrcs,
         dispatcher: Types::Disp,
         mut ctx: Ctx,
         shutdown: ShutdownFlag,
@@ -1064,7 +1062,7 @@ where
         ndispatched: Option<usize>,
         tokens_hint: Option<usize>
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
-        let channels = Types::Chans::create(&mut ctx, chans_config, srcs)
+        let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| DispatchThreadCreateError::Channels { err: err })?;
         let poll = Poll::new()
             .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
@@ -1419,10 +1417,8 @@ where
 
                     // Pull in any streams for channels that were refreshed.
                     if let Some(refreshed) = refreshed {
-                        let refreshed: HashSet<Types::ChannelID> = refreshed
-                            .into_iter()
-                            .map(|(id, _)| id)
-                            .collect();
+                        let refreshed: HashSet<Types::ChannelID> =
+                            refreshed.into_iter().map(|(id, _)| id).collect();
 
                         for (stream_id, disp) in self.stream_ids.iter() {
                             if refreshed.contains(stream_id.channel()) {
