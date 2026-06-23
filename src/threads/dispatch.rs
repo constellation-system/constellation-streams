@@ -1676,6 +1676,7 @@ where
             parties,
             ..
         } = self;
+
         info!(target: "dispatch-thread",
               "mio dispatch thread shutting down");
 
@@ -1703,25 +1704,27 @@ where
             ent.shutdown(&mut ctx)
         }
 
-        let mut live = true;
+        let DispatchThreadCtx { mut ctx, mut poll, channels, .. } = ctx;
+        let mut channels = Some(channels);
         let mut next = None;
 
         while {
             let now = Instant::now();
 
-            live && (next.is_some_and(|next: Instant| next < now) || {
+            channels.is_some() &&
+                (next.is_some_and(|next: Instant| next < now) || {
                 let duration = next.map(|next| next - now);
 
                 if let Some(duration) = &duration {
                     trace!(target: "dispatch-thread",
-                                "waiting for poll for {}.{:03}",
-                                duration.as_secs(), duration.subsec_millis());
+                           "waiting for poll for {}.{:03}",
+                           duration.as_secs(), duration.subsec_millis());
                 } else {
                     trace!(target: "dispatch-thread",
-                                "waiting for poll indefinitely");
+                           "waiting for poll indefinitely");
                 }
 
-                ctx.poll
+                poll
                     .poll(&mut events, duration)
                     .inspect_err(|err| {
                         error!(target: "dispatch-thread",
@@ -1737,25 +1740,28 @@ where
 
             next = None;
 
-            match ctx.channels.shutdown_listen(&mut ctx.ctx, &tokens) {
-                Ok(RetryResult::Success(res)) => {
-                    live = res;
-                }
-                Ok(RetryResult::Retry(when)) => next = Some(when),
-                Err(err) => {
-                    error!(target: "dispatch-thread",
-                           "error listening during shutdown: {}",
-                           err);
+            channels = if let Some(channels) = channels.take() {
+                match channels.shutdown_listen(&mut ctx, &tokens) {
+                    Ok(res) => res
+                       .map(|(channels, when)| {
+                           next = when;
 
-                    live = false;
+                           channels
+                       }),
+                    Err(err) => {
+                        error!(target: "poll-thread",
+                               "error listening during shutdown: {}",
+                               err);
+
+                        None
+                    }
                 }
+            } else {
+                error!(target: "poll-thread",
+                       "channels should not be empty here");
+
+                None
             }
-        }
-
-        if let Err(err) = ctx.channels.shutdown(&mut ctx.ctx) {
-            error!(target: "dispatch-thread",
-                   "error shutting down channels: {}",
-                   err);
         }
 
         info!(target: "dispatch-thread",

@@ -160,12 +160,12 @@ pub trait Channels<Ctx> {
     ///
     /// # Parameter
     ///
-    /// - `ctx`: The context.
+    /// - `ctx`: The context to use.
     ///
     /// - `channel`: The channel ID on which to create the stream.
     ///
     /// - `param`: The channel parameter to use.  These are obtained from this
-    ///   fungtion, or from [params](Channels::params).
+    ///   function, or from [params](Channels::params).
     ///
     /// - `endpoint`: The counterparty address.
     ///
@@ -177,7 +177,8 @@ pub trait Channels<Ctx> {
     ///
     /// 1. The authenticated session, if there is one.
     ///
-    /// 1. Whether a refresh occurred.
+    /// 1. If a refresh occurred, a [Vec] containing
+    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
     ///
     /// 1. When the next refresh occurs.
     fn req_stream(
@@ -278,8 +279,8 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     /// 1. An [Iterator](ChannelsListen::EndpointsIter) containing endpoints for
     ///    existing sessions that have received new messages.
     ///
-    /// 1. Optionally, a [Vec] containing [ChannelID](Channels::ChannelID)s that
-    ///    have been refreshed.
+    /// 1. If a refresh occurred, a [Vec] containing
+    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
     ///
     /// 1. If `Some`, then he earliest next time at which a `listen` should take
     ///    place, regardless of polling; if `None`, then the next listen should
@@ -299,29 +300,75 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     >;
 }
 
-pub trait ChannelsShutdown<Ctx>: Channels<Ctx> {
+pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     type ShutdownStreamError: Debug + Display + ScopedError;
     type ShutdownListenError: Debug + Display + ScopedError;
     type ShutdownError: Debug + Display + ScopedError;
 
+    /// Shut down a given stream.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `channel`: The channel ID on which to create the stream.
+    ///
+    /// - `param`: The channel parameter to use.  These are obtained from this
+    ///   function, or from [params](Channels::params).
+    ///
+    /// - `session`: The session to shut down.
+    ///
+    /// # Return Value
+    ///
+    /// A pair containing the following:
+    ///
+    /// 1. A set of new [Param](Channels::Param) if a refresh was done.
+    ///
+    /// 1. When the next refresh occurs.
     fn shutdown_stream(
         &mut self,
         ctx: &mut Ctx,
         channel: &Self::ChannelID,
         param: &Self::Param,
         session: Self::Stream
-    ) -> Result<RetryResult<()>, Self::ShutdownStreamError>;
+    ) -> Result<
+        RetryResult<(
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
+        Self::ShutdownStreamError
+    >;
 
-    fn shutdown(
-        self,
-        ctx: &mut Ctx
-    ) -> Result<(), Self::ShutdownError>;
-
+    /// Variant of [listen](ChannelsListen::listen) for shutting down.
+    ///
+    /// This is used to listen for input in the shutdown process.
+    /// This will not generate new sessions, but will result in
+    /// shutting down existing ones.  This will consume the `Channels`
+    /// instance, returning it if the shutdown process needs to
+    /// continue.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `tokens`: The set of live [Token]s.
+    ///
+    /// # Return Value
+    ///
+    /// - `None`: The shutdown process is complete.
+    ///
+    /// - `Some((self, None))`: The shutdown process is continuing,
+    ///   and `shutdown_listen` should be called after polling returns
+    ///   more tokens.
+    ///
+    /// - `Some((self, Some(when)))`: The shutdwon process is
+    ///   continuing, and `shutdown_listen` should be called at `when`
+    ///   at the latest, or after polling returns more tokens.
     fn shutdown_listen(
-        &mut self,
+        self,
         ctx: &mut Ctx,
         tokens: &HashSet<Token>
-    ) -> Result<RetryResult<bool>, Self::ShutdownListenError>;
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError>;
 }
 
 /// An implementation of [Channels] that is always empty.
@@ -357,9 +404,9 @@ pub struct NullChannelsAddr;
 /// creation of a batch and the addition of recipients as needed.
 pub struct SharedPrivateChannels<Private, Shared> {
     /// The private channels source.
-    private: Private,
+    private: Option<Private>,
     /// The shared channels source.
-    shared: Shared
+    shared: Option<Shared>
 }
 
 #[cfg(test)]
@@ -453,7 +500,9 @@ pub enum SharedPrivateError<Private, Shared> {
     Shared {
         /// Shared channel param iterator.
         err: Shared
-    }
+    },
+    /// One of the options is shut down.
+    Shutdown
 }
 
 /// Type of streams for [SharedPrivateChannels].
@@ -520,7 +569,12 @@ pub enum SharedPrivateMatchError<Private, Shared> {
         /// Shared channel stream iterator.
         err: Shared
     },
-    Mismatch
+    /// Mismatch between shared and private types.
+    ///
+    /// This should never happen.
+    Mismatch,
+    /// One of the options is shut down.
+    Shutdown
 }
 
 /// Common structure for
@@ -558,7 +612,8 @@ where
         match self {
             SharedPrivateMatchError::Private { err } => err.scope(),
             SharedPrivateMatchError::Shared { err } => err.scope(),
-            SharedPrivateMatchError::Mismatch => ErrorScope::Unrecoverable
+            SharedPrivateMatchError::Mismatch |
+            SharedPrivateMatchError::Shutdown => ErrorScope::Unrecoverable
         }
     }
 }
@@ -572,7 +627,8 @@ where
     fn scope(&self) -> ErrorScope {
         match self {
             SharedPrivateError::Private { err } => err.scope(),
-            SharedPrivateError::Shared { err } => err.scope()
+            SharedPrivateError::Shared { err } => err.scope(),
+            SharedPrivateError::Shutdown => ErrorScope::Unrecoverable
         }
     }
 }
@@ -601,7 +657,8 @@ where
     fn report_info(&self) -> Option<T> {
         match self {
             SharedPrivateError::Private { err } => err.report_info(),
-            SharedPrivateError::Shared { err } => err.report_info()
+            SharedPrivateError::Shared { err } => err.report_info(),
+            SharedPrivateError::Shutdown => None
         }
     }
 }
@@ -617,7 +674,8 @@ where
         match self {
             SharedPrivateMatchError::Private { err } => err.report_info(),
             SharedPrivateMatchError::Shared { err } => err.report_info(),
-            SharedPrivateMatchError::Mismatch => None
+            SharedPrivateMatchError::Mismatch |
+            SharedPrivateMatchError::Shutdown => None
         }
     }
 }
@@ -722,24 +780,23 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
         _channel: &Self::ChannelID,
         _param: &Self::Param,
         _session: Self::Stream
-    ) -> Result<RetryResult<()>, Self::ShutdownStreamError> {
-        Ok(RetryResult::Success(()))
+    ) -> Result<
+        RetryResult<(
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
+        Self::ShutdownStreamError
+    > {
+        Ok(RetryResult::Success((None, None)))
     }
 
     #[inline]
-    fn shutdown(
-        self,
-        _ctx: &mut Ctx
-    ) -> Result<(), Self::ShutdownError> {
-        Ok(())
-    }
-
     fn shutdown_listen(
-        &mut self,
+        self,
         _ctx: &mut Ctx,
         _tokens: &HashSet<Token>
-    ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
-        Ok(RetryResult::Success(true))
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
+        Ok(None)
     }
 }
 
@@ -750,8 +807,8 @@ impl<Private, Shared> SharedPrivateChannels<Private, Shared> {
         shared: Shared
     ) -> Self {
         SharedPrivateChannels {
-            private: private,
-            shared: shared
+            private: Some(private),
+            shared: Some(shared)
         }
     }
 }
@@ -816,6 +873,8 @@ where
 
         let private = self
             .private
+            .as_mut()
+            .ok_or(SharedPrivateError::Shutdown)?
             .params(ctx, private_channels.into_iter())
             .map_err(|err| SharedPrivateError::Private { err: err })?;
         let private: Vec<(
@@ -839,6 +898,8 @@ where
             .collect();
         let shared = self
             .shared
+            .as_mut()
+            .ok_or(SharedPrivateError::Shutdown)?
             .params(ctx, shared_channels.into_iter())
             .map_err(|err| SharedPrivateError::Shared { err: err })?;
         let out: Vec<(
@@ -890,6 +951,8 @@ where
                 }
             ) => Ok(self
                 .private
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
                 .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map(|(stream, refresh, when)| {
@@ -914,6 +977,8 @@ where
                 SharedPrivateValue::Shared { shared: nego_param }
             ) => Ok(self
                 .shared
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
                 .req_stream(ctx, id, param, addr, nego_param)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map(|(stream, refresh, when)| {
@@ -944,13 +1009,18 @@ where
         name: &str
     ) -> Option<Self::ChannelID> {
         self.private
-            .channel_id(name)
-            .map(|id| SharedPrivateValue::Private { private: id })
-            .or_else(|| {
-                self.shared
-                    .channel_id(name)
-                    .map(|id| SharedPrivateValue::Shared { shared: id })
-            })
+            .as_ref()
+            .and_then(|private| private
+                      .channel_id(name)
+                      .map(|id| SharedPrivateValue::Private { private: id }))
+            .or_else(|| self
+                     .shared
+                     .as_ref()
+                     .and_then(|private| private
+                               .channel_id(name)
+                               .map(|id| SharedPrivateValue::Shared {
+                                   shared: id
+                               })))
     }
 }
 
@@ -1002,9 +1072,13 @@ where
     > {
         match (
             self.private
+                .as_mut()
+                .ok_or(SharedPrivateError::Shutdown)?
                 .listen(ctx, tokens)
                 .map_err(|err| SharedPrivateError::Private { err: err })?,
             self.shared
+                .as_mut()
+                .ok_or(SharedPrivateError::Shutdown)?
                 .listen(ctx, tokens)
                 .map_err(|err| SharedPrivateError::Shared { err: err })?
         ) {
@@ -1232,57 +1306,97 @@ where
         channel: &Self::ChannelID,
         param: &Self::Param,
         session: Self::Stream
-    ) -> Result<RetryResult<()>, Self::ShutdownStreamError> {
+    ) -> Result<
+        RetryResult<(
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
+        Self::ShutdownStreamError
+    > {
         match (channel, param, session) {
             (
                 SharedPrivateValue::Private { private: id },
                 SharedPrivateValue::Private { private: param },
                 SharedPrivateChannelStream::Private { stream }
-            ) => self
+            ) => Ok(self
                 .private
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
                 .shutdown_stream(ctx, id, param, stream)
-                .map_err(|err| SharedPrivateMatchError::Private { err: err }),
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
+                .map(|(params, when)| {
+                    let params = params
+                        .map(|params| params
+                             .into_iter()
+                             .map(|param| SharedPrivateValue::Private {
+                                 private: param
+                             })
+                             .collect());
+
+                    (params, when)
+                })),
             (
                 SharedPrivateValue::Shared { shared: id },
                 SharedPrivateValue::Shared { shared: param },
                 SharedPrivateChannelStream::Shared { stream, .. }
-            ) => self
+            ) => Ok(self
                 .shared
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
                 .shutdown_stream(ctx, id, param, stream)
-                .map_err(|err| SharedPrivateMatchError::Shared { err: err }),
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
+                .map(|(params, when)| {
+                    let params = params
+                        .map(|params| params
+                             .into_iter()
+                             .map(|param| SharedPrivateValue::Shared {
+                                 shared: param
+                             })
+                             .collect());
+
+                    (params, when)
+                })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
     }
 
-    fn shutdown(
-        self,
-        ctx: &mut Ctx
-    ) -> Result<(), Self::ShutdownError> {
-        self.private
-            .shutdown(ctx)
-            .map_err(|err| SharedPrivateError::Private { err: err })?;
-        self.shared
-            .shutdown(ctx)
-            .map_err(|err| SharedPrivateError::Shared { err: err })?;
-
-        Ok(())
-    }
-
     fn shutdown_listen(
-        &mut self,
+        mut self,
         ctx: &mut Ctx,
         tokens: &HashSet<Token>
-    ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
-        self.private
-            .shutdown_listen(ctx, tokens)
-            .map_err(|err| SharedPrivateError::Private { err: err })?
-            .flat_map_ok(|private| {
-                Ok(self
-                    .shared
-                    .shutdown_listen(ctx, tokens)
-                    .map_err(|err| SharedPrivateError::Shared { err: err })?
-                    .map(|shared| shared && private))
-            })
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
+        let private_when = if let Some(private) = self.private.take() {
+            if let Some((private, when)) = private
+                .shutdown_listen(ctx, tokens)
+                .map_err(|err| SharedPrivateError::Private { err: err })? {
+                self.private = Some(private);
+
+                when
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let shared_when = if let Some(private) = self.private.take() {
+            if let Some((private, when)) = private
+                .shutdown_listen(ctx, tokens)
+                .map_err(|err| SharedPrivateError::Private { err: err })? {
+                self.private = Some(private);
+
+                when
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if self.private.is_some() || self.shared.is_some() {
+            Ok(Some((self, next_retry(&private_when, &shared_when))))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1846,6 +1960,9 @@ where
             }
             SharedPrivateMatchError::Mismatch => {
                 (None, Some(SharedPrivateMatchError::Mismatch))
+            }
+            SharedPrivateMatchError::Shutdown => {
+                (None, Some(SharedPrivateMatchError::Shutdown))
             }
         }
     }
@@ -3400,7 +3517,9 @@ where
     ) -> Result<(), Error> {
         match self {
             SharedPrivateError::Private { err } => err.fmt(f),
-            SharedPrivateError::Shared { err } => err.fmt(f)
+            SharedPrivateError::Shared { err } => err.fmt(f),
+            SharedPrivateError::Shutdown =>
+                write!(f, "stream is partially shut down")
         }
     }
 }
@@ -3421,6 +3540,8 @@ where
             SharedPrivateMatchError::Mismatch => {
                 write!(f, "mismatched param and addr")
             }
+            SharedPrivateMatchError::Shutdown =>
+                write!(f, "stream is partially shut down")
         }
     }
 }

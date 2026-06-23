@@ -55,7 +55,9 @@ pub struct TestChannelParam {
 pub struct TestStream<Stream> {
     id: TestStreamID,
     stream: Stream,
-    shutdown: Vec<Result<RetryResult<()>, TestChannelsError>>
+    shutdown: Vec<Result<RetryResult<(Option<Vec<TestChannelParam>>,
+                                      Option<Instant>)>,
+                         TestChannelsError>>
 }
 
 #[derive(Debug)]
@@ -89,10 +91,11 @@ pub struct TestChannels<Stream> {
             TestChannelsError
         >
     >,
-    shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>,
+    shutdown_listen: Vec<Result<Option<Option<Instant>>, TestChannelsError>>,
     pub actives: HashMap<
         (String, TestChannelParam),
-        Vec<Result<RetryResult<()>, TestChannelsError>>
+        Vec<Result<RetryResult<(Option<Vec<TestChannelParam>>,
+                                Option<Instant>)>, TestChannelsError>>
     >
 }
 
@@ -119,7 +122,7 @@ pub struct TestChannelsScript<Stream> {
             TestChannelsError
         >
     >,
-    pub shutdown_listen: Vec<Result<RetryResult<bool>, TestChannelsError>>
+    pub shutdown_listen: Vec<Result<Option<Option<Instant>>, TestChannelsError>>
 }
 
 impl ChannelParam<TestEndpoint> for TestChannelParam {
@@ -394,7 +397,13 @@ where
         channel: &Self::ChannelID,
         param: &Self::Param,
         _session: Self::Stream
-    ) -> Result<RetryResult<()>, Self::ShutdownStreamError> {
+    ) -> Result<
+        RetryResult<(
+            Option<Vec<Self::Param>>,
+            Option<Instant>
+        )>,
+        Self::ShutdownStreamError
+    > {
         self.actives
             .get_mut(&(channel.clone(), param.clone()))
             .expect("Stream not active")
@@ -402,21 +411,15 @@ where
             .expect("Expected scripted action")
     }
 
-    fn shutdown(
-        self,
-        _ctx: &mut Ctx
-    ) -> Result<(), Self::ShutdownError> {
-        Ok(())
-    }
-
     fn shutdown_listen(
-        &mut self,
+        mut self,
         _ctx: &mut Ctx,
         _tokens: &HashSet<Token>
-    ) -> Result<RetryResult<bool>, Self::ShutdownListenError> {
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
         self.shutdown_listen
             .pop()
             .expect("Expected scripted action")
+            .map(|res| res.map(|when| (self, when)))
     }
 }
 

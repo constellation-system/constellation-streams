@@ -891,9 +891,10 @@ where
     ) {
         let PollThread {
             pull_streams,
-            mut ctx,
+            ctx,
             ..
         } = self;
+        let PollThreadCtx { mut ctx, mut poll, mut channels } = ctx;
 
         info!(target: "poll-thread",
               "mio polling thread shutting down");
@@ -904,8 +905,8 @@ where
                    "shutting down stream {} with {}",
                    id, stream.prin());
 
-            if let Err(err) = ctx.channels.shutdown_stream(
-                &mut ctx.ctx,
+            if let Err(err) = channels.shutdown_stream(
+                &mut ctx,
                 id.channel(),
                 id.param(),
                 stream
@@ -916,30 +917,31 @@ where
             }
         }
 
-        let mut live = true;
+        let mut channels = Some(channels);
         let mut next = None;
 
         while {
             let now = Instant::now();
 
-            live && (next.is_some_and(|next: Instant| next < now) || {
+            channels.is_some() &&
+                (next.is_some_and(|next: Instant| next < now) || {
                 let duration = next.map(|next| next - now);
 
                 if let Some(duration) = &duration {
                     trace!(target: "poll-thread",
-                                "waiting for poll for {}.{:03}",
-                                duration.as_secs(), duration.subsec_millis());
+                           "waiting for poll for {}.{:03}",
+                           duration.as_secs(), duration.subsec_millis());
                 } else {
                     trace!(target: "poll-thread",
-                                "waiting for poll indefinitely");
+                           "waiting for poll indefinitely");
                 }
 
-                ctx.poll
+                poll
                     .poll(&mut events, duration)
                     .inspect_err(|err| {
                         error!(target: "poll-thread",
-                                    "error polling: {}",
-                                    err)
+                               "error polling: {}",
+                               err)
                     })
                     .is_ok()
             })
@@ -950,25 +952,28 @@ where
 
             next = None;
 
-            match ctx.channels.shutdown_listen(&mut ctx.ctx, &tokens) {
-                Ok(RetryResult::Success(res)) => {
-                    live = res;
-                }
-                Ok(RetryResult::Retry(when)) => next = Some(when),
-                Err(err) => {
-                    error!(target: "poll-thread",
-                           "error listening during shutdown: {}",
-                           err);
+            channels = if let Some(channels) = channels.take() {
+                match channels.shutdown_listen(&mut ctx, &tokens) {
+                    Ok(res) => res
+                       .map(|(channels, when)| {
+                           next = when;
 
-                    live = false;
+                           channels
+                       }),
+                    Err(err) => {
+                        error!(target: "poll-thread",
+                               "error listening during shutdown: {}",
+                               err);
+
+                        None
+                    }
                 }
+            } else {
+                error!(target: "poll-thread",
+                       "channels should not be empty here");
+
+                None
             }
-        }
-
-        if let Err(err) = ctx.channels.shutdown(&mut ctx.ctx) {
-            error!(target: "poll-thread",
-                   "error shutting down channels: {}",
-                   err);
         }
 
         info!(target: "poll-thread",
