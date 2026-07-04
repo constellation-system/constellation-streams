@@ -373,7 +373,6 @@ fn test_send_from_outbound_retry_add() {
     assert_eq!(next.next_outbound(), Some(when));
     assert_eq!(next.retry_pending(), Some(when));
     assert!(!next.has_completes());
-
     assert_eq!(
         stream
             .batches
@@ -485,7 +484,6 @@ fn test_send_from_outbound_retry_finish() {
     assert_eq!(next.next_outbound(), Some(when));
     assert_eq!(next.retry_pending(), Some(when));
     assert!(!next.has_completes());
-
     assert_eq!(
         stream
             .batches
@@ -603,7 +601,6 @@ fn test_send_from_outbound_retry_select_retry_create() {
     assert_eq!(next.next_outbound(), Some(later));
     assert_eq!(next.retry_pending(), Some(when));
     assert!(!next.has_completes());
-
     assert!(stream
         .batches
         .try_borrow()
@@ -1050,7 +1047,6 @@ fn test_send_from_outbound_retry_create_retry_add() {
     assert_eq!(next.next_outbound(), Some(later));
     assert_eq!(next.retry_pending(), Some(when));
     assert!(!next.has_completes());
-
     assert!(stream
         .batches
         .try_borrow()
@@ -1085,7 +1081,6 @@ fn test_send_from_outbound_retry_create_retry_add() {
     assert_eq!(next.next_outbound(), None);
     assert_eq!(next.retry_pending(), Some(when));
     assert!(!next.has_completes());
-
     assert_eq!(
         stream
             .batches
