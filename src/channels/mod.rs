@@ -139,7 +139,7 @@ pub trait Channels<Ctx> {
     /// Type of counterparty addresses to which to connect.
     type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of raw streams obtained from parameters.
-    type Stream: Clone;
+    type Stream;
     /// Type of errors that can occur when obtaining flows from a parameter.
     type ReqStreamError: Debug + Display + ScopedError;
 
@@ -303,7 +303,6 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
 pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     type ShutdownStreamError: Debug + Display + ScopedError;
     type ShutdownListenError: Debug + Display + ScopedError;
-    type ShutdownError: Debug + Display + ScopedError;
 
     /// Shut down a given stream.
     ///
@@ -769,7 +768,6 @@ impl<Ctx> ChannelsListen<Ctx> for NullChannels {
 }
 
 impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
-    type ShutdownError = Infallible;
     type ShutdownListenError = Infallible;
     type ShutdownStreamError = Infallible;
 
@@ -1289,8 +1287,6 @@ where
     Private: ChannelsShutdown<Ctx>,
     Shared: ChannelsShutdown<Ctx>
 {
-    type ShutdownError =
-        SharedPrivateError<Private::ShutdownError, Shared::ShutdownError>;
     type ShutdownListenError = SharedPrivateError<
         Private::ShutdownListenError,
         Shared::ShutdownListenError

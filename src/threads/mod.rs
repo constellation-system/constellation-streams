@@ -140,6 +140,11 @@ pub struct Tokens {
     freed: BinaryHeap<Token>
 }
 
+pub struct WithTokens<T> {
+    tokens: Tokens,
+    inner: T
+}
+
 pub(crate) enum LargeObjEntry<Stream, H, Ctx>
 where
     Stream: LargeObjOfferStream<H::HashID, Ctx>,
@@ -305,13 +310,57 @@ where
     }
 }
 
-impl Tokens {
+impl<T> WithTokens<T> {
     #[inline]
-    pub fn new() -> Tokens {
+    pub fn new(
+        inner: T
+    ) -> Self {
+        WithTokens {
+            tokens: Tokens::default(),
+            inner: inner,
+        }
+    }
+
+    #[inline]
+    pub fn inner(&self) -> &T {
+        &self.inner
+    }
+
+    #[inline]
+    pub fn inner_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+}
+
+impl<T> TokensCtx for WithTokens<T> {
+    #[inline]
+    fn token(&mut self) -> Token {
+        self.tokens.token()
+    }
+
+    #[inline]
+    fn free_token(
+        &mut self,
+        token: Token
+    ) {
+        self.tokens.free_token(token)
+    }
+}
+
+impl Default for Tokens {
+    #[inline]
+    fn default() -> Tokens {
         Tokens {
             freed: BinaryHeap::new(),
             curr: 0
         }
+    }
+}
+
+impl Tokens {
+    #[inline]
+    pub fn new() -> Tokens {
+        Tokens::default()
     }
 
     #[inline]

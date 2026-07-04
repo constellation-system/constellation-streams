@@ -494,6 +494,8 @@ where
                               "stream {} with {} was already present",
                               id, curr.prin());
 
+                        // XXX handle the retry case here
+
                         // Shut down the incoming stream.
                         if let Err(err) = self.ctx.channels.shutdown_stream(
                             &mut self.ctx.ctx,

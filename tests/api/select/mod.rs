@@ -22,6 +22,7 @@ use std::ops::Deref;
 use std::time::Instant;
 
 use constellation_common::config::Create;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::hashid::HashAlgo;
@@ -40,8 +41,6 @@ use constellation_streams::channels::test::TestChannels;
 use constellation_streams::channels::test::TestChannelsError;
 use constellation_streams::channels::test::TestChannelsScript;
 use constellation_streams::channels::test::TestStreamID;
-use constellation_streams::channels::Channels;
-use constellation_streams::channels::ChannelsCreate;
 use constellation_streams::config::ConnectionConfig;
 use constellation_streams::config::FarSchedulerConfig;
 use constellation_streams::config::PartyConfig;
@@ -68,7 +67,6 @@ use constellation_streams::stream::PushStreamAdd;
 use constellation_streams::stream::PushStreamPrivate;
 use constellation_streams::stream::PushStreamShared;
 use constellation_streams::stream::StreamRefresh;
-use constellation_streams::stream::StreamReporter;
 
 use crate::init;
 
@@ -92,7 +90,7 @@ where
         vec![test_endpoint]
     );
     let mut channels =
-        TestChannels::create(&mut (), channels, ()).expect("Expected success");
+        TestChannels::create(channels, &mut ()).expect("Expected success");
     let config = PartyConfig::new(
         FarSchedulerConfig::default(),
         resolve,
@@ -147,7 +145,7 @@ fn test_private_select_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -239,7 +237,7 @@ fn test_private_select_req_retry() {
                     test_stream_id,
                     Ok(RetryResult::Success((
                         Some(inner.clone()),
-                        false,
+                        None,
                         None
                     )))
                 ),
@@ -253,7 +251,7 @@ fn test_private_select_req_retry() {
     let res = stream.refresh(&mut channels).expect("Expected success");
 
     if let RetryResult::Success(when) = res {
-        assert_eq!(when, Some(now))
+        assert!(when.is_none())
     } else {
         panic!("Expected success");
     }
@@ -338,7 +336,7 @@ fn test_private_select_req_indef() {
         TestChannelsScript {
             req_streams: vec![(
                 test_stream_id,
-                Ok(RetryResult::Success((None, false, None)))
+                Ok(RetryResult::Success((None, None, None)))
             )],
             listen: vec![],
             shutdown_listen: vec![]
@@ -434,7 +432,7 @@ fn test_private_select_req_error() {
                     test_stream_id,
                     Ok(RetryResult::Success((
                         Some(inner.clone()),
-                        false,
+                        None,
                         None
                     )))
                 ),
@@ -534,7 +532,7 @@ fn test_private_create_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -632,7 +630,7 @@ fn test_private_create_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -742,7 +740,7 @@ fn test_private_create_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -846,7 +844,7 @@ fn test_private_create_batch_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -965,7 +963,7 @@ fn test_private_create_batch_complete_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1099,7 +1097,7 @@ fn test_private_create_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1227,7 +1225,7 @@ fn test_private_create_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1358,7 +1356,7 @@ fn test_private_start_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1447,7 +1445,7 @@ fn test_private_start_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1552,7 +1550,7 @@ fn test_private_start_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1650,7 +1648,7 @@ fn test_private_start_batch_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1766,7 +1764,7 @@ fn test_private_start_batch_complete_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -1897,7 +1895,7 @@ fn test_private_start_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2020,7 +2018,7 @@ fn test_private_start_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2143,7 +2141,7 @@ fn test_private_cancel_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2240,7 +2238,7 @@ fn test_private_cancel_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2357,7 +2355,7 @@ fn test_private_cancel_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2471,7 +2469,7 @@ fn test_private_cancel_batch_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2596,7 +2594,7 @@ fn test_private_cancel_batch_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2750,7 +2748,7 @@ fn test_private_cancel_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -2911,7 +2909,7 @@ fn test_private_cancel_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3046,7 +3044,7 @@ fn test_private_finish_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3143,7 +3141,7 @@ fn test_private_finish_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3259,7 +3257,7 @@ fn test_private_finish_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3373,7 +3371,7 @@ fn test_private_finish_batch_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3498,7 +3496,7 @@ fn test_private_finish_batch_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3652,7 +3650,7 @@ fn test_private_finish_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3813,7 +3811,7 @@ fn test_private_finish_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -3952,7 +3950,7 @@ fn test_private_abort_start_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4069,7 +4067,7 @@ fn test_private_abort_start_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4191,7 +4189,7 @@ fn test_private_add_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4290,7 +4288,7 @@ fn test_private_add_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4408,7 +4406,7 @@ fn test_private_add_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4522,7 +4520,7 @@ fn test_private_add_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4650,7 +4648,7 @@ fn test_private_add_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4806,7 +4804,7 @@ fn test_private_add_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -4970,7 +4968,7 @@ fn test_private_add_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5110,7 +5108,7 @@ fn test_private_frags_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5217,7 +5215,7 @@ fn test_private_frags_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5328,7 +5326,7 @@ fn test_private_frags_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5428,7 +5426,7 @@ fn test_private_frags_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5553,7 +5551,7 @@ fn test_private_frags_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5694,7 +5692,7 @@ fn test_private_frags_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5836,7 +5834,7 @@ fn test_private_frags_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -5961,7 +5959,7 @@ fn test_private_offer_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6079,7 +6077,7 @@ fn test_private_offer_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6191,7 +6189,7 @@ fn test_private_offer_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6290,7 +6288,7 @@ fn test_private_offer_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6417,7 +6415,7 @@ fn test_private_offer_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6555,7 +6553,7 @@ fn test_private_offer_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6699,7 +6697,7 @@ fn test_private_offer_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6818,7 +6816,7 @@ fn test_shared_select_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -6910,7 +6908,7 @@ fn test_shared_select_req_retry() {
                     test_stream_id,
                     Ok(RetryResult::Success((
                         Some(inner.clone()),
-                        false,
+                        None,
                         None
                     )))
                 ),
@@ -6924,7 +6922,7 @@ fn test_shared_select_req_retry() {
     let res = stream.refresh(&mut channels).expect("Expected success");
 
     if let RetryResult::Success(when) = res {
-        assert_eq!(when, Some(now))
+        assert!(when.is_none())
     } else {
         panic!("Expected success");
     }
@@ -7009,7 +7007,7 @@ fn test_shared_select_req_indef() {
         TestChannelsScript {
             req_streams: vec![(
                 test_stream_id,
-                Ok(RetryResult::Success((None, false, None)))
+                Ok(RetryResult::Success((None, None, None)))
             )],
             listen: vec![],
             shutdown_listen: vec![]
@@ -7105,7 +7103,7 @@ fn test_shared_select_req_error() {
                     test_stream_id,
                     Ok(RetryResult::Success((
                         Some(inner.clone()),
-                        false,
+                        None,
                         None
                     )))
                 ),
@@ -7205,7 +7203,7 @@ fn test_shared_create_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7306,7 +7304,7 @@ fn test_shared_create_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7420,7 +7418,7 @@ fn test_shared_create_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7526,7 +7524,7 @@ fn test_shared_create_batch_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7650,7 +7648,7 @@ fn test_shared_create_batch_complete_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7789,7 +7787,7 @@ fn test_shared_create_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -7919,7 +7917,7 @@ fn test_shared_create_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8055,7 +8053,7 @@ fn test_shared_start_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8149,7 +8147,7 @@ fn test_shared_start_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8258,7 +8256,7 @@ fn test_shared_start_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8356,7 +8354,7 @@ fn test_shared_start_batch_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8475,7 +8473,7 @@ fn test_shared_start_batch_complete_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8609,7 +8607,7 @@ fn test_shared_start_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8732,7 +8730,7 @@ fn test_shared_start_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8858,7 +8856,7 @@ fn test_shared_cancel_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -8957,7 +8955,7 @@ fn test_shared_cancel_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9078,7 +9076,7 @@ fn test_shared_cancel_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9200,7 +9198,7 @@ fn test_shared_cancel_batch_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9330,7 +9328,7 @@ fn test_shared_cancel_batch_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9495,7 +9493,7 @@ fn test_shared_cancel_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9667,7 +9665,7 @@ fn test_shared_cancel_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9813,7 +9811,7 @@ fn test_shared_finish_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -9915,7 +9913,7 @@ fn test_shared_finish_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10039,7 +10037,7 @@ fn test_shared_finish_batch_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10161,7 +10159,7 @@ fn test_shared_finish_batch_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10294,7 +10292,7 @@ fn test_shared_finish_batch_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10462,7 +10460,7 @@ fn test_shared_finish_batch_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10637,7 +10635,7 @@ fn test_shared_finish_batch_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10787,7 +10785,7 @@ fn test_shared_abort_start_batch_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -10904,7 +10902,7 @@ fn test_shared_abort_start_batch_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11026,7 +11024,7 @@ fn test_shared_add_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11128,7 +11126,7 @@ fn test_shared_add_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11252,7 +11250,7 @@ fn test_shared_add_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11374,7 +11372,7 @@ fn test_shared_add_complete_success() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11508,7 +11506,7 @@ fn test_shared_add_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11682,7 +11680,7 @@ fn test_shared_add_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -11858,7 +11856,7 @@ fn test_shared_add_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12009,7 +12007,7 @@ fn test_shared_frags_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12116,7 +12114,7 @@ fn test_shared_frags_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12227,7 +12225,7 @@ fn test_shared_frags_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12327,7 +12325,7 @@ fn test_shared_frags_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12452,7 +12450,7 @@ fn test_shared_frags_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12593,7 +12591,7 @@ fn test_shared_frags_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12735,7 +12733,7 @@ fn test_shared_frags_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12860,7 +12858,7 @@ fn test_shared_offer_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -12978,7 +12976,7 @@ fn test_shared_offer_retry_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -13090,7 +13088,7 @@ fn test_shared_offer_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -13189,7 +13187,7 @@ fn test_shared_offer_complete_succeed() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -13316,7 +13314,7 @@ fn test_shared_offer_complete_retry() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -13454,7 +13452,7 @@ fn test_shared_offer_complete_complete() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]
@@ -13598,7 +13596,7 @@ fn test_shared_offer_complete_permanent() {
     let channels = TestChannelsScript {
         req_streams: vec![(
             test_stream_id,
-            Ok(RetryResult::Success((Some(inner.clone()), false, None)))
+            Ok(RetryResult::Success((Some(inner.clone()), None, None)))
         )],
         listen: vec![],
         shutdown_listen: vec![]

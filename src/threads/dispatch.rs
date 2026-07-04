@@ -705,18 +705,26 @@ where
                 warn!(target: "dispatch-entry",
                       "stream {} with {} was already present",
                       id, stream.prin());
-
-                if let Err(err) = ctx.channels.shutdown_stream(
+/*
+                // XXX handle the retry case here
+                match ctx.channels.shutdown_stream(
                     &mut ctx.ctx,
                     id.channel(),
                     id.param(),
                     stream
                 ) {
-                    error!(target: "dispatch-thread",
-                           "error shutting down stream {}: {}",
-                           id, err);
+                    Ok(RetryResult::Success(res)) =>
+                        if let Some((stream, when)) = res {
+                        },
+                    Ok(RetryResult::Retry(when)) => {
+                    }
+                    Err(err) => {
+                        error!(target: "dispatch-thread",
+                               "error shutting down stream {}: {}",
+                               id, err);
+                    }
                 }
-
+*/
                 existing
             }
             None => stream

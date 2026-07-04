@@ -387,7 +387,6 @@ impl<Stream, Ctx> ChannelsShutdown<Ctx> for TestChannels<Stream>
 where
     Stream: Clone
 {
-    type ShutdownError = Infallible;
     type ShutdownListenError = TestChannelsError;
     type ShutdownStreamError = TestChannelsError;
 
