@@ -114,8 +114,9 @@ fn test_send_from_outbound_offer_succeed() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -154,8 +155,9 @@ fn test_send_from_outbound_offer_succeed() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -247,8 +249,9 @@ fn test_send_from_outbound_offer_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -280,7 +283,9 @@ fn test_send_from_outbound_offer_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -319,8 +324,9 @@ fn test_send_from_outbound_offer_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -412,8 +418,9 @@ fn test_send_from_outbound_offer_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -445,7 +452,9 @@ fn test_send_from_outbound_offer_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -484,8 +493,9 @@ fn test_send_from_outbound_offer_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -579,8 +589,9 @@ fn test_send_from_outbound_offer_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -619,8 +630,9 @@ fn test_send_from_outbound_offer_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -714,8 +726,9 @@ fn test_send_from_outbound_offer_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -747,7 +760,9 @@ fn test_send_from_outbound_offer_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -786,8 +801,9 @@ fn test_send_from_outbound_offer_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -873,8 +889,9 @@ fn test_send_from_outbound_offer_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -965,8 +982,9 @@ fn test_send_from_outbound_offer_retry_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -998,8 +1016,9 @@ fn test_send_from_outbound_offer_retry_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1031,7 +1050,9 @@ fn test_send_from_outbound_offer_retry_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1070,8 +1091,9 @@ fn test_send_from_outbound_offer_retry_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1172,8 +1194,9 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1205,7 +1228,9 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1244,8 +1269,9 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1346,8 +1372,9 @@ fn test_send_from_outbound_offer_retry_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1379,8 +1406,9 @@ fn test_send_from_outbound_offer_retry_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1412,7 +1440,9 @@ fn test_send_from_outbound_offer_retry_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1451,8 +1481,9 @@ fn test_send_from_outbound_offer_retry_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1549,8 +1580,9 @@ fn test_send_from_outbound_offer_retry_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1582,8 +1614,9 @@ fn test_send_from_outbound_offer_retry_indef() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1615,7 +1648,9 @@ fn test_send_from_outbound_offer_retry_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1654,8 +1689,9 @@ fn test_send_from_outbound_offer_retry_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1748,8 +1784,9 @@ fn test_send_from_outbound_offer_retry_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1781,8 +1818,9 @@ fn test_send_from_outbound_offer_retry_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1869,8 +1907,9 @@ fn test_send_from_outbound_offer_indef_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1902,8 +1941,9 @@ fn test_send_from_outbound_offer_indef_retry() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1935,7 +1975,9 @@ fn test_send_from_outbound_offer_indef_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -1974,8 +2016,9 @@ fn test_send_from_outbound_offer_indef_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2068,8 +2111,9 @@ fn test_send_from_outbound_offer_indef_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2101,8 +2145,9 @@ fn test_send_from_outbound_offer_indef_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2134,7 +2179,9 @@ fn test_send_from_outbound_offer_indef_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2173,8 +2220,9 @@ fn test_send_from_outbound_offer_indef_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2272,8 +2320,9 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2305,7 +2354,9 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2344,8 +2395,9 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2442,8 +2494,9 @@ fn test_send_from_outbound_offer_indef_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2475,8 +2528,9 @@ fn test_send_from_outbound_offer_indef_complete() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2508,7 +2562,9 @@ fn test_send_from_outbound_offer_indef_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2547,8 +2603,9 @@ fn test_send_from_outbound_offer_indef_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2644,8 +2701,9 @@ fn test_send_from_outbound_offer_indef_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2677,8 +2735,9 @@ fn test_send_from_outbound_offer_indef_permanent() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2771,8 +2830,9 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2804,7 +2864,9 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2843,8 +2905,9 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2943,8 +3006,9 @@ fn test_send_from_outbound_offer_complete_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -2976,8 +3040,9 @@ fn test_send_from_outbound_offer_complete_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3009,7 +3074,9 @@ fn test_send_from_outbound_offer_complete_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3048,8 +3115,9 @@ fn test_send_from_outbound_offer_complete_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3146,8 +3214,9 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3179,7 +3248,9 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3218,8 +3289,9 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3316,8 +3388,9 @@ fn test_send_from_outbound_offer_complete_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3349,8 +3422,9 @@ fn test_send_from_outbound_offer_complete_indef() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3382,7 +3456,9 @@ fn test_send_from_outbound_offer_complete_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3421,8 +3497,9 @@ fn test_send_from_outbound_offer_complete_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3523,7 +3600,9 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3562,8 +3641,9 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3664,8 +3744,9 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3697,7 +3778,9 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3736,8 +3819,9 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3838,8 +3922,9 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3871,7 +3956,9 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -3910,8 +3997,9 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4012,8 +4100,9 @@ fn test_send_from_outbound_offer_complete_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4045,8 +4134,9 @@ fn test_send_from_outbound_offer_complete_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4078,7 +4168,9 @@ fn test_send_from_outbound_offer_complete_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4117,8 +4209,9 @@ fn test_send_from_outbound_offer_complete_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4218,8 +4311,9 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4255,8 +4349,9 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4353,8 +4448,9 @@ fn test_send_from_outbound_offer_complete_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4390,8 +4486,9 @@ fn test_send_from_outbound_offer_complete_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4480,7 +4577,9 @@ fn test_send_from_outbound_frags_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4519,8 +4618,9 @@ fn test_send_from_outbound_frags_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4555,8 +4655,9 @@ fn test_send_from_outbound_frags_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4648,7 +4749,9 @@ fn test_send_from_outbound_frags_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4687,8 +4790,9 @@ fn test_send_from_outbound_frags_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4723,8 +4827,9 @@ fn test_send_from_outbound_frags_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4818,8 +4923,9 @@ fn test_send_from_outbound_frags_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4858,8 +4964,9 @@ fn test_send_from_outbound_frags_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4953,7 +5060,9 @@ fn test_send_from_outbound_frags_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -4992,8 +5101,9 @@ fn test_send_from_outbound_frags_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5028,8 +5138,9 @@ fn test_send_from_outbound_frags_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5122,7 +5233,9 @@ fn test_send_from_outbound_frags_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5161,7 +5274,9 @@ fn test_send_from_outbound_frags_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
 
     assert!(stream
         .batches
@@ -5256,7 +5371,9 @@ fn test_send_from_outbound_frags_retry_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5294,8 +5411,10 @@ fn test_send_from_outbound_frags_retry_retry() {
     let next = mode
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
-    assert_eq!(next, None);
 
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5330,8 +5449,9 @@ fn test_send_from_outbound_frags_retry_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5366,8 +5486,9 @@ fn test_send_from_outbound_frags_retry_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5468,7 +5589,9 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5507,8 +5630,9 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5543,8 +5667,9 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5645,7 +5770,9 @@ fn test_send_from_outbound_frags_retry_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5684,8 +5811,9 @@ fn test_send_from_outbound_frags_retry_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5720,8 +5848,9 @@ fn test_send_from_outbound_frags_retry_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5756,8 +5885,9 @@ fn test_send_from_outbound_frags_retry_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5854,7 +5984,9 @@ fn test_send_from_outbound_frags_retry_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5893,8 +6025,9 @@ fn test_send_from_outbound_frags_retry_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5929,8 +6062,9 @@ fn test_send_from_outbound_frags_retry_indef() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -5965,8 +6099,9 @@ fn test_send_from_outbound_frags_retry_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6066,7 +6201,9 @@ fn test_send_from_outbound_frags_retry_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6105,8 +6242,9 @@ fn test_send_from_outbound_frags_retry_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6141,8 +6279,9 @@ fn test_send_from_outbound_frags_retry_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6232,7 +6371,9 @@ fn test_send_from_outbound_frags_indef_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6271,8 +6412,9 @@ fn test_send_from_outbound_frags_indef_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6307,8 +6449,9 @@ fn test_send_from_outbound_frags_indef_retry() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6343,8 +6486,9 @@ fn test_send_from_outbound_frags_indef_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6437,7 +6581,9 @@ fn test_send_from_outbound_frags_indef_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6476,8 +6622,9 @@ fn test_send_from_outbound_frags_indef_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6512,8 +6659,9 @@ fn test_send_from_outbound_frags_indef_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6548,8 +6696,9 @@ fn test_send_from_outbound_frags_indef_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6646,7 +6795,9 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6685,8 +6836,9 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6721,8 +6873,9 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6819,7 +6972,9 @@ fn test_send_from_outbound_frags_indef_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6858,8 +7013,9 @@ fn test_send_from_outbound_frags_indef_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6894,8 +7050,9 @@ fn test_send_from_outbound_frags_indef_complete() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -6930,8 +7087,9 @@ fn test_send_from_outbound_frags_indef_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7027,7 +7185,9 @@ fn test_send_from_outbound_frags_indef_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7066,8 +7226,9 @@ fn test_send_from_outbound_frags_indef_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7102,8 +7263,9 @@ fn test_send_from_outbound_frags_indef_permanent() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7199,7 +7361,9 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7238,8 +7402,9 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7274,8 +7439,9 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7374,7 +7540,9 @@ fn test_send_from_outbound_frags_complete_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7413,8 +7581,9 @@ fn test_send_from_outbound_frags_complete_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7449,8 +7618,9 @@ fn test_send_from_outbound_frags_complete_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(now));
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7485,8 +7655,9 @@ fn test_send_from_outbound_frags_complete_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7583,7 +7754,9 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7622,8 +7795,9 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7658,8 +7832,9 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7756,7 +7931,9 @@ fn test_send_from_outbound_frags_complete_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(when));
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7795,8 +7972,9 @@ fn test_send_from_outbound_frags_complete_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7831,8 +8009,9 @@ fn test_send_from_outbound_frags_complete_indef() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7867,8 +8046,9 @@ fn test_send_from_outbound_frags_complete_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -7971,7 +8151,9 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8010,8 +8192,9 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8114,7 +8297,9 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8153,8 +8338,9 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8189,8 +8375,9 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8293,7 +8480,9 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8332,8 +8521,9 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8368,8 +8558,9 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8472,7 +8663,9 @@ fn test_send_from_outbound_frags_complete_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8511,8 +8704,9 @@ fn test_send_from_outbound_frags_complete_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8547,8 +8741,9 @@ fn test_send_from_outbound_frags_complete_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8583,8 +8778,9 @@ fn test_send_from_outbound_frags_complete_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(later));
-
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8684,7 +8880,9 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8723,8 +8921,9 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8772,7 +8971,7 @@ fn test_send_from_outbound_frags_complete_permanent() {
         add: vec![],
         push_frags: vec![Err(TestError::Completable {
             err: TestCompletableError {
-                scope: ErrorScope::Retryable,
+                scope: ErrorScope::WouldBlock,
                 action: TestIndefAction::Error {
                     err: Box::new(TestError::Permanent {
                         err: TestPermanentError {
@@ -8821,7 +9020,9 @@ fn test_send_from_outbound_frags_complete_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, Some(now));
+    assert_eq!(next.next_outbound(), Some(now));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8860,8 +9061,9 @@ fn test_send_from_outbound_frags_complete_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8896,8 +9098,9 @@ fn test_send_from_outbound_frags_complete_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -8986,8 +9189,9 @@ fn test_send_from_outbound_msg_succeed() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9088,8 +9292,9 @@ fn test_send_from_outbound_msg_select_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -9121,8 +9326,9 @@ fn test_send_from_outbound_msg_select_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9223,8 +9429,9 @@ fn test_send_from_outbound_msg_create_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -9256,8 +9463,9 @@ fn test_send_from_outbound_msg_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9358,8 +9566,9 @@ fn test_send_from_outbound_msg_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9394,8 +9603,9 @@ fn test_send_from_outbound_msg_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9496,8 +9706,9 @@ fn test_send_from_outbound_msg_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9538,8 +9749,9 @@ fn test_send_from_outbound_msg_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9643,8 +9855,9 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -9676,8 +9889,9 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -9709,8 +9923,9 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9814,8 +10029,9 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -9847,8 +10063,9 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9883,8 +10100,9 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -9988,8 +10206,9 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10021,8 +10240,9 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10063,8 +10283,9 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10168,8 +10389,9 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10201,8 +10423,9 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10237,8 +10460,9 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10342,8 +10566,9 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10375,8 +10600,9 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10417,8 +10643,9 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10522,8 +10749,9 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10558,8 +10786,9 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10600,8 +10829,9 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10707,8 +10937,9 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10740,8 +10971,9 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -10847,8 +11079,9 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10880,8 +11113,9 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -10913,8 +11147,9 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11020,8 +11255,9 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11053,8 +11289,9 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11160,8 +11397,9 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11193,8 +11431,9 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11229,8 +11468,9 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11336,8 +11576,9 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11369,8 +11610,9 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11476,8 +11718,9 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11509,8 +11752,9 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11551,8 +11795,9 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11658,8 +11903,9 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11691,8 +11937,9 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11798,8 +12045,9 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -11831,8 +12079,9 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11867,8 +12116,9 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -11974,8 +12224,9 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -12007,8 +12258,9 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12114,8 +12366,9 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -12147,8 +12400,9 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12189,8 +12443,9 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12296,8 +12551,9 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12332,8 +12588,9 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12439,8 +12696,9 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12475,8 +12733,9 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12517,8 +12776,9 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12623,8 +12883,9 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -12656,8 +12917,9 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12764,8 +13026,9 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -12797,8 +13060,9 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -12905,8 +13169,9 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -12938,8 +13203,9 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13046,8 +13312,9 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13079,8 +13346,9 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13187,8 +13455,9 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13220,8 +13489,9 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13328,8 +13598,9 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13364,12 +13635,9 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    let next = mode
-        .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
-        .expect("Expected success");
-
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13469,8 +13737,9 @@ fn test_send_from_outbound_msg_select_indef() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13502,8 +13771,9 @@ fn test_send_from_outbound_msg_select_indef() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13607,8 +13877,9 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13640,8 +13911,9 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13673,8 +13945,9 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13778,8 +14051,9 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13811,8 +14085,9 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13847,8 +14122,9 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -13952,8 +14228,9 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -13985,8 +14262,9 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14027,8 +14305,9 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14131,8 +14410,9 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14164,8 +14444,9 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14268,8 +14549,9 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14301,8 +14583,9 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14334,8 +14617,9 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14438,8 +14722,9 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14471,8 +14756,9 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14485,7 +14771,7 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
                 size: size as u64,
                 hash: hash
             }]
-        },]
+        }]
     );
     assert!(stream
         .frags
@@ -14575,8 +14861,9 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14608,8 +14895,9 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14644,8 +14932,9 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14748,8 +15037,9 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14781,8 +15071,9 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14885,8 +15176,9 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -14918,8 +15210,9 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
         .retry_indefs(&mut (), &mut proto, &mut stream)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -14960,8 +15253,9 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15061,8 +15355,9 @@ fn test_send_from_outbound_msg_select_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15162,8 +15457,9 @@ fn test_send_from_outbound_msg_select_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -15195,8 +15491,9 @@ fn test_send_from_outbound_msg_select_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15296,8 +15593,9 @@ fn test_send_from_outbound_msg_create_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15397,8 +15695,9 @@ fn test_send_from_outbound_msg_create_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -15430,8 +15729,9 @@ fn test_send_from_outbound_msg_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15531,8 +15831,9 @@ fn test_send_from_outbound_msg_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15632,8 +15933,9 @@ fn test_send_from_outbound_msg_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15668,8 +15970,9 @@ fn test_send_from_outbound_msg_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15769,8 +16072,9 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15870,8 +16174,9 @@ fn test_send_from_outbound_msg_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -15912,8 +16217,9 @@ fn test_send_from_outbound_msg_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16019,8 +16325,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -16052,8 +16359,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16159,8 +16467,9 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -16192,8 +16501,9 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -16225,8 +16535,9 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16332,8 +16643,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16368,8 +16680,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16475,8 +16788,9 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -16508,8 +16822,9 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16544,8 +16859,9 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16651,8 +16967,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16693,8 +17010,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16800,8 +17118,9 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -16833,8 +17152,9 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16875,8 +17195,9 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -16982,8 +17303,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17018,8 +17340,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17125,8 +17448,9 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -17158,8 +17482,9 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17194,8 +17519,9 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17301,8 +17627,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17343,8 +17670,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17450,8 +17778,9 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -17483,8 +17812,9 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17525,8 +17855,9 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17632,8 +17963,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17674,8 +18006,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17781,8 +18114,9 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17817,8 +18151,9 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17859,8 +18194,9 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -17965,8 +18301,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18071,8 +18408,9 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18104,8 +18442,9 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18210,8 +18549,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18243,8 +18583,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18349,8 +18690,9 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18382,8 +18724,9 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18415,8 +18758,9 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18521,8 +18865,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18627,8 +18972,9 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18660,8 +19006,9 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18766,8 +19113,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18802,8 +19150,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18908,8 +19257,9 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -18941,8 +19291,9 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -18977,8 +19328,9 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19083,8 +19435,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19189,8 +19542,9 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(!next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -19222,8 +19576,9 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19328,8 +19683,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19370,8 +19726,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19476,8 +19833,9 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -19509,8 +19867,9 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19551,8 +19910,9 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19657,8 +20017,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19763,8 +20124,9 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -19796,8 +20158,9 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19902,8 +20265,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -19938,8 +20302,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20044,8 +20409,9 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -20077,8 +20443,9 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20113,8 +20480,9 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20219,8 +20587,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20325,8 +20694,9 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -20358,8 +20728,9 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20464,8 +20835,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20506,8 +20878,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20612,8 +20985,9 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -20645,8 +21019,9 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20687,8 +21062,9 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20793,8 +21169,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20899,8 +21276,9 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -20935,8 +21313,9 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21041,8 +21420,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21083,8 +21463,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21189,8 +21570,9 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21225,8 +21607,9 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21267,8 +21650,9 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21372,8 +21756,9 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21479,8 +21864,9 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -21512,8 +21898,9 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21619,8 +22006,9 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21726,8 +22114,9 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -21759,8 +22148,9 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21866,8 +22256,9 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -21973,8 +22364,9 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -22006,8 +22398,9 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22113,8 +22506,9 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22220,8 +22614,9 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -22253,8 +22648,9 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22360,8 +22756,9 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22467,8 +22864,9 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -22500,8 +22898,9 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22607,8 +23006,9 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22714,8 +23114,9 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22750,8 +23151,9 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -22852,8 +23254,9 @@ fn test_send_from_outbound_msg_select_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert!(stream
         .batches
         .try_borrow()
@@ -22948,8 +23351,9 @@ fn test_send_from_outbound_msg_create_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23058,8 +23462,9 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23102,8 +23507,9 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23204,8 +23610,9 @@ fn test_send_from_outbound_msg_add_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23311,8 +23718,9 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23355,8 +23763,9 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23462,8 +23871,9 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23569,8 +23979,9 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23613,8 +24024,9 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23719,8 +24131,9 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23821,8 +24234,9 @@ fn test_send_from_outbound_msg_finish_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23928,8 +24342,9 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_some());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -23978,8 +24393,9 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, when)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -24085,8 +24501,9 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -24192,8 +24609,9 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
-
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -24242,8 +24660,9 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
         .complete_pending(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert_eq!(next, None);
-
+    assert!(next.next_outbound().is_none());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
     assert_eq!(
         stream
             .batches
@@ -24348,7 +24767,9 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
         .send_from_outbound(&mut (), &mut proto, &mut stream, &tokens)
         .expect("Expected success");
 
-    assert!(next.is_some());
+    assert!(next.next_outbound().is_some());
+    assert!(next.retry_pending().is_none());
+    assert!(!next.has_completes());
 
     assert_eq!(
         stream

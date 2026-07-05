@@ -1763,6 +1763,8 @@ where
 
                     self.msgs_completes = Some(vec);
                 }
+
+                next.set_has_completes();
             } else {
                 trace!(target: "private-large-obj-push-mode",
                        "completing error immediately");
@@ -1869,6 +1871,8 @@ where
 
                     self.frags_completes = Some(vec);
                 }
+
+                next.set_has_completes();
             } else {
                 trace!(target: "private-large-obj-push-mode",
                        "completing error immediately");
