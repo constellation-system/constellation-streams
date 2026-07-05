@@ -312,12 +312,10 @@ where
 
 impl<T> WithTokens<T> {
     #[inline]
-    pub fn new(
-        inner: T
-    ) -> Self {
+    pub fn new(inner: T) -> Self {
         WithTokens {
             tokens: Tokens::default(),
-            inner: inner,
+            inner: inner
         }
     }
 
@@ -397,7 +395,7 @@ impl TokensCtx for Tokens {
             while self
                 .freed
                 .peek()
-                .map_or(false, |head| head.0 + 1 == self.curr)
+                .is_some_and(|head| head.0 + 1 == self.curr)
             {
                 self.curr -= 1;
 

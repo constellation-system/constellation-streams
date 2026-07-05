@@ -17,10 +17,10 @@ fn load_files(
         } else {
             match path.as_os_str().to_os_string().into_string() {
                 Ok(path) if path.ends_with(".asn1") => {
-                    println!("cargo:rerun-if-changed={}", &path);
+                    println!("cargo:rerun-if-changed={}", path);
 
                     if let Err(e) = converter.load_file(&path) {
-                        panic!("Couldn't load {}: {:?}", &path, e);
+                        panic!("Couldn't load {}: {:?}", path, e);
                     }
                 }
                 _ => {}

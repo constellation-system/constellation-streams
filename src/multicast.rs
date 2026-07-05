@@ -1496,7 +1496,7 @@ where
 
                 for (_, res) in elems.into_iter() {
                     if let RetryResult::Success(when) = &res {
-                        min = next_retry(&min, &when);
+                        min = next_retry(&min, when);
                     } else {
                         all_success = false
                     }
@@ -3598,7 +3598,6 @@ where
                         // We're good; add this to the output.
                         Ok(res) => {
                             let res = res.map(|(res, _)| res).map_indef(|_| ());
-                            let res = RetryIndefResult::from(res);
 
                             results.push((Idx::from(i), res))
                         }
@@ -3659,7 +3658,6 @@ where
                 // We're good; add this to the output.
                 Ok(res) => {
                     let res = res.map(|(res, _)| res).map_indef(|_| ());
-                    let res = RetryIndefResult::from(res);
 
                     results.push((Idx::from(i), res))
                 }

@@ -134,7 +134,7 @@ impl Addrs for TestAddrs {
 
     #[inline]
     fn refresh_when(&self) -> Option<Instant> {
-        self.curr.as_ref().and_then(|(_, when, _)| when.clone())
+        self.curr.as_ref().and_then(|(_, when, _)| *when)
     }
 
     fn addrs(
@@ -151,7 +151,7 @@ impl Addrs for TestAddrs {
             _ => match self.addrs.pop().expect("Expected scripted action")? {
                 RetryResult::Success((mut addrs, when)) => {
                     addrs.retain(|(_, origin)| self.origins.contains(origin));
-                    self.curr = Some((addrs, when.clone(), now));
+                    self.curr = Some((addrs, when, now));
 
                     if let Some((addrs, _, _)) = &self.curr {
                         (addrs, when, now)

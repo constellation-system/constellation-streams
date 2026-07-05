@@ -55,9 +55,12 @@ pub struct TestChannelParam {
 pub struct TestStream<Stream> {
     id: TestStreamID,
     stream: Stream,
-    shutdown: Vec<Result<RetryResult<(Option<Vec<TestChannelParam>>,
-                                      Option<Instant>)>,
-                         TestChannelsError>>
+    shutdown: Vec<
+        Result<
+            RetryResult<(Option<Vec<TestChannelParam>>, Option<Instant>)>,
+            TestChannelsError
+        >
+    >
 }
 
 #[derive(Debug)]
@@ -94,8 +97,12 @@ pub struct TestChannels<Stream> {
     shutdown_listen: Vec<Result<Option<Option<Instant>>, TestChannelsError>>,
     pub actives: HashMap<
         (String, TestChannelParam),
-        Vec<Result<RetryResult<(Option<Vec<TestChannelParam>>,
-                                Option<Instant>)>, TestChannelsError>>
+        Vec<
+            Result<
+                RetryResult<(Option<Vec<TestChannelParam>>, Option<Instant>)>,
+                TestChannelsError
+            >
+        >
     >
 }
 
@@ -122,7 +129,8 @@ pub struct TestChannelsScript<Stream> {
             TestChannelsError
         >
     >,
-    pub shutdown_listen: Vec<Result<Option<Option<Instant>>, TestChannelsError>>
+    pub shutdown_listen:
+        Vec<Result<Option<Option<Instant>>, TestChannelsError>>
 }
 
 impl ChannelParam<TestEndpoint> for TestChannelParam {
@@ -170,6 +178,7 @@ where
             mut listen,
             mut shutdown_listen
         } = config;
+        let nreqs = req_streams.len();
         let mut reqs: HashMap<
             TestStreamID,
             Vec<(
@@ -183,7 +192,7 @@ where
                 >,
                 Option<Instant>
             )>
-        > = HashMap::with_capacity(req_streams.len());
+        > = HashMap::with_capacity(nreqs);
         let mut when: Option<Instant>;
 
         for (id, res) in req_streams {
@@ -196,7 +205,7 @@ where
             match reqs.entry(id) {
                 Entry::Occupied(mut ent) => ent.get_mut().push((res, when)),
                 Entry::Vacant(ent) => {
-                    let mut streams = Vec::new();
+                    let mut streams = Vec::with_capacity(nreqs);
 
                     streams.push((res, when));
                     ent.insert(streams);
@@ -397,10 +406,7 @@ where
         param: &Self::Param,
         _session: Self::Stream
     ) -> Result<
-        RetryResult<(
-            Option<Vec<Self::Param>>,
-            Option<Instant>
-        )>,
+        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
         Self::ShutdownStreamError
     > {
         self.actives
@@ -414,7 +420,8 @@ where
         mut self,
         _ctx: &mut Ctx,
         _tokens: &HashSet<Token>
-    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError>
+    {
         self.shutdown_listen
             .pop()
             .expect("Expected scripted action")

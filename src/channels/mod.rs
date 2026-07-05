@@ -331,10 +331,7 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         param: &Self::Param,
         session: Self::Stream
     ) -> Result<
-        RetryResult<(
-            Option<Vec<Self::Param>>,
-            Option<Instant>
-        )>,
+        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
         Self::ShutdownStreamError
     >;
 
@@ -356,13 +353,12 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     ///
     /// - `None`: The shutdown process is complete.
     ///
-    /// - `Some((self, None))`: The shutdown process is continuing,
-    ///   and `shutdown_listen` should be called after polling returns
-    ///   more tokens.
+    /// - `Some((self, None))`: The shutdown process is continuing, and
+    ///   `shutdown_listen` should be called after polling returns more tokens.
     ///
-    /// - `Some((self, Some(when)))`: The shutdwon process is
-    ///   continuing, and `shutdown_listen` should be called at `when`
-    ///   at the latest, or after polling returns more tokens.
+    /// - `Some((self, Some(when)))`: The shutdwon process is continuing, and
+    ///   `shutdown_listen` should be called at `when` at the latest, or after
+    ///   polling returns more tokens.
     fn shutdown_listen(
         self,
         ctx: &mut Ctx,
@@ -779,10 +775,7 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
         _param: &Self::Param,
         _session: Self::Stream
     ) -> Result<
-        RetryResult<(
-            Option<Vec<Self::Param>>,
-            Option<Instant>
-        )>,
+        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
         Self::ShutdownStreamError
     > {
         Ok(RetryResult::Success((None, None)))
@@ -793,7 +786,8 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
         self,
         _ctx: &mut Ctx,
         _tokens: &HashSet<Token>
-    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError>
+    {
         Ok(None)
     }
 }
@@ -1008,17 +1002,18 @@ where
     ) -> Option<Self::ChannelID> {
         self.private
             .as_ref()
-            .and_then(|private| private
-                      .channel_id(name)
-                      .map(|id| SharedPrivateValue::Private { private: id }))
-            .or_else(|| self
-                     .shared
-                     .as_ref()
-                     .and_then(|private| private
-                               .channel_id(name)
-                               .map(|id| SharedPrivateValue::Shared {
-                                   shared: id
-                               })))
+            .and_then(|private| {
+                private
+                    .channel_id(name)
+                    .map(|id| SharedPrivateValue::Private { private: id })
+            })
+            .or_else(|| {
+                self.shared.as_ref().and_then(|private| {
+                    private
+                        .channel_id(name)
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
+                })
+            })
     }
 }
 
@@ -1303,10 +1298,7 @@ where
         param: &Self::Param,
         session: Self::Stream
     ) -> Result<
-        RetryResult<(
-            Option<Vec<Self::Param>>,
-            Option<Instant>
-        )>,
+        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
         Self::ShutdownStreamError
     > {
         match (channel, param, session) {
@@ -1321,13 +1313,14 @@ where
                 .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
                 .map(|(params, when)| {
-                    let params = params
-                        .map(|params| params
-                             .into_iter()
-                             .map(|param| SharedPrivateValue::Private {
-                                 private: param
-                             })
-                             .collect());
+                    let params = params.map(|params| {
+                        params
+                            .into_iter()
+                            .map(|param| SharedPrivateValue::Private {
+                                private: param
+                            })
+                            .collect()
+                    });
 
                     (params, when)
                 })),
@@ -1342,13 +1335,14 @@ where
                 .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
                 .map(|(params, when)| {
-                    let params = params
-                        .map(|params| params
-                             .into_iter()
-                             .map(|param| SharedPrivateValue::Shared {
-                                 shared: param
-                             })
-                             .collect());
+                    let params = params.map(|params| {
+                        params
+                            .into_iter()
+                            .map(|param| SharedPrivateValue::Shared {
+                                shared: param
+                            })
+                            .collect()
+                    });
 
                     (params, when)
                 })),
@@ -1360,11 +1354,13 @@ where
         mut self,
         ctx: &mut Ctx,
         tokens: &HashSet<Token>
-    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError> {
+    ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError>
+    {
         let private_when = if let Some(private) = self.private.take() {
             if let Some((private, when)) = private
                 .shutdown_listen(ctx, tokens)
-                .map_err(|err| SharedPrivateError::Private { err: err })? {
+                .map_err(|err| SharedPrivateError::Private { err: err })?
+            {
                 self.private = Some(private);
 
                 when
@@ -1377,7 +1373,8 @@ where
         let shared_when = if let Some(private) = self.private.take() {
             if let Some((private, when)) = private
                 .shutdown_listen(ctx, tokens)
-                .map_err(|err| SharedPrivateError::Private { err: err })? {
+                .map_err(|err| SharedPrivateError::Private { err: err })?
+            {
                 self.private = Some(private);
 
                 when
@@ -3514,8 +3511,9 @@ where
         match self {
             SharedPrivateError::Private { err } => err.fmt(f),
             SharedPrivateError::Shared { err } => err.fmt(f),
-            SharedPrivateError::Shutdown =>
+            SharedPrivateError::Shutdown => {
                 write!(f, "stream is partially shut down")
+            }
         }
     }
 }
@@ -3536,8 +3534,9 @@ where
             SharedPrivateMatchError::Mismatch => {
                 write!(f, "mismatched param and addr")
             }
-            SharedPrivateMatchError::Shutdown =>
+            SharedPrivateMatchError::Shutdown => {
                 write!(f, "stream is partially shut down")
+            }
         }
     }
 }

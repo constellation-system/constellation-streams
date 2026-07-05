@@ -5277,7 +5277,6 @@ fn test_send_from_outbound_frags_permanent() {
     assert_eq!(next.next_outbound(), None);
     assert_eq!(next.retry_pending(), None);
     assert!(!next.has_completes());
-
     assert!(stream
         .batches
         .try_borrow()
@@ -24770,7 +24769,6 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
     assert!(next.next_outbound().is_some());
     assert!(next.retry_pending().is_none());
     assert!(!next.has_completes());
-
     assert_eq!(
         stream
             .batches

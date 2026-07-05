@@ -420,7 +420,7 @@ where
                "pulling messages from {}",
                id);
 
-        if let Some(stream) = self.pull_streams.get_mut(&id) {
+        if let Some(stream) = self.pull_streams.get_mut(id) {
             let mut valid = true;
 
             while self.shutdown.is_live() && valid {
@@ -658,7 +658,7 @@ where
         // XXX Uncertain when next_retry is actually going to get set.
 
         // Push all pending messages.
-        if pending.retry_pending().map_or(false, |when| when <= now) {
+        if pending.retry_pending().is_some_and(|when| when <= now) {
             trace!(target: "poll-thread",
                    "retrying pending messages");
 
@@ -683,7 +683,7 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refresh = if next_listen.map_or(false, |when| when <= now) {
+        let need_refresh = if next_listen.is_some_and(|when| when <= now) {
             trace!(target: "poll-thread",
                    "listening");
 
@@ -777,8 +777,7 @@ where
             } else {
                 *retry_refresh = Some(retry)
             }
-        } else if next_refresh.map_or(false, |when| when <= now) || need_refresh
-        {
+        } else if next_refresh.is_some_and(|when| when <= now) || need_refresh {
             trace!(target: "poll-thread",
                    "refreshing stream");
 
@@ -806,7 +805,7 @@ where
         // to signal that outbound messages are ready.
 
         // Push new messages.
-        if this_outbound.map_or(false, |when| when <= now) ||
+        if this_outbound.is_some_and(|when| when <= now) ||
             live.contains(&self.notify_token)
         {
             trace!(target: "poll-thread",
@@ -892,11 +891,13 @@ where
         mut events: Events
     ) {
         let PollThread {
-            pull_streams,
-            ctx,
-            ..
+            pull_streams, ctx, ..
         } = self;
-        let PollThreadCtx { mut ctx, mut poll, mut channels } = ctx;
+        let PollThreadCtx {
+            mut ctx,
+            mut poll,
+            mut channels
+        } = ctx;
 
         info!(target: "poll-thread",
               "mio polling thread shutting down");
@@ -927,26 +928,25 @@ where
 
             channels.is_some() &&
                 (next.is_some_and(|next: Instant| next < now) || {
-                let duration = next.map(|next| next - now);
+                    let duration = next.map(|next| next - now);
 
-                if let Some(duration) = &duration {
-                    trace!(target: "poll-thread",
+                    if let Some(duration) = &duration {
+                        trace!(target: "poll-thread",
                            "waiting for poll for {}.{:03}",
                            duration.as_secs(), duration.subsec_millis());
-                } else {
-                    trace!(target: "poll-thread",
+                    } else {
+                        trace!(target: "poll-thread",
                            "waiting for poll indefinitely");
-                }
+                    }
 
-                poll
-                    .poll(&mut events, duration)
-                    .inspect_err(|err| {
-                        error!(target: "poll-thread",
+                    poll.poll(&mut events, duration)
+                        .inspect_err(|err| {
+                            error!(target: "poll-thread",
                                "error polling: {}",
                                err)
-                    })
-                    .is_ok()
-            })
+                        })
+                        .is_ok()
+                })
         } {
             // Gather up all the events.
             let tokens: HashSet<Token> =
@@ -956,12 +956,11 @@ where
 
             channels = if let Some(channels) = channels.take() {
                 match channels.shutdown_listen(&mut ctx, &tokens) {
-                    Ok(res) => res
-                       .map(|(channels, when)| {
-                           next = when;
+                    Ok(res) => res.map(|(channels, when)| {
+                        next = when;
 
-                           channels
-                       }),
+                        channels
+                    }),
                     Err(err) => {
                         error!(target: "poll-thread",
                                "error listening during shutdown: {}",

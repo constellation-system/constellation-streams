@@ -215,8 +215,8 @@ where
     ///
     /// - `prin`: The new session principal.
     ///
-    /// - `notify`: Notifier used to alert the dispatch thread to
-    /// changes in outbound messages.
+    /// - `notify`: Notifier used to alert the dispatch thread to changes in
+    ///   outbound messages.
     fn dispatch(
         &mut self,
         ctx: &mut Ctx,
@@ -764,7 +764,7 @@ where
                "pulling messages from {}",
                id);
 
-        if let Some(stream) = self.pull_streams.get_mut(&id) {
+        if let Some(stream) = self.pull_streams.get_mut(id) {
             let mut valid = true;
 
             while self.dispatched.shutdown.is_live() && valid {
@@ -888,10 +888,10 @@ where
         now: Instant
     ) -> bool {
         self.refresh_complete.is_some() ||
-            self.next_refresh.map_or(false, |when| when <= now) ||
+            self.next_refresh.is_some_and(|when| when <= now) ||
             self.refresh_retry
                 .as_ref()
-                .map_or(false, |retry| retry.when() <= now)
+                .is_some_and(|retry| retry.when() <= now)
     }
 
     fn refresh_stream(
@@ -920,7 +920,7 @@ where
                 self.refresh_retry = Some(retry)
             }
         // Check if we need to start a new retry.
-        } else if self.next_refresh.map_or(false, |when| when <= now) ||
+        } else if self.next_refresh.is_some_and(|when| when <= now) ||
             need_refresh
         {
             trace!(target: "dispatch-entry",
@@ -945,7 +945,7 @@ where
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
-                &live
+                live
             ) {
                 Ok(res) => self.pending.merge(&res),
                 Err(err) => {
@@ -964,11 +964,7 @@ where
         live: &HashSet<Token>,
         now: Instant
     ) {
-        if self
-            .pending
-            .retry_pending()
-            .map_or(false, |when| when <= now)
-        {
+        if self.pending.retry_pending().is_some_and(|when| when <= now) {
             let _ = self.pending.take_retry_pending();
 
             trace!(target: "dispatch-entry",
@@ -978,7 +974,7 @@ where
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
-                &live,
+                live,
                 now
             ) {
                 Ok(res) => {
@@ -1000,11 +996,7 @@ where
         live: &HashSet<Token>,
         now: Instant
     ) {
-        if self
-            .pending
-            .next_outbound()
-            .map_or(false, |when| when <= now)
-        {
+        if self.pending.next_outbound().is_some_and(|when| when <= now) {
             trace!(target: "dispatch-entry",
                    "pushing messages");
 
@@ -1091,7 +1083,7 @@ where
             None => (HashMap::new(), HashMap::new(), HashMap::new())
         };
         let token = ctx.token();
-        let notify = Waker::new(ctx.registry(), token.clone())
+        let notify = Waker::new(ctx.registry(), token)
             .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
         let notify = Arc::new(notify);
 
@@ -1250,7 +1242,7 @@ where
 
                 let token = self.ctx.tokens.token();
 
-                match Waker::new(self.ctx.poll.registry(), token.clone()) {
+                match Waker::new(self.ctx.poll.registry(), token) {
                     Ok(notify) => match self.dispatcher.dispatch(
                         &mut self.ctx,
                         session.prin(),
@@ -1407,7 +1399,7 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refreshes = if next_listen.map_or(false, |when| when <= now) {
+        let need_refreshes = if next_listen.is_some_and(|when| when <= now) {
             let mut need_refreshes =
                 HashSet::with_capacity(self.dispatched.len());
 
@@ -1501,7 +1493,7 @@ where
                 // Complete the pending operation; record a new
                 // pending operation if it returns a time.
                 let need_refresh =
-                    need_refreshes.as_ref().map_or(false, |need_refreshes| {
+                    need_refreshes.as_ref().is_some_and(|need_refreshes| {
                         need_refreshes.contains(&token)
                     });
 
@@ -1522,14 +1514,14 @@ where
                     live.iter()
                         .cloned()
                         .map(DispatchedID)
-                        .filter(|id| self.dispatched.contains_key(&id))
+                        .filter(|id| self.dispatched.contains_key(id))
                 )
                 .collect()
         } else {
             live.iter()
                 .cloned()
                 .map(DispatchedID)
-                .filter(|id| self.dispatched.contains_key(&id))
+                .filter(|id| self.dispatched.contains_key(id))
                 .collect()
         };
 
@@ -1712,7 +1704,12 @@ where
             ent.shutdown(&mut ctx)
         }
 
-        let DispatchThreadCtx { mut ctx, mut poll, channels, .. } = ctx;
+        let DispatchThreadCtx {
+            mut ctx,
+            mut poll,
+            channels,
+            ..
+        } = ctx;
         let mut channels = Some(channels);
         let mut next = None;
 
@@ -1721,26 +1718,25 @@ where
 
             channels.is_some() &&
                 (next.is_some_and(|next: Instant| next < now) || {
-                let duration = next.map(|next| next - now);
+                    let duration = next.map(|next| next - now);
 
-                if let Some(duration) = &duration {
-                    trace!(target: "dispatch-thread",
+                    if let Some(duration) = &duration {
+                        trace!(target: "dispatch-thread",
                            "waiting for poll for {}.{:03}",
                            duration.as_secs(), duration.subsec_millis());
-                } else {
-                    trace!(target: "dispatch-thread",
+                    } else {
+                        trace!(target: "dispatch-thread",
                            "waiting for poll indefinitely");
-                }
+                    }
 
-                poll
-                    .poll(&mut events, duration)
-                    .inspect_err(|err| {
-                        error!(target: "dispatch-thread",
+                    poll.poll(&mut events, duration)
+                        .inspect_err(|err| {
+                            error!(target: "dispatch-thread",
                                     "error polling: {}",
                                     err)
-                    })
-                    .is_ok()
-            })
+                        })
+                        .is_ok()
+                })
         } {
             // Gather up all the events.
             let tokens: HashSet<Token> =
@@ -1750,12 +1746,11 @@ where
 
             channels = if let Some(channels) = channels.take() {
                 match channels.shutdown_listen(&mut ctx, &tokens) {
-                    Ok(res) => res
-                       .map(|(channels, when)| {
-                           next = when;
+                    Ok(res) => res.map(|(channels, when)| {
+                        next = when;
 
-                           channels
-                       }),
+                        channels
+                    }),
                     Err(err) => {
                         error!(target: "poll-thread",
                                "error listening during shutdown: {}",

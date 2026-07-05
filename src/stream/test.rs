@@ -415,9 +415,7 @@ where
         error: &TestPermanentBatchError
     ) -> Result<(), Self::ReportError> {
         let batch = error.batch;
-        let error = TestPermanentError {
-            scope: error.scope.clone()
-        };
+        let error = TestPermanentError { scope: error.scope };
 
         self.report_error_with_batch(&batch, &error)
     }
@@ -1729,7 +1727,7 @@ fn filter_select_error(
                 TestIndefPartiesAction::Success { parties } => {
                     let parties = parties
                         .into_iter()
-                        .filter(|party| filter.contains(&party))
+                        .filter(|party| filter.contains(party))
                         .collect();
 
                     TestIndefPartiesAction::Success { parties: parties }
@@ -1739,7 +1737,7 @@ fn filter_select_error(
                 } => {
                     let parties = parties
                         .into_iter()
-                        .filter(|party| filter.contains(&party))
+                        .filter(|party| filter.contains(party))
                         .collect();
 
                     TestIndefPartiesAction::Retry {
@@ -1752,7 +1750,7 @@ fn filter_select_error(
                 TestIndefPartiesAction::Indef { parties } => {
                     let parties = parties
                         .into_iter()
-                        .filter(|party| filter.contains(&party))
+                        .filter(|party| filter.contains(party))
                         .collect();
 
                     TestIndefPartiesAction::Indef { parties: parties }
@@ -1849,7 +1847,7 @@ where
                     .collect();
 
                 for party in parties.iter() {
-                    selections.push(party.clone())
+                    selections.push(*party)
                 }
 
                 Ok(RetryIndefResult::Success(parties))
@@ -2582,9 +2580,7 @@ where
         error: &TestPermanentBatchError
     ) -> Result<(), Self::ReportError> {
         let batch = error.batch;
-        let error = TestPermanentError {
-            scope: error.scope.clone()
-        };
+        let error = TestPermanentError { scope: error.scope };
 
         self.report_error_with_batch(&batch, &error)
     }

@@ -235,11 +235,7 @@ fn test_private_select_req_retry() {
                 (test_stream_id.clone(), Ok(RetryResult::Retry(now))),
                 (
                     test_stream_id,
-                    Ok(RetryResult::Success((
-                        Some(inner.clone()),
-                        None,
-                        None
-                    )))
+                    Ok(RetryResult::Success((Some(inner.clone()), None, None)))
                 ),
             ],
             listen: vec![],
@@ -430,11 +426,7 @@ fn test_private_select_req_error() {
                 ),
                 (
                     test_stream_id,
-                    Ok(RetryResult::Success((
-                        Some(inner.clone()),
-                        None,
-                        None
-                    )))
+                    Ok(RetryResult::Success((Some(inner.clone()), None, None)))
                 ),
             ],
             listen: vec![],
@@ -6906,11 +6898,7 @@ fn test_shared_select_req_retry() {
                 (test_stream_id.clone(), Ok(RetryResult::Retry(now))),
                 (
                     test_stream_id,
-                    Ok(RetryResult::Success((
-                        Some(inner.clone()),
-                        None,
-                        None
-                    )))
+                    Ok(RetryResult::Success((Some(inner.clone()), None, None)))
                 ),
             ],
             listen: vec![],
@@ -7101,11 +7089,7 @@ fn test_shared_select_req_error() {
                 ),
                 (
                     test_stream_id,
-                    Ok(RetryResult::Success((
-                        Some(inner.clone()),
-                        None,
-                        None
-                    )))
+                    Ok(RetryResult::Success((Some(inner.clone()), None, None)))
                 ),
             ],
             listen: vec![],
