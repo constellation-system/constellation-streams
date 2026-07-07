@@ -17,6 +17,7 @@
 // <https://www.gnu.org/licenses/>.
 
 use std::collections::hash_map::Entry;
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -66,6 +67,7 @@ use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
+use crate::threads::RetryHeapEntry;
 use crate::threads::Tokens;
 use crate::threads::TokensCtx;
 
@@ -140,6 +142,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
     type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
+    type ChanShutdownRetry: RetryWhen + Send;
     type ChanShutdownError: Debug + Display;
     type Chans: for<'a> CreateWithParam<
             &'a mut Ctx,
@@ -152,8 +155,11 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             Stream = Self::AuthNChan,
             ChannelID = Self::ChannelID
         > + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx, ShutdownStreamError = Self::ChanShutdownError>
-        + Send;
+        + ChannelsShutdown<
+            Ctx,
+            ShutdownStreamError = Self::ChanShutdownError,
+            ShutdownStreamRetry = Self::ChanShutdownRetry
+        > + Send;
 }
 
 pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
@@ -287,6 +293,14 @@ where
         Types::Recv
     >,
     mode: Types::Mode,
+    shutdown_retries: Option<
+        BinaryHeap<
+            RetryHeapEntry<
+                StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+                Types::ChanShutdownRetry
+            >
+        >
+    >,
     refresh_complete: Option<Types::RefreshCompletableError>,
     refresh_retry: Option<Types::RefreshRetry>,
     next_refresh: Option<Instant>,
@@ -705,26 +719,40 @@ where
                 warn!(target: "dispatch-entry",
                       "stream {} with {} was already present",
                       id, stream.prin());
-/*
-                // XXX handle the retry case here
+
                 match ctx.channels.shutdown_stream(
                     &mut ctx.ctx,
                     id.channel(),
                     id.param(),
                     stream
                 ) {
-                    Ok(RetryResult::Success(res)) =>
-                        if let Some((stream, when)) = res {
-                        },
-                    Ok(RetryResult::Retry(when)) => {
+                    Ok(res) => {
+                        if let RetryResult::Retry(retry) = res {
+                            let id = id.clone();
+                            let ent = RetryHeapEntry::new(id, retry);
+
+                            match &mut self.shutdown_retries {
+                                Some(shutdown_retries) => {
+                                    shutdown_retries.push(ent);
+                                }
+                                None => {
+                                    let mut heap = BinaryHeap::with_capacity(
+                                        self.pull_streams.len()
+                                    );
+
+                                    heap.push(ent);
+                                    self.shutdown_retries = Some(heap);
+                                }
+                            }
+                        }
                     }
                     Err(err) => {
-                        error!(target: "dispatch-thread",
+                        error!(target: "poll-thread",
                                "error shutting down stream {}: {}",
                                id, err);
                     }
                 }
-*/
+
                 existing
             }
             None => stream
@@ -883,6 +911,12 @@ where
         }
     }
 
+    fn next_shutdown_retry(&self) -> Option<Instant> {
+        self.shutdown_retries
+            .as_ref()
+            .and_then(|heap| heap.peek().map(|ent| ent.when()))
+    }
+
     fn needs_refresh(
         &self,
         now: Instant
@@ -957,6 +991,66 @@ where
         }
     }
 
+    /// Retry pending shutdown operations if necessary.
+    fn retry_shutdown(
+        &mut self,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        now: Instant
+    ) {
+        if let Some(mut retries) = self.shutdown_retries.take() {
+            let mut newents: Option<Vec<_>> = None;
+
+            while retries.peek().is_some_and(|ent| ent.when() <= now) {
+                if let Some(ent) = retries.pop() {
+                    let (id, retry) = ent.take();
+
+                    match ctx.channels.retry_shutdown_stream(
+                        &mut ctx.ctx,
+                        id.channel(),
+                        id.param(),
+                        retry
+                    ) {
+                        Ok(res) => {
+                            if let RetryResult::Retry(retry) = res {
+                                let ent = RetryHeapEntry::new(id, retry);
+
+                                match &mut newents {
+                                    Some(newents) => {
+                                        newents.push(ent);
+                                    }
+                                    None => {
+                                        let mut heap = Vec::with_capacity(
+                                            self.pull_streams.len()
+                                        );
+
+                                        heap.push(ent);
+                                        newents = Some(heap);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            error!(target: "poll-thread",
+                                   "error shutting down stream {}: {}",
+                                   id, err);
+                        }
+                    }
+                } else {
+                    error!(target: "poll-thread",
+                           "shutdown_retries.pop() should not be None")
+                }
+            }
+
+            if let Some(newents) = newents {
+                newents.into_iter().for_each(|ent| retries.push(ent));
+            }
+
+            if !retries.is_empty() {
+                self.shutdown_retries = Some(retries)
+            }
+        }
+    }
+
     /// Retry pending push operations if necessary.
     fn retry_pending(
         &mut self,
@@ -1022,24 +1116,67 @@ where
 
     fn shutdown(
         mut self,
-        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        shutdown_retries: &mut Option<
+            BinaryHeap<
+                RetryHeapEntry<
+                    StreamID<
+                        Types::Addr,
+                        Types::ChannelID,
+                        Types::ChannelParam
+                    >,
+                    Types::ChanShutdownRetry
+                >
+            >
+        >
     ) {
+        let nsessions = self.pull_streams.len();
+
         // Shut down all streams.
         for (id, stream) in self.pull_streams.into_iter() {
             debug!(target: "poll-thread",
                    "shutting down stream {} with {}",
                    id, stream.prin());
 
-            if let Err(err) = ctx.channels.shutdown_stream(
+            match ctx.channels.shutdown_stream(
                 &mut ctx.ctx,
                 id.channel(),
                 id.param(),
                 stream
             ) {
-                error!(target: "poll-thread",
-                       "error shutting down stream {}: {}",
-                       id, err);
+                Ok(res) => {
+                    if let RetryResult::Retry(retry) = res {
+                        let id = id.clone();
+                        let ent = RetryHeapEntry::new(id, retry);
+
+                        match &mut self.shutdown_retries {
+                            Some(shutdown_retries) => {
+                                shutdown_retries.push(ent);
+                            }
+                            None => {
+                                let mut heap =
+                                    BinaryHeap::with_capacity(nsessions);
+
+                                heap.push(ent);
+                                self.shutdown_retries = Some(heap);
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error shutting down stream {}: {}",
+                           id, err);
+                }
             }
+        }
+
+        if let Some(shutdown_retries) = shutdown_retries {
+            if let Some(new_retries) = &mut self.shutdown_retries {
+                shutdown_retries.append(new_retries);
+            }
+        } else {
+            *shutdown_retries = self.shutdown_retries
         }
 
         self.dispatched.shutdown()
@@ -1133,6 +1270,7 @@ where
         let pending = PushModeResult::new(Some(now), None, false);
         let mut dispatched = DispatchedEntry {
             ctx: PhantomData,
+            shutdown_retries: None,
             dispatched: dispatched,
             pull_streams: pull_streams,
             mode: mode,
@@ -1360,6 +1498,7 @@ where
         refreshes: Option<Vec<DispatchedID>>,
         outbounds: Option<Vec<DispatchedID>>,
         retries: Option<Vec<DispatchedID>>,
+        shutdown_retries: Option<Vec<DispatchedID>>,
         completes: Option<Vec<DispatchedID>>,
         now: Instant
     ) -> bool {
@@ -1393,6 +1532,21 @@ where
                     // This shouldn't happen.
                     error!(target: "dispatch-thread",
                            "entry for retry for {} not found",
+                           token);
+                }
+            }
+        }
+
+        // If we have pending shutdown retries, run them.
+        if let Some(shutdown_retries) = shutdown_retries {
+            for token in shutdown_retries.into_iter() {
+                // Look up the dispatched entry.
+                if let Some(ent) = self.dispatched.get_mut(&token) {
+                    ent.retry_shutdown(&mut self.ctx, now)
+                } else {
+                    // This shouldn't happen.
+                    error!(target: "dispatch-thread",
+                           "entry for shutdown retry for {} not found",
                            token);
                 }
             }
@@ -1543,6 +1697,7 @@ where
         let mut events = Events::with_capacity(self.nevents);
         let mut next_listen = None;
         let mut outbounds: Option<Vec<DispatchedID>> = None;
+        let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
         let mut retries: Option<Vec<DispatchedID>> = None;
         let mut completes: Option<Vec<DispatchedID>> = None;
         let mut refreshes: Option<Vec<DispatchedID>> = None;
@@ -1560,7 +1715,7 @@ where
             for (id, ent) in self.dispatched.iter() {
                 if ent.needs_refresh(now) {
                     match &mut refreshes {
-                        Some(completes) => completes.push(id.clone()),
+                        Some(refreshes) => refreshes.push(id.clone()),
                         None => {
                             let mut vec = Vec::with_capacity(nents);
 
@@ -1595,6 +1750,24 @@ where
                                 next = Some(next_retry_definite(&next, &when));
                                 vec.push(id.clone());
                                 outbounds = Some(vec);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(when) = ent.next_shutdown_retry() {
+                    if when < now {
+                        match &mut shutdown_retries {
+                            Some(shutdown_retries) => {
+                                next = Some(next_retry_definite(&next, &when));
+                                shutdown_retries.push(id.clone())
+                            }
+                            None => {
+                                let mut vec = Vec::with_capacity(nents);
+
+                                next = Some(next_retry_definite(&next, &when));
+                                vec.push(id.clone());
+                                shutdown_retries = Some(vec);
                             }
                         }
                     }
@@ -1656,6 +1829,7 @@ where
                 refreshes.take(),
                 outbounds.take(),
                 retries.take(),
+                shutdown_retries.take(),
                 completes.take(),
                 now
             ) {
@@ -1676,6 +1850,7 @@ where
             parties,
             ..
         } = self;
+        let mut shutdown_retries: Option<BinaryHeap<_>> = None;
 
         info!(target: "dispatch-thread",
               "mio dispatch thread shutting down");
@@ -1687,7 +1862,7 @@ where
                       "shutting down dispatched entry for {}",
                       party);
 
-                ent.shutdown(&mut ctx)
+                ent.shutdown(&mut ctx, &mut shutdown_retries)
             } else {
                 trace!(target: "dispatch-thread",
                        "entry missing for {}, {}",
@@ -1701,7 +1876,7 @@ where
                   "shutting down dispatched entry for {} with no party",
                   token);
 
-            ent.shutdown(&mut ctx)
+            ent.shutdown(&mut ctx, &mut shutdown_retries)
         }
 
         let DispatchThreadCtx {
@@ -1741,10 +1916,67 @@ where
             // Gather up all the events.
             let tokens: HashSet<Token> =
                 events.iter().map(|event| event.token()).collect();
+            let now = Instant::now();
 
             next = None;
 
-            channels = if let Some(channels) = channels.take() {
+            channels = if let Some(mut channels) = channels.take() {
+                if let Some(mut retries) = shutdown_retries.take() {
+                    let mut newents: Option<Vec<_>> = None;
+                    let nsessions = retries.len();
+
+                    while retries.peek().is_some_and(|ent| ent.when() <= now) {
+                        if let Some(ent) = retries.pop() {
+                            let (id, retry) = ent.take();
+
+                            match channels.retry_shutdown_stream(
+                                &mut ctx,
+                                id.channel(),
+                                id.param(),
+                                retry
+                            ) {
+                                Ok(res) => {
+                                    if let RetryResult::Retry(retry) = res {
+                                        let ent =
+                                            RetryHeapEntry::new(id, retry);
+
+                                        match &mut newents {
+                                            Some(newents) => {
+                                                newents.push(ent);
+                                            }
+                                            None => {
+                                                let mut heap =
+                                                    Vec::with_capacity(
+                                                        nsessions
+                                                    );
+
+                                                heap.push(ent);
+                                                newents = Some(heap);
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    error!(target: "poll-thread",
+                                           "error shutting down stream {}: {}",
+                                           id, err);
+                                }
+                            }
+                        } else {
+                            error!(target: "poll-thread",
+                                   "shutdown_retries.pop() should not be None")
+                        }
+                    }
+
+                    if let Some(newents) = newents {
+                        newents.into_iter().for_each(|ent| retries.push(ent));
+                    }
+
+                    if !retries.is_empty() {
+                        shutdown_retries = Some(retries)
+                    }
+                }
+
                 match channels.shutdown_listen(&mut ctx, &tokens) {
                     Ok(res) => res.map(|(channels, when)| {
                         next = when;

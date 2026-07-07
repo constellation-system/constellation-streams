@@ -398,6 +398,7 @@ where
 {
     type ShutdownListenError = TestChannelsError;
     type ShutdownStreamError = TestChannelsError;
+    type ShutdownStreamRetry = Instant;
 
     fn shutdown_stream(
         &mut self,
@@ -407,6 +408,26 @@ where
         _session: Self::Stream
     ) -> Result<
         RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
+        Self::ShutdownStreamError
+    > {
+        self.actives
+            .get_mut(&(channel.clone(), param.clone()))
+            .expect("Stream not active")
+            .pop()
+            .expect("Expected scripted action")
+    }
+
+    fn retry_shutdown_stream(
+        &mut self,
+        _ctx: &mut Ctx,
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        _retry: Self::ShutdownStreamRetry
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
         Self::ShutdownStreamError
     > {
         self.actives

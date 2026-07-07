@@ -45,7 +45,7 @@ pub trait Frags {
 
     fn is_empty(&self) -> bool;
 
-    fn len(&self) -> usize;
+    fn nbytes(&self) -> usize;
 
     fn recv_req(
         &mut self,
@@ -134,7 +134,7 @@ impl InboundFrags {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn nbytes(&self) -> usize {
         self.data.len()
     }
 
@@ -299,7 +299,7 @@ impl Frags for OutboundFrags {
     }
 
     #[inline]
-    fn len(&self) -> usize {
+    fn nbytes(&self) -> usize {
         self.data.len()
     }
 

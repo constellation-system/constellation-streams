@@ -302,6 +302,7 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
 
 pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     type ShutdownStreamError: Debug + Display + ScopedError;
+    type ShutdownStreamRetry: RetryWhen;
     type ShutdownListenError: Debug + Display + ScopedError;
 
     /// Shut down a given stream.
@@ -331,7 +332,24 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         param: &Self::Param,
         session: Self::Stream
     ) -> Result<
-        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
+        Self::ShutdownStreamError
+    >;
+
+    fn retry_shutdown_stream(
+        &mut self,
+        ctx: &mut Ctx,
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        retry: Self::ShutdownStreamRetry
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
         Self::ShutdownStreamError
     >;
 
@@ -766,6 +784,7 @@ impl<Ctx> ChannelsListen<Ctx> for NullChannels {
 impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
     type ShutdownListenError = Infallible;
     type ShutdownStreamError = Infallible;
+    type ShutdownStreamRetry = Infallible;
 
     #[inline]
     fn shutdown_stream(
@@ -775,9 +794,32 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
         _param: &Self::Param,
         _session: Self::Stream
     ) -> Result<
-        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
         Self::ShutdownStreamError
     > {
+        Ok(RetryResult::Success((None, None)))
+    }
+
+    #[inline]
+    fn retry_shutdown_stream(
+        &mut self,
+        _ctx: &mut Ctx,
+        _channel: &Self::ChannelID,
+        _param: &Self::Param,
+        _retry: Self::ShutdownStreamRetry
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
+        Self::ShutdownStreamError
+    > {
+        error!(target: "",
+               "should never call retry_shutdown_stream");
+
         Ok(RetryResult::Success((None, None)))
     }
 
@@ -1290,6 +1332,10 @@ where
         Private::ShutdownStreamError,
         Shared::ShutdownStreamError
     >;
+    type ShutdownStreamRetry = SharedPrivateStreamRetry<
+        Private::ShutdownStreamRetry,
+        Shared::ShutdownStreamRetry
+    >;
 
     fn shutdown_stream(
         &mut self,
@@ -1298,7 +1344,10 @@ where
         param: &Self::Param,
         session: Self::Stream
     ) -> Result<
-        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
         Self::ShutdownStreamError
     > {
         match (channel, param, session) {
@@ -1312,6 +1361,9 @@ where
                 .ok_or(SharedPrivateMatchError::Shutdown)?
                 .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
                 .map(|(params, when)| {
                     let params = params.map(|params| {
                         params
@@ -1334,6 +1386,77 @@ where
                 .ok_or(SharedPrivateMatchError::Shutdown)?
                 .shutdown_stream(ctx, id, param, stream)
                 .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
+                .map(|(params, when)| {
+                    let params = params.map(|params| {
+                        params
+                            .into_iter()
+                            .map(|param| SharedPrivateValue::Shared {
+                                shared: param
+                            })
+                            .collect()
+                    });
+
+                    (params, when)
+                })),
+            _ => Err(SharedPrivateMatchError::Mismatch)
+        }
+    }
+
+    fn retry_shutdown_stream(
+        &mut self,
+        ctx: &mut Ctx,
+        channel: &Self::ChannelID,
+        param: &Self::Param,
+        retry: Self::ShutdownStreamRetry
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
+        Self::ShutdownStreamError
+    > {
+        match (channel, param, retry) {
+            (
+                SharedPrivateValue::Private { private: id },
+                SharedPrivateValue::Private { private: param },
+                SharedPrivateStreamRetry::Private { retry }
+            ) => Ok(self
+                .private
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
+                .retry_shutdown_stream(ctx, id, param, retry)
+                .map_err(|err| SharedPrivateMatchError::Private { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                    retry: retry
+                })
+                .map(|(params, when)| {
+                    let params = params.map(|params| {
+                        params
+                            .into_iter()
+                            .map(|param| SharedPrivateValue::Private {
+                                private: param
+                            })
+                            .collect()
+                    });
+
+                    (params, when)
+                })),
+            (
+                SharedPrivateValue::Shared { shared: id },
+                SharedPrivateValue::Shared { shared: param },
+                SharedPrivateStreamRetry::Shared { retry }
+            ) => Ok(self
+                .shared
+                .as_mut()
+                .ok_or(SharedPrivateMatchError::Shutdown)?
+                .retry_shutdown_stream(ctx, id, param, retry)
+                .map_err(|err| SharedPrivateMatchError::Shared { err: err })?
+                .map_retry(|retry| SharedPrivateStreamRetry::Shared {
+                    retry: retry
+                })
                 .map(|(params, when)| {
                     let params = params.map(|params| {
                         params

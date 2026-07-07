@@ -574,7 +574,7 @@ impl LargeObjFrag {
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn nbytes(&self) -> usize {
         self.data.len()
     }
 
@@ -587,7 +587,7 @@ impl LargeObjFrag {
 impl InboundFragsState {
     fn size(&self) -> usize {
         match self {
-            InboundFragsState::Active { frags, .. } => frags.len(),
+            InboundFragsState::Active { frags, .. } => frags.nbytes(),
             InboundFragsState::Finished { size, .. } => *size
         }
     }
@@ -613,7 +613,7 @@ where
                 Ok(data) => Ok((
                     LargeObjMsg::Offer {
                         hash: hash,
-                        size: frags.len() as u64,
+                        size: frags.nbytes() as u64,
                         frag: LargeObjFrag {
                             offset: offset as u64,
                             data: data.to_vec()
@@ -798,7 +798,7 @@ where
                         req: Some(ReqState { nretries, when }),
                         frags
                     } => {
-                        let size = frags.len();
+                        let size = frags.nbytes();
                         let delay = self.retry.retry_delay(*nretries);
                         let retry = now + delay;
                         let msg = LargeObjMsg::req_obj(hash, size, id);
@@ -962,7 +962,7 @@ where
                     req: Some(ReqState { nretries, when }),
                     frags
                 } => {
-                    let size = frags.len();
+                    let size = frags.nbytes();
                     let delay = self.retry.retry_delay(*nretries);
                     let retry = now + delay;
                     let msg = LargeObjMsg::req_obj(hash, size, id);

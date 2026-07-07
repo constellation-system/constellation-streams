@@ -18,6 +18,7 @@
 
 //! Manager threads for various kinds of push and pull streams.
 
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -122,6 +123,13 @@ pub trait TokensCtx {
     );
 }
 
+pub(crate) struct RetryHeapEntry<I, T>
+where
+    T: RetryWhen {
+    when: T,
+    id: I
+}
+
 /// Result from [PushMode] operations.
 ///
 /// This records times for the next operations, and whether there are
@@ -156,6 +164,75 @@ where
     PushOffer {
         hash: H::HashID,
         retry: Stream::PushOfferRetry
+    }
+}
+
+impl<I, T> PartialEq for RetryHeapEntry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn eq(
+        &self,
+        other: &Self
+    ) -> bool {
+        self.when().eq(&other.when())
+    }
+}
+
+impl<I, T> Eq for RetryHeapEntry<I, T> where T: RetryWhen {}
+
+impl<I, T> Ord for RetryHeapEntry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn cmp(
+        &self,
+        other: &Self
+    ) -> Ordering {
+        self.when().cmp(&other.when())
+    }
+}
+
+impl<I, T> PartialOrd for RetryHeapEntry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn partial_cmp(
+        &self,
+        other: &Self
+    ) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<I, T> RetryWhen for RetryHeapEntry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn when(&self) -> Instant {
+        self.when.when()
+    }
+}
+
+impl<I, T> RetryHeapEntry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    pub(crate) fn new(
+        id: I,
+        when: T
+    ) -> Self {
+        RetryHeapEntry { when: when, id: id }
+    }
+
+    #[inline]
+    pub(crate) fn take(self) -> (I, T) {
+        (self.id, self.when)
     }
 }
 

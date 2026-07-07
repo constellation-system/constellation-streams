@@ -16,6 +16,7 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -62,6 +63,7 @@ use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
+use crate::threads::RetryHeapEntry;
 
 pub trait PollThreadTypes<Ctx>
 where
@@ -103,6 +105,7 @@ where
     type Msgs: 'static + Send;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
+    type ChanShutdownRetry: RetryWhen + Send;
     type ChanShutdownError: Debug + Display;
     type Chans: 'static
         + for<'a> CreateWithParam<
@@ -118,7 +121,11 @@ where
             ChannelID = Self::ChannelID
         >
         + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx, ShutdownStreamError = Self::ChanShutdownError>
+        + ChannelsShutdown<
+            Ctx,
+            ShutdownStreamError = Self::ChanShutdownError,
+            ShutdownStreamRetry = Self::ChanShutdownRetry
+        >
         + Send;
     type MsgAuthConfig;
     type MsgAuth: 'static
@@ -171,6 +178,14 @@ where
     >,
     ctx: PollThreadCtx<Types::Chans, Ctx>,
     refresh_complete: Option<Types::RefreshCompletableError>,
+    shutdown_retries: Option<
+        BinaryHeap<
+            RetryHeapEntry<
+                StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+                Types::ChanShutdownRetry
+            >
+        >
+    >,
     authn: Types::MsgAuth,
     recv: Types::Recv,
     mode: Types::Mode,
@@ -334,6 +349,7 @@ where
 
         Ok(PollThread {
             pull_streams: pull_streams,
+            shutdown_retries: None,
             refresh_complete: None,
             authn: authn,
             mode: mode,
@@ -494,18 +510,38 @@ where
                               "stream {} with {} was already present",
                               id, curr.prin());
 
-                        // XXX handle the retry case here
-
-                        // Shut down the incoming stream.
-                        if let Err(err) = self.ctx.channels.shutdown_stream(
+                        match self.ctx.channels.shutdown_stream(
                             &mut self.ctx.ctx,
                             id.channel(),
                             id.param(),
                             stream
                         ) {
-                            error!(target: "poll-thread",
-                                   "error shutting down stream {}: {}",
-                                   id, err);
+                            Ok(res) => {
+                                if let RetryResult::Retry(retry) = res {
+                                    let id = id.clone();
+                                    let ent = RetryHeapEntry::new(id, retry);
+
+                                    match &mut self.shutdown_retries {
+                                        Some(shutdown_retries) => {
+                                            shutdown_retries.push(ent);
+                                        }
+                                        None => {
+                                            let mut heap =
+                                                BinaryHeap::with_capacity(
+                                                    self.pull_streams.len()
+                                                );
+
+                                            heap.push(ent);
+                                            self.shutdown_retries = Some(heap);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                error!(target: "poll-thread",
+                                       "error shutting down stream {}: {}",
+                                       id, err);
+                            }
                         }
 
                         curr
@@ -655,7 +691,58 @@ where
             }
         }
 
-        // XXX Uncertain when next_retry is actually going to get set.
+        if let Some(mut retries) = self.shutdown_retries.take() {
+            let mut newents: Option<Vec<_>> = None;
+
+            while retries.peek().is_some_and(|ent| ent.when() <= now) {
+                if let Some(ent) = retries.pop() {
+                    let (id, retry) = ent.take();
+
+                    match self.ctx.channels.retry_shutdown_stream(
+                        &mut self.ctx.ctx,
+                        id.channel(),
+                        id.param(),
+                        retry
+                    ) {
+                        Ok(res) => {
+                            if let RetryResult::Retry(retry) = res {
+                                let ent = RetryHeapEntry::new(id, retry);
+
+                                match &mut newents {
+                                    Some(newents) => {
+                                        newents.push(ent);
+                                    }
+                                    None => {
+                                        let mut heap = Vec::with_capacity(
+                                            self.pull_streams.len()
+                                        );
+
+                                        heap.push(ent);
+                                        newents = Some(heap);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            error!(target: "poll-thread",
+                                   "error shutting down stream {}: {}",
+                                   id, err);
+                        }
+                    }
+                } else {
+                    error!(target: "poll-thread",
+                           "shutdown_retries.pop() should not be None")
+                }
+            }
+
+            if let Some(newents) = newents {
+                newents.into_iter().for_each(|ent| retries.push(ent));
+            }
+
+            if !retries.is_empty() {
+                self.shutdown_retries = Some(retries)
+            }
+        }
 
         // Push all pending messages.
         if pending.retry_pending().is_some_and(|when| when <= now) {
@@ -845,8 +932,12 @@ where
 
         // Loop until told to shut down.
         while {
-            let next =
-                next_retry(&pending.next_outbound(), &pending.retry_pending());
+            let next = self
+                .shutdown_retries
+                .as_ref()
+                .and_then(|heap| heap.peek().map(|ent| ent.when()));
+            let next = next_retry(&next, &pending.next_outbound());
+            let next = next_retry(&next, &pending.retry_pending());
             let next = next_retry(&next, &next_listen);
             let next = next_retry(&next, &next_refresh);
 
@@ -891,13 +982,17 @@ where
         mut events: Events
     ) {
         let PollThread {
-            pull_streams, ctx, ..
+            mut shutdown_retries,
+            pull_streams,
+            ctx,
+            ..
         } = self;
         let PollThreadCtx {
             mut ctx,
             mut poll,
             mut channels
         } = ctx;
+        let nsessions = pull_streams.len();
 
         info!(target: "poll-thread",
               "mio polling thread shutting down");
@@ -908,15 +1003,36 @@ where
                    "shutting down stream {} with {}",
                    id, stream.prin());
 
-            if let Err(err) = channels.shutdown_stream(
+            match channels.shutdown_stream(
                 &mut ctx,
                 id.channel(),
                 id.param(),
                 stream
             ) {
-                error!(target: "poll-thread",
-                       "error shutting down stream {}: {}",
-                       id, err);
+                Ok(res) => {
+                    if let RetryResult::Retry(retry) = res {
+                        let id = id.clone();
+                        let ent = RetryHeapEntry::new(id, retry);
+
+                        match &mut shutdown_retries {
+                            Some(shutdown_retries) => {
+                                shutdown_retries.push(ent);
+                            }
+                            None => {
+                                let mut heap =
+                                    BinaryHeap::with_capacity(nsessions);
+
+                                heap.push(ent);
+                                shutdown_retries = Some(heap);
+                            }
+                        }
+                    }
+                }
+                Err(err) => {
+                    error!(target: "poll-thread",
+                           "error shutting down stream {}: {}",
+                           id, err);
+                }
             }
         }
 
@@ -924,6 +1040,12 @@ where
         let mut next = None;
 
         while {
+            next = next_retry(
+                &next,
+                &shutdown_retries
+                    .as_ref()
+                    .and_then(|heap| heap.peek().map(|ent| ent.when()))
+            );
             let now = Instant::now();
 
             channels.is_some() &&
@@ -951,10 +1073,67 @@ where
             // Gather up all the events.
             let tokens: HashSet<Token> =
                 events.iter().map(|event| event.token()).collect();
+            let now = Instant::now();
 
             next = None;
 
-            channels = if let Some(channels) = channels.take() {
+            channels = if let Some(mut channels) = channels.take() {
+                if let Some(mut retries) = shutdown_retries.take() {
+                    let mut newents: Option<Vec<_>> = None;
+                    let nsessions = retries.len();
+
+                    while retries.peek().is_some_and(|ent| ent.when() <= now) {
+                        if let Some(ent) = retries.pop() {
+                            let (id, retry) = ent.take();
+
+                            match channels.retry_shutdown_stream(
+                                &mut ctx,
+                                id.channel(),
+                                id.param(),
+                                retry
+                            ) {
+                                Ok(res) => {
+                                    if let RetryResult::Retry(retry) = res {
+                                        let ent =
+                                            RetryHeapEntry::new(id, retry);
+
+                                        match &mut newents {
+                                            Some(newents) => {
+                                                newents.push(ent);
+                                            }
+                                            None => {
+                                                let mut heap =
+                                                    Vec::with_capacity(
+                                                        nsessions
+                                                    );
+
+                                                heap.push(ent);
+                                                newents = Some(heap);
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    error!(target: "poll-thread",
+                                           "error shutting down stream {}: {}",
+                                           id, err);
+                                }
+                            }
+                        } else {
+                            error!(target: "poll-thread",
+                                   "shutdown_retries.pop() should not be None")
+                        }
+                    }
+
+                    if let Some(newents) = newents {
+                        newents.into_iter().for_each(|ent| retries.push(ent));
+                    }
+
+                    if !retries.is_empty() {
+                        shutdown_retries = Some(retries)
+                    }
+                }
+
                 match channels.shutdown_listen(&mut ctx, &tokens) {
                     Ok(res) => res.map(|(channels, when)| {
                         next = when;
@@ -974,7 +1153,7 @@ where
                        "channels should not be empty here");
 
                 None
-            }
+            };
         }
 
         info!(target: "poll-thread",

@@ -3244,8 +3244,8 @@ where
     }
 
     #[inline]
-    fn len(&self) -> usize {
-        self.frags[0].len()
+    fn nbytes(&self) -> usize {
+        self.frags[0].nbytes()
     }
 
     fn recv_req(
