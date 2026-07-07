@@ -695,7 +695,6 @@ fn test_private_create_batch_retry_succeed() {
 fn test_private_create_batch_permanent() {
     init();
 
-    let now = Instant::now();
     let test_endpoint = TestEndpoint::from(TEST_ENDPOINT);
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
@@ -1505,7 +1504,6 @@ fn test_private_start_batch_retry_succeed() {
 fn test_private_start_batch_permanent() {
     init();
 
-    let now = Instant::now();
     let test_endpoint = TestEndpoint::from(TEST_ENDPOINT);
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
@@ -2310,7 +2308,6 @@ fn test_private_cancel_batch_retry_succeed() {
 fn test_private_cancel_batch_permanent() {
     init();
 
-    let now = Instant::now();
     let test_endpoint = TestEndpoint::from(TEST_ENDPOINT);
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])

@@ -2669,13 +2669,6 @@ fn test_send_from_outbound_offer_indef_permanent() {
     let mut stream: TestPrivateStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
         TestPrivateStream::new(script);
     let msg = vec![0x11; 4096];
-    let hasher = SHA3Algo::default();
-    let hash = hasher.hash_bytes(once(
-        TestBytesCodec
-            .encode_to_vec(&msg)
-            .expect("Expected success")
-            .as_slice()
-    ));
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);

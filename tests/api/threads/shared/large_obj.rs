@@ -2686,7 +2686,6 @@ fn test_send_from_outbound_offer_indef_permanent() {
     let mut stream: TestSharedStream<Vec<u8>, LargeObjMsg<SHA3ID>, SHA3ID> =
         TestSharedStream::new(script, vec![0, 1, 2].into_iter());
     let msg = vec![0x11; 4096];
-    let hasher = SHA3Algo::default();
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> =
         vec![(Some(msg), Some(when)), (None, None), (None, Some(later))];
     let msgs = TestLargeObjMsgs::new(script);
@@ -13907,10 +13906,6 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-
-    let next = mode
-        .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
-        .expect("Expected success");
 
     let next = mode
         .retry_pending(&mut (), &mut proto, &mut stream, &tokens, later)
