@@ -35,12 +35,10 @@ use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::MsgAuthN;
-use constellation_auth::cred::Credentials;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::net::PrivateMsgs;
 use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
@@ -120,7 +118,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             Self::AuthNChan,
             ReportStreamError = Self::ReportStreamError
         > + Send;
-    type Msgs: PrivateMsgs<Self::OutMsg> + Send;
+    type Msgs: Send;
     type RecvError: Debug + Display + ScopedError;
     type Recv: AuthNMsgRecv<
             Self::MsgPrin,
@@ -128,18 +126,17 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             Self::AuthNMsg,
             RecvError = Self::RecvError
         > + Send;
-    type Chan: Credentials
-        + PullStream<Self::Wrapper, PullError = Self::PullError>;
+    type Chan: PullStream<Self::Wrapper, PullError = Self::PullError>;
     type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan> + Send;
     type ModeConfig: Clone + Send;
     type ModeCreateError: Debug + Display;
-    type Mode: PushMode<Self::Stream, Self::Msgs, DispatchThreadCtx<Self::Chans, Ctx>>
+    type Mode: PushMode<Self::Stream, Self::Msgs,
+                        DispatchThreadCtx<Self::Chans, Ctx>>
         + for<'a> CreateWithParam<
             &'a Self::Stream,
             Config = Self::ModeConfig,
             CreateError = Self::ModeCreateError
         > + Send;
-    type ChansSrcs;
     type ChansConfig;
     type ChansCreateError: Debug + Display;
     type ChanShutdownRetry: RetryWhen + Send;
@@ -198,7 +195,7 @@ where
     /// This will be used by the created [PushStreamPrivateThread] to
     /// obtain messages to be sent using the
     /// [PushStream](Dispatch::PushStream) instance.
-    type Msgs: PrivateMsgs<Types::OutMsg>;
+    type Msgs;
     /// Type of authenticated message receivers.
     ///
     /// This will be used to deliver incoming messages.
@@ -231,7 +228,6 @@ where
     ) -> Result<
         Dispatched<
             Types,
-            Types::OutMsg,
             Self::PushStream,
             Self::Msgs,
             Self::Recv
@@ -255,16 +251,14 @@ where
 ///
 /// - `Stream`: Type of [PushStream]s used to send messages.
 ///
-/// - `Msgs`: Type of [PrivateMsgs] outbound message box used to generate
-///   outbound messages.
+/// - `Msgs`: Type of outbound message box used to generate outbound
+///   messages.
 ///
 /// - `Recv`: Type of [AuthNMsgRecv] used to send messages.
-pub struct Dispatched<Types, OutMsg, Stream, Msgs, Recv>
+pub struct Dispatched<Types, Stream, Msgs, Recv>
 where
     Types: DispatchInboundTypes,
-    Msgs: PrivateMsgs<OutMsg>,
     Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg> {
-    outmsg: PhantomData<OutMsg>,
     /// Flag used to signal shutdown to the connected thread.
     shutdown: ShutdownFlag,
     /// Message authenticator to use for inbound messages.
@@ -287,7 +281,6 @@ where
     >,
     dispatched: Dispatched<
         Types,
-        Types::OutMsg,
         Types::Stream,
         Types::Msgs,
         Types::Recv
@@ -384,11 +377,9 @@ pub enum DispatchThreadRecvError<ID, Pull, AuthN, Recv> {
     }
 }
 
-impl<Types, OutMsg, Stream, Msgs, Recv>
-    Dispatched<Types, OutMsg, Stream, Msgs, Recv>
+impl<Types, Stream, Msgs, Recv> Dispatched<Types, Stream, Msgs, Recv>
 where
     Types: DispatchInboundTypes,
-    Msgs: PrivateMsgs<OutMsg>,
     Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg>
 {
     /// Create a new `Dispatched` from its components.
@@ -400,7 +391,7 @@ where
     ///
     /// - `stream`: The [PushStream] used to send messages.
     ///
-    /// - `msgs`: The [PrivateMsgs] message outbox used to generate messages to
+    /// - `msgs`: The message outbox used to generate messages to
     ///   send.
     ///
     /// - `authn`: The [MsgAuthN] used to authenticate incoming messages.
@@ -415,7 +406,6 @@ where
         recv: Recv
     ) -> Self {
         Dispatched {
-            outmsg: PhantomData,
             shutdown: shutdown,
             stream: stream,
             authn: authn,
@@ -1255,7 +1245,6 @@ where
         id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
         dispatched: Dispatched<
             Types,
-            Types::OutMsg,
             Types::Stream,
             Types::Msgs,
             Types::Recv
