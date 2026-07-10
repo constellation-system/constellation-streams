@@ -21,24 +21,54 @@ use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
 
+use constellation_auth::authn::AuthNed;
+use constellation_auth::authn::AuthNMsgRecv;
+use constellation_auth::authn::BasicAuthNed;
+use constellation_auth::authn::PassthruMsgAuthN;
+use constellation_auth::cred::NullCred;
+use constellation_common::config::Create;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::retry::RetryResult;
+use constellation_common::retry::RetryWhen;
 use constellation_common::retry::next_retry;
 use mio::Token;
 
+use crate::addrs::test::TestEndpoint;
+use crate::channels::test::TestStreamID;
+use crate::channels::test::TestChannelParam;
+use crate::channels::test::TestChannels;
+use crate::channels::test::TestChannelsScript;
+use crate::channels::test::TestChannelsError;
+use crate::stream::PullStream;
+use crate::stream::StreamRefresh;
+use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
+use crate::threads::poll::PollThreadTypes;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TestError {
     pub scope: ErrorScope
 }
 
-pub struct SimpleTestStream {
-    pub sends: Vec<String>
+#[derive(Clone)]
+pub struct TestChannel {
+    id: String,
+    script: Arc<Mutex<Vec<Result<String, TestError>>>>
+}
+
+pub struct TestStream {
+    pub sends: Vec<String>,
+    pub reports: HashSet<(TestStreamID, String)>,
+    script: Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                       TestRefreshError>>
 }
 
 pub struct TestPushModeScriptElem {
@@ -53,6 +83,161 @@ pub struct TestPushMode {
     retries: Vec<(Instant, TestPushModeScriptElem)>,
     indefs: Vec<TestPushModeScriptElem>,
     completes: Vec<TestPushModeScriptElem>
+}
+
+#[derive(Default)]
+pub struct TestRecv {
+    pub msgs: Vec<BasicAuthNed<NullCred, String>>
+}
+
+pub struct PollThreadTestTypes;
+
+#[derive(Clone, Debug)]
+pub struct TestRefreshRetry {
+    when: Instant,
+    result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                       TestRefreshError>>
+}
+
+#[derive(Clone, Debug)]
+pub struct TestCompletableError {
+    scope: ErrorScope,
+    result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                       TestRefreshError>>
+}
+
+#[derive(Clone, Debug)]
+pub enum TestRefreshError {
+    Completable {
+        result: TestCompletableError
+    },
+    Permanent {
+        err: TestError
+    }
+}
+
+impl ScopedError for TestCompletableError {
+    fn scope(&self) -> ErrorScope {
+        self.scope
+    }
+}
+
+impl RecoverableError for TestRefreshError {
+    type Completable = TestCompletableError;
+    type Permanent = TestError;
+
+    fn split(
+        self
+    ) -> (Option<<TestRefreshError as RecoverableError>::Completable>,
+          Option<<TestRefreshError as RecoverableError>::Permanent>) {
+        match self {
+            TestRefreshError::Completable { result } => (Some(result), None),
+            TestRefreshError::Permanent { err } => (None, Some(err))
+        }
+    }
+}
+
+impl RetryWhen for TestRefreshRetry {
+    #[inline]
+    fn when(&self) -> Instant {
+        self.when
+    }
+}
+
+impl Create for TestStream {
+    type Config = Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                             TestRefreshError>>;
+    type CreateError = Infallible;
+
+    fn create(mut script: Self::Config) -> Result<Self, Self::CreateError> {
+        script.reverse();
+
+        Ok(TestStream {
+            sends: Vec::new(),
+            reports: HashSet::new(),
+            script: script,
+        })
+    }
+}
+
+impl CreateWithParam<String> for TestChannel {
+    type Config = Vec<Result<String, TestError>>;
+    type CreateError = Infallible;
+
+    #[inline]
+    fn create(
+        mut script: Vec<Result<String, TestError>>,
+        id: String
+    ) -> Result<Self, Self::CreateError> {
+        script.reverse();
+
+        Ok(TestChannel {
+            id: id,
+            script: Arc::new(Mutex::new(script))
+        })
+    }
+}
+
+impl<Ctx> StreamRefresh<Ctx> for TestStream {
+    type RefreshRetry = TestRefreshRetry;
+    type RefreshError = TestRefreshError;
+
+    fn refresh(
+        &mut self,
+        _ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        self.script.pop().expect("Expected scripted action")
+    }
+
+    fn retry_refresh(
+        &mut self,
+        _ctx: &mut Ctx,
+        retry: Self::RefreshRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        retry.result.as_ref().clone()
+    }
+
+    fn complete_refresh(
+        &mut self,
+        _ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        errs.result.as_ref().clone()
+    }
+}
+
+impl PullStream<String> for TestChannel {
+    type PullError = TestError;
+
+    #[inline]
+    fn pull(&mut self) -> Result<String, Self::PullError> {
+        self.script.lock().expect("lock failed")
+            .pop().expect("Expected scripted action")
+    }
+}
+
+impl AuthNMsgRecv<NullCred, String, BasicAuthNed<NullCred, String>>
+    for TestRecv {
+    type RecvError = Infallible;
+
+    #[inline]
+    fn recv_auth_msg(
+        &mut self,
+        msg: BasicAuthNed<NullCred, String>
+    ) -> Result<(), Self::RecvError> {
+        self.msgs.push(msg);
+
+        Ok(())
+    }
 }
 
 impl<'a, Ctx> CreateWithParam<&'a mut Ctx> for TestPushMode {
@@ -78,7 +263,7 @@ impl<'a, Ctx> CreateWithParam<&'a mut Ctx> for TestPushMode {
 impl TestPushMode {
     fn process_script_elem(
         &mut self,
-        stream: &mut SimpleTestStream,
+        stream: &mut TestStream,
         elem: TestPushModeScriptElem
     ) -> Option<Instant> {
         let TestPushModeScriptElem { sends, retries, indefs, completes } = elem;
@@ -104,7 +289,26 @@ impl TestPushMode {
     }
 }
 
-impl<Ctx> PushMode<SimpleTestStream, (), Ctx> for TestPushMode {
+impl StreamReporter<NullCred, TestStreamID, BasicAuthNed<NullCred, TestChannel>>
+    for TestStream {
+    type ReportStreamError = Infallible;
+
+    fn report_stream(
+        &mut self,
+        _party: &NullCred,
+        id: TestStreamID,
+        stream: BasicAuthNed<NullCred, TestChannel>
+    ) -> Result<Option<BasicAuthNed<NullCred, TestChannel>>,
+                Self::ReportStreamError> {
+        if !self.reports.insert((id, stream.get().id.clone())) {
+            Ok(Some(stream))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
     type SendError = TestError;
     type RetryError = TestError;
     type RetryIndefError = TestError;
@@ -113,7 +317,7 @@ impl<Ctx> PushMode<SimpleTestStream, (), Ctx> for TestPushMode {
         &mut self,
         _ctx: &mut Ctx,
         _msgs: &mut (),
-        stream: &mut SimpleTestStream,
+        stream: &mut TestStream,
         _live: &HashSet<Token>
     ) -> Result<PushModeResult, Self::SendError> {
         let elem = self.script.pop().expect("Expected script element");
@@ -131,7 +335,7 @@ impl<Ctx> PushMode<SimpleTestStream, (), Ctx> for TestPushMode {
         &mut self,
         _ctx: &mut Ctx,
         _msgs: &mut (),
-        stream: &mut SimpleTestStream,
+        stream: &mut TestStream,
         _live: &HashSet<Token>,
         now: Instant
     ) -> Result<PushModeResult, Self::SendError> {
@@ -161,7 +365,7 @@ impl<Ctx> PushMode<SimpleTestStream, (), Ctx> for TestPushMode {
         &mut self,
         _ctx: &mut Ctx,
         _msgs: &mut (),
-        stream: &mut SimpleTestStream,
+        stream: &mut TestStream,
         _live: &HashSet<Token>
     ) -> Result<PushModeResult, Self::SendError> {
         let mut curr = None;
@@ -186,7 +390,7 @@ impl<Ctx> PushMode<SimpleTestStream, (), Ctx> for TestPushMode {
         &mut self,
         _ctx: &mut Ctx,
         _msgs: &mut (),
-        stream: &mut SimpleTestStream,
+        stream: &mut TestStream,
     ) -> Result<PushModeResult, Self::SendError> {
         let mut curr = None;
         let completes: Vec<_> = self.indefs.drain(..).collect();
@@ -221,4 +425,40 @@ impl Display for TestError {
     ) -> Result<(), Error> {
         write!(f, "test error {}", self.scope)
     }
+}
+
+impl<Ctx> PollThreadTypes<Ctx> for PollThreadTestTypes
+where
+    Ctx: 'static + Send {
+    type Addr = TestEndpoint;
+    type ChannelParam = TestChannelParam;
+    type ChannelID = String;
+    type MsgPrin = NullCred;
+    type SessionPrin = NullCred;
+    type AuthNChan = BasicAuthNed<NullCred, TestChannel>;
+    type Chan = TestChannel;
+    type PullError = TestError;
+    type RefreshRetry = TestRefreshRetry;
+    type RefreshCompletableError = TestCompletableError;
+    type RefreshPermanentError = TestError;
+    type RefreshError = TestRefreshError;
+    type Stream = TestStream;
+    type InMsg = String;
+    type AuthNMsg = BasicAuthNed<NullCred, String>;
+    type Wrapper = String;
+    type Msgs = ();
+    type ChansConfig = TestChannelsScript<BasicAuthNed<NullCred, TestChannel>>;
+    type ChansCreateError = Infallible;
+    type ChanShutdownRetry = Instant;
+    type ChanShutdownError = TestChannelsError;
+    type Chans = TestChannels<BasicAuthNed<NullCred, TestChannel>>;
+    type MsgAuthConfig = ();
+    type MsgAuth = PassthruMsgAuthN<String, NullCred>;
+    type MsgAuthCreateError = Infallible;
+    type MsgAuthError = Infallible;
+    type RecvError = Infallible;
+    type Recv = TestRecv;
+    type ModeConfig = Vec<TestPushModeScriptElem>;
+    type ModeCreateError = Infallible;
+    type Mode = TestPushMode;
 }

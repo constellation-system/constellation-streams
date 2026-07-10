@@ -39,13 +39,9 @@ use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
+use crate::stream::StreamID;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TestStreamID {
-    pub channel: String,
-    pub param: TestChannelParam,
-    pub endpoint: TestEndpoint
-}
+pub type TestStreamID = StreamID<TestEndpoint, String, TestChannelParam>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestChannelParam {
@@ -263,11 +259,8 @@ where
         )>,
         Self::ReqStreamError
     > {
-        let id = TestStreamID {
-            channel: channel.clone(),
-            param: param.clone(),
-            endpoint: endpoint.clone()
-        };
+        let id = StreamID::new(endpoint.clone(), channel.clone(),
+                               param.clone());
 
         self.req_streams
             .get_mut(&id)
@@ -291,11 +284,11 @@ where
         )> = Vec::with_capacity(self.req_streams.len());
 
         for (id, script) in self.req_streams.iter() {
-            if channels.contains(&id.channel) {
+            if channels.contains(id.channel()) {
                 if let Some((_, when)) = script.last() {
                     params.push((
-                        id.channel.clone(),
-                        RetryResult::Success((vec![id.param.clone()], *when))
+                        id.channel().clone(),
+                        RetryResult::Success((vec![id.param().clone()], *when))
                     ));
                 }
             }
@@ -348,7 +341,8 @@ where
                         .into_iter()
                         .map(|mut val| {
                             let key =
-                                (val.id.channel.clone(), val.id.param.clone());
+                                (val.id.channel().clone(),
+                                 val.id.param().clone());
 
                             val.shutdown.reverse();
 
@@ -358,17 +352,19 @@ where
                             }
 
                             (
-                                val.id.endpoint,
-                                val.id.channel,
-                                val.id.param,
+                                val.id.party_addr().clone(),
+                                val.id.channel().clone(),
+                                val.id.param().clone(),
                                 val.stream
                             )
                         })
                         .collect();
                     let ids: Vec<(TestEndpoint, String, TestChannelParam)> =
                         ids.into_iter()
-                            .map(|id| (id.endpoint, id.channel, id.param))
-                            .collect();
+                        .map(|id| (id.party_addr().clone(),
+                                   id.channel().clone(),
+                                   id.param().clone()))
+                        .collect();
 
                     if let Some(refreshes) = &refreshes {
                         let refreshes: HashSet<(String, TestChannelParam)> =
@@ -471,18 +467,5 @@ impl Display for TestChannelParam {
         }
 
         Ok(())
-    }
-}
-
-impl Display for TestStreamID {
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        write!(
-            f,
-            "test stream, channel: {}, {}, addr: {}",
-            self.channel, self.param, self.endpoint
-        )
     }
 }
