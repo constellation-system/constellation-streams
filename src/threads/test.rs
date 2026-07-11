@@ -82,10 +82,10 @@ pub struct TestChannel {
 }
 
 pub struct TestStream {
-    pub sends: Vec<String>,
+    pub sends: Arc<Mutex<Vec<String>>>,
     pub reports: HashSet<(TestStreamID, String)>,
-    script: Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
-                       TestRefreshError>>
+    refresh_script: Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                               TestRefreshError>>
 }
 
 #[derive(Clone)]
@@ -97,7 +97,7 @@ pub struct TestPushModeScriptElem {
 }
 
 pub struct TestPushMode {
-    script: Vec<TestPushModeScriptElem>,
+    script: Vec<Result<TestPushModeScriptElem, TestError>>,
     retries: Vec<(Instant, TestPushModeScriptElem)>,
     indefs: Vec<TestPushModeScriptElem>,
     completes: Vec<TestPushModeScriptElem>
@@ -224,9 +224,9 @@ impl Create for TestStream {
         script.reverse();
 
         Ok(TestStream {
-            sends: Vec::new(),
+            sends: Arc::new(Mutex::new(Vec::new())),
             reports: HashSet::new(),
-            script: script,
+            refresh_script: script,
         })
     }
 }
@@ -260,7 +260,7 @@ impl<Ctx> StreamRefresh<Ctx> for TestStream {
         RetryResult<Option<Instant>, Self::RefreshRetry>,
         Self::RefreshError
     > {
-        self.script.pop().expect("Expected scripted action")
+        self.refresh_script.pop().expect("Expected scripted action")
     }
 
     fn retry_refresh(
@@ -312,7 +312,7 @@ impl AuthNMsgRecv<NullCred, String, BasicAuthNed<NullCred, String>>
 }
 
 impl<Ctx> CreateWithParam<&'_ Ctx> for TestPushMode {
-    type Config = Vec<TestPushModeScriptElem>;
+    type Config = Vec<Result<TestPushModeScriptElem, TestError>>;
     type CreateError = Infallible;
 
     #[inline]
@@ -353,7 +353,7 @@ impl TestPushMode {
 
         sends
             .and_then(|(next, mut sends)| {
-                stream.sends.append(&mut sends);
+                stream.sends.lock().expect("lock failed").append(&mut sends);
 
                 next
             })
@@ -391,7 +391,7 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         stream: &mut TestStream,
         _live: &HashSet<Token>
     ) -> Result<PushModeResult, Self::SendError> {
-        let elem = self.script.pop().expect("Expected script element");
+        let elem = self.script.pop().expect("Expected script element")?;
         let next_outbound = self.process_script_elem(stream, elem);
         let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
@@ -529,7 +529,7 @@ where
     type MsgAuthError = Infallible;
     type RecvError = Infallible;
     type Recv = TestRecv;
-    type ModeConfig = Vec<TestPushModeScriptElem>;
+    type ModeConfig = Vec<Result<TestPushModeScriptElem, TestError>>;
     type ModeCreateError = Infallible;
     type Mode = TestPushMode;
 }
@@ -563,7 +563,7 @@ where
     type Recv = TestRecv;
     type Chan = TestChannel;
     type AuthNChan = BasicAuthNed<NullCred, TestChannel>;
-    type ModeConfig = Vec<TestPushModeScriptElem>;
+    type ModeConfig = Vec<Result<TestPushModeScriptElem, TestError>>;
     type ModeCreateError = Infallible;
     type Mode = TestPushMode;
     type ChansConfig = TestChannelsScript<BasicAuthNed<NullCred, TestChannel>>;

@@ -157,6 +157,11 @@ where
     type ModeCreateError: Debug + Display;
     type Mode: 'static
         + PushMode<Self::Stream, Self::Msgs, PollThreadCtx<Self::Chans, Ctx>>
+        + for<'a> CreateWithParam<
+            &'a Self::Stream,
+            Config = Self::ModeConfig,
+            CreateError = Self::ModeCreateError
+        >
         + Send;
 }
 
@@ -304,7 +309,7 @@ where
 
 impl<Ctx, Types> PollThread<Ctx, Types>
 where
-    Types: PollThreadTypes<Ctx>,
+    Types: 'static + PollThreadTypes<Ctx>,
     Ctx: 'static + Send
 {
     pub fn create(
@@ -328,13 +333,7 @@ where
             Types::ChansCreateError,
             Types::MsgAuthCreateError
         >
-    >
-    where
-        Types::Mode: for<'a> CreateWithParam<
-            &'a Types::Stream,
-            Config = Types::ModeConfig,
-            CreateError = Types::ModeCreateError
-        > {
+    > {
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
         let mode = Types::Mode::create(mode_config, &stream)
@@ -363,13 +362,7 @@ where
             ctx: ctx
         })
     }
-}
 
-impl<Ctx, Types> PollThread<Ctx, Types>
-where
-    Ctx: 'static + Send,
-    Types: 'static + PollThreadTypes<Ctx>
-{
     /// Get the [Waker] used to signal availability of new messages
     /// to this thread.
     #[inline]
@@ -670,10 +663,20 @@ where
         let mut valid = true;
 
         // First deal with stalled and pending sends.
-        let this_outbound = pending.take_next_outbound();
+        let outbound_ready = if pending.next_outbound()
+            .is_some_and(|when| when <= now) {
+            let _ = pending.take_next_outbound();
+
+            true
+        } else {
+            false
+        };
 
         // Complete any stalled sends first.
         if pending.take_has_completes() {
+            trace!(target: "poll-thread",
+                   "processing stalled sends");
+
             match self.mode.complete_pending(
                 &mut self.ctx,
                 &mut self.msgs,
@@ -692,11 +695,18 @@ where
         }
 
         if let Some(mut retries) = self.shutdown_retries.take() {
+            trace!(target: "poll-thread",
+                   "processing shutdown retries");
+
             let mut newents: Option<Vec<_>> = None;
 
             while retries.peek().is_some_and(|ent| ent.when() <= now) {
                 if let Some(ent) = retries.pop() {
                     let (id, retry) = ent.take();
+
+                    trace!(target: "poll-thread",
+                           "retrying shutdown of {}",
+                           id);
 
                     match self.ctx.channels.retry_shutdown_stream(
                         &mut self.ctx.ctx,
@@ -888,13 +898,8 @@ where
             }
         }
 
-        // XXX will need to have a mailbox to allow application layer
-        // to signal that outbound messages are ready.
-
         // Push new messages.
-        if this_outbound.is_some_and(|when| when <= now) ||
-            live.contains(&self.notify_token)
-        {
+        if outbound_ready || live.contains(&self.notify_token) {
             trace!(target: "poll-thread",
                    "pushing messages");
 
@@ -907,10 +912,23 @@ where
                 Ok(res) => {
                     pending.merge(&res);
                 }
-                Err(err) => {
-                    error!(target: "poll-thread",
-                           "error sending messages: {}",
-                           err);
+                Err(err) => match err.scope() {
+                    ErrorScope::Unrecoverable |
+                    ErrorScope::System => {
+                        error!(target: "poll-thread",
+                               "fatal error sending messages: {}",
+                               err);
+
+                        valid = false;
+                    }
+                    ErrorScope::Shutdown => {
+                        valid = false;
+                    }
+                    _ => {
+                        error!(target: "poll-thread",
+                               "error sending messages: {}",
+                               err);
+                    }
                 }
             }
         }
@@ -1202,4 +1220,254 @@ where
             PollThreadRecvError::Recv { err } => err.fmt(f)
         }
     }
+}
+
+#[cfg(test)]
+use std::time::Duration;
+
+#[cfg(test)]
+use constellation_auth::cred::NullCred;
+
+#[cfg(test)]
+use crate::init;
+#[cfg(test)]
+use crate::channels::test::TestChannelsScript;
+#[cfg(test)]
+use crate::threads::test::TestPushModeScriptElem;
+#[cfg(test)]
+use crate::threads::test::TestStream;
+#[cfg(test)]
+use crate::threads::test::ThreadTestTypes;
+#[cfg(test)]
+use crate::threads::test::TestError;
+#[cfg(test)]
+use crate::threads::test::TestRecv;
+
+#[test]
+fn test_send() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: Some((Some(when), vec![String::from("hello")])),
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(when));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+}
+
+#[test]
+fn test_send_later() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(when), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(when));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+}
+
+#[test]
+fn test_send_error() {
+    init();
+
+    let now = Instant::now();
+    let mode_config = vec![
+        Err(TestError { scope: ErrorScope::Unrecoverable })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(!res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
 }
