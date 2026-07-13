@@ -305,7 +305,7 @@ impl PushModeResult {
 
     #[inline]
     pub fn take_retry_pending(&mut self) -> Option<Instant> {
-        self.next_outbound.take()
+        self.next_retry.take()
     }
 
     #[inline]

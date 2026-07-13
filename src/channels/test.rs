@@ -33,12 +33,14 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 use mio::Token;
+use log::trace;
 
 use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
+use crate::stream::PullStream;
 use crate::stream::StreamID;
 
 pub type TestStreamID = StreamID<TestEndpoint, String, TestChannelParam>;
@@ -48,7 +50,8 @@ pub struct TestChannelParam {
     pub accepts: HashSet<TestEndpoint>
 }
 
-pub struct TestStream<Stream> {
+#[derive(Clone)]
+pub struct TestChannel<Stream> {
     id: TestStreamID,
     stream: Stream,
     shutdown: Vec<
@@ -59,7 +62,7 @@ pub struct TestStream<Stream> {
     >
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TestChannelsError {
     pub scope: ErrorScope
 }
@@ -82,7 +85,7 @@ pub struct TestChannels<Stream> {
     listen: Vec<
         Result<
             RetryResult<(
-                Vec<TestStream<Stream>>,
+                Vec<TestChannel<Stream>>,
                 Vec<TestStreamID>,
                 Option<Vec<(String, Option<Vec<TestChannelParam>>)>>,
                 Option<Instant>
@@ -117,7 +120,7 @@ pub struct TestChannelsScript<Stream> {
     pub listen: Vec<
         Result<
             RetryResult<(
-                Vec<TestStream<Stream>>,
+                Vec<TestChannel<Stream>>,
                 Vec<TestStreamID>,
                 Option<Vec<(String, Option<Vec<TestChannelParam>>)>>,
                 Option<Instant>
@@ -127,6 +130,27 @@ pub struct TestChannelsScript<Stream> {
     >,
     pub shutdown_listen:
         Vec<Result<Option<Option<Instant>>, TestChannelsError>>
+}
+
+impl<Stream> TestChannel<Stream> {
+    pub fn new(
+        id: TestStreamID,
+        stream: Stream,
+        mut shutdown: Vec<
+            Result<
+                RetryResult<(Option<Vec<TestChannelParam>>, Option<Instant>)>,
+                TestChannelsError
+            >
+        >
+    ) -> Self {
+        shutdown.reverse();
+
+        TestChannel {
+            id: id,
+            stream: stream,
+            shutdown: shutdown
+        }
+    }
 }
 
 impl ChannelParam<TestEndpoint> for TestChannelParam {
@@ -155,6 +179,22 @@ impl Hash for TestChannelParam {
 impl ScopedError for TestChannelsError {
     fn scope(&self) -> ErrorScope {
         self.scope
+    }
+}
+
+impl<Stream> TestChannel<Stream> {
+    pub fn id(&self) -> &TestStreamID {
+        &self.id
+    }
+}
+
+impl<Stream, Msg> PullStream<Msg> for TestChannel<Stream>
+where Stream: PullStream<Msg> {
+    type PullError = Stream::PullError;
+
+    #[inline]
+    fn pull(&mut self) -> Result<Msg, Self::PullError> {
+        self.stream.pull()
     }
 }
 
@@ -346,9 +386,13 @@ where
 
                             val.shutdown.reverse();
 
-                            if self.actives.insert(key, val.shutdown).is_some()
-                            {
-                                panic!("Stream {:?} already exists", val.id)
+                            if !self.actives.contains_key(&key) {
+                                if self.actives
+                                    .insert(key, val.shutdown)
+                                    .is_some()
+                                {
+                                    panic!("Stream {:?} already exists", val.id)
+                                }
                             }
 
                             (

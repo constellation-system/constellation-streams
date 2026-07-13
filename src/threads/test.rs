@@ -76,14 +76,13 @@ pub struct TestError {
 }
 
 #[derive(Clone)]
-pub struct TestChannel {
-    id: String,
-    script: Arc<Mutex<Vec<Result<String, TestError>>>>
+pub struct TestChannelCore {
+    script: Vec<Result<String, TestError>>
 }
 
 pub struct TestStream {
     pub sends: Arc<Mutex<Vec<String>>>,
-    pub reports: HashSet<(TestStreamID, String)>,
+    pub reports: Arc<Mutex<HashSet<TestStreamID>>>,
     refresh_script: Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
                                TestRefreshError>>
 }
@@ -91,16 +90,17 @@ pub struct TestStream {
 #[derive(Clone)]
 pub struct TestPushModeScriptElem {
     pub sends: Option<(Option<Instant>, Vec<String>)>,
-    pub retries: Option<Box<(Instant, TestPushModeScriptElem)>>,
-    pub indefs: Option<Box<TestPushModeScriptElem>>,
-    pub completes: Option<Box<TestPushModeScriptElem>>
+    pub retries: Option<Box<(Instant, Result<TestPushModeScriptElem,
+                                             TestError>)>>,
+    pub indefs: Option<Box<Result<TestPushModeScriptElem, TestError>>>,
+    pub completes: Option<Box<Result<TestPushModeScriptElem, TestError>>>
 }
 
 pub struct TestPushMode {
     script: Vec<Result<TestPushModeScriptElem, TestError>>,
-    retries: Vec<(Instant, TestPushModeScriptElem)>,
-    indefs: Vec<TestPushModeScriptElem>,
-    completes: Vec<TestPushModeScriptElem>
+    retries: Vec<(Instant, Result<TestPushModeScriptElem, TestError>)>,
+    indefs: Vec<Result<TestPushModeScriptElem, TestError>>,
+    completes: Vec<Result<TestPushModeScriptElem, TestError>>
 }
 
 #[derive(Default)]
@@ -159,6 +159,28 @@ impl RetryWhen for TestRefreshRetry {
     #[inline]
     fn when(&self) -> Instant {
         self.when
+    }
+}
+
+impl AuthNed<NullCred, TestChannelCore> for TestChannelCore {
+    #[inline]
+    fn prin(&self) -> &NullCred {
+        &NullCred
+    }
+
+    #[inline]
+    fn get(&self) -> &Self {
+        self
+    }
+
+    #[inline]
+    fn get_mut(&mut self) -> &mut Self {
+        self
+    }
+
+    #[inline]
+    fn take(self) -> (NullCred, Self) {
+        (NullCred, self)
     }
 }
 
@@ -225,26 +247,24 @@ impl Create for TestStream {
 
         Ok(TestStream {
             sends: Arc::new(Mutex::new(Vec::new())),
-            reports: HashSet::new(),
+            reports: Arc::new(Mutex::new(HashSet::new())),
             refresh_script: script,
         })
     }
 }
 
-impl CreateWithParam<String> for TestChannel {
+impl Create for TestChannelCore {
     type Config = Vec<Result<String, TestError>>;
     type CreateError = Infallible;
 
     #[inline]
     fn create(
         mut script: Vec<Result<String, TestError>>,
-        id: String
     ) -> Result<Self, Self::CreateError> {
         script.reverse();
 
-        Ok(TestChannel {
-            id: id,
-            script: Arc::new(Mutex::new(script))
+        Ok(TestChannelCore {
+            script: script
         })
     }
 }
@@ -286,13 +306,12 @@ impl<Ctx> StreamRefresh<Ctx> for TestStream {
     }
 }
 
-impl PullStream<String> for TestChannel {
+impl PullStream<String> for TestChannelCore {
     type PullError = TestError;
 
     #[inline]
     fn pull(&mut self) -> Result<String, Self::PullError> {
-        self.script.lock().expect("lock failed")
-            .pop().expect("Expected scripted action")
+        self.script.pop().expect("Expected scripted action")
     }
 }
 
@@ -360,18 +379,16 @@ impl TestPushMode {
     }
 }
 
-impl StreamReporter<NullCred, TestStreamID, BasicAuthNed<NullCred, TestChannel>>
-    for TestStream {
+impl StreamReporter<NullCred, TestStreamID, TestChannelCore> for TestStream {
     type ReportStreamError = Infallible;
 
     fn report_stream(
         &mut self,
         _party: &NullCred,
         id: TestStreamID,
-        stream: BasicAuthNed<NullCred, TestChannel>
-    ) -> Result<Option<BasicAuthNed<NullCred, TestChannel>>,
-                Self::ReportStreamError> {
-        if !self.reports.insert((id, stream.get().id.clone())) {
+        stream: TestChannelCore
+    ) -> Result<Option<TestChannelCore>, Self::ReportStreamError> {
+        if !self.reports.lock().expect("lock failed").insert(id) {
             Ok(Some(stream))
         } else {
             Ok(None)
@@ -412,24 +429,37 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
     ) -> Result<PushModeResult, Self::SendError> {
         let mut curr = None;
         let retries: Vec<_> = self.retries.drain(..).collect();
+        let mut errs = Vec::new();
 
         for (when, elem) in retries {
             if when <= now {
-                let next_outbound = self.process_script_elem(stream, elem);
+                match elem {
+                    Ok(elem) => {
+                        let next_outbound = self
+                            .process_script_elem(stream, elem);
 
-                curr = next_retry(&curr, &next_outbound)
+                        curr = next_retry(&curr, &next_outbound)
+                    }
+                    Err(err) => {
+                        errs.push(err);
+                    }
+                }
             } else {
                 self.retries.push((when, elem))
             }
         }
 
-        let next_retry = self.retries.iter().map(|(when, _)| *when).min();
+        if let Some(err) = errs.pop() {
+            Err(err)
+        } else {
+            let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
-        Ok(PushModeResult {
-            next_outbound: curr,
-            next_retry: next_retry,
-            has_completes: !self.completes.is_empty()
-        })
+            Ok(PushModeResult {
+                next_outbound: curr,
+                next_retry: next_retry,
+                has_completes: !self.completes.is_empty()
+            })
+        }
     }
 
     fn complete_pending(
@@ -441,20 +471,32 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
     ) -> Result<PushModeResult, Self::SendError> {
         let mut curr = None;
         let completes: Vec<_> = self.completes.drain(..).collect();
+        let mut errs = Vec::new();
 
         for elem in completes {
-            let next_outbound = self.process_script_elem(stream, elem);
+            match elem {
+                Ok(elem) => {
+                    let next_outbound = self.process_script_elem(stream, elem);
 
-            curr = next_retry(&curr, &next_outbound)
+                    curr = next_retry(&curr, &next_outbound)
+                }
+                Err(err) => {
+                    errs.push(err);
+                }
+            }
+         }
+
+        if let Some(err) = errs.pop() {
+            Err(err)
+        } else {
+            let next_retry = self.retries.iter().map(|(when, _)| *when).min();
+
+            Ok(PushModeResult {
+                next_outbound: curr,
+                next_retry: next_retry,
+                has_completes: !self.completes.is_empty()
+            })
         }
-
-        let next_retry = self.retries.iter().map(|(when, _)| *when).min();
-
-        Ok(PushModeResult {
-            next_outbound: curr,
-            next_retry: next_retry,
-            has_completes: !self.completes.is_empty()
-        })
     }
 
     fn retry_indefs(
@@ -464,21 +506,33 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         stream: &mut TestStream,
     ) -> Result<PushModeResult, Self::SendError> {
         let mut curr = None;
-        let completes: Vec<_> = self.indefs.drain(..).collect();
+        let indefs: Vec<_> = self.indefs.drain(..).collect();
+        let mut errs = Vec::new();
 
-        for elem in completes {
-            let next_outbound = self.process_script_elem(stream, elem);
+        for elem in indefs {
+            match elem {
+                Ok(elem) => {
+                    let next_outbound = self.process_script_elem(stream, elem);
 
-            curr = next_retry(&curr, &next_outbound)
+                    curr = next_retry(&curr, &next_outbound)
+                }
+                Err(err) => {
+                    errs.push(err);
+                }
+            }
         }
 
-        let next_retry = self.retries.iter().map(|(when, _)| *when).min();
+        if let Some(err) = errs.pop() {
+            Err(err)
+        } else {
+            let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
-        Ok(PushModeResult {
-            next_outbound: curr,
-            next_retry: next_retry,
-            has_completes: !self.completes.is_empty()
-        })
+            Ok(PushModeResult {
+                next_outbound: curr,
+                next_retry: next_retry,
+                has_completes: !self.completes.is_empty()
+            })
+        }
     }
 }
 
@@ -506,8 +560,8 @@ where
     type ChannelID = String;
     type MsgPrin = NullCred;
     type SessionPrin = NullCred;
-    type AuthNChan = BasicAuthNed<NullCred, TestChannel>;
-    type Chan = TestChannel;
+    type AuthNChan = TestChannelCore;
+    type Chan = TestChannelCore;
     type PullError = TestError;
     type RefreshRetry = TestRefreshRetry;
     type RefreshCompletableError = TestCompletableError;
@@ -518,11 +572,11 @@ where
     type AuthNMsg = BasicAuthNed<NullCred, String>;
     type Wrapper = String;
     type Msgs = ();
-    type ChansConfig = TestChannelsScript<BasicAuthNed<NullCred, TestChannel>>;
+    type ChansConfig = TestChannelsScript<TestChannelCore>;
     type ChansCreateError = Infallible;
     type ChanShutdownRetry = Instant;
     type ChanShutdownError = TestChannelsError;
-    type Chans = TestChannels<BasicAuthNed<NullCred, TestChannel>>;
+    type Chans = TestChannels<TestChannelCore>;
     type MsgAuthConfig = ();
     type MsgAuth = PassthruMsgAuthN<String, NullCred>;
     type MsgAuthCreateError = Infallible;
@@ -561,16 +615,16 @@ where
     type Msgs = ();
     type RecvError = Infallible;
     type Recv = TestRecv;
-    type Chan = TestChannel;
-    type AuthNChan = BasicAuthNed<NullCred, TestChannel>;
+    type Chan = TestChannelCore;
+    type AuthNChan = TestChannelCore;
     type ModeConfig = Vec<Result<TestPushModeScriptElem, TestError>>;
     type ModeCreateError = Infallible;
     type Mode = TestPushMode;
-    type ChansConfig = TestChannelsScript<BasicAuthNed<NullCred, TestChannel>>;
+    type ChansConfig = TestChannelsScript<TestChannelCore>;
     type ChansCreateError = Infallible;
     type ChanShutdownRetry = Instant;
     type ChanShutdownError = TestChannelsError;
-    type Chans = TestChannels<BasicAuthNed<NullCred, TestChannel>>;
+    type Chans = TestChannels<TestChannelCore>;
 }
 
 impl<Ctx> DispatchTypes<Ctx> for ThreadTestTypes
