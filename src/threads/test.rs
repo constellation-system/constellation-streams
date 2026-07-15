@@ -25,7 +25,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::BasicAuthNed;
 use constellation_auth::authn::PassthruMsgAuthN;
@@ -37,6 +36,7 @@ use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::WithRetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
 use mio::Token;
@@ -44,6 +44,7 @@ use mio::Waker;
 
 use crate::addrs::test::TestEndpoint;
 use crate::channels::test::TestStreamID;
+use crate::channels::test::TestChannel;
 use crate::channels::test::TestChannelParam;
 use crate::channels::test::TestChannels;
 use crate::channels::test::TestChannelsScript;
@@ -112,16 +113,16 @@ pub struct ThreadTestTypes;
 
 #[derive(Clone, Debug)]
 pub struct TestRefreshRetry {
-    when: Instant,
-    result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
-                       TestRefreshError>>
+    pub when: Instant,
+    pub result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                           TestRefreshError>>
 }
 
 #[derive(Clone, Debug)]
 pub struct TestCompletableError {
-    scope: ErrorScope,
-    result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
-                       TestRefreshError>>
+    pub scope: ErrorScope,
+    pub result: Arc<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
+                           TestRefreshError>>
 }
 
 #[derive(Clone, Debug)]
@@ -159,28 +160,6 @@ impl RetryWhen for TestRefreshRetry {
     #[inline]
     fn when(&self) -> Instant {
         self.when
-    }
-}
-
-impl AuthNed<NullCred, TestChannelCore> for TestChannelCore {
-    #[inline]
-    fn prin(&self) -> &NullCred {
-        &NullCred
-    }
-
-    #[inline]
-    fn get(&self) -> &Self {
-        self
-    }
-
-    #[inline]
-    fn get_mut(&mut self) -> &mut Self {
-        self
-    }
-
-    #[inline]
-    fn take(self) -> (NullCred, Self) {
-        (NullCred, self)
     }
 }
 
@@ -379,15 +358,15 @@ impl TestPushMode {
     }
 }
 
-impl StreamReporter<NullCred, TestStreamID, TestChannelCore> for TestStream {
+impl<Stream> StreamReporter<NullCred, TestStreamID, Stream> for TestStream {
     type ReportStreamError = Infallible;
 
     fn report_stream(
         &mut self,
         _party: &NullCred,
         id: TestStreamID,
-        stream: TestChannelCore
-    ) -> Result<Option<TestChannelCore>, Self::ReportStreamError> {
+        stream: Stream
+    ) -> Result<Option<Stream>, Self::ReportStreamError> {
         if !self.reports.lock().expect("lock failed").insert(id) {
             Ok(Some(stream))
         } else {
@@ -560,8 +539,8 @@ where
     type ChannelID = String;
     type MsgPrin = NullCred;
     type SessionPrin = NullCred;
-    type AuthNChan = TestChannelCore;
-    type Chan = TestChannelCore;
+    type AuthNChan = TestChannel<TestChannelCore>;
+    type Chan = TestChannel<TestChannelCore>;
     type PullError = TestError;
     type RefreshRetry = TestRefreshRetry;
     type RefreshCompletableError = TestCompletableError;
@@ -574,7 +553,7 @@ where
     type Msgs = ();
     type ChansConfig = TestChannelsScript<TestChannelCore>;
     type ChansCreateError = Infallible;
-    type ChanShutdownRetry = Instant;
+    type ChanShutdownRetry = WithRetryWhen<TestChannel<TestChannelCore>>;
     type ChanShutdownError = TestChannelsError;
     type Chans = TestChannels<TestChannelCore>;
     type MsgAuthConfig = ();
@@ -615,14 +594,14 @@ where
     type Msgs = ();
     type RecvError = Infallible;
     type Recv = TestRecv;
-    type Chan = TestChannelCore;
-    type AuthNChan = TestChannelCore;
+    type Chan = TestChannel<TestChannelCore>;
+    type AuthNChan = TestChannel<TestChannelCore>;
     type ModeConfig = Vec<Result<TestPushModeScriptElem, TestError>>;
     type ModeCreateError = Infallible;
     type Mode = TestPushMode;
     type ChansConfig = TestChannelsScript<TestChannelCore>;
     type ChansCreateError = Infallible;
-    type ChanShutdownRetry = Instant;
+    type ChanShutdownRetry = WithRetryWhen<TestChannel<TestChannelCore>>;
     type ChanShutdownError = TestChannelsError;
     type Chans = TestChannels<TestChannelCore>;
 }

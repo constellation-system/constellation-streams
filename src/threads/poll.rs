@@ -517,6 +517,10 @@ where
                     ) {
                         Ok(res) => {
                             if let RetryResult::Retry(retry) = res {
+                                trace!(target: "poll-thread",
+                                       "retrying shutdown of stream {} later",
+                                       id);
+
                                 let id = id.clone();
                                 let ent = RetryHeapEntry::new(id, retry);
 
@@ -584,20 +588,43 @@ where
     fn handle_refresh_stream_error(
         &mut self,
         err: Types::RefreshError
-    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+    ) -> RetryResult<(Option<Instant>, bool, bool), Types::RefreshRetry> {
         match err.split() {
-            (_, Some(err)) => {
-                error!(target: "poll-thread",
-                       "unrecoverable error refreshing stream: {}",
-                       err);
+            (_, Some(err)) => match err.scope() {
+                ErrorScope::Unrecoverable |
+                ErrorScope::System => {
+                    error!(target: "poll-thread",
+                           "fatal error refreshing stream: {}",
+                           err);
 
-                RetryResult::Success(None)
+                    RetryResult::Success((None, false, false))
+                }
+                ErrorScope::Shutdown => {
+                    RetryResult::Success((None, false, false))
+                }
+                ErrorScope::WouldBlock => {
+                    error!(target: "poll-thread",
+                           "error of scope WouldBlock \
+                            shouldn't be seen here");
+
+                    RetryResult::Success((None, true, false))
+                }
+                _ => {
+                    error!(target: "poll-thread",
+                           "error refreshing stream: {}",
+                           err);
+
+                    RetryResult::Success((None, true, false))
+                }
             }
             (Some(err), _) => {
                 if err.scope() == ErrorScope::WouldBlock {
+                    trace!(target: "poll-thread",
+                           "deferring stream refresh");
+
                     self.refresh_complete = Some(err);
 
-                    RetryResult::Success(None)
+                    RetryResult::Success((None, true, false))
                 } else {
                     self.complete_refresh_stream(err)
                 }
@@ -606,7 +633,7 @@ where
                 error!(target: "poll-thread",
                        "refresh error split produced no results");
 
-                RetryResult::Success(None)
+                RetryResult::Success((None, true, false))
             }
         }
     }
@@ -614,26 +641,29 @@ where
     fn complete_refresh_stream(
         &mut self,
         err: Types::RefreshCompletableError
-    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+    ) -> RetryResult<(Option<Instant>, bool, bool), Types::RefreshRetry> {
         self.stream
             .complete_refresh(&mut self.ctx, err)
+            .map(|res| res.map(|res| (res, true, true)))
             .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
     fn retry_refresh_stream(
         &mut self,
         retry: Types::RefreshRetry
-    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+    ) -> RetryResult<(Option<Instant>, bool, bool), Types::RefreshRetry> {
         self.stream
             .retry_refresh(&mut self.ctx, retry)
+            .map(|res| res.map(|res| (res, true, true)))
             .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
     fn refresh_stream(
         &mut self
-    ) -> RetryResult<Option<Instant>, Types::RefreshRetry> {
+    ) -> RetryResult<(Option<Instant>, bool, bool), Types::RefreshRetry> {
         self.stream
             .refresh(&mut self.ctx)
+            .map(|res| res.map(|res| (res, true, true)))
             .unwrap_or_else(|err| self.handle_refresh_stream_error(err))
     }
 
@@ -723,7 +753,7 @@ where
 
         if let Some(mut retries) = self.shutdown_retries.take() {
             trace!(target: "poll-thread",
-                   "processing shutdown retries");
+                   "retrying shutdowns");
 
             let mut newents: Option<Vec<_>> = None;
 
@@ -883,39 +913,101 @@ where
 
         // Refresh the stream if needed.
         if let Some(refresh_complete) = self.refresh_complete.take() {
-            match self.complete_refresh_stream(refresh_complete) {
-                RetryResult::Success(when) => {
-                    *next_refresh = when;
+            trace!(target: "poll-thread",
+                   "completing refresh");
 
-                    if let Err(err) = self.mode.retry_indefs(
-                        &mut self.ctx,
-                        &mut self.msgs,
-                        &mut self.stream
-                    ) {
-                        error!(target: "poll-thread",
-                               "error completing refresh: {}",
-                               err)
+            match self.complete_refresh_stream(refresh_complete) {
+                RetryResult::Success((when, cont, refreshed)) => {
+                    *next_refresh = when;
+                    valid &= cont;
+
+                    if refreshed {
+                        trace!(target: "poll-thread",
+                               "retrying indefinitely-delayed sends");
+
+                        match self.mode.retry_indefs(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream
+                        ) {
+                            Ok(res) => {
+                                pending.merge(&res);
+                            }
+                            Err(err) => match err.scope() {
+                                ErrorScope::Unrecoverable |
+                                ErrorScope::System => {
+                                    error!(target: "poll-thread",
+                                           "fatal error completing refresh: {}",
+                                           err);
+
+                                    valid = false;
+                                }
+                                ErrorScope::Shutdown => {
+                                    valid = false;
+                                }
+                                ErrorScope::WouldBlock => {
+                                    error!(target: "poll-thread",
+                                           "error of scope WouldBlock \
+                                            shouldn't be seen here");
+                                }
+                                _ => {
+                                    error!(target: "poll-thread",
+                                           "error completing refresh: {}",
+                                           err);
+                                }
+                            }
+                        }
                     }
                 }
                 RetryResult::Retry(retry) => *retry_refresh = Some(retry)
             }
         } else if let Some(retry) = retry_refresh.take() {
-            if retry.when() < now {
+            if retry.when() <= now {
                 trace!(target: "poll-thread",
                        "retrying stream refresh");
 
                 match self.retry_refresh_stream(retry) {
-                    RetryResult::Success(when) => {
+                    RetryResult::Success((when, cont, refreshed)) => {
                         *next_refresh = when;
+                        valid &= cont;
 
-                        if let Err(err) = self.mode.retry_indefs(
-                            &mut self.ctx,
-                            &mut self.msgs,
-                            &mut self.stream
-                        ) {
-                            error!(target: "poll-thread",
-                                   "error retrying refresh: {}",
-                                   err)
+                        if refreshed {
+                            trace!(target: "poll-thread",
+                                   "retrying indefinitely-delayed sends");
+
+                            match self.mode.retry_indefs(
+                                &mut self.ctx,
+                                &mut self.msgs,
+                                &mut self.stream
+                            ) {
+                                Ok(res) => {
+                                    pending.merge(&res);
+                                }
+                                Err(err) => match err.scope() {
+                                    ErrorScope::Unrecoverable |
+                                    ErrorScope::System => {
+                                        error!(target: "poll-thread",
+                                               "fatal error completing \
+                                                refresh: {}",
+                                               err);
+
+                                        valid = false;
+                                    }
+                                    ErrorScope::Shutdown => {
+                                        valid = false;
+                                    }
+                                    ErrorScope::WouldBlock => {
+                                        error!(target: "poll-thread",
+                                               "error of scope WouldBlock \
+                                                shouldn't be seen here");
+                                    }
+                                    _ => {
+                                        error!(target: "poll-thread",
+                                               "error completing refresh: {}",
+                                               err);
+                                    }
+                                }
+                            }
                         }
                     }
                     RetryResult::Retry(retry) => *retry_refresh = Some(retry)
@@ -930,17 +1022,49 @@ where
             *next_refresh = None;
 
             match self.refresh_stream() {
-                RetryResult::Success(when) => {
+                RetryResult::Success((when, cont, refreshed)) => {
                     *next_refresh = when;
+                    valid &= cont;
 
-                    if let Err(err) = self.mode.retry_indefs(
-                        &mut self.ctx,
-                        &mut self.msgs,
-                        &mut self.stream
-                    ) {
-                        error!(target: "poll-thread",
-                               "error retrying refresh: {}",
-                               err)
+                    trace!(target: "poll-thread",
+                           "retrying indefinitely-delayed sends");
+
+                    if refreshed {
+                        trace!(target: "poll-thread",
+                               "retrying indefinitely-delayed sends");
+
+                        match self.mode.retry_indefs(
+                            &mut self.ctx,
+                            &mut self.msgs,
+                            &mut self.stream
+                        ) {
+                            Ok(res) => {
+                                pending.merge(&res);
+                            }
+                            Err(err) => match err.scope() {
+                                ErrorScope::Unrecoverable |
+                                ErrorScope::System => {
+                                    error!(target: "poll-thread",
+                                           "fatal error completing refresh: {}",
+                                           err);
+
+                                    valid = false;
+                                }
+                                ErrorScope::Shutdown => {
+                                    valid = false;
+                                }
+                                ErrorScope::WouldBlock => {
+                                    error!(target: "poll-thread",
+                                           "error of scope WouldBlock \
+                                            shouldn't be seen here");
+                                }
+                                _ => {
+                                    error!(target: "poll-thread",
+                                           "error completing refresh: {}",
+                                           err);
+                                }
+                            }
+                        }
                     }
                 }
                 RetryResult::Retry(retry) => *retry_refresh = Some(retry)
@@ -986,6 +1110,13 @@ where
                 }
             }
         }
+
+        let shutdown_retry = self
+            .shutdown_retries
+            .as_ref()
+            .and_then(|retries| retries.peek().map(|ent| ent.when()));
+
+        pending.merge_next_retry(&shutdown_retry);
 
         valid
     }
@@ -1291,11 +1422,19 @@ use crate::channels::test::TestChannel;
 #[cfg(test)]
 use crate::channels::test::TestChannelParam;
 #[cfg(test)]
+use crate::channels::test::TestChannelsError;
+#[cfg(test)]
 use crate::channels::test::TestChannelsScript;
 #[cfg(test)]
 use crate::threads::test::TestPushModeScriptElem;
 #[cfg(test)]
 use crate::threads::test::TestChannelCore;
+#[cfg(test)]
+use crate::threads::test::TestCompletableError;
+#[cfg(test)]
+use crate::threads::test::TestRefreshError;
+#[cfg(test)]
+use crate::threads::test::TestRefreshRetry;
 #[cfg(test)]
 use crate::threads::test::TestStream;
 #[cfg(test)]
@@ -3512,4 +3651,3017 @@ fn test_listen_new_stream_recv_collide() {
                vec![] as Vec<String>);
     assert_eq!(*reports.lock().expect("lock failed"),
                HashSet::from([stream_id]));
+}
+
+#[test]
+fn test_listen_new_stream_recv_collide_error() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None,
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("hello")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            ))),
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("goodbye")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![
+                            Err(TestChannelsError {
+                                scope: ErrorScope::Unrecoverable
+                            })
+                        ]
+                    )
+                ],
+                vec![],
+                None,
+                None
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = Some(now);
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id.clone()]));
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id]));
+}
+
+#[test]
+fn test_listen_new_stream_recv_collide_retry_shutdown() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None,
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("hello")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            ))),
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("goodbye")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![
+                            Ok(RetryResult::Retry(later)),
+                            Ok(RetryResult::Success((None, None)))
+                        ]
+                    )
+                ],
+                vec![],
+                None,
+                None
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = Some(now);
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id.clone()]));
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), Some(later));
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id.clone()]));
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id]));
+}
+
+#[test]
+fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None,
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("hello")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            ))),
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Ok(String::from("goodbye")),
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![
+                            Ok(RetryResult::Retry(later)),
+                            Err(TestChannelsError {
+                                scope: ErrorScope::Unrecoverable
+                            })
+                        ]
+                    )
+                ],
+                vec![],
+                None,
+                None
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let stream_script = vec![];
+    let stream = TestStream::create(stream_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = None;
+    let mut next_listen = Some(now);
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id.clone()]));
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), Some(later));
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id.clone()]));
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(*reports.lock().expect("lock failed"),
+               HashSet::from([stream_id]));
+}
+
+#[test]
+fn test_refresh() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![Ok(RetryResult::Success(Some(when)))];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(when));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_imm_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Ok(RetryResult::Success(Some(later))))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Ok(RetryResult::Success(Some(later))))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_imm_complete_imm_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Err(TestRefreshError::Completable {
+                    result: TestCompletableError {
+                        scope: ErrorScope::Retryable,
+                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_imm_complete_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Err(TestRefreshError::Completable {
+                    result: TestCompletableError {
+                        scope: ErrorScope::WouldBlock,
+                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_complete_imm_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Err(TestRefreshError::Completable {
+                    result: TestCompletableError {
+                        scope: ErrorScope::Retryable,
+                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_complete_success() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Err(TestRefreshError::Completable {
+                    result: TestCompletableError {
+                        scope: ErrorScope::WouldBlock,
+                        result: Arc::new(Ok(RetryResult::Success(Some(after))))
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_permanent() {
+    init();
+
+    let now = Instant::now();
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Permanent {
+            err: TestError {
+                scope: ErrorScope::Unrecoverable
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(!res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_imm_permanent() {
+    init();
+
+    let now = Instant::now();
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Err(TestRefreshError::Permanent {
+                    err: TestError {
+                        scope: ErrorScope::Unrecoverable
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(!res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_permanent() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Err(TestRefreshError::Permanent {
+                    err: TestError {
+                        scope: ErrorScope::Unrecoverable
+                    }
+                }))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(!res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_imm_retry() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+                    result: Arc::new(Ok(RetryResult::Success(Some(later)))),
+                    when: when,
+                })))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_complete_retry() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+                    result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+                    when: later,
+                })))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(later));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_retry() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Ok(RetryResult::Success(Some(later)))),
+            when: when,
+        }))
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_retry_retry() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+                result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+                when: later,
+            }))),
+            when: when,
+        }))
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(later));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_retry_complete_imm() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                }
+            })),
+            when: when,
+        }))
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_retry_complete() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    result: Arc::new(Ok(RetryResult::Success(Some(after))))
+                }
+            })),
+            when: when,
+        }))
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_refresh_retry_permanent() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Err(TestRefreshError::Permanent {
+                err: TestError {
+                    scope: ErrorScope::Unrecoverable
+                }
+            })),
+            when: when,
+        }))
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(now);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(when));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(!res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+
+
+
+
+
+#[test]
+fn test_send_indef_refresh() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(later), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            }))),
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![Ok(RetryResult::Success(Some(later)))];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(when);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(when));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(later));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_send_indef_refresh_retry() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(after), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            }))),
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+            when: later,
+        })),
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(when);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(when));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(retry_refresh.as_ref().map(|retry| retry.when), Some(later));
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(after));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_send_indef_refresh_complete_imm() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(later), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            }))),
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Ok(RetryResult::Success(Some(later))))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(when);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(when));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(later));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(later));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+    assert!(reports.lock().expect("lock failed").is_empty());
+}
+
+#[test]
+fn test_send_indef_refresh_complete() {
+    init();
+
+    let now = Instant::now();
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(after), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            }))),
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![],
+        shutdown_listen: vec![]
+    };
+    let refresh_script = vec![
+        Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Ok(RetryResult::Success(Some(after))))
+            }
+        })
+    ];
+    let stream = TestStream::create(refresh_script).expect("Expected success");
+    let reports = stream.reports.clone();
+    let sendbuf = stream.sends.clone();
+    let poll = Poll::new().expect("Expected success");
+    let token = Token(0);
+    let notify = Waker::new(poll.registry(), token).expect("Expected success");
+    let notify = Arc::new(notify);
+    let recv = TestRecv::default();
+    let recvbuf = recv.msgs.clone();
+    let flag = ShutdownFlag::default();
+
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        mode_config,
+        chans_config,
+        (),
+        (),
+        poll,
+        recv,
+        (),
+        notify,
+        token,
+        stream,
+        flag,
+        16,
+        None
+    ).expect("Expected success");
+
+    let mut events = Events::with_capacity(16);
+    let mut retry_refresh = None;
+    let mut next_refresh = Some(when);
+    let mut next_listen = None;
+    let mut pending = PushModeResult::new(Some(now), None, false);
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        now
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(when));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        when
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), None);
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, Some(after));
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(after));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+    assert!(reports.lock().expect("lock failed").is_empty());
 }

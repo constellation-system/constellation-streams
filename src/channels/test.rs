@@ -28,19 +28,33 @@ use std::hash::Hasher;
 use std::time::Instant;
 use std::vec::IntoIter;
 
+use constellation_auth::authn::AuthNed;
+use constellation_auth::cred::NullCred;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::hashid::HashID;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
+use constellation_common::retry::WithRetryWhen;
 use mio::Token;
-use log::trace;
 
 use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
+use crate::large_obj::LargeObjID;
+use crate::stream::LargeObjStream;
+use crate::stream::LargeObjOfferStream;
+use crate::stream::Parties;
 use crate::stream::PullStream;
+use crate::stream::PushStream;
+use crate::stream::PushStreamAdd;
+use crate::stream::PushStreamPartyID;
+use crate::stream::PushStreamPrivate;
+use crate::stream::PushStreamShared;
 use crate::stream::StreamID;
 
 pub type TestStreamID = StreamID<TestEndpoint, String, TestChannelParam>;
@@ -73,7 +87,7 @@ pub struct TestChannels<Stream> {
         Vec<(
             Result<
                 RetryResult<(
-                    Option<Stream>,
+                    Option<TestChannel<Stream>>,
                     Option<Vec<TestChannelParam>>,
                     Option<Instant>
                 )>,
@@ -94,15 +108,7 @@ pub struct TestChannels<Stream> {
         >
     >,
     shutdown_listen: Vec<Result<Option<Option<Instant>>, TestChannelsError>>,
-    pub actives: HashMap<
-        (String, TestChannelParam),
-        Vec<
-            Result<
-                RetryResult<(Option<Vec<TestChannelParam>>, Option<Instant>)>,
-                TestChannelsError
-            >
-        >
-    >
+    pub actives: HashSet<(String, TestChannelParam)>
 }
 
 pub struct TestChannelsScript<Stream> {
@@ -110,7 +116,7 @@ pub struct TestChannelsScript<Stream> {
         TestStreamID,
         Result<
             RetryResult<(
-                Option<Stream>,
+                Option<TestChannel<Stream>>,
                 Option<Vec<TestChannelParam>>,
                 Option<Instant>
             )>,
@@ -132,6 +138,28 @@ pub struct TestChannelsScript<Stream> {
         Vec<Result<Option<Option<Instant>>, TestChannelsError>>
 }
 
+impl<Stream> AuthNed<NullCred, TestChannel<Stream>> for TestChannel<Stream> {
+    #[inline]
+    fn prin(&self) -> &NullCred {
+        &NullCred
+    }
+
+    #[inline]
+    fn get(&self) -> &Self {
+        self
+    }
+
+    #[inline]
+    fn get_mut(&mut self) -> &mut Self {
+        self
+    }
+
+    #[inline]
+    fn take(self) -> (NullCred, Self) {
+        (NullCred, self)
+    }
+}
+
 impl<Stream> TestChannel<Stream> {
     pub fn new(
         id: TestStreamID,
@@ -150,6 +178,10 @@ impl<Stream> TestChannel<Stream> {
             stream: stream,
             shutdown: shutdown
         }
+    }
+
+    pub fn inner(&self) -> &Stream {
+        &self.stream
     }
 }
 
@@ -188,6 +220,549 @@ impl<Stream> TestChannel<Stream> {
     }
 }
 
+impl<Stream, Ctx> PushStream<Ctx> for TestChannel<Stream>
+where Stream: PushStream<Ctx> {
+    type BatchID = Stream::BatchID;
+    type CancelBatchError = Stream::CancelBatchError;
+    type CancelBatchRetry = Stream::CancelBatchRetry;
+    type FinishBatchError = Stream::FinishBatchError;
+    type FinishBatchRetry = Stream::FinishBatchRetry;
+    type StreamFlags = Stream::StreamFlags;
+    type ReportError = Stream::ReportError;
+
+    fn finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+        self.stream.finish_batch(ctx, flags, batch)
+    }
+
+    fn retry_finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        retry: Self::FinishBatchRetry
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+        self.stream.retry_finish_batch(ctx, flags, batch, retry)
+    }
+
+    fn complete_finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        err: <Self::FinishBatchError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+        self.stream.complete_finish_batch(ctx, flags, batch, err)
+    }
+
+    fn cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+        self.stream.cancel_batch(ctx, flags, batch)
+    }
+
+    fn retry_cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        retry: Self::CancelBatchRetry
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+        self.stream.retry_cancel_batch(ctx, flags, batch, retry)
+    }
+
+    fn complete_cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        err: <Self::CancelBatchError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+        self.stream.complete_cancel_batch(ctx, flags, batch, err)
+    }
+
+    fn cancel_batches(&mut self) {
+        self.stream.cancel_batches()
+    }
+
+    fn report_failure(
+        &mut self,
+        batch: &Self::BatchID
+    ) -> Result<(), Self::ReportError> {
+        self.stream.report_failure(batch)
+    }
+}
+
+impl<T, Stream, Ctx> PushStreamAdd<T, Ctx> for TestChannel<Stream>
+where Stream: PushStreamAdd<T, Ctx> {
+    type AddError = Stream::AddError;
+    type AddRetry = Stream::AddRetry;
+
+    fn add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.stream.add(ctx, flags, msg, batch)
+    }
+
+    fn retry_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID,
+        retry: Self::AddRetry
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.stream.retry_add(ctx, flags, msg, batch, retry)
+    }
+
+    fn complete_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID,
+        err: <Self::AddError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.stream.complete_add(ctx, flags, msg, batch, err)
+    }
+}
+
+impl<Stream, Ctx> PushStreamPrivate<Ctx> for TestChannel<Stream>
+where Stream: PushStreamPrivate<Ctx> {
+    type SelectError = Stream::SelectError;
+    type SelectRetry = Stream::SelectRetry;
+    type CreateBatchError = Stream::CreateBatchError;
+    type CreateBatchRetry = Stream::CreateBatchRetry;
+    type StartBatchError = Stream::StartBatchError;
+    type StartBatchRetry = Stream::StartBatchRetry;
+    type AbortBatchRetry = Stream::AbortBatchRetry;
+    type Selections = Stream::Selections;
+    type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
+
+    fn select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+        self.stream.select(ctx, selections)
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+        self.stream.retry_select(ctx, selections, retry)
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as RecoverableError>::Completable
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+        self.stream.complete_select(ctx, selections, err)
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.create_batch(ctx, batches, selections)
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.retry_create_batch(ctx, batches, selections, retry)
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.complete_create_batch(ctx, batches, selections, err)
+    }
+
+    fn start_batch(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.stream.start_batch(ctx)
+    }
+
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.stream.retry_start_batch(ctx, retry)
+    }
+
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.stream.complete_start_batch(ctx, err)
+    }
+
+    fn abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.stream.abort_start_batch(ctx, flags, err)
+    }
+
+    fn retry_abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.stream.retry_abort_start_batch(ctx, flags, retry)
+    }
+}
+
+impl<Stream> PushStreamPartyID for TestChannel<Stream>
+where Stream: PushStreamPartyID {
+    type PartyID = Stream::PartyID;
+}
+
+impl<Stream, Ctx> PushStreamShared<Ctx> for TestChannel<Stream>
+where Stream: PushStreamShared<Ctx> {
+    type SelectError = Stream::SelectError;
+    type SelectRetry = Stream::SelectRetry;
+    type CreateBatchError = Stream::CreateBatchError;
+    type CreateBatchRetry = Stream::CreateBatchRetry;
+    type StartBatchError = Stream::StartBatchError;
+    type StartBatchRetry = Stream::StartBatchRetry;
+    type AbortBatchRetry = Stream::AbortBatchRetry;
+    type Selections = Stream::Selections;
+    type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
+    type BatchPartiesIter = Stream::BatchPartiesIter;
+    type BatchPartiesError = Stream::BatchPartiesError;
+    type IndefParties = Stream::IndefParties;
+
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        self.stream.batch_parties(batch_id)
+    }
+
+    fn select<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        parties: I
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        self.stream.select(ctx, selections, parties)
+    }
+
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    > {
+        self.stream.retry_select(ctx, selections, retry)
+    }
+
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    > {
+        self.stream.complete_select(ctx, selections, err)
+    }
+
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.create_batch(ctx, batches, selections)
+    }
+
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.retry_create_batch(ctx, batches, selections, retry)
+    }
+
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.stream.complete_create_batch(ctx, batches, selections, err)
+    }
+
+    fn start_batch<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        parties: I
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        self.stream.start_batch(ctx, parties)
+    }
+
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    > {
+        self.stream.retry_start_batch(ctx, retry)
+    }
+
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    > {
+        self.stream.complete_start_batch(ctx, err)
+    }
+
+    fn abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.stream.abort_start_batch(ctx, flags, err)
+    }
+
+    fn retry_abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.stream.retry_abort_start_batch(ctx, flags, retry)
+    }
+}
+
+impl<Stream, Ctx> LargeObjStream<Ctx> for TestChannel<Stream>
+where Stream: LargeObjStream<Ctx> {
+    type PushFragError = Stream::PushFragError;
+    type PushFragRetry = Stream::PushFragRetry;
+    type Frags = Stream::Frags;
+    type Parties = Stream::Parties;
+
+    fn push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.stream.push_frags(ctx, id, frags)
+    }
+
+    fn retry_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.stream.retry_push_frags(ctx, id, frags, retry)
+    }
+
+    fn complete_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.stream.complete_push_frags(ctx, id, frags, err)
+    }
+}
+
+impl<H, Stream, Ctx> LargeObjOfferStream<H, Ctx> for TestChannel<Stream>
+where Stream: LargeObjOfferStream<H, Ctx>,
+      H: HashID {
+    type PushOfferError = Stream::PushOfferError;
+    type PushOfferRetry = Stream::PushOfferRetry;
+
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.stream.push_offer(ctx, hash, frags)
+    }
+
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.stream.retry_push_offer(ctx, hash, frags, retry)
+    }
+
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.stream.complete_push_offer(ctx, hash, frags, err)
+    }
+}
+
 impl<Stream, Msg> PullStream<Msg> for TestChannel<Stream>
 where Stream: PullStream<Msg> {
     type PullError = Stream::PullError;
@@ -220,7 +795,7 @@ where
             Vec<(
                 Result<
                     RetryResult<(
-                        Option<Stream>,
+                        Option<TestChannel<Stream>>,
                         Option<Vec<TestChannelParam>>,
                         Option<Instant>
                     )>,
@@ -260,7 +835,7 @@ where
             req_streams: reqs,
             listen: listen,
             shutdown_listen: shutdown_listen,
-            actives: HashMap::new()
+            actives: HashSet::new()
         })
     }
 }
@@ -282,7 +857,7 @@ where
     where
         I: Iterator<Item = Self::ChannelID>;
     type ReqStreamError = TestChannelsError;
-    type Stream = Stream;
+    type Stream = TestChannel<Stream>;
 
     fn req_stream(
         &mut self,
@@ -352,7 +927,7 @@ where
     type EndpointIter = IntoIter<(TestEndpoint, String, TestChannelParam)>;
     type ListenError = TestChannelsError;
     type StreamIter =
-        IntoIter<(TestEndpoint, String, TestChannelParam, Stream)>;
+        IntoIter<(TestEndpoint, String, TestChannelParam, TestChannel<Stream>)>;
 
     fn listen(
         &mut self,
@@ -376,30 +951,21 @@ where
                         TestEndpoint,
                         String,
                         TestChannelParam,
-                        Stream
+                        TestChannel<Stream>
                     )> = streams
                         .into_iter()
-                        .map(|mut val| {
+                        .map(|val| {
                             let key =
                                 (val.id.channel().clone(),
                                  val.id.param().clone());
 
-                            val.shutdown.reverse();
-
-                            if !self.actives.contains_key(&key) {
-                                if self.actives
-                                    .insert(key, val.shutdown)
-                                    .is_some()
-                                {
-                                    panic!("Stream {:?} already exists", val.id)
-                                }
-                            }
+                            let _ = self.actives.insert(key);
 
                             (
                                 val.id.party_addr().clone(),
                                 val.id.channel().clone(),
                                 val.id.param().clone(),
-                                val.stream
+                                val
                             )
                         })
                         .collect();
@@ -423,7 +989,7 @@ where
                                 })
                                 .collect();
 
-                        self.actives.retain(|key, _| refreshes.contains(key));
+                        self.actives.retain(|key| refreshes.contains(key));
                     }
 
                     (streams.into_iter(), ids.into_iter(), refreshes, when)
@@ -438,31 +1004,32 @@ where
 {
     type ShutdownListenError = TestChannelsError;
     type ShutdownStreamError = TestChannelsError;
-    type ShutdownStreamRetry = Instant;
+    type ShutdownStreamRetry = WithRetryWhen<Self::Stream>;
 
     fn shutdown_stream(
         &mut self,
         _ctx: &mut Ctx,
-        channel: &Self::ChannelID,
-        param: &Self::Param,
-        _session: Self::Stream
+        _channel: &Self::ChannelID,
+        _param: &Self::Param,
+        mut session: Self::Stream
     ) -> Result<
-        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>)>,
+        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>),
+                    Self::ShutdownStreamRetry>,
         Self::ShutdownStreamError
     > {
-        self.actives
-            .get_mut(&(channel.clone(), param.clone()))
-            .expect("Stream not active")
+        session
+            .shutdown
             .pop()
             .expect("Expected scripted action")
+            .map(|res| res.map_retry(|when| WithRetryWhen::new(session, when)))
     }
 
     fn retry_shutdown_stream(
         &mut self,
         _ctx: &mut Ctx,
-        channel: &Self::ChannelID,
-        param: &Self::Param,
-        _retry: Self::ShutdownStreamRetry
+        _channel: &Self::ChannelID,
+        _param: &Self::Param,
+        retry: Self::ShutdownStreamRetry
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
@@ -470,11 +1037,13 @@ where
         >,
         Self::ShutdownStreamError
     > {
-        self.actives
-            .get_mut(&(channel.clone(), param.clone()))
-            .expect("Stream not active")
+        let (mut session, _) = retry.take();
+
+        session
+            .shutdown
             .pop()
             .expect("Expected scripted action")
+            .map(|res| res.map_retry(|when| WithRetryWhen::new(session, when)))
     }
 
     fn shutdown_listen(
