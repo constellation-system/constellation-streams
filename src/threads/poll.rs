@@ -1473,7 +1473,7 @@ fn test_send() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -1554,7 +1554,7 @@ fn test_send_later() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -1628,7 +1628,7 @@ fn test_send_error() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -1717,7 +1717,7 @@ fn test_send_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -1840,7 +1840,7 @@ fn test_send_after_and_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -1963,7 +1963,7 @@ fn test_send_and_retry_after() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2073,7 +2073,7 @@ fn test_send_retry_error() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2198,7 +2198,7 @@ fn test_send_retry_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2319,7 +2319,7 @@ fn test_send_retry_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2432,7 +2432,7 @@ fn test_send_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2552,7 +2552,7 @@ fn test_send_after_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2672,7 +2672,7 @@ fn test_send_complete_after() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2781,7 +2781,7 @@ fn test_send_complete_error() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -2895,7 +2895,7 @@ fn test_send_complete_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3017,7 +3017,7 @@ fn test_send_complete_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3148,7 +3148,7 @@ fn test_listen_new_stream_recv_none() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3254,7 +3254,7 @@ fn test_listen_new_stream_recv_one() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3361,7 +3361,7 @@ fn test_listen_new_stream_recv_two() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3487,7 +3487,7 @@ fn test_listen_new_stream_recv_collide() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3642,7 +3642,7 @@ fn test_listen_new_stream_recv_collide_error() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3797,7 +3797,7 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -3982,7 +3982,7 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4119,7 +4119,7 @@ fn test_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4207,7 +4207,7 @@ fn test_refresh_complete_imm_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4295,7 +4295,7 @@ fn test_refresh_complete_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4415,7 +4415,7 @@ fn test_refresh_complete_imm_complete_imm_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4508,7 +4508,7 @@ fn test_refresh_complete_imm_complete_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4628,7 +4628,7 @@ fn test_refresh_complete_complete_imm_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4749,7 +4749,7 @@ fn test_refresh_complete_complete_success() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4888,7 +4888,7 @@ fn test_refresh_permanent() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -4978,7 +4978,7 @@ fn test_refresh_complete_imm_permanent() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5069,7 +5069,7 @@ fn test_refresh_complete_permanent() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5187,7 +5187,7 @@ fn test_refresh_complete_imm_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5306,7 +5306,7 @@ fn test_refresh_complete_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5446,7 +5446,7 @@ fn test_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5563,7 +5563,7 @@ fn test_refresh_retry_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5708,7 +5708,7 @@ fn test_refresh_retry_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5827,7 +5827,7 @@ fn test_refresh_retry_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -5970,7 +5970,7 @@ fn test_refresh_retry_permanent() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6083,7 +6083,7 @@ fn test_send_indef() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6169,7 +6169,7 @@ fn test_send_indef_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6291,7 +6291,7 @@ fn test_send_indef_retry_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6437,7 +6437,7 @@ fn test_send_indef_complete_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6583,7 +6583,7 @@ fn test_send_indef_indef_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6702,7 +6702,7 @@ fn test_send_indef_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -6857,7 +6857,7 @@ fn test_send_indef_retry_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7036,7 +7036,7 @@ fn test_send_indef_complete_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7214,7 +7214,7 @@ fn test_send_indef_indef_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7361,7 +7361,7 @@ fn test_send_indef_refresh_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7491,7 +7491,7 @@ fn test_send_indef_retry_refresh_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7644,7 +7644,7 @@ fn test_send_indef_complete_refresh_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7797,7 +7797,7 @@ fn test_send_indef_indef_refresh_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -7918,7 +7918,7 @@ fn test_send_indef_refresh_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8076,7 +8076,7 @@ fn test_send_indef_retry_refresh_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8257,7 +8257,7 @@ fn test_send_indef_complete_refresh_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8437,7 +8437,7 @@ fn test_send_indef_indef_refresh_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8589,7 +8589,7 @@ fn test_send_indef_listen_refresh() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8720,7 +8720,7 @@ fn test_send_indef_listen_refresh_retry() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -8879,7 +8879,7 @@ fn test_send_indef_listen_refresh_complete_imm() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,
@@ -9012,7 +9012,7 @@ fn test_send_indef_listen_refresh_complete() {
     let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::default();
+    let flag = ShutdownFlag::new(notify.clone());
 
     let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
         mode_config,

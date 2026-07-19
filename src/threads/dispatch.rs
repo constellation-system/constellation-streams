@@ -43,6 +43,7 @@ use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::shutdown::ShutdownFlag;
+use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::info;
@@ -218,13 +219,17 @@ where
     ///
     /// - `prin`: The new session principal.
     ///
+    /// - `shutdown`: A [ShutdownFlag] that will be used to signal a
+    ///   shutdown.
+    ///
     /// - `notify`: Notifier used to alert the dispatch thread to changes in
     ///   outbound messages.
     fn dispatch(
         &mut self,
         ctx: &mut Ctx,
         prin: &Types::SessionPrin,
-        notify: Arc<Waker>
+        shutdown: ShutdownFlag,
+        notify: Notify
     ) -> Result<
         Dispatched<
             Types,
@@ -268,7 +273,7 @@ where
     /// Outbound message box.
     msgs: Msgs,
     /// [PushStream] used to send messages.
-    stream: Stream
+    stream: Stream,
 }
 
 pub struct DispatchedEntry<Types, Ctx>
@@ -285,6 +290,7 @@ where
         Types::Msgs,
         Types::Recv
     >,
+    notify: Notify,
     mode: Types::Mode,
     shutdown_retries: Option<
         BinaryHeap<
@@ -313,8 +319,11 @@ pub struct DispatchThread<Types, Ctx>
 where
     Types: DispatchTypes<Ctx> {
     ctx: DispatchThreadCtx<Types::Chans, Ctx>,
-    /// [DispatchedEntry]s, indexed by the [Token]s corresponding to
-    /// their [Waker]s.
+    // XXX Replace this hash table + counter with a better dense map
+    // data structure.
+    /// Current ID for creating DispatchedIDs
+    curr_id: usize,
+    /// [DispatchedEntry]s, indexed by [DispatchID]s.
     dispatched: HashMap<DispatchedID, DispatchedEntry<Types, Ctx>>,
     /// Map from principals to the [DispatchedID]s that index
     /// [DispatchedEntry]s.
@@ -333,7 +342,7 @@ where
 /// Newtype to distinguish tokens associated with [DispatchEntry]s
 /// from regular tokens.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct DispatchedID(Token);
+pub struct DispatchedID(usize);
 
 #[derive(Debug)]
 pub enum DispatchThreadCreateError<Channels> {
@@ -557,8 +566,8 @@ where
     /// This will trigger the [ShutdownFlag] associated with this
     /// `Dispatched`.
     #[inline]
-    fn shutdown(&mut self) {
-        self.shutdown.set();
+    fn shutdown(&mut self) -> Result<(), Error> {
+        self.shutdown.set()
     }
 }
 
@@ -1119,7 +1128,7 @@ where
                 >
             >
         >
-    ) {
+    ) -> Result<(), Error> {
         let nsessions = self.pull_streams.len();
 
         // Shut down all streams.
@@ -1216,6 +1225,7 @@ where
 
         Ok(DispatchThread {
             mode_config: mode_config,
+            curr_id: 0,
             dispatcher: dispatcher,
             shutdown: shutdown,
             dispatched: dispatched,
@@ -1225,13 +1235,6 @@ where
             nevents: nevents,
             notify: notify
         })
-    }
-
-    /// Get the [Waker] used to signal availability of new messages
-    /// to this thread.
-    #[inline]
-    pub fn notify(&self) -> Arc<Waker> {
-        self.notify.clone()
     }
 
     /// Install a newly dispatched session into the tables.
@@ -1251,6 +1254,7 @@ where
         >,
         mode: Types::Mode,
         stream: Types::AuthNChan,
+        notify: Notify,
         token: DispatchedID
     ) {
         // XXX use a size hint here.
@@ -1262,6 +1266,7 @@ where
             shutdown_retries: None,
             dispatched: dispatched,
             pull_streams: pull_streams,
+            notify: notify,
             mode: mode,
             pending: pending,
             next_refresh: Some(now),
@@ -1367,69 +1372,49 @@ where
                        "dispatching for {}",
                        session.prin());
 
-                let token = self.ctx.tokens.token();
+                let notify = Notify::new(self.notify.clone());
 
-                match Waker::new(self.ctx.poll.registry(), token) {
-                    Ok(notify) => match self.dispatcher.dispatch(
-                        &mut self.ctx,
-                        session.prin(),
-                        Arc::new(notify)
+                match self.dispatcher.dispatch(
+                    &mut self.ctx,
+                    session.prin(),
+                    self.shutdown.clone(),
+                    notify.clone()
+                ) {
+                    Ok(dispatched) => match Types::Mode::create(
+                        self.mode_config.clone(),
+                        &dispatched.stream
                     ) {
-                        Ok(dispatched) => match Types::Mode::create(
-                            self.mode_config.clone(),
-                            &dispatched.stream
-                        ) {
-                            Ok(mode) => {
-                                let token = DispatchedID(token);
+                        Ok(mode) => {
+                            let idx = DispatchedID(self.curr_id);
 
-                                Self::setup_dispatched(
-                                    &mut self.ctx,
-                                    &mut self.dispatched,
-                                    &mut self.stream_ids,
-                                    id,
-                                    dispatched,
-                                    mode,
-                                    session,
-                                    token.clone()
-                                );
-                                ent.insert(token.clone());
+                            self.curr_id += 1;
 
-                                Some(token)
-                            }
-                            Err(err) => {
-                                error!(target: "dispatch-thread",
-                                       "error creating push mode for {}: {}",
-                                       session.prin(), err);
+                            Self::setup_dispatched(
+                                &mut self.ctx,
+                                &mut self.dispatched,
+                                &mut self.stream_ids,
+                                id,
+                                dispatched,
+                                mode,
+                                session,
+                                notify,
+                                idx.clone()
+                            );
+                            ent.insert(idx.clone());
 
-                                self.ctx.tokens.free_token(token);
-
-                                None
-                            }
-                        },
+                            Some(idx)
+                        }
                         Err(err) => {
                             error!(target: "dispatch-thread",
-                                   "error dispatching for {}: {}",
+                                   "error creating push mode for {}: {}",
                                    session.prin(), err);
-
-                            if let Err(err) = self.ctx.channels.shutdown_stream(
-                                &mut self.ctx.ctx,
-                                id.channel(),
-                                id.param(),
-                                session
-                            ) {
-                                error!(target: "dispatch-thread",
-                                       "error shutting down stream {}: {}",
-                                       id, err);
-                            }
-
-                            self.ctx.tokens.free_token(token);
 
                             None
                         }
                     },
                     Err(err) => {
                         error!(target: "dispatch-thread",
-                               "error creating notifier for {}: {}",
+                               "error dispatching for {}: {}",
                                session.prin(), err);
 
                         if let Err(err) = self.ctx.channels.shutdown_stream(
@@ -1442,8 +1427,6 @@ where
                                    "error shutting down stream {}: {}",
                                    id, err);
                         }
-
-                        self.ctx.tokens.free_token(token);
 
                         None
                     }
@@ -1465,14 +1448,14 @@ where
             Types::RecvError
         >
     > {
-        let token = self
+        let idx = self
             .stream_ids
             .get(id)
             .ok_or(DispatchThreadRecvError::NoToken { id: id.clone() })?;
-        let ent = self.dispatched.get_mut(token).ok_or(
+        let ent = self.dispatched.get_mut(idx).ok_or(
             DispatchThreadRecvError::NoEnt {
                 id: id.clone(),
-                token: token.clone()
+                token: idx.clone()
             }
         )?;
 
@@ -1654,17 +1637,23 @@ where
             outbounds
                 .into_iter()
                 .chain(
-                    live.iter()
-                        .cloned()
-                        .map(DispatchedID)
-                        .filter(|id| self.dispatched.contains_key(id))
+                    self.dispatched
+                        .iter()
+                        .flat_map(|(id, ent)| if ent.notify.collect() {
+                            Some(id.clone())
+                        } else {
+                            None
+                        })
                 )
                 .collect()
         } else {
-            live.iter()
-                .cloned()
-                .map(DispatchedID)
-                .filter(|id| self.dispatched.contains_key(id))
+            self.dispatched
+                .iter()
+                .flat_map(|(id, ent)| if ent.notify.collect() {
+                    Some(id.clone())
+                } else {
+                    None
+                })
                 .collect()
         };
 
@@ -1682,6 +1671,99 @@ where
         valid
     }
 
+    fn collect_actions(
+        &mut self,
+        next: &mut Option<Instant>,
+        outbounds: &mut Option<Vec<DispatchedID>>,
+        shutdown_retries: &mut Option<Vec<DispatchedID>>,
+        retries: &mut Option<Vec<DispatchedID>>,
+        completes: &mut Option<Vec<DispatchedID>>,
+        refreshes: &mut Option<Vec<DispatchedID>>,
+        now: Instant
+    ) {
+        let nents = self.dispatched.len();
+
+        for (id, ent) in self.dispatched.iter() {
+            if ent.needs_refresh(now) {
+                match refreshes {
+                    Some(refreshes) => refreshes.push(id.clone()),
+                    None => {
+                        let mut vec = Vec::with_capacity(nents);
+
+                        vec.push(id.clone());
+                        *refreshes = Some(vec);
+                    }
+                }
+            }
+
+            if ent.pending.has_completes() {
+                match completes {
+                    Some(completes) => completes.push(id.clone()),
+                    None => {
+                        let mut vec = Vec::with_capacity(nents);
+
+                        vec.push(id.clone());
+                        *completes = Some(vec);
+                    }
+                }
+            }
+
+            if let Some(when) = ent.pending.next_outbound() {
+                if when < now {
+                    match outbounds {
+                        Some(outbounds) => {
+                            *next = Some(next_retry_definite(&next, &when));
+                            outbounds.push(id.clone())
+                        }
+                        None => {
+                            let mut vec = Vec::with_capacity(nents);
+
+                            *next = Some(next_retry_definite(&next, &when));
+                            vec.push(id.clone());
+                            *outbounds = Some(vec);
+                        }
+                    }
+                }
+            }
+
+            if let Some(when) = ent.next_shutdown_retry() {
+                if when < now {
+                    match shutdown_retries {
+                        Some(shutdown_retries) => {
+                            *next = Some(next_retry_definite(&next, &when));
+                            shutdown_retries.push(id.clone())
+                        }
+                        None => {
+                            let mut vec = Vec::with_capacity(nents);
+
+                            *next = Some(next_retry_definite(&next, &when));
+                            vec.push(id.clone());
+                            *shutdown_retries = Some(vec);
+                        }
+                    }
+                }
+            }
+
+            if let Some(when) = ent.pending.retry_pending() {
+                if when < now {
+                    match retries {
+                        Some(retries) => {
+                            *next = Some(next_retry_definite(&next, &when));
+                            retries.push(id.clone())
+                        }
+                        None => {
+                            let mut vec = Vec::with_capacity(nents);
+
+                            *next = Some(next_retry_definite(&next, &when));
+                            vec.push(id.clone());
+                            *retries = Some(vec);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
         let mut next_listen = None;
@@ -1697,89 +1779,18 @@ where
 
         while {
             let mut next = next_listen;
-            let nents = self.dispatched.len();
 
             now = Instant::now();
 
-            for (id, ent) in self.dispatched.iter() {
-                if ent.needs_refresh(now) {
-                    match &mut refreshes {
-                        Some(refreshes) => refreshes.push(id.clone()),
-                        None => {
-                            let mut vec = Vec::with_capacity(nents);
-
-                            vec.push(id.clone());
-                            refreshes = Some(vec);
-                        }
-                    }
-                }
-
-                if ent.pending.has_completes() {
-                    match &mut completes {
-                        Some(completes) => completes.push(id.clone()),
-                        None => {
-                            let mut vec = Vec::with_capacity(nents);
-
-                            vec.push(id.clone());
-                            completes = Some(vec);
-                        }
-                    }
-                }
-
-                if let Some(when) = ent.pending.next_outbound() {
-                    if when < now {
-                        match &mut outbounds {
-                            Some(outbounds) => {
-                                next = Some(next_retry_definite(&next, &when));
-                                outbounds.push(id.clone())
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(nents);
-
-                                next = Some(next_retry_definite(&next, &when));
-                                vec.push(id.clone());
-                                outbounds = Some(vec);
-                            }
-                        }
-                    }
-                }
-
-                if let Some(when) = ent.next_shutdown_retry() {
-                    if when < now {
-                        match &mut shutdown_retries {
-                            Some(shutdown_retries) => {
-                                next = Some(next_retry_definite(&next, &when));
-                                shutdown_retries.push(id.clone())
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(nents);
-
-                                next = Some(next_retry_definite(&next, &when));
-                                vec.push(id.clone());
-                                shutdown_retries = Some(vec);
-                            }
-                        }
-                    }
-                }
-
-                if let Some(when) = ent.pending.retry_pending() {
-                    if when < now {
-                        match &mut retries {
-                            Some(retries) => {
-                                next = Some(next_retry_definite(&next, &when));
-                                retries.push(id.clone())
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(nents);
-
-                                next = Some(next_retry_definite(&next, &when));
-                                vec.push(id.clone());
-                                retries = Some(vec);
-                            }
-                        }
-                    }
-                }
-            }
+            self.collect_actions(
+                &mut next,
+                &mut outbounds,
+                &mut shutdown_retries,
+                &mut retries,
+                &mut completes,
+                &mut refreshes,
+                now
+            );
 
             self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
@@ -1851,7 +1862,13 @@ where
                       "shutting down dispatched entry for {}",
                       party);
 
-                ent.shutdown(&mut ctx, &mut shutdown_retries)
+                if let Err(err) = ent
+                    .shutdown(&mut ctx, &mut shutdown_retries) {
+                    error!(target: "dispatch-thread",
+                           "error setting shutdown flag for {} ({}): {}",
+                           token, party, err);
+
+                }
             } else {
                 trace!(target: "dispatch-thread",
                        "entry missing for {}, {}",
@@ -1865,7 +1882,13 @@ where
                   "shutting down dispatched entry for {} with no party",
                   token);
 
-            ent.shutdown(&mut ctx, &mut shutdown_retries)
+            if let Err(err) = ent
+                .shutdown(&mut ctx, &mut shutdown_retries) {
+                error!(target: "dispatch-thread",
+                       "error setting shutdown flag for {}: {}",
+                       token, err);
+
+            }
         }
 
         let DispatchThreadCtx {
@@ -2004,7 +2027,7 @@ impl Display for DispatchedID {
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
-        write!(f, "dispatched {}", self.0 .0)
+        write!(f, "dispatched {}", self.0)
     }
 }
 
@@ -2095,3 +2118,170 @@ where
         }
     }
 }
+
+#[cfg(test)]
+use std::sync::Mutex;
+#[cfg(test)]
+use std::time::Duration;
+
+#[cfg(test)]
+use constellation_auth::cred::NullCred;
+#[cfg(test)]
+use constellation_common::config::Create;
+
+#[cfg(test)]
+use crate::init;
+#[cfg(test)]
+use crate::addrs::test::TestEndpoint;
+#[cfg(test)]
+use crate::channels::test::TestChannel;
+#[cfg(test)]
+use crate::channels::test::TestChannelParam;
+#[cfg(test)]
+use crate::channels::test::TestChannelsError;
+#[cfg(test)]
+use crate::channels::test::TestChannelsScript;
+#[cfg(test)]
+use crate::threads::test::TestPushModeScriptElem;
+#[cfg(test)]
+use crate::threads::test::TestChannelCore;
+#[cfg(test)]
+use crate::threads::test::TestCompletableError;
+#[cfg(test)]
+use crate::threads::test::TestDispatch;
+#[cfg(test)]
+use crate::threads::test::TestDispatchScriptEntry;
+#[cfg(test)]
+use crate::threads::test::TestRefreshError;
+#[cfg(test)]
+use crate::threads::test::TestRefreshRetry;
+#[cfg(test)]
+use crate::threads::test::TestStream;
+#[cfg(test)]
+use crate::threads::test::ThreadTestTypes;
+#[cfg(test)]
+use crate::threads::test::TestError;
+#[cfg(test)]
+use crate::threads::test::TestRecv;
+/*
+#[test]
+fn test_send() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: Some((Some(when), vec![String::from("hello")])),
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let flag = ShutdownFlag::default();
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        flag,
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, None);
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![String::from("hello")]);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    panic!("Stopping");
+}
+*/

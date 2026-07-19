@@ -3404,6 +3404,12 @@ use constellation_auth::authn::PassthruMsgAuthN;
 use constellation_auth::cred::NullCred;
 #[cfg(test)]
 use constellation_common::codec::test::TestBytesCodec;
+#[cfg(test)]
+use mio::Poll;
+#[cfg(test)]
+use mio::Token;
+#[cfg(test)]
+use mio::Waker;
 
 #[cfg(test)]
 use crate::init;
@@ -3573,6 +3579,10 @@ fn test_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3581,7 +3591,7 @@ fn test_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3600,7 +3610,7 @@ fn test_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -3670,6 +3680,10 @@ fn test_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3678,7 +3692,7 @@ fn test_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3697,7 +3711,7 @@ fn test_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -3786,6 +3800,10 @@ fn test_offer_complete_repeat_multi_finish() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3794,7 +3812,7 @@ fn test_offer_complete_repeat_multi_finish() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3814,7 +3832,7 @@ fn test_offer_complete_repeat_multi_finish() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -3916,6 +3934,10 @@ fn test_long_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3924,7 +3946,7 @@ fn test_long_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3943,7 +3965,7 @@ fn test_long_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4032,6 +4054,10 @@ fn test_offer_req_obj_frag_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4040,7 +4066,7 @@ fn test_offer_req_obj_frag_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4060,7 +4086,7 @@ fn test_offer_req_obj_frag_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4170,6 +4196,10 @@ fn test_offer_req_obj_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4178,7 +4208,7 @@ fn test_offer_req_obj_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4198,7 +4228,7 @@ fn test_offer_req_obj_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4300,6 +4330,10 @@ fn test_offer_req_frag_complete_repeat() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4308,7 +4342,7 @@ fn test_offer_req_frag_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4328,7 +4362,7 @@ fn test_offer_req_frag_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4480,6 +4514,10 @@ fn test_offer_req_obj_frag_req_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker = Waker::new(poll.registry(), Token(0))
+        .expect("Expected success");
+    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4488,7 +4526,7 @@ fn test_offer_req_obj_frag_req_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4508,7 +4546,7 @@ fn test_offer_req_obj_frag_req_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(),
+        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),

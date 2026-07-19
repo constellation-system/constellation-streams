@@ -39,8 +39,8 @@ use constellation_common::retry::RetryWhen;
 use constellation_common::retry::WithRetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
+use constellation_common::sync::Notify;
 use mio::Token;
-use mio::Waker;
 
 use crate::addrs::test::TestEndpoint;
 use crate::channels::test::TestStreamID;
@@ -61,10 +61,12 @@ use crate::threads::dispatch::DispatchEntryTypes;
 use crate::threads::dispatch::DispatchTypes;
 use crate::threads::poll::PollThreadTypes;
 
+#[derive(Default)]
 pub struct TestDispatchScriptEntry {
-    msgs: Arc<Mutex<Vec<BasicAuthNed<NullCred, String>>>>,
-    stream_script: Vec<Result<RetryResult<Option<Instant>, TestRefreshRetry>,
-                              TestRefreshError>>
+    pub msgs: Arc<Mutex<Vec<BasicAuthNed<NullCred, String>>>>,
+    pub stream_script: Vec<Result<RetryResult<Option<Instant>,
+                                              TestRefreshRetry>,
+                                  TestRefreshError>>
 }
 
 pub struct TestDispatch {
@@ -189,7 +191,8 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
         &mut self,
         _ctx: &mut Ctx,
         _prin: &NullCred,
-        _notify: Arc<Waker>
+        shutdown: ShutdownFlag,
+        _notify: Notify
     ) -> Result<
         Dispatched<
             ThreadTestTypes,
@@ -207,7 +210,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
         };
 
         Ok(Dispatched::new(
-            ShutdownFlag::new(),
+            shutdown,
             stream,
             (),
             PassthruMsgAuthN::default(),
