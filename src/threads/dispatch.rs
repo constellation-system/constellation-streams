@@ -1192,7 +1192,6 @@ where
         chans_config: Types::ChansConfig,
         dispatcher: Types::Disp,
         mut ctx: Ctx,
-        shutdown: ShutdownFlag,
         nevents: usize,
         nsessions: Option<usize>,
         ndispatched: Option<usize>,
@@ -1222,6 +1221,7 @@ where
         let notify = Waker::new(ctx.registry(), token)
             .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
         let notify = Arc::new(notify);
+        let shutdown = ShutdownFlag::new(notify.clone());
 
         Ok(DispatchThread {
             mode_config: mode_config,
@@ -1235,6 +1235,11 @@ where
             nevents: nevents,
             notify: notify
         })
+    }
+
+    #[inline]
+    pub fn shutdown_flag(&self) -> ShutdownFlag {
+        self.shutdown.clone()
     }
 
     /// Install a newly dispatched session into the tables.
@@ -1255,11 +1260,11 @@ where
         mode: Types::Mode,
         stream: Types::AuthNChan,
         notify: Notify,
-        token: DispatchedID
+        token: DispatchedID,
+        now: Instant
     ) {
         // XXX use a size hint here.
         let pull_streams = HashMap::new();
-        let now = Instant::now();
         let pending = PushModeResult::new(Some(now), None, false);
         let mut dispatched = DispatchedEntry {
             ctx: PhantomData,
@@ -1316,7 +1321,8 @@ where
     fn recv_session(
         &mut self,
         id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-        session: Types::AuthNChan
+        session: Types::AuthNChan,
+        now: Instant
     ) -> Option<DispatchedID> {
         match self.parties.entry(session.prin().clone()) {
             Entry::Occupied(token) => {
@@ -1398,7 +1404,8 @@ where
                                 mode,
                                 session,
                                 notify,
-                                idx.clone()
+                                idx.clone(),
+                                now
                             );
                             ent.insert(idx.clone());
 
@@ -1468,7 +1475,7 @@ where
         next_listen: &mut Option<Instant>,
         live: HashSet<Token>,
         refreshes: Option<Vec<DispatchedID>>,
-        outbounds: Option<Vec<DispatchedID>>,
+        mut outbounds: Option<Vec<DispatchedID>>,
         retries: Option<Vec<DispatchedID>>,
         shutdown_retries: Option<Vec<DispatchedID>>,
         completes: Option<Vec<DispatchedID>>,
@@ -1525,7 +1532,8 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refreshes = if next_listen.is_some_and(|when| when <= now) {
+        let need_refreshes = if next_listen.take()
+            .is_some_and(|when| when <= now) {
             let mut need_refreshes =
                 HashSet::with_capacity(self.dispatched.len());
 
@@ -1541,6 +1549,9 @@ where
                 ))) => {
                     *next_listen = when;
 
+                    trace!(target: "dispatch-thread",
+                           "recording necessary refreshes");
+
                     // Pull in any streams for channels that were refreshed.
                     if let Some(refreshed) = refreshed {
                         let refreshed: HashSet<Types::ChannelID> =
@@ -1548,27 +1559,54 @@ where
 
                         for (stream_id, disp) in self.stream_ids.iter() {
                             if refreshed.contains(stream_id.channel()) {
+                                trace!(target: "dispatch-thread",
+                                       "adding {} because {} was refreshed",
+                                       disp, stream_id);
+
                                 need_refreshes.insert(disp.clone());
                             }
                         }
                     }
 
+                    trace!(target: "dispatch-thread",
+                           "reporting new streams");
+
                     // Report new streams.
                     for (addr, channel_id, param, stream) in streams {
                         let id = StreamID::new(addr, channel_id, param);
 
-                        if let Some(disp) = self.recv_session(id, stream) {
-                            if need_refreshes.insert(disp.clone()) {
-                                error!(target: "dispatch-thread",
-                                       "{} already in needed refreshes",
-                                       disp);
+                        if let Some(disp) = self.recv_session(id, stream, now) {
+                            trace!(target: "dispatch-thread",
+                                   "adding new {}",
+                                   disp);
+
+                            need_refreshes.insert(disp.clone());
+
+                            match &mut outbounds {
+                                Some(outbounds) => {
+                                    outbounds.push(disp.clone());
+                                }
+                                None => {
+                                    // XXX use size hint here
+                                    let mut vec = Vec::new();
+
+                                    vec.push(disp.clone());
+                                    outbounds = Some(vec);
+                                }
                             }
                         }
                     }
 
+                    trace!(target: "dispatch-thread",
+                           "reporting messages");
+
                     // Pull in messages from all active streams.
                     for (addr, channel_id, param) in endpoints {
                         let id = StreamID::new(addr, channel_id, param);
+
+                        trace!(target: "dispatch-thread",
+                               "reporting messages for {}",
+                               id);
 
                         if let Err(err) = self.pull_msgs(&id) {
                             error!(target: "dispatch-thread",
@@ -1598,6 +1636,9 @@ where
         let refreshes: HashSet<DispatchedID> = if let Some(refreshes) =
             refreshes
         {
+            trace!(target: "dispatch-thread",
+                   "refreshing");
+
             // Deduplicate the refreshed tokens from both the incoming
             // refreshes, as well as the new tokens in need_refreshes.
             if let Some(need_refreshes) = &need_refreshes {
@@ -1614,13 +1655,17 @@ where
                 .map_or(HashSet::new(), |need_refreshes| need_refreshes.clone())
         };
 
-        for token in refreshes.into_iter() {
-            if let Some(ent) = self.dispatched.get_mut(&token) {
+        for disp in refreshes.into_iter() {
+            if let Some(ent) = self.dispatched.get_mut(&disp) {
+                trace!(target: "dispatch-thread",
+                       "refreshing {}",
+                       disp);
+
                 // Complete the pending operation; record a new
                 // pending operation if it returns a time.
                 let need_refresh =
                     need_refreshes.as_ref().is_some_and(|need_refreshes| {
-                        need_refreshes.contains(&token)
+                        need_refreshes.contains(&disp)
                     });
 
                 ent.refresh_stream(&mut self.ctx, need_refresh, now)
@@ -1628,7 +1673,7 @@ where
                 // This shouldn't happen.
                 error!(target: "dispatch-thread",
                        "entry for pending for {} not found",
-                       token);
+                       disp);
             }
         }
 
@@ -1683,8 +1728,15 @@ where
     ) {
         let nents = self.dispatched.len();
 
+        trace!(target: "dispatch-thread",
+               "collecting pending events");
+
         for (id, ent) in self.dispatched.iter() {
             if ent.needs_refresh(now) {
+                trace!(target: "dispatch-thread",
+                       "{} needs refresh",
+                       id);
+
                 match refreshes {
                     Some(refreshes) => refreshes.push(id.clone()),
                     None => {
@@ -1697,6 +1749,10 @@ where
             }
 
             if ent.pending.has_completes() {
+                trace!(target: "dispatch-thread",
+                       "{} has completes",
+                       id);
+
                 match completes {
                     Some(completes) => completes.push(id.clone()),
                     None => {
@@ -1709,7 +1765,11 @@ where
             }
 
             if let Some(when) = ent.pending.next_outbound() {
-                if when < now {
+                if when <= now {
+                    trace!(target: "dispatch-thread",
+                           "{} needs to check outbounds",
+                           id);
+
                     match outbounds {
                         Some(outbounds) => {
                             *next = Some(next_retry_definite(&next, &when));
@@ -1727,7 +1787,11 @@ where
             }
 
             if let Some(when) = ent.next_shutdown_retry() {
-                if when < now {
+                if when <= now {
+                    trace!(target: "dispatch-thread",
+                           "{} needs to resend shutdown messages",
+                           id);
+
                     match shutdown_retries {
                         Some(shutdown_retries) => {
                             *next = Some(next_retry_definite(&next, &when));
@@ -1745,7 +1809,11 @@ where
             }
 
             if let Some(when) = ent.pending.retry_pending() {
-                if when < now {
+                if when <= now {
+                    trace!(target: "dispatch-thread",
+                           "{} needs to resend messages",
+                           id);
+
                     match retries {
                         Some(retries) => {
                             *next = Some(next_retry_definite(&next, &when));
@@ -2142,6 +2210,8 @@ use crate::channels::test::TestChannelsError;
 #[cfg(test)]
 use crate::channels::test::TestChannelsScript;
 #[cfg(test)]
+use crate::channels::test::TestStreamID;
+#[cfg(test)]
 use crate::threads::test::TestPushModeScriptElem;
 #[cfg(test)]
 use crate::threads::test::TestChannelCore;
@@ -2163,7 +2233,7 @@ use crate::threads::test::ThreadTestTypes;
 use crate::threads::test::TestError;
 #[cfg(test)]
 use crate::threads::test::TestRecv;
-/*
+
 #[test]
 fn test_send() {
     init();
@@ -2209,7 +2279,6 @@ fn test_send() {
         ],
         shutdown_listen: vec![]
     };
-    let flag = ShutdownFlag::default();
     let recvbuf = Arc::new(Mutex::new(vec![]));
     let dispatch = TestDispatchScriptEntry {
         msgs: recvbuf.clone(),
@@ -2224,7 +2293,6 @@ fn test_send() {
         chans_config,
         dispatcher,
         (),
-        flag,
         16,
         None,
         None,
@@ -2257,11 +2325,11 @@ fn test_send() {
     let res = thread.handle_events(
         &mut next_listen,
         HashSet::new(),
-        None,
-        None,
-        None,
-        None,
-        None,
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
         pre
     );
     let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
@@ -2274,14 +2342,15 @@ fn test_send() {
         .drain(..)
         .map(|authned| authned.take())
         .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
 
     assert!(res);
-    assert_eq!(next_listen, None);
+    assert_eq!(next_listen, Some(when));
     assert_eq!(recved, vec![]);
     assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
-    assert!(reports.lock().expect("lock failed").is_empty());
-
-    panic!("Stopping");
+               vec!["hello"]);
+    assert_eq!(reported, vec![stream_id.clone()]);
 }
-*/
