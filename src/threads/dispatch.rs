@@ -972,7 +972,9 @@ where
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>
-    ) {
+    ) -> bool {
+        let mut valid = true;
+
         if self.pending.take_has_completes() {
             match self.mode.complete_pending(
                 ctx,
@@ -981,13 +983,33 @@ where
                 live
             ) {
                 Ok(res) => self.pending.merge(&res),
-                Err(err) => {
-                    error!(target: "dispatched-entry",
-                           "error completing stalled sends: {}",
-                           err);
+                Err(err) => match err.scope() {
+                    ErrorScope::Unrecoverable |
+                    ErrorScope::System => {
+                        error!(target: "dispatched-entry",
+                               "fatal error completing stalled sends: {}",
+                               err);
+
+                        valid = false;
+                    }
+                    ErrorScope::Shutdown => {
+                        valid = false;
+                    }
+                    ErrorScope::WouldBlock => {
+                        error!(target: "dispatched-entry",
+                               "error of scope WouldBlock \
+                                shouldn't be seen here");
+                    }
+                    _ => {
+                        error!(target: "dispatched-entry",
+                               "error completing stalled sends: {}",
+                               err);
+                    }
                 }
             }
         }
+
+        valid
     }
 
     /// Retry pending shutdown operations if necessary.
@@ -1056,7 +1078,9 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
         now: Instant
-    ) {
+    ) -> bool {
+        let mut valid = true;
+
         if self.pending.retry_pending().is_some_and(|when| when <= now) {
             let _ = self.pending.take_retry_pending();
 
@@ -1073,13 +1097,33 @@ where
                 Ok(res) => {
                     self.pending.merge(&res);
                 }
-                Err(err) => {
-                    error!(target: "dispatch-entry",
-                           "error retrying pending messages: {}",
-                           err);
+                Err(err) => match err.scope() {
+                    ErrorScope::Unrecoverable |
+                    ErrorScope::System => {
+                        error!(target: "dispatch-entry",
+                               "fatal error sending messages: {}",
+                               err);
+
+                        valid = false;
+                    }
+                    ErrorScope::Shutdown => {
+                        valid = false;
+                    }
+                    ErrorScope::WouldBlock => {
+                        error!(target: "dispatch-entry",
+                               "error of scope WouldBlock \
+                                shouldn't be seen here");
+                    }
+                    _ => {
+                        error!(target: "dispatch-entry",
+                               "error sending messages: {}",
+                               err);
+                    }
                 }
             }
         }
+
+        valid
     }
 
     /// Push messages if it's time to do so.
@@ -1088,7 +1132,9 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
         now: Instant
-    ) {
+    ) -> bool {
+        let mut valid = true;
+
         if self.pending.next_outbound().is_some_and(|when| when <= now) {
             trace!(target: "dispatch-entry",
                    "pushing messages");
@@ -1104,13 +1150,33 @@ where
                 Ok(res) => {
                     self.pending.merge(&res);
                 }
-                Err(err) => {
-                    error!(target: "dispatch-entry",
-                           "error sending messages: {}",
-                           err);
+                Err(err) => match err.scope() {
+                    ErrorScope::Unrecoverable |
+                    ErrorScope::System => {
+                        error!(target: "dispatch-entry",
+                               "fatal error sending messages: {}",
+                               err);
+
+                        valid = false
+                    }
+                    ErrorScope::Shutdown => {
+                        valid = false
+                    }
+                    ErrorScope::WouldBlock => {
+                        error!(target: "dispatch-entry",
+                               "error of scope WouldBlock \
+                                shouldn't be seen here");
+                    }
+                    _ => {
+                        error!(target: "dispatch-entry",
+                               "error sending messages: {}",
+                               err);
+                    }
                 }
             }
         }
+
+        valid
     }
 
     fn shutdown(
@@ -1491,7 +1557,7 @@ where
         if let Some(completes) = completes {
             for token in completes.into_iter() {
                 if let Some(ent) = self.dispatched.get_mut(&token) {
-                    ent.complete_pending(&mut self.ctx, &live)
+                    valid &= ent.complete_pending(&mut self.ctx, &live)
                 } else {
                     // This shouldn't happen.
                     error!(target: "dispatch-thread",
@@ -1506,7 +1572,7 @@ where
             for token in retries.into_iter() {
                 // Look up the dispatched entry.
                 if let Some(ent) = self.dispatched.get_mut(&token) {
-                    ent.retry_pending(&mut self.ctx, &live, now)
+                    valid &= ent.retry_pending(&mut self.ctx, &live, now)
                 } else {
                     // This shouldn't happen.
                     error!(target: "dispatch-thread",
@@ -1532,10 +1598,11 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refreshes = if next_listen.take()
-            .is_some_and(|when| when <= now) {
+        let need_refreshes = if next_listen.is_some_and(|when| when <= now) {
             let mut need_refreshes =
                 HashSet::with_capacity(self.dispatched.len());
+
+            let _ = next_listen.take();
 
             trace!(target: "dispatch-thread",
                    "listening");
@@ -1620,10 +1687,28 @@ where
                 Ok(RetryResult::Retry(when)) => {
                     *next_listen = Some(when);
                 }
-                Err(err) => {
-                    error!(target: "dispatch-thread",
-                           "error listening: {}",
-                           err);
+                Err(err) => match err.scope() {
+                    ErrorScope::Unrecoverable |
+                    ErrorScope::System => {
+                        error!(target: "dispatch-thread",
+                               "fatal error listening: {}",
+                               err);
+
+                        valid = false;
+                    }
+                    ErrorScope::Shutdown => {
+                        valid = false;
+                    }
+                    ErrorScope::WouldBlock => {
+                        error!(target: "dispatch-thread",
+                               "error of scope WouldBlock \
+                                shouldn't be seen here");
+                    }
+                    _ => {
+                        error!(target: "dispatch-thread",
+                               "error listening: {}",
+                               err);
+                    }
                 }
             }
 
@@ -1704,7 +1789,7 @@ where
 
         for token in outbounds.into_iter() {
             if let Some(ent) = self.dispatched.get_mut(&token) {
-                ent.push_outbound_msgs(&mut self.ctx, &live, now)
+                valid &= ent.push_outbound_msgs(&mut self.ctx, &live, now)
             } else {
                 // This shouldn't happen.
                 error!(target: "dispatch-thread",
@@ -2235,7 +2320,7 @@ use crate::threads::test::TestError;
 use crate::threads::test::TestRecv;
 
 #[test]
-fn test_send() {
+fn test_recv_session_send() {
     init();
 
     let pre = Instant::now();
@@ -2353,4 +2438,2397 @@ fn test_send() {
     assert_eq!(*sendbuf.lock().expect("lock failed"),
                vec!["hello"]);
     assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_session_retry_send() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: Some((Some(when), vec![String::from("hello")])),
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Retry(now)),
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+
+    assert!(res);
+    assert_eq!(next_listen, Some(now));
+    assert!(thread.stream_ids.is_empty());
+    assert!(thread.dispatched.is_empty());
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(now));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_error() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: Some((Some(when), vec![String::from("hello")])),
+            retries: None,
+            indefs: None,
+            completes: None
+        })
+    ];
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Err(TestChannelsError {
+                scope: ErrorScope::Unrecoverable
+            })
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+
+    assert!(!res);
+    assert!(thread.stream_ids.is_empty());
+    assert!(thread.dispatched.is_empty());
+    assert_eq!(next_listen, None);
+}
+
+#[test]
+fn test_send_error() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Err(TestError { scope: ErrorScope::Unrecoverable })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(when)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(!res);
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_session_send_retry() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: Some(Box::new((
+                now,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(later), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(now));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+}
+
+#[test]
+fn test_recv_session_send_retry_error() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: Some(Box::new((
+                now,
+                Err(TestError { scope: ErrorScope::Unrecoverable })
+            ))),
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(now));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(!res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+}
+
+#[test]
+fn test_recv_session_send_retry_retry() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: Some(Box::new((
+                now,
+                Ok(TestPushModeScriptElem {
+                    sends: None,
+                    retries: Some(Box::new((
+                        when,
+                        Ok(TestPushModeScriptElem {
+                            sends: Some((Some(after),
+                                         vec![String::from("hello")])),
+                            retries: None,
+                            indefs: None,
+                            completes: None
+                        })
+                    ))),
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(after)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(now));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        when
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        later
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_session_send_retry_complete() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: Some(Box::new((
+                now,
+                Ok(TestPushModeScriptElem {
+                    sends: None,
+                    retries: None,
+                    indefs: None,
+                    completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                        sends: Some((Some(after), vec![String::from("hello")])),
+                        retries: None,
+                        indefs: None,
+                        completes: None
+                    }))),
+                })
+            ))),
+            indefs: None,
+            completes: None
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(after)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(now));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        when
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        later
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_session_send_complete() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(later), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            }))),
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(later)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(later)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(later));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+#[test]
+fn test_recv_session_send_complete_error() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: None,
+                retries: None,
+                indefs: None,
+                completes: Some(Box::new(Err(TestError {
+                    scope: ErrorScope::Unrecoverable
+                }))),
+            })))
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(later)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        when
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(!res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+}
+
+#[test]
+fn test_recv_session_send_complete_complete() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: None,
+                retries: None,
+                indefs: None,
+                completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                    sends: Some((Some(after), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                }))),
+            })))
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(after)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        when
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        later
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+}
+
+
+
+
+
+#[test]
+fn test_recv_session_send_complete_retry() {
+    init();
+
+    let pre = Instant::now();
+    let now = pre + Duration::from_secs(1);
+    let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
+    let mode_config = vec![
+        Ok(TestPushModeScriptElem {
+            sends: None,
+            retries: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: None,
+                retries: Some(Box::new((
+                    when,
+                    Ok(TestPushModeScriptElem {
+                        sends: Some((Some(after), vec![String::from("hello")])),
+                        retries: None,
+                        indefs: None,
+                        completes: None
+                    })
+                ))),
+                indefs: None,
+                completes: None,
+            })))
+        })
+    ];
+    let endpoint = TestEndpoint::from("test-addr");
+    let channel_param = TestChannelParam {
+        accepts: HashSet::from([endpoint.clone()])
+    };
+    let stream_id = StreamID::new(endpoint,
+                                  String::from("test-channel"),
+                                  channel_param);
+    let chans_config = TestChannelsScript {
+        req_streams: vec![],
+        listen: vec![
+            Ok(RetryResult::Success((
+                vec![
+                    TestChannel::new(
+                        stream_id.clone(),
+                        TestChannelCore::create(vec![
+                            Err(TestError {
+                                scope: ErrorScope::WouldBlock
+                            })
+                        ]).expect("Expected success"),
+                        vec![]
+                    )
+                ],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            ))),
+            Ok(RetryResult::Success((
+                vec![],
+                vec![],
+                None,
+                Some(after)
+            )))
+        ],
+        shutdown_listen: vec![]
+    };
+    let recvbuf = Arc::new(Mutex::new(vec![]));
+    let dispatch = TestDispatchScriptEntry {
+        msgs: recvbuf.clone(),
+        stream_script: vec![
+            Ok(RetryResult::Success(Some(after)))
+        ]
+    };
+    let dispatcher = TestDispatch::create(vec![dispatch])
+        .expect("Expected success");
+    let mut thread: DispatchThread<ThreadTestTypes, _> = DispatchThread::create(
+        mode_config,
+        chans_config,
+        dispatcher,
+        (),
+        16,
+        None,
+        None,
+        None
+    ).expect("Expected success");
+
+    let mut next_listen = Some(pre);
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        pre
+    );
+    assert_eq!(next_listen, Some(pre));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        pre
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![stream_id.clone()]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        now
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, Some(vec![DispatchedID(0)]));
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        now
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec![] as Vec<String>);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        when
+    );
+    assert_eq!(next_listen, Some(when));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, Some(vec![DispatchedID(0)]));
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
+
+    let res = thread.handle_events(
+        &mut next_listen,
+        HashSet::new(),
+        refreshes,
+        outbounds,
+        retries,
+        shutdown_retries,
+        completes,
+        when
+    );
+    let dispatched = thread.stream_ids.get(&stream_id).expect("Expected some");
+    let dispatched = thread.dispatched.get(&dispatched).expect("Expected some");
+    let sendbuf = dispatched.dispatched.stream.sends.clone();
+    let reports = dispatched.dispatched.stream.reports.clone();
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+    let reported: Vec<TestStreamID> = reports
+        .lock()
+        .expect("lock failed").drain()
+        .collect();
+
+    assert!(res);
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
+    assert_eq!(reported, vec![]);
+
+    let mut outbounds: Option<Vec<DispatchedID>> = None;
+    let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
+    let mut retries: Option<Vec<DispatchedID>> = None;
+    let mut completes: Option<Vec<DispatchedID>> = None;
+    let mut refreshes: Option<Vec<DispatchedID>> = None;
+
+    thread.collect_actions(
+        &mut next_listen,
+        &mut outbounds,
+        &mut shutdown_retries,
+        &mut retries,
+        &mut completes,
+        &mut refreshes,
+        later
+    );
+    assert_eq!(next_listen, Some(after));
+    assert_eq!(outbounds, None);
+    assert_eq!(shutdown_retries, None);
+    assert_eq!(retries, None);
+    assert_eq!(completes, None);
+    assert_eq!(refreshes, None);
 }

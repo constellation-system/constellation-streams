@@ -2865,6 +2865,8 @@ fn test_send_complete_complete() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let after = later + Duration::from_secs(1);
     let mode_config = vec![
         Ok(TestPushModeScriptElem {
             sends: None,
@@ -2874,8 +2876,11 @@ fn test_send_complete_complete() {
                 sends: None,
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Err(TestError {
-                    scope: ErrorScope::Unrecoverable
+                completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                    sends: Some((Some(after), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
                 }))),
             })))
         })
@@ -2970,6 +2975,33 @@ fn test_send_complete_complete() {
     assert_eq!(recved, vec![]);
     assert_eq!(*sendbuf.lock().expect("lock failed"),
                vec![] as Vec<String>);
+    assert!(reports.lock().expect("lock failed").is_empty());
+
+    let res = poll.handle_events(
+        &mut events,
+        &mut retry_refresh,
+        &mut next_refresh,
+        &mut next_listen,
+        &mut pending,
+        later
+    );
+    let recved: Vec<(NullCred, String)> = recvbuf
+        .lock()
+        .expect("lock failed")
+        .drain(..)
+        .map(|authned| authned.take())
+        .collect();
+
+    assert!(res);
+    assert!(retry_refresh.is_none());
+    assert_eq!(next_refresh, None);
+    assert_eq!(next_listen, None);
+    assert_eq!(pending.next_outbound(), Some(after));
+    assert_eq!(pending.retry_pending(), None);
+    assert!(!pending.has_completes());
+    assert_eq!(recved, vec![]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"),
+               vec!["hello"]);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
