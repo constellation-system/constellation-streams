@@ -503,65 +503,61 @@ where
             id.clone(),
             stream.clone()
         ) {
-            Ok(res) => match res {
-                Some(stream) => {
-                    warn!(target: "poll-thread",
-                          "stream {} with {} was already present",
-                          id, stream.prin());
+            Ok(Some(stream)) => {
+                warn!(target: "poll-thread",
+                      "stream {} with {} was already present",
+                      id, stream.prin());
 
-                    match self.ctx.channels.shutdown_stream(
-                        &mut self.ctx.ctx,
-                        id.channel(),
-                        id.param(),
-                        stream
-                    ) {
-                        Ok(res) => {
-                            if let RetryResult::Retry(retry) = res {
-                                trace!(target: "poll-thread",
-                                       "retrying shutdown of stream {} later",
-                                       id);
+                match self.ctx.channels.shutdown_stream(
+                    &mut self.ctx.ctx,
+                    id.channel(),
+                    id.param(),
+                    stream
+                ) {
+                    Ok(res) => if let RetryResult::Retry(retry) = res {
+                        trace!(target: "poll-thread",
+                               "retrying shutdown of stream {} later",
+                               id);
 
-                                let id = id.clone();
-                                let ent = RetryHeapEntry::new(id, retry);
+                        let id = id.clone();
+                        let ent = RetryHeapEntry::new(id, retry);
 
-                                match &mut self.shutdown_retries {
-                                    Some(shutdown_retries) => {
-                                        shutdown_retries.push(ent);
-                                    }
-                                    None => {
-                                        let mut heap =
-                                            BinaryHeap::with_capacity(
-                                                self.pull_streams.len()
-                                            );
+                        match &mut self.shutdown_retries {
+                            Some(shutdown_retries) => {
+                                shutdown_retries.push(ent);
+                            }
+                            None => {
+                                let mut heap =
+                                    BinaryHeap::with_capacity(
+                                        self.pull_streams.len()
+                                    );
 
-                                        heap.push(ent);
-                                        self.shutdown_retries = Some(heap);
-                                    }
-                                }
+                                heap.push(ent);
+                                self.shutdown_retries = Some(heap);
                             }
                         }
-                        Err(err) => {
-                            error!(target: "poll-thread",
-                                   "error shutting down stream {}: {}",
-                                   id, err);
-                        }
                     }
-
-                    Ok(())
+                    Err(err) => {
+                        error!(target: "poll-thread",
+                               "error shutting down stream {}: {}",
+                               id, err);
+                    }
                 }
-                None => if self
-                    .pull_streams
-                    .insert(id.clone(), stream.clone())
-                    .is_some()
-                {
-                    error!(target: "poll-thread",
-                           "stream {} was already present for {}",
-                           id, stream.prin());
 
-                    Ok(())
-                } else {
-                    self.pull_msgs(id)
-                }
+                Ok(())
+            }
+            Ok(None) => if self
+                .pull_streams
+                .insert(id.clone(), stream.clone())
+                .is_some()
+            {
+                error!(target: "poll-thread",
+                       "stream {} was already present for {}",
+                       id, stream.prin());
+
+                Ok(())
+            } else {
+                self.pull_msgs(id)
             }
             Err(err) => {
                 error!(target: "poll-thread",
@@ -755,6 +751,7 @@ where
             trace!(target: "poll-thread",
                    "retrying shutdowns");
 
+            let nents = retries.len();
             let mut newents: Option<Vec<_>> = None;
 
             while retries.peek().is_some_and(|ent| ent.when() <= now) {
@@ -781,7 +778,7 @@ where
                                     }
                                     None => {
                                         let mut heap = Vec::with_capacity(
-                                            self.pull_streams.len()
+                                            nents
                                         );
 
                                         heap.push(ent);
