@@ -514,26 +514,27 @@ where
                     id.param(),
                     stream
                 ) {
-                    Ok(res) => if let RetryResult::Retry(retry) = res {
-                        trace!(target: "poll-thread",
+                    Ok(res) => {
+                        if let RetryResult::Retry(retry) = res {
+                            trace!(target: "poll-thread",
                                "retrying shutdown of stream {} later",
                                id);
 
-                        let id = id.clone();
-                        let ent = RetryHeapEntry::new(id, retry);
+                            let id = id.clone();
+                            let ent = RetryHeapEntry::new(id, retry);
 
-                        match &mut self.shutdown_retries {
-                            Some(shutdown_retries) => {
-                                shutdown_retries.push(ent);
-                            }
-                            None => {
-                                let mut heap =
-                                    BinaryHeap::with_capacity(
+                            match &mut self.shutdown_retries {
+                                Some(shutdown_retries) => {
+                                    shutdown_retries.push(ent);
+                                }
+                                None => {
+                                    let mut heap = BinaryHeap::with_capacity(
                                         self.pull_streams.len()
                                     );
 
-                                heap.push(ent);
-                                self.shutdown_retries = Some(heap);
+                                    heap.push(ent);
+                                    self.shutdown_retries = Some(heap);
+                                }
                             }
                         }
                     }
@@ -546,18 +547,20 @@ where
 
                 Ok(())
             }
-            Ok(None) => if self
-                .pull_streams
-                .insert(id.clone(), stream.clone())
-                .is_some()
-            {
-                error!(target: "poll-thread",
+            Ok(None) => {
+                if self
+                    .pull_streams
+                    .insert(id.clone(), stream.clone())
+                    .is_some()
+                {
+                    error!(target: "poll-thread",
                        "stream {} was already present for {}",
                        id, stream.prin());
 
-                Ok(())
-            } else {
-                self.pull_msgs(id)
+                    Ok(())
+                } else {
+                    self.pull_msgs(id)
+                }
             }
             Err(err) => {
                 error!(target: "poll-thread",
@@ -587,8 +590,7 @@ where
     ) -> RetryResult<(Option<Instant>, bool, bool), Types::RefreshRetry> {
         match err.split() {
             (_, Some(err)) => match err.scope() {
-                ErrorScope::Unrecoverable |
-                ErrorScope::System => {
+                ErrorScope::Unrecoverable | ErrorScope::System => {
                     error!(target: "poll-thread",
                            "fatal error refreshing stream: {}",
                            err);
@@ -612,7 +614,7 @@ where
 
                     RetryResult::Success((None, true, false))
                 }
-            }
+            },
             (Some(err), _) => {
                 if err.scope() == ErrorScope::WouldBlock {
                     trace!(target: "poll-thread",
@@ -698,14 +700,14 @@ where
         let mut valid = true;
 
         // First deal with stalled and pending sends.
-        let outbound_ready = if pending.next_outbound()
-            .is_some_and(|when| when <= now) {
-            let _ = pending.take_next_outbound();
+        let outbound_ready =
+            if pending.next_outbound().is_some_and(|when| when <= now) {
+                let _ = pending.take_next_outbound();
 
-            true
-        } else {
-            false
-        };
+                true
+            } else {
+                false
+            };
 
         // Complete any stalled sends first.
         if pending.take_has_completes() {
@@ -722,8 +724,7 @@ where
                     pending.merge(&res);
                 }
                 Err(err) => match err.scope() {
-                    ErrorScope::Unrecoverable |
-                    ErrorScope::System => {
+                    ErrorScope::Unrecoverable | ErrorScope::System => {
                         error!(target: "poll-thread",
                                "fatal error completing stalled sends: {}",
                                err);
@@ -777,9 +778,8 @@ where
                                         newents.push(ent);
                                     }
                                     None => {
-                                        let mut heap = Vec::with_capacity(
-                                            nents
-                                        );
+                                        let mut heap =
+                                            Vec::with_capacity(nents);
 
                                         heap.push(ent);
                                         newents = Some(heap);
@@ -826,8 +826,7 @@ where
                     pending.merge(&res);
                 }
                 Err(err) => match err.scope() {
-                    ErrorScope::Unrecoverable |
-                    ErrorScope::System => {
+                    ErrorScope::Unrecoverable | ErrorScope::System => {
                         error!(target: "poll-thread",
                                "fatal error sending messages: {}",
                                err);
@@ -1083,8 +1082,7 @@ where
                     pending.merge(&res);
                 }
                 Err(err) => match err.scope() {
-                    ErrorScope::Unrecoverable |
-                    ErrorScope::System => {
+                    ErrorScope::Unrecoverable | ErrorScope::System => {
                         error!(target: "poll-thread",
                                "fatal error sending messages: {}",
                                err);
@@ -1411,8 +1409,6 @@ use std::time::Duration;
 use constellation_auth::cred::NullCred;
 
 #[cfg(test)]
-use crate::init;
-#[cfg(test)]
 use crate::addrs::test::TestEndpoint;
 #[cfg(test)]
 use crate::channels::test::TestChannel;
@@ -1423,11 +1419,17 @@ use crate::channels::test::TestChannelsError;
 #[cfg(test)]
 use crate::channels::test::TestChannelsScript;
 #[cfg(test)]
-use crate::threads::test::TestPushModeScriptElem;
+use crate::init;
 #[cfg(test)]
 use crate::threads::test::TestChannelCore;
 #[cfg(test)]
 use crate::threads::test::TestCompletableError;
+#[cfg(test)]
+use crate::threads::test::TestError;
+#[cfg(test)]
+use crate::threads::test::TestPushModeScriptElem;
+#[cfg(test)]
+use crate::threads::test::TestRecv;
 #[cfg(test)]
 use crate::threads::test::TestRefreshError;
 #[cfg(test)]
@@ -1436,10 +1438,6 @@ use crate::threads::test::TestRefreshRetry;
 use crate::threads::test::TestStream;
 #[cfg(test)]
 use crate::threads::test::ThreadTestTypes;
-#[cfg(test)]
-use crate::threads::test::TestError;
-#[cfg(test)]
-use crate::threads::test::TestRecv;
 
 #[test]
 fn test_send() {
@@ -1447,14 +1445,12 @@ fn test_send() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: Some((Some(when), vec![String::from("hello")])),
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: Some((Some(when), vec![String::from("hello")])),
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -1486,7 +1482,8 @@ fn test_send() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1516,8 +1513,10 @@ fn test_send() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -1528,14 +1527,12 @@ fn test_send_later() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: Some((Some(later), vec![String::from("hello")])),
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: Some((Some(later), vec![String::from("hello")])),
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -1567,7 +1564,8 @@ fn test_send_later() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1597,8 +1595,7 @@ fn test_send_later() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -1607,9 +1604,9 @@ fn test_send_error() {
     init();
 
     let now = Instant::now();
-    let mode_config = vec![
-        Err(TestError { scope: ErrorScope::Unrecoverable })
-    ];
+    let mode_config = vec![Err(TestError {
+        scope: ErrorScope::Unrecoverable
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -1641,7 +1638,8 @@ fn test_send_error() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1671,8 +1669,7 @@ fn test_send_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -1683,22 +1680,20 @@ fn test_send_retry() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: Some(Box::new((
-                when,
-                Ok(TestPushModeScriptElem {
-                    sends: Some((Some(later), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                })
-            ))),
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: Some(Box::new((
+            when,
+            Ok(TestPushModeScriptElem {
+                sends: Some((Some(later), vec![String::from("hello")])),
+                retries: None,
+                indefs: None,
+                completes: None
+            })
+        ))),
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -1730,7 +1725,8 @@ fn test_send_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1760,8 +1756,7 @@ fn test_send_retry() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -1787,8 +1782,10 @@ fn test_send_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -1820,7 +1817,7 @@ fn test_send_after_and_retry() {
             retries: None,
             indefs: None,
             completes: None
-        })
+        }),
     ];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
@@ -1853,7 +1850,8 @@ fn test_send_after_and_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1883,8 +1881,7 @@ fn test_send_after_and_retry() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -1910,8 +1907,10 @@ fn test_send_after_and_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello"), String::from("goodbye")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello"), String::from("goodbye")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -1943,7 +1942,7 @@ fn test_send_and_retry_after() {
             retries: None,
             indefs: None,
             completes: None
-        })
+        }),
     ];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
@@ -1976,7 +1975,8 @@ fn test_send_and_retry_after() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2006,8 +2006,7 @@ fn test_send_and_retry_after() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2033,8 +2032,10 @@ fn test_send_and_retry_after() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello"), String::from("goodbye")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello"), String::from("goodbye")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2044,17 +2045,17 @@ fn test_send_retry_error() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: Some(Box::new((
-                when,
-                Err(TestError { scope: ErrorScope::Unrecoverable })
-            ))),
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: Some(Box::new((
+            when,
+            Err(TestError {
+                scope: ErrorScope::Unrecoverable
+            })
+        ))),
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2086,7 +2087,8 @@ fn test_send_retry_error() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2116,8 +2118,7 @@ fn test_send_retry_error() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2143,8 +2144,7 @@ fn test_send_retry_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2156,30 +2156,28 @@ fn test_send_retry_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: Some(Box::new((
-                when,
-                Ok(TestPushModeScriptElem {
-                    sends: None,
-                    retries: Some(Box::new((
-                        later,
-                        Ok(TestPushModeScriptElem {
-                            sends: Some((Some(after), vec![])),
-                            retries: None,
-                            indefs: None,
-                            completes: None
-                        })
-                    ))),
-                    indefs: None,
-                    completes: None
-                })
-            ))),
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: Some(Box::new((
+            when,
+            Ok(TestPushModeScriptElem {
+                sends: None,
+                retries: Some(Box::new((
+                    later,
+                    Ok(TestPushModeScriptElem {
+                        sends: Some((Some(after), vec![])),
+                        retries: None,
+                        indefs: None,
+                        completes: None
+                    })
+                ))),
+                indefs: None,
+                completes: None
+            })
+        ))),
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2211,7 +2209,8 @@ fn test_send_retry_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2241,8 +2240,7 @@ fn test_send_retry_retry() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2268,8 +2266,7 @@ fn test_send_retry_retry() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2280,27 +2277,25 @@ fn test_send_retry_complete() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: Some(Box::new((
-                when,
-                Ok(TestPushModeScriptElem {
-                    sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: Some(Box::new((
+            when,
+            Ok(TestPushModeScriptElem {
+                sends: None,
+                retries: None,
+                indefs: None,
+                completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                    sends: Some((Some(later), vec![String::from("hello")])),
                     retries: None,
                     indefs: None,
-                    completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                        sends: Some((Some(later), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    }))),
-                })
-            ))),
-            indefs: None,
-            completes: None
-        })
-    ];
+                    completes: None
+                })))
+            })
+        ))),
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2332,7 +2327,8 @@ fn test_send_retry_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2362,8 +2358,7 @@ fn test_send_retry_complete() {
     assert_eq!(pending.retry_pending(), Some(when));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2389,8 +2384,7 @@ fn test_send_retry_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2401,19 +2395,17 @@ fn test_send_complete() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
             indefs: None,
-            completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
-        })
-    ];
+            completes: None
+        })))
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2445,7 +2437,8 @@ fn test_send_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2475,8 +2468,7 @@ fn test_send_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2502,8 +2494,7 @@ fn test_send_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec!["hello"]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec!["hello"]);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2525,14 +2516,14 @@ fn test_send_after_complete() {
                 retries: None,
                 indefs: None,
                 completes: None
-            }))),
+            })))
         }),
         Ok(TestPushModeScriptElem {
             sends: Some((Some(after), vec![String::from("goodbye")])),
             retries: None,
             indefs: None,
             completes: None
-        })
+        }),
     ];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
@@ -2565,7 +2556,8 @@ fn test_send_after_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2595,8 +2587,7 @@ fn test_send_after_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2622,8 +2613,10 @@ fn test_send_after_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec!["hello", "goodbye"]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec!["hello", "goodbye"]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2645,14 +2638,14 @@ fn test_send_complete_after() {
                 retries: None,
                 indefs: None,
                 completes: None
-            }))),
+            })))
         }),
         Ok(TestPushModeScriptElem {
             sends: Some((Some(later), vec![String::from("goodbye")])),
             retries: None,
             indefs: None,
             completes: None
-        })
+        }),
     ];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
@@ -2685,7 +2678,8 @@ fn test_send_complete_after() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2715,8 +2709,7 @@ fn test_send_complete_after() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2742,8 +2735,10 @@ fn test_send_complete_after() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec!["hello", "goodbye"]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec!["hello", "goodbye"]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2753,16 +2748,14 @@ fn test_send_complete_error() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: Some(Box::new(Err(TestError {
-                scope: ErrorScope::Unrecoverable
-            }))),
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: Some(Box::new(Err(TestError {
+            scope: ErrorScope::Unrecoverable
+        })))
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2794,7 +2787,8 @@ fn test_send_complete_error() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2824,8 +2818,7 @@ fn test_send_complete_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2851,8 +2844,7 @@ fn test_send_complete_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -2864,24 +2856,22 @@ fn test_send_complete_complete() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
             indefs: None,
             completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
+                sends: Some((Some(after), vec![String::from("hello")])),
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: Some((Some(after), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
+                completes: None
             })))
-        })
-    ];
+        })))
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -2913,7 +2903,8 @@ fn test_send_complete_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2943,8 +2934,7 @@ fn test_send_complete_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2970,8 +2960,7 @@ fn test_send_complete_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -2997,8 +2986,7 @@ fn test_send_complete_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec!["hello"]);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec!["hello"]);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -3010,27 +2998,25 @@ fn test_send_complete_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
-            retries: None,
+            retries: Some(Box::new((
+                later,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(after), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
             indefs: None,
-            completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
-                retries: Some(Box::new((
-                    later,
-                    Ok(TestPushModeScriptElem {
-                        sends: Some((Some(after), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    })
-                ))),
-                indefs: None,
-                completes: None,
-            })))
-        })
-    ];
+            completes: None
+        })))
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -3062,7 +3048,8 @@ fn test_send_complete_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3092,8 +3079,7 @@ fn test_send_complete_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -3119,8 +3105,7 @@ fn test_send_complete_retry() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -3130,41 +3115,33 @@ fn test_listen_new_stream_recv_none() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
-                vec![],
-                None,
-                Some(when)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![TestChannel::new(
+                stream_id.clone(),
+                TestChannelCore::create(vec![Err(TestError {
+                    scope: ErrorScope::WouldBlock
+                })])
+                .expect("Expected success"),
+                vec![]
+            )],
+            vec![],
+            None,
+            Some(when)
+        )))],
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
@@ -3193,7 +3170,8 @@ fn test_listen_new_stream_recv_none() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3223,10 +3201,11 @@ fn test_listen_new_stream_recv_none() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3235,42 +3214,36 @@ fn test_listen_new_stream_recv_one() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
-                vec![],
-                None,
-                Some(when)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![TestChannel::new(
+                stream_id.clone(),
+                TestChannelCore::create(vec![
+                    Ok(String::from("hello")),
+                    Err(TestError {
+                        scope: ErrorScope::WouldBlock
+                    }),
+                ])
+                .expect("Expected success"),
+                vec![]
+            )],
+            vec![],
+            None,
+            Some(when)
+        )))],
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
@@ -3299,7 +3272,8 @@ fn test_listen_new_stream_recv_one() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3329,10 +3303,11 @@ fn test_listen_new_stream_recv_one() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3341,43 +3316,37 @@ fn test_listen_new_stream_recv_two() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Ok(String::from("goodbye")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
-                vec![],
-                None,
-                Some(when)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![TestChannel::new(
+                stream_id.clone(),
+                TestChannelCore::create(vec![
+                    Ok(String::from("hello")),
+                    Ok(String::from("goodbye")),
+                    Err(TestError {
+                        scope: ErrorScope::WouldBlock
+                    }),
+                ])
+                .expect("Expected success"),
+                vec![]
+            )],
+            vec![],
+            None,
+            Some(when)
+        )))],
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
@@ -3406,7 +3375,8 @@ fn test_listen_new_stream_recv_two() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3435,12 +3405,18 @@ fn test_listen_new_stream_recv_two() {
     assert_eq!(pending.next_outbound(), None);
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
-    assert_eq!(recved, vec![(NullCred, String::from("hello")),
-                            (NullCred, String::from("goodbye"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(
+        recved,
+        vec![
+            (NullCred, String::from("hello")),
+            (NullCred, String::from("goodbye"))
+        ]
+    );
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3449,60 +3425,53 @@ fn test_listen_new_stream_recv_collide() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("hello")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![]
+                )],
                 vec![],
                 None,
                 Some(when)
             ))),
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("goodbye")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![
-                            Ok(RetryResult::Success((None, None)))
-                        ]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("goodbye")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![Ok(RetryResult::Success((None, None)))]
+                )],
                 vec![],
                 None,
                 None
-            )))
+            ))),
         ],
         shutdown_listen: vec![]
     };
@@ -3532,7 +3501,8 @@ fn test_listen_new_stream_recv_collide() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3562,10 +3532,11 @@ fn test_listen_new_stream_recv_collide() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -3590,10 +3561,11 @@ fn test_listen_new_stream_recv_collide() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3602,62 +3574,55 @@ fn test_listen_new_stream_recv_collide_error() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("hello")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![]
+                )],
                 vec![],
                 None,
                 Some(when)
             ))),
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("goodbye")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![
-                            Err(TestChannelsError {
-                                scope: ErrorScope::Unrecoverable
-                            })
-                        ]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("goodbye")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![Err(TestChannelsError {
+                        scope: ErrorScope::Unrecoverable
+                    })]
+                )],
                 vec![],
                 None,
                 None
-            )))
+            ))),
         ],
         shutdown_listen: vec![]
     };
@@ -3687,7 +3652,8 @@ fn test_listen_new_stream_recv_collide_error() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3717,10 +3683,11 @@ fn test_listen_new_stream_recv_collide_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -3745,10 +3712,11 @@ fn test_listen_new_stream_recv_collide_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3758,61 +3726,56 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("hello")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![]
+                )],
                 vec![],
                 None,
                 Some(when)
             ))),
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("goodbye")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![
-                            Ok(RetryResult::Retry(later)),
-                            Ok(RetryResult::Success((None, None)))
-                        ]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("goodbye")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![
+                        Ok(RetryResult::Retry(later)),
+                        Ok(RetryResult::Success((None, None))),
+                    ]
+                )],
                 vec![],
                 None,
                 None
-            )))
+            ))),
         ],
         shutdown_listen: vec![]
     };
@@ -3842,7 +3805,8 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3872,10 +3836,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -3900,10 +3865,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -3928,10 +3894,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -3941,63 +3908,58 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None,
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
-    let stream_id = StreamID::new(endpoint,
-                                  String::from("test-channel"),
-                                  channel_param);
+    let stream_id =
+        StreamID::new(endpoint, String::from("test-channel"), channel_param);
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("hello")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("hello")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![]
+                )],
                 vec![],
                 None,
                 Some(when)
             ))),
             Ok(RetryResult::Success((
-                vec![
-                    TestChannel::new(
-                        stream_id.clone(),
-                        TestChannelCore::create(vec![
-                            Ok(String::from("goodbye")),
-                            Err(TestError {
-                                scope: ErrorScope::WouldBlock
-                            })
-                        ]).expect("Expected success"),
-                        vec![
-                            Ok(RetryResult::Retry(later)),
-                            Err(TestChannelsError {
-                                scope: ErrorScope::Unrecoverable
-                            })
-                        ]
-                    )
-                ],
+                vec![TestChannel::new(
+                    stream_id.clone(),
+                    TestChannelCore::create(vec![
+                        Ok(String::from("goodbye")),
+                        Err(TestError {
+                            scope: ErrorScope::WouldBlock
+                        }),
+                    ])
+                    .expect("Expected success"),
+                    vec![
+                        Ok(RetryResult::Retry(later)),
+                        Err(TestChannelsError {
+                            scope: ErrorScope::Unrecoverable
+                        }),
+                    ]
+                )],
                 vec![],
                 None,
                 None
-            )))
+            ))),
         ],
         shutdown_listen: vec![]
     };
@@ -4027,7 +3989,8 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4057,10 +4020,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![(NullCred, String::from("hello"))]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -4085,10 +4049,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id.clone()]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id.clone()])
+    );
 
     let res = poll.handle_events(
         &mut events,
@@ -4113,10 +4078,11 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
-    assert_eq!(*reports.lock().expect("lock failed"),
-               HashSet::from([stream_id]));
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
+    assert_eq!(
+        *reports.lock().expect("lock failed"),
+        HashSet::from([stream_id])
+    );
 }
 
 #[test]
@@ -4125,14 +4091,12 @@ fn test_refresh() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -4164,7 +4128,8 @@ fn test_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4194,8 +4159,7 @@ fn test_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4206,27 +4170,23 @@ fn test_refresh_complete_imm_success() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(later))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(later))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4252,7 +4212,8 @@ fn test_refresh_complete_imm_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4282,8 +4243,7 @@ fn test_refresh_complete_imm_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4294,27 +4254,23 @@ fn test_refresh_complete_success() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(later))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(later))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4340,7 +4296,8 @@ fn test_refresh_complete_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4370,8 +4327,7 @@ fn test_refresh_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -4397,8 +4353,7 @@ fn test_refresh_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4409,32 +4364,28 @@ fn test_refresh_complete_imm_complete_imm_success() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Err(TestRefreshError::Completable {
-                    result: TestCompletableError {
-                        scope: ErrorScope::Retryable,
-                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4460,7 +4411,8 @@ fn test_refresh_complete_imm_complete_imm_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4490,8 +4442,7 @@ fn test_refresh_complete_imm_complete_imm_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4502,32 +4453,28 @@ fn test_refresh_complete_imm_complete_success() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Err(TestRefreshError::Completable {
-                    result: TestCompletableError {
-                        scope: ErrorScope::WouldBlock,
-                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4553,7 +4500,8 @@ fn test_refresh_complete_imm_complete_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4583,8 +4531,7 @@ fn test_refresh_complete_imm_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -4610,8 +4557,7 @@ fn test_refresh_complete_imm_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4622,32 +4568,28 @@ fn test_refresh_complete_complete_imm_success() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Err(TestRefreshError::Completable {
-                    result: TestCompletableError {
-                        scope: ErrorScope::Retryable,
-                        result: Arc::new(Ok(RetryResult::Success(Some(later))))
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::Retryable,
+                    result: Arc::new(Ok(RetryResult::Success(Some(later))))
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4673,7 +4615,8 @@ fn test_refresh_complete_complete_imm_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4703,8 +4646,7 @@ fn test_refresh_complete_complete_imm_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -4730,8 +4672,7 @@ fn test_refresh_complete_complete_imm_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4743,32 +4684,28 @@ fn test_refresh_complete_complete_success() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Err(TestRefreshError::Completable {
-                    result: TestCompletableError {
-                        scope: ErrorScope::WouldBlock,
-                        result: Arc::new(Ok(RetryResult::Success(Some(after))))
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Err(TestRefreshError::Completable {
+                result: TestCompletableError {
+                    scope: ErrorScope::WouldBlock,
+                    result: Arc::new(Ok(RetryResult::Success(Some(after))))
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4794,7 +4731,8 @@ fn test_refresh_complete_complete_success() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4824,8 +4762,7 @@ fn test_refresh_complete_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -4851,8 +4788,7 @@ fn test_refresh_complete_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -4878,8 +4814,7 @@ fn test_refresh_complete_complete_success() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4888,26 +4823,22 @@ fn test_refresh_permanent() {
     init();
 
     let now = Instant::now();
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Permanent {
-            err: TestError {
-                scope: ErrorScope::Unrecoverable
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Permanent {
+        err: TestError {
+            scope: ErrorScope::Unrecoverable
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -4933,7 +4864,8 @@ fn test_refresh_permanent() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4963,8 +4895,7 @@ fn test_refresh_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -4973,31 +4904,27 @@ fn test_refresh_complete_imm_permanent() {
     init();
 
     let now = Instant::now();
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Err(TestRefreshError::Permanent {
-                    err: TestError {
-                        scope: ErrorScope::Unrecoverable
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Err(TestRefreshError::Permanent {
+                err: TestError {
+                    scope: ErrorScope::Unrecoverable
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5023,7 +4950,8 @@ fn test_refresh_complete_imm_permanent() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5053,8 +4981,7 @@ fn test_refresh_complete_imm_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5064,31 +4991,27 @@ fn test_refresh_complete_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Err(TestRefreshError::Permanent {
-                    err: TestError {
-                        scope: ErrorScope::Unrecoverable
-                    }
-                }))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Err(TestRefreshError::Permanent {
+                err: TestError {
+                    scope: ErrorScope::Unrecoverable
+                }
+            }))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5114,7 +5037,8 @@ fn test_refresh_complete_permanent() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5144,8 +5068,7 @@ fn test_refresh_complete_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5171,8 +5094,7 @@ fn test_refresh_complete_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5183,30 +5105,26 @@ fn test_refresh_complete_imm_retry() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
-                    result: Arc::new(Ok(RetryResult::Success(Some(later)))),
-                    when: when,
-                })))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+                result: Arc::new(Ok(RetryResult::Success(Some(later)))),
+                when: when
+            })))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5232,7 +5150,8 @@ fn test_refresh_complete_imm_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5262,8 +5181,7 @@ fn test_refresh_complete_imm_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5289,8 +5207,7 @@ fn test_refresh_complete_imm_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5302,30 +5219,26 @@ fn test_refresh_complete_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
-                    result: Arc::new(Ok(RetryResult::Success(Some(after)))),
-                    when: later,
-                })))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+                result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+                when: later
+            })))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5351,7 +5264,8 @@ fn test_refresh_complete_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5381,8 +5295,7 @@ fn test_refresh_complete_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5408,8 +5321,7 @@ fn test_refresh_complete_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5435,8 +5347,7 @@ fn test_refresh_complete_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5447,25 +5358,21 @@ fn test_refresh_retry() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(later)))),
-            when: when,
-        }))
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(later)))),
+        when: when
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5491,7 +5398,8 @@ fn test_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5521,8 +5429,7 @@ fn test_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5548,8 +5455,7 @@ fn test_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5561,28 +5467,24 @@ fn test_refresh_retry_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
-                result: Arc::new(Ok(RetryResult::Success(Some(after)))),
-                when: later,
-            }))),
-            when: when,
-        }))
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Retry(TestRefreshRetry {
+            result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+            when: later
+        }))),
+        when: when
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5608,7 +5510,8 @@ fn test_refresh_retry_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5638,8 +5541,7 @@ fn test_refresh_retry_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5665,8 +5567,7 @@ fn test_refresh_retry_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5692,8 +5593,7 @@ fn test_refresh_retry_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5704,30 +5604,26 @@ fn test_refresh_retry_complete_imm() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Err(TestRefreshError::Completable {
-                result: TestCompletableError {
-                    scope: ErrorScope::Retryable,
-                    result: Arc::new(Ok(RetryResult::Success(Some(later))))
-                }
-            })),
-            when: when,
-        }))
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                result: Arc::new(Ok(RetryResult::Success(Some(later))))
+            }
+        })),
+        when: when
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5753,7 +5649,8 @@ fn test_refresh_retry_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5783,8 +5680,7 @@ fn test_refresh_retry_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5810,8 +5706,7 @@ fn test_refresh_retry_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5823,30 +5718,26 @@ fn test_refresh_retry_complete() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Err(TestRefreshError::Completable {
-                result: TestCompletableError {
-                    scope: ErrorScope::WouldBlock,
-                    result: Arc::new(Ok(RetryResult::Success(Some(after))))
-                }
-            })),
-            when: when,
-        }))
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Err(TestRefreshError::Completable {
+            result: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                result: Arc::new(Ok(RetryResult::Success(Some(after))))
+            }
+        })),
+        when: when
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -5872,7 +5763,8 @@ fn test_refresh_retry_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5902,8 +5794,7 @@ fn test_refresh_retry_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5929,8 +5820,7 @@ fn test_refresh_retry_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -5956,8 +5846,7 @@ fn test_refresh_retry_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -5967,29 +5856,25 @@ fn test_refresh_retry_permanent() {
 
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
-            retries: None,
-            indefs: None,
-            completes: None
-        })
-    ];
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: None,
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Err(TestRefreshError::Permanent {
-                err: TestError {
-                    scope: ErrorScope::Unrecoverable
-                }
-            })),
-            when: when,
-        }))
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Err(TestRefreshError::Permanent {
+            err: TestError {
+                scope: ErrorScope::Unrecoverable
+            }
+        })),
+        when: when
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -6015,7 +5900,8 @@ fn test_refresh_retry_permanent() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6045,8 +5931,7 @@ fn test_refresh_retry_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6072,8 +5957,7 @@ fn test_refresh_retry_permanent() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6084,19 +5968,17 @@ fn test_send_indef() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
-            completes: None,
-        })
-    ];
+            indefs: None,
+            completes: None
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -6128,7 +6010,8 @@ fn test_send_indef() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6158,8 +6041,7 @@ fn test_send_indef() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6170,19 +6052,17 @@ fn test_send_indef_refresh() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -6214,7 +6094,8 @@ fn test_send_indef_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6244,8 +6125,7 @@ fn test_send_indef_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6271,8 +6151,10 @@ fn test_send_indef_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6284,27 +6166,25 @@ fn test_send_indef_retry_refresh() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
-            retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
-                retries: Some(Box::new((
-                    later,
-                    Ok(TestPushModeScriptElem {
-                        sends: Some((Some(after), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    })
-                ))),
-                indefs: None,
-                completes: None
-            }))),
+            retries: Some(Box::new((
+                later,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(after), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -6336,7 +6216,8 @@ fn test_send_indef_retry_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6366,8 +6247,7 @@ fn test_send_indef_retry_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6393,8 +6273,7 @@ fn test_send_indef_retry_refresh() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6420,8 +6299,10 @@ fn test_send_indef_retry_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6433,24 +6314,22 @@ fn test_send_indef_complete_refresh() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(after), vec![String::from("hello")])),
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: Some((Some(after), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-            }))),
-            completes: None
-        })
-    ];
+                completes: None
+            })))
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -6482,7 +6361,8 @@ fn test_send_indef_complete_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6512,8 +6392,7 @@ fn test_send_indef_complete_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6539,8 +6418,7 @@ fn test_send_indef_complete_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6566,8 +6444,10 @@ fn test_send_indef_complete_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6579,24 +6459,22 @@ fn test_send_indef_indef_refresh() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
             indefs: Some(Box::new(Ok(TestPushModeScriptElem {
                 sends: None,
                 retries: None,
-                indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: None,
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
+                indefs: None,
                 completes: None
             }))),
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
@@ -6628,7 +6506,8 @@ fn test_send_indef_indef_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6658,8 +6537,7 @@ fn test_send_indef_indef_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6685,8 +6563,7 @@ fn test_send_indef_indef_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6698,30 +6575,26 @@ fn test_send_indef_refresh_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(after), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(after), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(after)))),
-            when: later,
-        })),
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+        when: later
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -6747,7 +6620,8 @@ fn test_send_indef_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6777,8 +6651,7 @@ fn test_send_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6804,8 +6677,7 @@ fn test_send_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6831,8 +6703,10 @@ fn test_send_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -6845,38 +6719,34 @@ fn test_send_indef_retry_refresh_retry() {
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
     let post = after + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
-            retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
-                retries: Some(Box::new((
-                    after,
-                    Ok(TestPushModeScriptElem {
-                        sends: Some((Some(post), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    })
-                ))),
-                indefs: None,
-                completes: None
-            }))),
+            retries: Some(Box::new((
+                after,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(post), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(post)))),
-            when: later,
-        })),
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(post)))),
+        when: later
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -6902,7 +6772,8 @@ fn test_send_indef_retry_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6932,8 +6803,7 @@ fn test_send_indef_retry_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6959,8 +6829,7 @@ fn test_send_indef_retry_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -6986,8 +6855,7 @@ fn test_send_indef_retry_refresh_retry() {
     assert_eq!(pending.retry_pending(), Some(after));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7013,8 +6881,10 @@ fn test_send_indef_retry_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7027,35 +6897,31 @@ fn test_send_indef_complete_refresh_retry() {
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
     let post = after + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(post), vec![String::from("hello")])),
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: Some((Some(post), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-            }))),
-            completes: None
-        })
-    ];
+                completes: None
+            })))
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(post)))),
-            when: later,
-        })),
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(post)))),
+        when: later
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7081,7 +6947,8 @@ fn test_send_indef_complete_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7111,8 +6978,7 @@ fn test_send_indef_complete_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7138,8 +7004,7 @@ fn test_send_indef_complete_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7165,8 +7030,7 @@ fn test_send_indef_complete_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7192,8 +7056,10 @@ fn test_send_indef_complete_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7205,35 +7071,31 @@ fn test_send_indef_indef_refresh_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
             indefs: Some(Box::new(Ok(TestPushModeScriptElem {
                 sends: None,
                 retries: None,
-                indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: None,
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-                completes: None,
+                indefs: None,
+                completes: None
             }))),
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(after)))),
-            when: later,
-        })),
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+        when: later
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7259,7 +7121,8 @@ fn test_send_indef_indef_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7289,8 +7152,7 @@ fn test_send_indef_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7316,8 +7178,7 @@ fn test_send_indef_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7343,8 +7204,7 @@ fn test_send_indef_indef_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7355,32 +7215,28 @@ fn test_send_indef_refresh_complete_imm() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(later))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(later))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7406,7 +7262,8 @@ fn test_send_indef_refresh_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7436,8 +7293,7 @@ fn test_send_indef_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7463,11 +7319,12 @@ fn test_send_indef_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
-
 
 #[test]
 fn test_send_indef_retry_refresh_complete_imm() {
@@ -7477,40 +7334,36 @@ fn test_send_indef_retry_refresh_complete_imm() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
-            retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
-                retries: Some(Box::new((
-                    later,
-                    Ok(TestPushModeScriptElem {
-                        sends: Some((Some(after), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    })
-                ))),
-                indefs: None,
-                completes: None
-            }))),
+            retries: Some(Box::new((
+                later,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(after), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7536,7 +7389,8 @@ fn test_send_indef_retry_refresh_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7566,8 +7420,7 @@ fn test_send_indef_retry_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7593,8 +7446,7 @@ fn test_send_indef_retry_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), Some(later));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7620,8 +7472,10 @@ fn test_send_indef_retry_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7633,37 +7487,33 @@ fn test_send_indef_complete_refresh_complete_imm() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(after), vec![String::from("hello")])),
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: Some((Some(after), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-            }))),
-            completes: None
-        })
-    ];
+                completes: None
+            })))
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7689,7 +7539,8 @@ fn test_send_indef_complete_refresh_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7719,8 +7570,7 @@ fn test_send_indef_complete_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7746,8 +7596,7 @@ fn test_send_indef_complete_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7773,8 +7622,10 @@ fn test_send_indef_complete_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7786,37 +7637,33 @@ fn test_send_indef_indef_refresh_complete_imm() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
             indefs: Some(Box::new(Ok(TestPushModeScriptElem {
                 sends: None,
                 retries: None,
-                indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: None,
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
+                indefs: None,
                 completes: None
             }))),
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7842,7 +7689,8 @@ fn test_send_indef_indef_refresh_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7872,8 +7720,7 @@ fn test_send_indef_indef_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -7899,8 +7746,7 @@ fn test_send_indef_indef_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -7912,32 +7758,28 @@ fn test_send_indef_refresh_complete() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(after), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(after), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -7963,7 +7805,8 @@ fn test_send_indef_refresh_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7993,8 +7836,7 @@ fn test_send_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8020,8 +7862,7 @@ fn test_send_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8047,11 +7888,12 @@ fn test_send_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
-
 
 #[test]
 fn test_send_indef_retry_refresh_complete() {
@@ -8062,40 +7904,36 @@ fn test_send_indef_retry_refresh_complete() {
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
     let post = after + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
-            retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
-                retries: Some(Box::new((
-                    after,
-                    Ok(TestPushModeScriptElem {
-                        sends: Some((Some(post), vec![String::from("hello")])),
-                        retries: None,
-                        indefs: None,
-                        completes: None
-                    })
-                ))),
-                indefs: None,
-                completes: None
-            }))),
+            retries: Some(Box::new((
+                after,
+                Ok(TestPushModeScriptElem {
+                    sends: Some((Some(post), vec![String::from("hello")])),
+                    retries: None,
+                    indefs: None,
+                    completes: None
+                })
+            ))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(post))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(post))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -8121,7 +7959,8 @@ fn test_send_indef_retry_refresh_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8151,8 +7990,7 @@ fn test_send_indef_retry_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8178,8 +8016,7 @@ fn test_send_indef_retry_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8205,8 +8042,7 @@ fn test_send_indef_retry_refresh_complete() {
     assert_eq!(pending.retry_pending(), Some(after));
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8232,8 +8068,10 @@ fn test_send_indef_retry_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8246,37 +8084,33 @@ fn test_send_indef_complete_refresh_complete() {
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
     let post = after + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: None,
+            indefs: None,
+            completes: Some(Box::new(Ok(TestPushModeScriptElem {
+                sends: Some((Some(post), vec![String::from("hello")])),
                 retries: None,
                 indefs: None,
-                completes: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: Some((Some(post), vec![String::from("hello")])),
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-            }))),
-            completes: None
-        })
-    ];
+                completes: None
+            })))
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(post))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(post))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -8302,7 +8136,8 @@ fn test_send_indef_complete_refresh_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8332,8 +8167,7 @@ fn test_send_indef_complete_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8359,8 +8193,7 @@ fn test_send_indef_complete_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8386,8 +8219,7 @@ fn test_send_indef_complete_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8413,8 +8245,10 @@ fn test_send_indef_complete_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8426,37 +8260,33 @@ fn test_send_indef_indef_refresh_complete() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
             sends: None,
             retries: None,
             indefs: Some(Box::new(Ok(TestPushModeScriptElem {
                 sends: None,
                 retries: None,
-                indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                    sends: None,
-                    retries: None,
-                    indefs: None,
-                    completes: None
-                }))),
-                completes: None,
+                indefs: None,
+                completes: None
             }))),
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let chans_config = TestChannelsScript {
         req_streams: vec![],
         listen: vec![],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -8482,7 +8312,8 @@ fn test_send_indef_indef_refresh_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8512,8 +8343,7 @@ fn test_send_indef_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8539,8 +8369,7 @@ fn test_send_indef_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8566,8 +8395,7 @@ fn test_send_indef_indef_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8578,34 +8406,32 @@ fn test_send_indef_listen_refresh() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![],
-                vec![],
-                Some(vec![(String::from("test-channel"),
-                           Some(vec![channel_param]))]),
-                Some(later)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![],
+            vec![],
+            Some(vec![(
+                String::from("test-channel"),
+                Some(vec![channel_param])
+            )]),
+            Some(later)
+        )))],
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(later)))];
@@ -8634,7 +8460,8 @@ fn test_send_indef_listen_refresh() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8664,8 +8491,7 @@ fn test_send_indef_listen_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8691,8 +8517,10 @@ fn test_send_indef_listen_refresh() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8704,42 +8532,38 @@ fn test_send_indef_listen_refresh_retry() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(after), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(after), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![],
-                vec![],
-                Some(vec![(String::from("test-channel"),
-                           Some(vec![channel_param]))]),
-                Some(after)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![],
+            vec![],
+            Some(vec![(
+                String::from("test-channel"),
+                Some(vec![channel_param])
+            )]),
+            Some(after)
+        )))],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Ok(RetryResult::Retry(TestRefreshRetry {
-            result: Arc::new(Ok(RetryResult::Success(Some(after)))),
-            when: later,
-        })),
-    ];
+    let refresh_script = vec![Ok(RetryResult::Retry(TestRefreshRetry {
+        result: Arc::new(Ok(RetryResult::Success(Some(after)))),
+        when: later
+    }))];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -8765,7 +8589,8 @@ fn test_send_indef_listen_refresh_retry() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8795,8 +8620,7 @@ fn test_send_indef_listen_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8822,8 +8646,7 @@ fn test_send_indef_listen_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8849,8 +8672,10 @@ fn test_send_indef_listen_refresh_retry() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8861,44 +8686,40 @@ fn test_send_indef_listen_refresh_complete_imm() {
     let now = Instant::now();
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(later), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(later), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![],
-                vec![],
-                Some(vec![(String::from("test-channel"),
-                           Some(vec![channel_param]))]),
-                Some(later)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![],
+            vec![],
+            Some(vec![(
+                String::from("test-channel"),
+                Some(vec![channel_param])
+            )]),
+            Some(later)
+        )))],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::Retryable,
-                result: Arc::new(Ok(RetryResult::Success(Some(later))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::Retryable,
+            result: Arc::new(Ok(RetryResult::Success(Some(later))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -8924,7 +8745,8 @@ fn test_send_indef_listen_refresh_complete_imm() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8954,8 +8776,7 @@ fn test_send_indef_listen_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -8981,8 +8802,10 @@ fn test_send_indef_listen_refresh_complete_imm() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }
 
@@ -8994,44 +8817,40 @@ fn test_send_indef_listen_refresh_complete() {
     let when = now + Duration::from_secs(1);
     let later = when + Duration::from_secs(1);
     let after = later + Duration::from_secs(1);
-    let mode_config = vec![
-        Ok(TestPushModeScriptElem {
-            sends: None,
+    let mode_config = vec![Ok(TestPushModeScriptElem {
+        sends: None,
+        retries: None,
+        indefs: Some(Box::new(Ok(TestPushModeScriptElem {
+            sends: Some((Some(after), vec![String::from("hello")])),
             retries: None,
-            indefs: Some(Box::new(Ok(TestPushModeScriptElem {
-                sends: Some((Some(after), vec![String::from("hello")])),
-                retries: None,
-                indefs: None,
-                completes: None
-            }))),
+            indefs: None,
             completes: None
-        })
-    ];
+        }))),
+        completes: None
+    })];
     let endpoint = TestEndpoint::from("test-addr");
     let channel_param = TestChannelParam {
         accepts: HashSet::from([endpoint.clone()])
     };
     let chans_config = TestChannelsScript {
         req_streams: vec![],
-        listen: vec![
-            Ok(RetryResult::Success((
-                vec![],
-                vec![],
-                Some(vec![(String::from("test-channel"),
-                           Some(vec![channel_param]))]),
-                Some(after)
-            )))
-        ],
+        listen: vec![Ok(RetryResult::Success((
+            vec![],
+            vec![],
+            Some(vec![(
+                String::from("test-channel"),
+                Some(vec![channel_param])
+            )]),
+            Some(after)
+        )))],
         shutdown_listen: vec![]
     };
-    let refresh_script = vec![
-        Err(TestRefreshError::Completable {
-            result: TestCompletableError {
-                scope: ErrorScope::WouldBlock,
-                result: Arc::new(Ok(RetryResult::Success(Some(after))))
-            }
-        })
-    ];
+    let refresh_script = vec![Err(TestRefreshError::Completable {
+        result: TestCompletableError {
+            scope: ErrorScope::WouldBlock,
+            result: Arc::new(Ok(RetryResult::Success(Some(after))))
+        }
+    })];
     let stream = TestStream::create(refresh_script).expect("Expected success");
     let reports = stream.reports.clone();
     let sendbuf = stream.sends.clone();
@@ -9057,7 +8876,8 @@ fn test_send_indef_listen_refresh_complete() {
         flag,
         16,
         None
-    ).expect("Expected success");
+    )
+    .expect("Expected success");
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -9087,8 +8907,7 @@ fn test_send_indef_listen_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -9114,8 +8933,7 @@ fn test_send_indef_listen_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![] as Vec<String>);
+    assert_eq!(*sendbuf.lock().expect("lock failed"), vec![] as Vec<String>);
     assert!(reports.lock().expect("lock failed").is_empty());
 
     let res = poll.handle_events(
@@ -9141,7 +8959,9 @@ fn test_send_indef_listen_refresh_complete() {
     assert_eq!(pending.retry_pending(), None);
     assert!(!pending.has_completes());
     assert_eq!(recved, vec![]);
-    assert_eq!(*sendbuf.lock().expect("lock failed"),
-               vec![String::from("hello")]);
+    assert_eq!(
+        *sendbuf.lock().expect("lock failed"),
+        vec![String::from("hello")]
+    );
     assert!(reports.lock().expect("lock failed").is_empty());
 }

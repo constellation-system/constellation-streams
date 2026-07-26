@@ -47,7 +47,6 @@ use constellation_streams::config::PartyConfig;
 use constellation_streams::frags::OutboundFrags;
 use constellation_streams::large_obj::LargeObjID;
 use constellation_streams::select::StreamSelector;
-use constellation_streams::stream::StreamID;
 use constellation_streams::stream::test::TestAbortRetry;
 use constellation_streams::stream::test::TestAction;
 use constellation_streams::stream::test::TestCompletableError;
@@ -67,6 +66,7 @@ use constellation_streams::stream::PushStream;
 use constellation_streams::stream::PushStreamAdd;
 use constellation_streams::stream::PushStreamPrivate;
 use constellation_streams::stream::PushStreamShared;
+use constellation_streams::stream::StreamID;
 use constellation_streams::stream::StreamRefresh;
 
 use crate::init;
@@ -118,9 +118,11 @@ fn test_private_select_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -135,11 +137,7 @@ fn test_private_select_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -171,28 +169,33 @@ fn test_private_select_succeed() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -208,9 +211,11 @@ fn test_private_select_req_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -225,11 +230,7 @@ fn test_private_select_req_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -274,28 +275,33 @@ fn test_private_select_req_retry() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -310,9 +316,11 @@ fn test_private_select_req_indef() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -395,9 +403,11 @@ fn test_private_select_req_error() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -412,11 +422,7 @@ fn test_private_select_req_error() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -468,28 +474,33 @@ fn test_private_select_req_error() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -504,9 +515,11 @@ fn test_private_create_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -521,11 +534,7 @@ fn test_private_create_batch_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -563,30 +572,35 @@ fn test_private_create_batch_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -602,9 +616,11 @@ fn test_private_create_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![
@@ -622,11 +638,7 @@ fn test_private_create_batch_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -662,7 +674,8 @@ fn test_private_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -675,30 +688,35 @@ fn test_private_create_batch_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -713,9 +731,11 @@ fn test_private_create_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Permanent {
@@ -734,11 +754,7 @@ fn test_private_create_batch_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -772,7 +788,8 @@ fn test_private_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -783,28 +800,33 @@ fn test_private_create_batch_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -819,9 +841,11 @@ fn test_private_create_batch_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -841,11 +865,7 @@ fn test_private_create_batch_complete_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -879,7 +899,8 @@ fn test_private_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -897,30 +918,35 @@ fn test_private_create_batch_complete_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -936,9 +962,11 @@ fn test_private_create_batch_complete_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![
@@ -963,11 +991,7 @@ fn test_private_create_batch_complete_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1001,7 +1025,8 @@ fn test_private_create_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1021,7 +1046,8 @@ fn test_private_create_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1034,30 +1060,35 @@ fn test_private_create_batch_complete_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1072,9 +1103,11 @@ fn test_private_create_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -1100,11 +1133,7 @@ fn test_private_create_batch_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1138,7 +1167,8 @@ fn test_private_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1166,28 +1196,33 @@ fn test_private_create_batch_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1202,9 +1237,11 @@ fn test_private_create_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -1231,11 +1268,7 @@ fn test_private_create_batch_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1269,7 +1302,8 @@ fn test_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1292,7 +1326,8 @@ fn test_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1310,30 +1345,35 @@ fn test_private_create_batch_complete_complete() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1348,9 +1388,11 @@ fn test_private_start_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -1365,11 +1407,7 @@ fn test_private_start_batch_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1398,30 +1436,35 @@ fn test_private_start_batch_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1437,9 +1480,11 @@ fn test_private_start_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![
@@ -1457,11 +1502,7 @@ fn test_private_start_batch_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1492,7 +1533,8 @@ fn test_private_start_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1505,30 +1547,35 @@ fn test_private_start_batch_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1543,9 +1590,11 @@ fn test_private_start_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Permanent {
@@ -1564,11 +1613,7 @@ fn test_private_start_batch_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1605,30 +1650,35 @@ fn test_private_start_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &[TestPrivateBatchState::StartError]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1643,9 +1693,11 @@ fn test_private_start_batch_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -1665,11 +1717,7 @@ fn test_private_start_batch_complete_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1700,7 +1748,8 @@ fn test_private_start_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1718,30 +1767,35 @@ fn test_private_start_batch_complete_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1757,9 +1811,11 @@ fn test_private_start_batch_complete_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![
@@ -1784,11 +1840,7 @@ fn test_private_start_batch_complete_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1819,7 +1871,8 @@ fn test_private_start_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1839,7 +1892,8 @@ fn test_private_start_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1852,30 +1906,35 @@ fn test_private_start_batch_complete_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -1890,9 +1949,11 @@ fn test_private_start_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -1918,11 +1979,7 @@ fn test_private_start_batch_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -1953,7 +2010,8 @@ fn test_private_start_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -1977,30 +2035,35 @@ fn test_private_start_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &[TestPrivateBatchState::StartError]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2015,9 +2078,11 @@ fn test_private_start_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Completable {
@@ -2044,11 +2109,7 @@ fn test_private_start_batch_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2079,7 +2140,8 @@ fn test_private_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -2097,7 +2159,8 @@ fn test_private_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -2115,30 +2178,35 @@ fn test_private_start_batch_complete_complete() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2153,9 +2221,11 @@ fn test_private_cancel_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2170,11 +2240,7 @@ fn test_private_cancel_batch_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2211,30 +2277,35 @@ fn test_private_cancel_batch_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2250,9 +2321,11 @@ fn test_private_cancel_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2270,11 +2343,7 @@ fn test_private_cancel_batch_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2315,7 +2384,8 @@ fn test_private_cancel_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2330,30 +2400,35 @@ fn test_private_cancel_batch_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2368,9 +2443,11 @@ fn test_private_cancel_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2389,11 +2466,7 @@ fn test_private_cancel_batch_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2425,7 +2498,8 @@ fn test_private_cancel_batch_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2446,30 +2520,35 @@ fn test_private_cancel_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2484,9 +2563,11 @@ fn test_private_cancel_batch_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2506,11 +2587,7 @@ fn test_private_cancel_batch_complete_success() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2548,7 +2625,8 @@ fn test_private_cancel_batch_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2568,30 +2646,35 @@ fn test_private_cancel_batch_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2607,9 +2690,11 @@ fn test_private_cancel_batch_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2634,11 +2719,7 @@ fn test_private_cancel_batch_complete_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2670,7 +2751,8 @@ fn test_private_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2686,7 +2768,8 @@ fn test_private_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2709,7 +2792,8 @@ fn test_private_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2724,30 +2808,35 @@ fn test_private_cancel_batch_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2762,9 +2851,11 @@ fn test_private_cancel_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2791,11 +2882,7 @@ fn test_private_cancel_batch_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2827,7 +2914,8 @@ fn test_private_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2843,7 +2931,8 @@ fn test_private_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2869,7 +2958,8 @@ fn test_private_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2889,30 +2979,35 @@ fn test_private_cancel_batch_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -2927,9 +3022,11 @@ fn test_private_cancel_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -2955,11 +3052,7 @@ fn test_private_cancel_batch_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -2991,7 +3084,8 @@ fn test_private_cancel_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3007,7 +3101,8 @@ fn test_private_cancel_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3038,30 +3133,35 @@ fn test_private_cancel_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3076,9 +3176,11 @@ fn test_private_finish_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3093,11 +3195,7 @@ fn test_private_finish_batch_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3134,30 +3232,35 @@ fn test_private_finish_batch_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3173,9 +3276,11 @@ fn test_private_finish_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3193,11 +3298,7 @@ fn test_private_finish_batch_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3238,7 +3339,8 @@ fn test_private_finish_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3253,30 +3355,35 @@ fn test_private_finish_batch_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3291,9 +3398,11 @@ fn test_private_finish_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3312,11 +3421,7 @@ fn test_private_finish_batch_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3348,7 +3453,8 @@ fn test_private_finish_batch_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3369,30 +3475,35 @@ fn test_private_finish_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3407,9 +3518,11 @@ fn test_private_finish_batch_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3429,11 +3542,7 @@ fn test_private_finish_batch_complete_success() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3471,7 +3580,8 @@ fn test_private_finish_batch_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3491,30 +3601,35 @@ fn test_private_finish_batch_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3530,9 +3645,11 @@ fn test_private_finish_batch_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3557,11 +3674,7 @@ fn test_private_finish_batch_complete_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3593,7 +3706,8 @@ fn test_private_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3609,7 +3723,8 @@ fn test_private_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3632,7 +3747,8 @@ fn test_private_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3647,30 +3763,35 @@ fn test_private_finish_batch_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3685,9 +3806,11 @@ fn test_private_finish_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3714,11 +3837,7 @@ fn test_private_finish_batch_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3750,7 +3869,8 @@ fn test_private_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3766,7 +3886,8 @@ fn test_private_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3792,7 +3913,8 @@ fn test_private_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3812,30 +3934,35 @@ fn test_private_finish_batch_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3850,9 +3977,11 @@ fn test_private_finish_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -3878,11 +4007,7 @@ fn test_private_finish_batch_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -3914,7 +4039,8 @@ fn test_private_finish_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3930,7 +4056,8 @@ fn test_private_finish_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3961,30 +4088,35 @@ fn test_private_finish_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -3999,9 +4131,11 @@ fn test_private_abort_start_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Permanent {
@@ -4020,11 +4154,7 @@ fn test_private_abort_start_batch_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4061,7 +4191,8 @@ fn test_private_abort_start_batch_succeed() {
     assert!(completable.is_none());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4074,30 +4205,35 @@ fn test_private_abort_start_batch_succeed() {
         .is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Aborted,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4113,9 +4249,11 @@ fn test_private_abort_start_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Err(TestError::Permanent {
@@ -4140,11 +4278,7 @@ fn test_private_abort_start_batch_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4181,7 +4315,8 @@ fn test_private_abort_start_batch_retry_succeed() {
     assert!(completable.is_none());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4197,7 +4332,8 @@ fn test_private_abort_start_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4210,30 +4346,35 @@ fn test_private_abort_start_batch_retry_succeed() {
         .is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Aborted,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4248,9 +4389,11 @@ fn test_private_add_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4265,11 +4408,7 @@ fn test_private_add_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4306,7 +4445,8 @@ fn test_private_add_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4315,23 +4455,27 @@ fn test_private_add_succeed() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4347,9 +4491,11 @@ fn test_private_add_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4367,11 +4513,7 @@ fn test_private_add_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4412,7 +4554,8 @@ fn test_private_add_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4427,7 +4570,8 @@ fn test_private_add_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4436,23 +4580,27 @@ fn test_private_add_retry_succeed() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4467,9 +4615,11 @@ fn test_private_add_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4488,11 +4638,7 @@ fn test_private_add_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4524,7 +4670,8 @@ fn test_private_add_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4545,30 +4692,35 @@ fn test_private_add_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4583,9 +4735,11 @@ fn test_private_add_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4605,11 +4759,7 @@ fn test_private_add_complete_success() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4648,7 +4798,8 @@ fn test_private_add_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4668,7 +4819,8 @@ fn test_private_add_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4677,23 +4829,27 @@ fn test_private_add_complete_success() {
             msgs: vec!["hello"]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4709,9 +4865,11 @@ fn test_private_add_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4736,11 +4894,7 @@ fn test_private_add_complete_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4772,7 +4926,8 @@ fn test_private_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4788,7 +4943,8 @@ fn test_private_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4811,7 +4967,8 @@ fn test_private_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4826,7 +4983,8 @@ fn test_private_add_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4835,23 +4993,27 @@ fn test_private_add_complete_retry() {
             msgs: vec!["hello"]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -4866,9 +5028,11 @@ fn test_private_add_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -4895,11 +5059,7 @@ fn test_private_add_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -4931,7 +5091,8 @@ fn test_private_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4947,7 +5108,8 @@ fn test_private_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4974,7 +5136,8 @@ fn test_private_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4994,7 +5157,8 @@ fn test_private_add_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5003,23 +5167,27 @@ fn test_private_add_complete_complete() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5034,9 +5202,11 @@ fn test_private_add_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -5062,11 +5232,7 @@ fn test_private_add_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5098,7 +5264,8 @@ fn test_private_add_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5114,7 +5281,8 @@ fn test_private_add_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5146,30 +5314,35 @@ fn test_private_add_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5185,9 +5358,11 @@ fn test_private_frags_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5205,11 +5380,7 @@ fn test_private_frags_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5245,7 +5416,12 @@ fn test_private_frags_succeed() {
     }
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
 
@@ -5259,27 +5435,36 @@ fn test_private_frags_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64), LargeObjID::from(2 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5295,9 +5480,11 @@ fn test_private_frags_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5315,11 +5502,7 @@ fn test_private_frags_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5354,7 +5537,12 @@ fn test_private_frags_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5373,27 +5561,36 @@ fn test_private_frags_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5408,9 +5605,11 @@ fn test_private_frags_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5429,11 +5628,7 @@ fn test_private_frags_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5474,27 +5669,36 @@ fn test_private_frags_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5510,9 +5714,11 @@ fn test_private_frags_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5532,11 +5738,7 @@ fn test_private_frags_complete_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5573,7 +5775,12 @@ fn test_private_frags_complete_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5597,27 +5804,36 @@ fn test_private_frags_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5633,9 +5849,11 @@ fn test_private_frags_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5660,11 +5878,7 @@ fn test_private_frags_complete_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5701,7 +5915,12 @@ fn test_private_frags_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5725,7 +5944,12 @@ fn test_private_frags_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5739,27 +5963,36 @@ fn test_private_frags_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5775,9 +6008,11 @@ fn test_private_frags_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5804,11 +6039,7 @@ fn test_private_frags_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5845,7 +6076,12 @@ fn test_private_frags_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5867,7 +6103,12 @@ fn test_private_frags_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -5886,27 +6127,36 @@ fn test_private_frags_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -5921,9 +6171,11 @@ fn test_private_frags_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -5949,11 +6201,7 @@ fn test_private_frags_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -5990,7 +6238,12 @@ fn test_private_frags_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6012,7 +6265,12 @@ fn test_private_frags_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6021,27 +6279,36 @@ fn test_private_frags_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6057,9 +6324,11 @@ fn test_private_offer_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6077,11 +6346,7 @@ fn test_private_offer_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6120,7 +6385,8 @@ fn test_private_offer_succeed() {
     }
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6138,18 +6404,21 @@ fn test_private_offer_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6157,12 +6426,14 @@ fn test_private_offer_succeed() {
         &vec![hash_0, hash_1]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6178,9 +6449,11 @@ fn test_private_offer_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6198,11 +6471,7 @@ fn test_private_offer_retry_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6239,7 +6508,12 @@ fn test_private_offer_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6253,18 +6527,21 @@ fn test_private_offer_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6272,12 +6549,14 @@ fn test_private_offer_retry_succeed() {
         &vec![hash.clone()]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6292,9 +6571,11 @@ fn test_private_offer_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6313,11 +6594,7 @@ fn test_private_offer_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6356,28 +6633,33 @@ fn test_private_offer_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6393,9 +6675,11 @@ fn test_private_offer_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6415,11 +6699,7 @@ fn test_private_offer_complete_succeed() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6454,7 +6734,12 @@ fn test_private_offer_complete_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6478,18 +6763,21 @@ fn test_private_offer_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6497,12 +6785,14 @@ fn test_private_offer_complete_succeed() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6518,9 +6808,11 @@ fn test_private_offer_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6545,11 +6837,7 @@ fn test_private_offer_complete_retry() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6584,7 +6872,12 @@ fn test_private_offer_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6608,7 +6901,12 @@ fn test_private_offer_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6617,18 +6915,21 @@ fn test_private_offer_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6636,12 +6937,14 @@ fn test_private_offer_complete_retry() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6657,9 +6960,11 @@ fn test_private_offer_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6686,11 +6991,7 @@ fn test_private_offer_complete_complete() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6725,7 +7026,12 @@ fn test_private_offer_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6747,7 +7053,12 @@ fn test_private_offer_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6766,18 +7077,21 @@ fn test_private_offer_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -6785,12 +7099,14 @@ fn test_private_offer_complete_complete() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6805,9 +7121,11 @@ fn test_private_offer_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestPrivateStreamScript {
         select: vec![Ok(RetryIndefResult::Success(()))],
         create_batch: vec![],
@@ -6833,11 +7151,7 @@ fn test_private_offer_complete_permanent() {
     };
     let inner: TestPrivateStream<&str, &str, SHA3ID> =
         TestPrivateStream::new(script);
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6872,7 +7186,12 @@ fn test_private_offer_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6894,7 +7213,12 @@ fn test_private_offer_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -6903,27 +7227,36 @@ fn test_private_offer_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -6938,9 +7271,11 @@ fn test_shared_select_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -6955,11 +7290,7 @@ fn test_shared_select_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -6991,28 +7322,33 @@ fn test_shared_select_succeed() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7028,9 +7364,11 @@ fn test_shared_select_req_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -7045,11 +7383,7 @@ fn test_shared_select_req_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7094,28 +7428,33 @@ fn test_shared_select_req_retry() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7130,9 +7469,11 @@ fn test_shared_select_req_indef() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -7147,11 +7488,7 @@ fn test_shared_select_req_indef() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7184,28 +7521,33 @@ fn test_shared_select_req_indef() {
 
     assert!(res.is_indef());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7220,9 +7562,11 @@ fn test_shared_select_req_error() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -7237,11 +7581,7 @@ fn test_shared_select_req_error() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7293,28 +7633,33 @@ fn test_shared_select_req_error() {
 
     assert!(res.is_success());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7329,9 +7674,11 @@ fn test_shared_create_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -7346,11 +7693,7 @@ fn test_shared_create_batch_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7388,7 +7731,8 @@ fn test_shared_create_batch_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7398,23 +7742,27 @@ fn test_shared_create_batch_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7430,9 +7778,11 @@ fn test_shared_create_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![
@@ -7450,11 +7800,7 @@ fn test_shared_create_batch_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7492,7 +7838,8 @@ fn test_shared_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -7505,7 +7852,8 @@ fn test_shared_create_batch_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7515,23 +7863,27 @@ fn test_shared_create_batch_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7546,9 +7898,11 @@ fn test_shared_create_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Permanent {
@@ -7567,11 +7921,7 @@ fn test_shared_create_batch_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7607,7 +7957,8 @@ fn test_shared_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -7618,28 +7969,33 @@ fn test_shared_create_batch_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7654,9 +8010,11 @@ fn test_shared_create_batch_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -7676,11 +8034,7 @@ fn test_shared_create_batch_complete_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7716,7 +8070,8 @@ fn test_shared_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -7734,7 +8089,8 @@ fn test_shared_create_batch_complete_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7744,23 +8100,27 @@ fn test_shared_create_batch_complete_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7776,9 +8136,11 @@ fn test_shared_create_batch_complete_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![
@@ -7803,11 +8165,7 @@ fn test_shared_create_batch_complete_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7843,7 +8201,8 @@ fn test_shared_create_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -7863,7 +8222,8 @@ fn test_shared_create_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -7876,7 +8236,8 @@ fn test_shared_create_batch_complete_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7886,23 +8247,27 @@ fn test_shared_create_batch_complete_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -7917,9 +8282,11 @@ fn test_shared_create_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -7945,11 +8312,7 @@ fn test_shared_create_batch_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -7985,7 +8348,8 @@ fn test_shared_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8013,28 +8377,33 @@ fn test_shared_create_batch_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8049,9 +8418,11 @@ fn test_shared_create_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -8078,11 +8449,7 @@ fn test_shared_create_batch_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8118,7 +8485,8 @@ fn test_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8141,7 +8509,8 @@ fn test_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8159,7 +8528,8 @@ fn test_shared_create_batch_complete_complete() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8169,23 +8539,27 @@ fn test_shared_create_batch_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8200,9 +8574,11 @@ fn test_shared_start_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -8217,11 +8593,7 @@ fn test_shared_start_batch_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8252,7 +8624,8 @@ fn test_shared_start_batch_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8262,23 +8635,27 @@ fn test_shared_start_batch_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8294,9 +8671,11 @@ fn test_shared_start_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![
@@ -8314,11 +8693,7 @@ fn test_shared_start_batch_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8351,7 +8726,8 @@ fn test_shared_start_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8364,7 +8740,8 @@ fn test_shared_start_batch_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8374,23 +8751,27 @@ fn test_shared_start_batch_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8405,9 +8786,11 @@ fn test_shared_start_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Permanent {
@@ -8426,11 +8809,7 @@ fn test_shared_start_batch_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8467,30 +8846,35 @@ fn test_shared_start_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &[TestSharedBatchState::StartError]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8505,9 +8889,11 @@ fn test_shared_start_batch_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -8527,11 +8913,7 @@ fn test_shared_start_batch_complete_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8562,7 +8944,8 @@ fn test_shared_start_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8580,7 +8963,8 @@ fn test_shared_start_batch_complete_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8590,23 +8974,27 @@ fn test_shared_start_batch_complete_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8622,9 +9010,11 @@ fn test_shared_start_batch_complete_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![
@@ -8649,11 +9039,7 @@ fn test_shared_start_batch_complete_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8684,7 +9070,8 @@ fn test_shared_start_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8704,7 +9091,8 @@ fn test_shared_start_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8717,7 +9105,8 @@ fn test_shared_start_batch_complete_retry_succeed() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8727,23 +9116,27 @@ fn test_shared_start_batch_complete_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8758,9 +9151,11 @@ fn test_shared_start_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -8786,11 +9181,7 @@ fn test_shared_start_batch_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8821,7 +9212,8 @@ fn test_shared_start_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8845,30 +9237,35 @@ fn test_shared_start_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &[TestSharedBatchState::StartError]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -8883,9 +9280,11 @@ fn test_shared_start_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Completable {
@@ -8912,11 +9311,7 @@ fn test_shared_start_batch_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -8947,7 +9342,8 @@ fn test_shared_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8965,7 +9361,8 @@ fn test_shared_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
@@ -8983,7 +9380,8 @@ fn test_shared_start_batch_complete_complete() {
     assert!(batch.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8993,23 +9391,27 @@ fn test_shared_start_batch_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9024,9 +9426,11 @@ fn test_shared_cancel_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9041,11 +9445,7 @@ fn test_shared_cancel_batch_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9084,30 +9484,35 @@ fn test_shared_cancel_batch_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9123,9 +9528,11 @@ fn test_shared_cancel_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9143,11 +9550,7 @@ fn test_shared_cancel_batch_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9190,7 +9593,8 @@ fn test_shared_cancel_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9208,30 +9612,35 @@ fn test_shared_cancel_batch_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9246,9 +9655,11 @@ fn test_shared_cancel_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9267,11 +9678,7 @@ fn test_shared_cancel_batch_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9305,7 +9712,8 @@ fn test_shared_cancel_batch_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9329,7 +9737,8 @@ fn test_shared_cancel_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9339,23 +9748,27 @@ fn test_shared_cancel_batch_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9370,9 +9783,11 @@ fn test_shared_cancel_batch_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9392,11 +9807,7 @@ fn test_shared_cancel_batch_complete_success() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9436,7 +9847,8 @@ fn test_shared_cancel_batch_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9459,30 +9871,35 @@ fn test_shared_cancel_batch_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9498,9 +9915,11 @@ fn test_shared_cancel_batch_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9525,11 +9944,7 @@ fn test_shared_cancel_batch_complete_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9563,7 +9978,8 @@ fn test_shared_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9582,7 +9998,8 @@ fn test_shared_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9608,7 +10025,8 @@ fn test_shared_cancel_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9626,30 +10044,35 @@ fn test_shared_cancel_batch_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9664,9 +10087,11 @@ fn test_shared_cancel_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9693,11 +10118,7 @@ fn test_shared_cancel_batch_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9731,7 +10152,8 @@ fn test_shared_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9750,7 +10172,8 @@ fn test_shared_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9779,7 +10202,8 @@ fn test_shared_cancel_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9802,30 +10226,35 @@ fn test_shared_cancel_batch_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -9840,9 +10269,11 @@ fn test_shared_cancel_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -9868,11 +10299,7 @@ fn test_shared_cancel_batch_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -9906,7 +10333,8 @@ fn test_shared_cancel_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9925,7 +10353,8 @@ fn test_shared_cancel_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9959,7 +10388,8 @@ fn test_shared_cancel_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9969,23 +10399,27 @@ fn test_shared_cancel_batch_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10000,9 +10434,11 @@ fn test_shared_finish_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10017,11 +10453,7 @@ fn test_shared_finish_batch_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10060,7 +10492,8 @@ fn test_shared_finish_batch_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10070,23 +10503,27 @@ fn test_shared_finish_batch_succeed() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10102,9 +10539,11 @@ fn test_shared_finish_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10122,11 +10561,7 @@ fn test_shared_finish_batch_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10169,7 +10604,8 @@ fn test_shared_finish_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10187,7 +10623,8 @@ fn test_shared_finish_batch_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10197,23 +10634,27 @@ fn test_shared_finish_batch_retry_succeed() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10228,9 +10669,11 @@ fn test_shared_finish_batch_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10249,11 +10692,7 @@ fn test_shared_finish_batch_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10287,7 +10726,8 @@ fn test_shared_finish_batch_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10311,7 +10751,8 @@ fn test_shared_finish_batch_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10321,23 +10762,27 @@ fn test_shared_finish_batch_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10352,9 +10797,11 @@ fn test_shared_finish_batch_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10374,11 +10821,7 @@ fn test_shared_finish_batch_complete_success() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10418,7 +10861,8 @@ fn test_shared_finish_batch_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10441,7 +10885,8 @@ fn test_shared_finish_batch_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10451,23 +10896,27 @@ fn test_shared_finish_batch_complete_success() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10483,9 +10932,11 @@ fn test_shared_finish_batch_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10510,11 +10961,7 @@ fn test_shared_finish_batch_complete_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10548,7 +10995,8 @@ fn test_shared_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10567,7 +11015,8 @@ fn test_shared_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10593,7 +11042,8 @@ fn test_shared_finish_batch_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10611,7 +11061,8 @@ fn test_shared_finish_batch_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10621,23 +11072,27 @@ fn test_shared_finish_batch_complete_retry() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10652,9 +11107,11 @@ fn test_shared_finish_batch_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10681,11 +11138,7 @@ fn test_shared_finish_batch_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10719,7 +11172,8 @@ fn test_shared_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10738,7 +11192,8 @@ fn test_shared_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10767,7 +11222,8 @@ fn test_shared_finish_batch_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10790,7 +11246,8 @@ fn test_shared_finish_batch_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10800,23 +11257,27 @@ fn test_shared_finish_batch_complete_complete() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10831,9 +11292,11 @@ fn test_shared_finish_batch_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -10859,11 +11322,7 @@ fn test_shared_finish_batch_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -10897,7 +11356,8 @@ fn test_shared_finish_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10916,7 +11376,8 @@ fn test_shared_finish_batch_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10950,7 +11411,8 @@ fn test_shared_finish_batch_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10960,23 +11422,27 @@ fn test_shared_finish_batch_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -10991,9 +11457,11 @@ fn test_shared_abort_start_batch_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Permanent {
@@ -11012,11 +11480,7 @@ fn test_shared_abort_start_batch_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11053,7 +11517,8 @@ fn test_shared_abort_start_batch_succeed() {
     assert!(completable.is_none());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11066,30 +11531,35 @@ fn test_shared_abort_start_batch_succeed() {
         .is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Aborted,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11105,9 +11575,11 @@ fn test_shared_abort_start_batch_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Err(TestError::Permanent {
@@ -11132,11 +11604,7 @@ fn test_shared_abort_start_batch_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11173,7 +11641,8 @@ fn test_shared_abort_start_batch_retry_succeed() {
     assert!(completable.is_none());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11189,7 +11658,8 @@ fn test_shared_abort_start_batch_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11202,30 +11672,35 @@ fn test_shared_abort_start_batch_retry_succeed() {
         .is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![TestSharedBatchState::Aborted,]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11240,9 +11715,11 @@ fn test_shared_add_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11257,11 +11734,7 @@ fn test_shared_add_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11300,7 +11773,8 @@ fn test_shared_add_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11310,23 +11784,27 @@ fn test_shared_add_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11342,9 +11820,11 @@ fn test_shared_add_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11362,11 +11842,7 @@ fn test_shared_add_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11409,7 +11885,8 @@ fn test_shared_add_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11427,7 +11904,8 @@ fn test_shared_add_retry_succeed() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11437,23 +11915,27 @@ fn test_shared_add_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11468,9 +11950,11 @@ fn test_shared_add_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11489,11 +11973,7 @@ fn test_shared_add_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11527,7 +12007,8 @@ fn test_shared_add_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11551,7 +12032,8 @@ fn test_shared_add_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11561,23 +12043,27 @@ fn test_shared_add_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11592,9 +12078,11 @@ fn test_shared_add_complete_success() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11614,11 +12102,7 @@ fn test_shared_add_complete_success() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11659,7 +12143,8 @@ fn test_shared_add_complete_success() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11682,7 +12167,8 @@ fn test_shared_add_complete_success() {
     assert!(err.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11692,23 +12178,27 @@ fn test_shared_add_complete_success() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11724,9 +12214,11 @@ fn test_shared_add_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11751,11 +12243,7 @@ fn test_shared_add_complete_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11789,7 +12277,8 @@ fn test_shared_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11808,7 +12297,8 @@ fn test_shared_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11840,7 +12330,8 @@ fn test_shared_add_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11858,7 +12349,8 @@ fn test_shared_add_complete_retry() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11868,23 +12360,27 @@ fn test_shared_add_complete_retry() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -11899,9 +12395,11 @@ fn test_shared_add_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -11928,11 +12426,7 @@ fn test_shared_add_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -11966,7 +12460,8 @@ fn test_shared_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11985,7 +12480,8 @@ fn test_shared_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12015,7 +12511,8 @@ fn test_shared_add_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12038,7 +12535,8 @@ fn test_shared_add_complete_complete() {
     assert!(res.is_success());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12048,23 +12546,27 @@ fn test_shared_add_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12079,9 +12581,11 @@ fn test_shared_add_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![Ok(RetryResult::Success(()))],
@@ -12107,11 +12611,7 @@ fn test_shared_add_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12145,7 +12645,8 @@ fn test_shared_add_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12164,7 +12665,8 @@ fn test_shared_add_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12199,7 +12701,8 @@ fn test_shared_add_complete_permanent() {
     assert!(permanent.is_some());
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12209,23 +12712,27 @@ fn test_shared_add_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12241,9 +12748,11 @@ fn test_shared_frags_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12261,11 +12770,7 @@ fn test_shared_frags_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12301,7 +12806,12 @@ fn test_shared_frags_succeed() {
     }
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
 
@@ -12315,27 +12825,36 @@ fn test_shared_frags_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64), LargeObjID::from(2 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12351,9 +12870,11 @@ fn test_shared_frags_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12371,11 +12892,7 @@ fn test_shared_frags_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12410,7 +12927,12 @@ fn test_shared_frags_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12429,27 +12951,36 @@ fn test_shared_frags_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12464,9 +12995,11 @@ fn test_shared_frags_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12485,11 +13018,7 @@ fn test_shared_frags_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12530,27 +13059,36 @@ fn test_shared_frags_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12566,9 +13104,11 @@ fn test_shared_frags_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12588,11 +13128,7 @@ fn test_shared_frags_complete_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12629,7 +13165,12 @@ fn test_shared_frags_complete_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12653,27 +13194,36 @@ fn test_shared_frags_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12689,9 +13239,11 @@ fn test_shared_frags_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12716,11 +13268,7 @@ fn test_shared_frags_complete_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12757,7 +13305,12 @@ fn test_shared_frags_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12781,7 +13334,12 @@ fn test_shared_frags_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12795,27 +13353,36 @@ fn test_shared_frags_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12831,9 +13398,11 @@ fn test_shared_frags_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -12860,11 +13429,7 @@ fn test_shared_frags_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -12901,7 +13466,12 @@ fn test_shared_frags_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12923,7 +13493,12 @@ fn test_shared_frags_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -12942,27 +13517,36 @@ fn test_shared_frags_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -12977,9 +13561,11 @@ fn test_shared_frags_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13005,11 +13591,7 @@ fn test_shared_frags_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13046,7 +13628,12 @@ fn test_shared_frags_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13068,7 +13655,12 @@ fn test_shared_frags_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13077,27 +13669,36 @@ fn test_shared_frags_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13113,9 +13714,11 @@ fn test_shared_offer_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13133,11 +13736,7 @@ fn test_shared_offer_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13176,7 +13775,8 @@ fn test_shared_offer_succeed() {
     }
 
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13194,18 +13794,21 @@ fn test_shared_offer_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13213,12 +13816,14 @@ fn test_shared_offer_succeed() {
         &vec![hash_0, hash_1]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13234,9 +13839,11 @@ fn test_shared_offer_retry_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13254,11 +13861,7 @@ fn test_shared_offer_retry_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13295,7 +13898,12 @@ fn test_shared_offer_retry_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13309,18 +13917,21 @@ fn test_shared_offer_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13328,12 +13939,14 @@ fn test_shared_offer_retry_succeed() {
         &vec![hash.clone()]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13348,9 +13961,11 @@ fn test_shared_offer_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13369,11 +13984,7 @@ fn test_shared_offer_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13412,28 +14023,33 @@ fn test_shared_offer_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .offers
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13449,9 +14065,11 @@ fn test_shared_offer_complete_succeed() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13471,11 +14089,7 @@ fn test_shared_offer_complete_succeed() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13510,7 +14124,12 @@ fn test_shared_offer_complete_succeed() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13534,18 +14153,21 @@ fn test_shared_offer_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13553,12 +14175,14 @@ fn test_shared_offer_complete_succeed() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13574,9 +14198,11 @@ fn test_shared_offer_complete_retry() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13601,11 +14227,7 @@ fn test_shared_offer_complete_retry() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13640,7 +14262,12 @@ fn test_shared_offer_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13664,7 +14291,12 @@ fn test_shared_offer_complete_retry() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13673,18 +14305,21 @@ fn test_shared_offer_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13692,12 +14327,14 @@ fn test_shared_offer_complete_retry() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13713,9 +14350,11 @@ fn test_shared_offer_complete_complete() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13742,11 +14381,7 @@ fn test_shared_offer_complete_complete() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13781,7 +14416,12 @@ fn test_shared_offer_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13803,7 +14443,12 @@ fn test_shared_offer_complete_complete() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13822,18 +14467,21 @@ fn test_shared_offer_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner()
+        inner
+            .inner()
             .offers
             .try_borrow()
             .expect("try_borrow failed")
@@ -13841,12 +14489,14 @@ fn test_shared_offer_complete_complete() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")
@@ -13861,9 +14511,11 @@ fn test_shared_offer_complete_permanent() {
     let test_param = TestChannelParam {
         accepts: HashSet::from([test_endpoint.clone()])
     };
-    let test_stream_id = StreamID::new(test_endpoint.clone(),
-                                       TEST_CHANNEL_ID.to_string(),
-                                       test_param);
+    let test_stream_id = StreamID::new(
+        test_endpoint.clone(),
+        TEST_CHANNEL_ID.to_string(),
+        test_param
+    );
     let script = TestSharedStreamScript {
         select: vec![Ok(RetryIndefResult::Success(vec![0, 1, 2]))],
         create_batch: vec![],
@@ -13889,11 +14541,7 @@ fn test_shared_offer_complete_permanent() {
     };
     let inner: TestSharedStream<&str, &str, SHA3ID> =
         TestSharedStream::new(script, vec![1, 2, 3].into_iter());
-    let inner = TestChannel::new(
-       test_stream_id.clone(),
-        inner,
-        vec![]
-    );
+    let inner = TestChannel::new(test_stream_id.clone(), inner, vec![]);
     let resolve = TestAddrsScript {
         addrs: vec![Ok(RetryResult::Success((
             vec![(test_endpoint, String::from(TEST_ENDPOINT))],
@@ -13928,7 +14576,12 @@ fn test_shared_offer_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13950,7 +14603,12 @@ fn test_shared_offer_complete_permanent() {
     };
 
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
 
@@ -13959,27 +14617,36 @@ fn test_shared_offer_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batches
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .frags
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
     assert_eq!(
-        inner.inner().frags.try_borrow().expect("try_borrow failed").deref(),
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
         &vec![]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .reports
         .try_borrow()
         .expect("try_borrow failed")
         .is_empty());
-    assert!(inner.inner()
+    assert!(inner
+        .inner()
         .batch_reports
         .try_borrow()
         .expect("try_borrow failed")

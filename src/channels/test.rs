@@ -46,8 +46,8 @@ use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::large_obj::LargeObjID;
-use crate::stream::LargeObjStream;
 use crate::stream::LargeObjOfferStream;
+use crate::stream::LargeObjStream;
 use crate::stream::Parties;
 use crate::stream::PullStream;
 use crate::stream::PushStream;
@@ -221,21 +221,24 @@ impl<Stream> TestChannel<Stream> {
 }
 
 impl<Stream, Ctx> PushStream<Ctx> for TestChannel<Stream>
-where Stream: PushStream<Ctx> {
+where
+    Stream: PushStream<Ctx>
+{
     type BatchID = Stream::BatchID;
     type CancelBatchError = Stream::CancelBatchError;
     type CancelBatchRetry = Stream::CancelBatchRetry;
     type FinishBatchError = Stream::FinishBatchError;
     type FinishBatchRetry = Stream::FinishBatchRetry;
-    type StreamFlags = Stream::StreamFlags;
     type ReportError = Stream::ReportError;
+    type StreamFlags = Stream::StreamFlags;
 
     fn finish_batch(
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
         self.stream.finish_batch(ctx, flags, batch)
     }
 
@@ -245,7 +248,8 @@ where Stream: PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         retry: Self::FinishBatchRetry
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
         self.stream.retry_finish_batch(ctx, flags, batch, retry)
     }
 
@@ -255,7 +259,8 @@ where Stream: PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         err: <Self::FinishBatchError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError> {
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
         self.stream.complete_finish_batch(ctx, flags, batch, err)
     }
 
@@ -264,7 +269,8 @@ where Stream: PushStream<Ctx> {
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
         self.stream.cancel_batch(ctx, flags, batch)
     }
 
@@ -274,7 +280,8 @@ where Stream: PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         retry: Self::CancelBatchRetry
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
         self.stream.retry_cancel_batch(ctx, flags, batch, retry)
     }
 
@@ -284,7 +291,8 @@ where Stream: PushStream<Ctx> {
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
         err: <Self::CancelBatchError as RecoverableError>::Completable
-    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError> {
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
         self.stream.complete_cancel_batch(ctx, flags, batch, err)
     }
 
@@ -301,7 +309,9 @@ where Stream: PushStream<Ctx> {
 }
 
 impl<T, Stream, Ctx> PushStreamAdd<T, Ctx> for TestChannel<Stream>
-where Stream: PushStreamAdd<T, Ctx> {
+where
+    Stream: PushStreamAdd<T, Ctx>
+{
     type AddError = Stream::AddError;
     type AddRetry = Stream::AddRetry;
 
@@ -339,22 +349,25 @@ where Stream: PushStreamAdd<T, Ctx> {
 }
 
 impl<Stream, Ctx> PushStreamPrivate<Ctx> for TestChannel<Stream>
-where Stream: PushStreamPrivate<Ctx> {
-    type SelectError = Stream::SelectError;
-    type SelectRetry = Stream::SelectRetry;
+where
+    Stream: PushStreamPrivate<Ctx>
+{
+    type AbortBatchRetry = Stream::AbortBatchRetry;
     type CreateBatchError = Stream::CreateBatchError;
     type CreateBatchRetry = Stream::CreateBatchRetry;
+    type SelectError = Stream::SelectError;
+    type SelectRetry = Stream::SelectRetry;
+    type Selections = Stream::Selections;
     type StartBatchError = Stream::StartBatchError;
     type StartBatchRetry = Stream::StartBatchRetry;
-    type AbortBatchRetry = Stream::AbortBatchRetry;
-    type Selections = Stream::Selections;
     type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
 
     fn select(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
         self.stream.select(ctx, selections)
     }
 
@@ -363,7 +376,8 @@ where Stream: PushStreamPrivate<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
         self.stream.retry_select(ctx, selections, retry)
     }
 
@@ -372,7 +386,8 @@ where Stream: PushStreamPrivate<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
         self.stream.complete_select(ctx, selections, err)
     }
 
@@ -398,7 +413,8 @@ where Stream: PushStreamPrivate<Ctx> {
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self.stream.retry_create_batch(ctx, batches, selections, retry)
+        self.stream
+            .retry_create_batch(ctx, batches, selections, retry)
     }
 
     fn complete_create_batch(
@@ -411,7 +427,8 @@ where Stream: PushStreamPrivate<Ctx> {
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self.stream.complete_create_batch(ctx, batches, selections, err)
+        self.stream
+            .complete_create_batch(ctx, batches, selections, err)
     }
 
     fn start_batch(
@@ -466,24 +483,28 @@ where Stream: PushStreamPrivate<Ctx> {
 }
 
 impl<Stream> PushStreamPartyID for TestChannel<Stream>
-where Stream: PushStreamPartyID {
+where
+    Stream: PushStreamPartyID
+{
     type PartyID = Stream::PartyID;
 }
 
 impl<Stream, Ctx> PushStreamShared<Ctx> for TestChannel<Stream>
-where Stream: PushStreamShared<Ctx> {
-    type SelectError = Stream::SelectError;
-    type SelectRetry = Stream::SelectRetry;
+where
+    Stream: PushStreamShared<Ctx>
+{
+    type AbortBatchRetry = Stream::AbortBatchRetry;
+    type BatchPartiesError = Stream::BatchPartiesError;
+    type BatchPartiesIter = Stream::BatchPartiesIter;
     type CreateBatchError = Stream::CreateBatchError;
     type CreateBatchRetry = Stream::CreateBatchRetry;
+    type IndefParties = Stream::IndefParties;
+    type SelectError = Stream::SelectError;
+    type SelectRetry = Stream::SelectRetry;
+    type Selections = Stream::Selections;
     type StartBatchError = Stream::StartBatchError;
     type StartBatchRetry = Stream::StartBatchRetry;
-    type AbortBatchRetry = Stream::AbortBatchRetry;
-    type Selections = Stream::Selections;
     type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
-    type BatchPartiesIter = Stream::BatchPartiesIter;
-    type BatchPartiesError = Stream::BatchPartiesError;
-    type IndefParties = Stream::IndefParties;
 
     fn batch_parties(
         &self,
@@ -565,7 +586,8 @@ where Stream: PushStreamShared<Ctx> {
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self.stream.retry_create_batch(ctx, batches, selections, retry)
+        self.stream
+            .retry_create_batch(ctx, batches, selections, retry)
     }
 
     fn complete_create_batch(
@@ -578,7 +600,8 @@ where Stream: PushStreamShared<Ctx> {
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self.stream.complete_create_batch(ctx, batches, selections, err)
+        self.stream
+            .complete_create_batch(ctx, batches, selections, err)
     }
 
     fn start_batch<'a, I>(
@@ -649,11 +672,13 @@ where Stream: PushStreamShared<Ctx> {
 }
 
 impl<Stream, Ctx> LargeObjStream<Ctx> for TestChannel<Stream>
-where Stream: LargeObjStream<Ctx> {
-    type PushFragError = Stream::PushFragError;
-    type PushFragRetry = Stream::PushFragRetry;
+where
+    Stream: LargeObjStream<Ctx>
+{
     type Frags = Stream::Frags;
     type Parties = Stream::Parties;
+    type PushFragError = Stream::PushFragError;
+    type PushFragRetry = Stream::PushFragRetry;
 
     fn push_frags(
         &mut self,
@@ -707,8 +732,10 @@ where Stream: LargeObjStream<Ctx> {
 }
 
 impl<H, Stream, Ctx> LargeObjOfferStream<H, Ctx> for TestChannel<Stream>
-where Stream: LargeObjOfferStream<H, Ctx>,
-      H: HashID {
+where
+    Stream: LargeObjOfferStream<H, Ctx>,
+    H: HashID
+{
     type PushOfferError = Stream::PushOfferError;
     type PushOfferRetry = Stream::PushOfferRetry;
 
@@ -764,7 +791,9 @@ where Stream: LargeObjOfferStream<H, Ctx>,
 }
 
 impl<Stream, Msg> PullStream<Msg> for TestChannel<Stream>
-where Stream: PullStream<Msg> {
+where
+    Stream: PullStream<Msg>
+{
     type PullError = Stream::PullError;
 
     #[inline]
@@ -874,8 +903,8 @@ where
         )>,
         Self::ReqStreamError
     > {
-        let id = StreamID::new(endpoint.clone(), channel.clone(),
-                               param.clone());
+        let id =
+            StreamID::new(endpoint.clone(), channel.clone(), param.clone());
 
         self.req_streams
             .get_mut(&id)
@@ -955,9 +984,10 @@ where
                     )> = streams
                         .into_iter()
                         .map(|val| {
-                            let key =
-                                (val.id.channel().clone(),
-                                 val.id.param().clone());
+                            let key = (
+                                val.id.channel().clone(),
+                                val.id.param().clone()
+                            );
 
                             let _ = self.actives.insert(key);
 
@@ -971,10 +1001,14 @@ where
                         .collect();
                     let ids: Vec<(TestEndpoint, String, TestChannelParam)> =
                         ids.into_iter()
-                        .map(|id| (id.party_addr().clone(),
-                                   id.channel().clone(),
-                                   id.param().clone()))
-                        .collect();
+                            .map(|id| {
+                                (
+                                    id.party_addr().clone(),
+                                    id.channel().clone(),
+                                    id.param().clone()
+                                )
+                            })
+                            .collect();
 
                     if let Some(refreshes) = &refreshes {
                         let refreshes: HashSet<(String, TestChannelParam)> =
@@ -1013,8 +1047,10 @@ where
         _param: &Self::Param,
         mut session: Self::Stream
     ) -> Result<
-        RetryResult<(Option<Vec<Self::Param>>, Option<Instant>),
-                    Self::ShutdownStreamRetry>,
+        RetryResult<
+            (Option<Vec<Self::Param>>, Option<Instant>),
+            Self::ShutdownStreamRetry
+        >,
         Self::ShutdownStreamError
     > {
         session

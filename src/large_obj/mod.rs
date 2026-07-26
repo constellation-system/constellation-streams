@@ -3580,8 +3580,8 @@ fn test_offer_complete() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -3681,8 +3681,8 @@ fn test_offer_complete_repeat() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -3801,8 +3801,8 @@ fn test_offer_complete_repeat_multi_finish() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -3935,8 +3935,8 @@ fn test_long_offer_complete_repeat() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -4055,8 +4055,8 @@ fn test_offer_req_obj_frag_complete() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -4197,8 +4197,8 @@ fn test_offer_req_obj_offer_complete() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -4331,8 +4331,8 @@ fn test_offer_req_frag_complete_repeat() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
@@ -4515,8 +4515,8 @@ fn test_offer_req_obj_frag_req_complete() {
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let poll = Poll::new().expect("Expected success");
-    let waker = Waker::new(poll.registry(), Token(0))
-        .expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
     let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
