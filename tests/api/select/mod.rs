@@ -104,7 +104,7 @@ where
         AscendingCount<u128>,
         TestAddrs,
         TestChannels<Inner>
-    > = StreamSelector::create(&mut channels, config)
+    > = StreamSelector::create(config, &mut channels)
         .expect("Expected success");
 
     (stream, channels)

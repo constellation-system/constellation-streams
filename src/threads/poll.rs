@@ -56,6 +56,7 @@ use mio::Waker;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
+use crate::config::PollThreadConfig;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
@@ -64,6 +65,8 @@ use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
 use crate::threads::RetryHeapEntry;
+use crate::threads::Tokens;
+use crate::threads::TokensCtx;
 
 pub trait PollThreadTypes<Ctx>
 where
@@ -87,6 +90,8 @@ where
             Completable = Self::RefreshCompletableError,
             Permanent = Self::RefreshPermanentError
         >;
+    type StreamConfig;
+    type StreamCreateError: Debug + Display;
     type Stream: 'static
         + StreamRefresh<
             PollThreadCtx<Self::Chans, Ctx>,
@@ -97,6 +102,11 @@ where
             Self::SessionPrin,
             StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
             Self::AuthNChan
+        >
+        + for<'a> CreateWithParam<
+            &'a PollThreadCtx<Self::Chans, Ctx>,
+            Config = Self::StreamConfig,
+            CreateError = Self::StreamCreateError
         >
         + Send;
     type InMsg;
@@ -169,6 +179,7 @@ pub struct PollThreadCtx<Chans, Ctx>
 where
     Chans: Channels<Ctx> {
     channels: Chans,
+    tokens: Tokens,
     ctx: Ctx,
     poll: Poll
 }
@@ -266,6 +277,24 @@ where
     }
 }
 
+impl<Chans, Ctx> TokensCtx for PollThreadCtx<Chans, Ctx>
+where
+    Chans: Channels<Ctx>
+{
+    #[inline]
+    fn token(&mut self) -> Token {
+        self.tokens.token()
+    }
+
+    #[inline]
+    fn free_token(
+        &mut self,
+        token: Token
+    ) {
+        self.tokens.free_token(token)
+    }
+}
+
 impl<Chans, Ctx> RegistryCtx for PollThreadCtx<Chans, Ctx>
 where
     Chans: Channels<Ctx>
@@ -277,9 +306,11 @@ where
 }
 
 #[derive(Debug)]
-pub enum PollThreadCreateError<Mode, Channels, AuthN> {
+pub enum PollThreadCreateError<Mode, Channels, Stream, AuthN> {
+    IO { err: Error },
     Mode { err: Mode },
     Channels { err: Channels },
+    Stream { err: Stream },
     AuthN { err: AuthN }
 }
 
@@ -297,10 +328,17 @@ where
     fn new(
         ctx: Ctx,
         channels: Chans,
-        poll: Poll
+        poll: Poll,
+        tokens_hint: Option<usize>
     ) -> Self {
+        let tokens = match tokens_hint {
+            Some(hint) => Tokens::with_capacity(hint),
+            None => Tokens::new()
+        };
+
         PollThreadCtx {
             channels: channels,
+            tokens: tokens,
             ctx: ctx,
             poll: poll
         }
@@ -309,42 +347,56 @@ where
 
 impl<Ctx, Types> PollThread<Ctx, Types>
 where
-    Types: 'static + PollThreadTypes<Ctx>,
-    Ctx: 'static + Send
+    Types: PollThreadTypes<Ctx>,
+    Ctx: Send
 {
     pub fn create(
-        mode_config: Types::ModeConfig,
-        chans_config: Types::ChansConfig,
-        authn_config: Types::MsgAuthConfig,
+        config: PollThreadConfig<
+            Types::ChansConfig,
+            Types::ModeConfig,
+            Types::StreamConfig,
+            Types::MsgAuthConfig
+        >,
         mut ctx: Ctx,
-        poll: Poll,
         recv: Types::Recv,
-        msgs: Types::Msgs,
-        notify: Arc<Waker>,
-        notify_token: Token,
-        stream: Types::Stream,
-        shutdown: ShutdownFlag,
-        nevents: usize,
-        nsessions: Option<usize>
+        msgs: Types::Msgs
     ) -> Result<
         Self,
         PollThreadCreateError<
             Types::ModeCreateError,
             Types::ChansCreateError,
+            Types::StreamCreateError,
             Types::MsgAuthCreateError
         >
     > {
+        let (
+            chans_config,
+            mode_config,
+            stream_config,
+            authn_config,
+            nevents,
+            nsessions
+        ) = config.take();
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
-        let mode = Types::Mode::create(mode_config, &stream)
-            .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
         let pull_streams = match nsessions {
             Some(nsessions) => HashMap::with_capacity(nsessions),
             None => HashMap::new()
         };
-        let ctx = PollThreadCtx::new(ctx, channels, poll);
+        let poll = Poll::new()
+            .map_err(|err| PollThreadCreateError::IO { err: err })?;
+        let mut ctx = PollThreadCtx::new(ctx, channels, poll, nsessions);
+        let stream = Types::Stream::create(stream_config, &ctx)
+            .map_err(|err| PollThreadCreateError::Stream { err: err })?;
+        let mode = Types::Mode::create(mode_config, &stream)
+            .map_err(|err| PollThreadCreateError::Mode { err: err })?;
+        let notify_token = ctx.token();
+        let notify = Waker::new(ctx.poll.registry(), notify_token)
+            .map_err(|err| PollThreadCreateError::IO { err: err })?;
+        let notify = Arc::new(notify);
+        let shutdown = ShutdownFlag::new(notify.clone());
 
         Ok(PollThread {
             pull_streams: pull_streams,
@@ -362,12 +414,32 @@ where
             ctx: ctx
         })
     }
+}
+
+impl<Ctx, Types> PollThread<Ctx, Types>
+where
+    Types: 'static + PollThreadTypes<Ctx>,
+    Ctx: 'static + Send
+{
+    #[inline]
+    pub fn stream(&self) -> &Types::Stream {
+        &self.stream
+    }
 
     /// Get the [Waker] used to signal availability of new messages
     /// to this thread.
     #[inline]
     pub fn notify(&self) -> Arc<Waker> {
         self.notify.clone()
+    }
+
+    /// Shut down this `Dispatched`.
+    ///
+    /// This will trigger the [ShutdownFlag] associated with this
+    /// `Dispatched`.
+    #[inline]
+    pub fn shutdown_flag(&mut self) -> Result<(), Error> {
+        self.shutdown.set()
     }
 
     fn handle_msg(
@@ -1188,7 +1260,8 @@ where
         let PollThreadCtx {
             mut ctx,
             mut poll,
-            mut channels
+            mut channels,
+            ..
         } = ctx;
         let nsessions = pull_streams.len();
 
@@ -1365,11 +1438,12 @@ where
     }
 }
 
-impl<Mode, Channels, AuthN> Display
-    for PollThreadCreateError<Mode, Channels, AuthN>
+impl<Mode, Channels, Stream, AuthN> Display
+    for PollThreadCreateError<Mode, Channels, Stream, AuthN>
 where
     Channels: Display,
     Mode: Display,
+    Stream: Display,
     AuthN: Display
 {
     fn fmt(
@@ -1377,7 +1451,9 @@ where
         f: &mut Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
         match self {
+            PollThreadCreateError::IO { err } => write!(f, "{}", err),
             PollThreadCreateError::Channels { err } => err.fmt(f),
+            PollThreadCreateError::Stream { err } => err.fmt(f),
             PollThreadCreateError::AuthN { err } => err.fmt(f),
             PollThreadCreateError::Mode { err } => err.fmt(f)
         }
@@ -1435,8 +1511,6 @@ use crate::threads::test::TestRefreshError;
 #[cfg(test)]
 use crate::threads::test::TestRefreshRetry;
 #[cfg(test)]
-use crate::threads::test::TestStream;
-#[cfg(test)]
 use crate::threads::test::ThreadTestTypes;
 
 #[test]
@@ -1457,33 +1531,20 @@ fn test_send() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1539,33 +1600,20 @@ fn test_send_later() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1613,33 +1661,20 @@ fn test_send_error() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1700,33 +1735,20 @@ fn test_send_retry() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1825,33 +1847,20 @@ fn test_send_after_and_retry() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -1950,33 +1959,20 @@ fn test_send_and_retry_after() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2062,33 +2058,20 @@ fn test_send_retry_error() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2184,33 +2167,20 @@ fn test_send_retry_retry() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2302,33 +2272,20 @@ fn test_send_retry_complete() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2412,33 +2369,20 @@ fn test_send_complete() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2531,33 +2475,20 @@ fn test_send_after_complete() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2653,33 +2584,20 @@ fn test_send_complete_after() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2762,33 +2680,20 @@ fn test_send_complete_error() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -2878,33 +2783,20 @@ fn test_send_complete_complete() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3023,33 +2915,20 @@ fn test_send_complete_retry() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3145,33 +3024,20 @@ fn test_listen_new_stream_recv_none() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3247,33 +3113,20 @@ fn test_listen_new_stream_recv_one() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3350,33 +3203,20 @@ fn test_listen_new_stream_recv_two() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3476,33 +3316,20 @@ fn test_listen_new_stream_recv_collide() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3627,33 +3454,20 @@ fn test_listen_new_stream_recv_collide_error() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3780,33 +3594,20 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -3964,33 +3765,20 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4103,33 +3891,20 @@ fn test_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(when)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4187,33 +3962,20 @@ fn test_refresh_complete_imm_success() {
             result: Arc::new(Ok(RetryResult::Success(Some(later))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4271,33 +4033,20 @@ fn test_refresh_complete_success() {
             result: Arc::new(Ok(RetryResult::Success(Some(later))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4386,33 +4135,20 @@ fn test_refresh_complete_imm_complete_imm_success() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4475,33 +4211,20 @@ fn test_refresh_complete_imm_complete_success() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4590,33 +4313,20 @@ fn test_refresh_complete_complete_imm_success() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4706,33 +4416,20 @@ fn test_refresh_complete_complete_success() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4839,33 +4536,20 @@ fn test_refresh_permanent() {
             scope: ErrorScope::Unrecoverable
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -4925,33 +4609,20 @@ fn test_refresh_complete_imm_permanent() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5012,33 +4683,20 @@ fn test_refresh_complete_permanent() {
             }))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5125,33 +4783,20 @@ fn test_refresh_complete_imm_retry() {
             })))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5239,33 +4884,20 @@ fn test_refresh_complete_retry() {
             })))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5373,33 +5005,20 @@ fn test_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(later)))),
         when: when
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5485,33 +5104,20 @@ fn test_refresh_retry_retry() {
         }))),
         when: when
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5624,33 +5230,20 @@ fn test_refresh_retry_complete_imm() {
         })),
         when: when
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5738,33 +5331,20 @@ fn test_refresh_retry_complete() {
         })),
         when: when
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5875,33 +5455,20 @@ fn test_refresh_retry_permanent() {
         })),
         when: when
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -5985,33 +5552,20 @@ fn test_send_indef() {
         shutdown_listen: vec![]
     };
     let stream_script = vec![];
-    let stream = TestStream::create(stream_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        stream_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6069,33 +5623,20 @@ fn test_send_indef_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(later)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6191,33 +5732,20 @@ fn test_send_indef_retry_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(after)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6336,33 +5864,20 @@ fn test_send_indef_complete_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(after)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6481,33 +5996,20 @@ fn test_send_indef_indef_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(after)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6595,33 +6097,20 @@ fn test_send_indef_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(after)))),
         when: later
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6747,33 +6236,20 @@ fn test_send_indef_retry_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(post)))),
         when: later
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -6922,33 +6398,20 @@ fn test_send_indef_complete_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(post)))),
         when: later
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7096,33 +6559,20 @@ fn test_send_indef_indef_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(after)))),
         when: later
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7237,33 +6687,20 @@ fn test_send_indef_refresh_complete_imm() {
             result: Arc::new(Ok(RetryResult::Success(Some(later))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7364,33 +6801,20 @@ fn test_send_indef_retry_refresh_complete_imm() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7514,33 +6938,20 @@ fn test_send_indef_complete_refresh_complete_imm() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7664,33 +7075,20 @@ fn test_send_indef_indef_refresh_complete_imm() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7780,33 +7178,20 @@ fn test_send_indef_refresh_complete() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -7934,33 +7319,20 @@ fn test_send_indef_retry_refresh_complete() {
             result: Arc::new(Ok(RetryResult::Success(Some(post))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8111,33 +7483,20 @@ fn test_send_indef_complete_refresh_complete() {
             result: Arc::new(Ok(RetryResult::Success(Some(post))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8287,33 +7646,20 @@ fn test_send_indef_indef_refresh_complete() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8435,33 +7781,20 @@ fn test_send_indef_listen_refresh() {
         shutdown_listen: vec![]
     };
     let refresh_script = vec![Ok(RetryResult::Success(Some(later)))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8564,33 +7897,20 @@ fn test_send_indef_listen_refresh_retry() {
         result: Arc::new(Ok(RetryResult::Success(Some(after)))),
         when: later
     }))];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8720,33 +8040,20 @@ fn test_send_indef_listen_refresh_complete_imm() {
             result: Arc::new(Ok(RetryResult::Success(Some(later))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;
@@ -8851,33 +8158,20 @@ fn test_send_indef_listen_refresh_complete() {
             result: Arc::new(Ok(RetryResult::Success(Some(after))))
         }
     })];
-    let stream = TestStream::create(refresh_script).expect("Expected success");
-    let reports = stream.reports.clone();
-    let sendbuf = stream.sends.clone();
-    let poll = Poll::new().expect("Expected success");
-    let token = Token(0);
-    let notify = Waker::new(poll.registry(), token).expect("Expected success");
-    let notify = Arc::new(notify);
     let recv = TestRecv::default();
     let recvbuf = recv.msgs.clone();
-    let flag = ShutdownFlag::new(notify.clone());
-
-    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
-        mode_config,
+    let config = PollThreadConfig::new(
         chans_config,
+        mode_config,
+        refresh_script,
         (),
-        (),
-        poll,
-        recv,
-        (),
-        notify,
-        token,
-        stream,
-        flag,
         16,
         None
-    )
-    .expect("Expected success");
+    );
+    let mut poll: PollThread<_, ThreadTestTypes> =
+        PollThread::create(config, (), recv, ()).expect("Expected success");
+    let reports = poll.stream().reports.clone();
+    let sendbuf = poll.stream().sends.clone();
 
     let mut events = Events::with_capacity(16);
     let mut retry_refresh = None;

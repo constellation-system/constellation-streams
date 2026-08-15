@@ -60,6 +60,7 @@ use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
+use crate::config::DispatchThreadConfig;
 use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
@@ -1275,15 +1276,18 @@ where
     Ctx: 'static + Send
 {
     pub fn create(
-        mode_config: Types::ModeConfig,
-        chans_config: Types::ChansConfig,
+        config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
         dispatcher: Types::Disp,
-        mut ctx: Ctx,
-        nevents: usize,
-        nsessions: Option<usize>,
-        ndispatched: Option<usize>,
-        tokens_hint: Option<usize>
+        mut ctx: Ctx
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
+        let (
+            chans_config,
+            mode_config,
+            nevents,
+            nsessions,
+            ndispatched,
+            tokens_hint
+        ) = config.take();
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| DispatchThreadCreateError::Channels { err: err })?;
         let poll = Poll::new()
@@ -2549,18 +2553,17 @@ fn test_recv_session_send() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -2684,18 +2687,17 @@ fn test_recv_session_retry_send() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -2838,18 +2840,17 @@ fn test_recv_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -2932,18 +2933,17 @@ fn test_send_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -3075,18 +3075,17 @@ fn test_recv_session_send_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -3266,18 +3265,17 @@ fn test_recv_session_send_retry_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -3448,18 +3446,17 @@ fn test_recv_session_send_retry_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -3700,18 +3697,17 @@ fn test_recv_session_send_retry_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -3942,18 +3938,17 @@ fn test_recv_session_send_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -4137,18 +4132,17 @@ fn test_recv_session_send_complete_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -4364,18 +4358,17 @@ fn test_recv_session_send_complete_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -4616,18 +4609,17 @@ fn test_recv_session_send_complete_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -4856,18 +4848,17 @@ fn test_recv_session_recv_one() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -4995,18 +4986,17 @@ fn test_recv_session_recv_two() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -5159,18 +5149,17 @@ fn test_recv_session_recv_collide() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -5378,18 +5367,17 @@ fn test_recv_session_recv_collide_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -5578,18 +5566,17 @@ fn test_recv_session_recv_collide_retry_shutdown() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -5857,18 +5844,17 @@ fn test_recv_session_recv_collide_retry_shutdown_error() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -6084,18 +6070,17 @@ fn test_recv_session_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -6275,18 +6260,17 @@ fn test_recv_session_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -6467,18 +6451,17 @@ fn test_recv_session_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -6716,18 +6699,17 @@ fn test_recv_session_refresh_complete_imm_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -6915,18 +6897,17 @@ fn test_recv_session_refresh_complete_imm_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -7165,18 +7146,17 @@ fn test_recv_session_refresh_complete_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -7416,18 +7396,17 @@ fn test_recv_session_refresh_complete_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -7709,18 +7688,17 @@ fn test_recv_session_refresh_permanent() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -7883,18 +7861,17 @@ fn test_recv_session_refresh_complete_imm_permanent() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -8057,18 +8034,17 @@ fn test_recv_session_refresh_complete_permanent() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -8285,18 +8261,17 @@ fn test_recv_session_refresh_complete_imm_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -8536,18 +8511,17 @@ fn test_recv_session_refresh_complete_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -8828,18 +8802,17 @@ fn test_recv_session_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -9073,18 +9046,17 @@ fn test_recv_session_refresh_retry_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -9370,18 +9342,17 @@ fn test_recv_session_refresh_retry_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -9617,18 +9588,17 @@ fn test_recv_session_refresh_retry_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -9913,18 +9883,17 @@ fn test_recv_session_refresh_retry_permanent() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -10130,18 +10099,17 @@ fn test_recv_session_send_indef() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -10270,18 +10238,17 @@ fn test_recv_session_send_indef_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -10473,18 +10440,17 @@ fn test_recv_session_send_indef_retry_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -10724,18 +10690,17 @@ fn test_recv_session_send_indef_complete_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -10975,18 +10940,17 @@ fn test_recv_session_send_indef_indef_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -11173,18 +11137,17 @@ fn test_recv_session_send_indef_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -11431,18 +11394,17 @@ fn test_recv_session_send_indef_retry_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -11737,18 +11699,17 @@ fn test_recv_session_send_indef_complete_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -12042,18 +12003,17 @@ fn test_recv_session_send_indef_indef_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -12289,18 +12249,17 @@ fn test_recv_session_send_indef_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -12497,18 +12456,17 @@ fn test_recv_session_send_indef_retry_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -12753,18 +12711,17 @@ fn test_recv_session_send_indef_complete_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -13009,18 +12966,17 @@ fn test_recv_session_send_indef_indef_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -13209,18 +13165,17 @@ fn test_recv_session_send_indef_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -13469,18 +13424,17 @@ fn test_recv_session_send_indef_retry_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -13777,18 +13731,17 @@ fn test_recv_session_send_indef_complete_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -14084,18 +14037,17 @@ fn test_recv_session_send_indef_indef_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -14340,18 +14292,17 @@ fn test_recv_session_send_indef_listen_refresh() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -14549,18 +14500,17 @@ fn test_recv_session_send_indef_listen_refresh_retry() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -14810,18 +14760,17 @@ fn test_recv_session_send_indef_listen_refresh_complete_imm() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
@@ -15021,18 +14970,17 @@ fn test_recv_session_send_indef_listen_refresh_complete() {
     };
     let dispatcher =
         TestDispatch::create(vec![dispatch]).expect("Expected success");
+    let config = DispatchThreadConfig::new(
+        chans_config,
+        mode_config,
+        16,
+        None,
+        None,
+        None
+    );
     let mut thread: DispatchThread<ThreadTestTypes, _> =
-        DispatchThread::create(
-            mode_config,
-            chans_config,
-            dispatcher,
-            (),
-            16,
-            None,
-            None,
-            None
-        )
-        .expect("Expected success");
+        DispatchThread::create(config, dispatcher, ())
+            .expect("Expected success");
 
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;

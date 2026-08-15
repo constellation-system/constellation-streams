@@ -28,6 +28,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Instant;
 
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -446,6 +447,22 @@ where
             }
             TestStartBatchError::Create { err, .. } => self.report_error(err)
         }
+    }
+}
+
+impl<'a, In, Out, H> CreateWithParam<&'a ()> for TestPrivateStream<In, Out, H>
+where
+    H: HashID
+{
+    type Config = TestPrivateStreamScript<In>;
+    type CreateError = Infallible;
+
+    #[inline]
+    fn create(
+        script: TestPrivateStreamScript<In>,
+        _ctx: &'a ()
+    ) -> Result<Self, Self::CreateError> {
+        Ok(Self::new(script))
     }
 }
 

@@ -200,7 +200,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
 
     fn dispatch(
         &mut self,
-        _ctx: &mut Ctx,
+        ctx: &mut Ctx,
         _prin: &NullCred,
         shutdown: ShutdownFlag,
         _notify: Notify
@@ -212,7 +212,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
             msgs,
             stream_script
         } = self.script.pop().expect("Expected scripted action");
-        let Ok(stream) = TestStream::create(stream_script);
+        let Ok(stream) = TestStream::create(stream_script, ctx);
         let recv = TestRecv { msgs: msgs };
 
         Ok(Dispatched::new(
@@ -225,7 +225,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
     }
 }
 
-impl Create for TestStream {
+impl<'a, Ctx> CreateWithParam<&'a Ctx> for TestStream {
     type Config = Vec<
         Result<
             RetryResult<Option<Instant>, TestRefreshRetry>,
@@ -234,7 +234,10 @@ impl Create for TestStream {
     >;
     type CreateError = Infallible;
 
-    fn create(mut script: Self::Config) -> Result<Self, Self::CreateError> {
+    fn create(
+        mut script: Self::Config,
+        _ctx: &'a Ctx
+    ) -> Result<Self, Self::CreateError> {
         script.reverse();
 
         Ok(TestStream {
@@ -581,6 +584,13 @@ where
     type RefreshRetry = TestRefreshRetry;
     type SessionPrin = NullCred;
     type Stream = TestStream;
+    type StreamConfig = Vec<
+        Result<
+            RetryResult<Option<Instant>, TestRefreshRetry>,
+            TestRefreshError
+        >
+    >;
+    type StreamCreateError = Infallible;
     type Wrapper = String;
 }
 

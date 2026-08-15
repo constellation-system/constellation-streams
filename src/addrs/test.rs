@@ -89,22 +89,15 @@ impl AsRef<str> for TestEndpoint {
     }
 }
 
-impl OutboundEndpointConfig<String, ()> for TestEndpoint {
+impl OutboundEndpointConfig<()> for TestEndpoint {
     #[inline]
-    fn endpoint(&self) -> &String {
-        &self.0
-    }
-
-    #[inline]
-    fn take(self) -> (String, ()) {
-        (self.0, ())
-    }
+    fn outbound_nego_param(&self) {}
 }
 
 impl<Ctx> AddrsCreate<Ctx> for TestAddrs {
     type Config = TestAddrsScript;
     type CreateError = Infallible;
-    type OriginConfig = String;
+    type OriginConfig = TestEndpoint;
 
     #[inline]
     fn create<I>(
@@ -114,7 +107,8 @@ impl<Ctx> AddrsCreate<Ctx> for TestAddrs {
     ) -> Result<Self, Self::CreateError>
     where
         I: Iterator<Item = Self::OriginConfig> {
-        let origins: HashSet<String> = origins.collect();
+        let origins: HashSet<String> =
+            origins.map(|endpoint| endpoint.0).collect();
 
         script.addrs.reverse();
 

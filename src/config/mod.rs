@@ -287,6 +287,58 @@ where
     size_hint: Option<usize>
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct MulticastPartyConfig<PartyID, Frags, Stream>
+where
+    Frags: Default {
+    party: PartyID,
+    #[serde(flatten)]
+    stream: Stream,
+    #[serde(default)]
+    frags: Frags
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "poll-config")]
+pub struct PollThreadConfig<Channels, Mode, Stream, AuthN> {
+    channels: Channels,
+    authn: AuthN,
+    #[serde(flatten)]
+    stream: Stream,
+    #[serde(flatten)]
+    #[serde(default)]
+    mode: Mode,
+    #[serde(
+        default = "PollThreadConfig::<Channels, Mode, Stream, AuthN>::default_nevents"
+    )]
+    num_events: usize,
+    #[serde(default)]
+    num_sessions: Option<usize>
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "dispatch-config")]
+pub struct DispatchThreadConfig<Channels, Mode> {
+    channels: Channels,
+    #[serde(flatten)]
+    #[serde(default)]
+    mode: Mode,
+    #[serde(
+        default = "DispatchThreadConfig::<Channels, Mode>::default_nevents"
+    )]
+    num_events: usize,
+    #[serde(default)]
+    num_sessions: Option<usize>,
+    #[serde(default)]
+    num_dispatched: Option<usize>,
+    #[serde(default)]
+    num_tokens: Option<usize>
+}
+
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -335,6 +387,18 @@ pub struct SharedDatagramModeConfig {
     retries_hint: Option<usize>
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "stream-multicaster")]
+pub struct StreamMulticasterConfig<PartyID, Frags, Stream>
+where
+    Frags: Default {
+    #[serde(default)]
+    #[serde(flatten)]
+    batch_slots: BatchSlotsConfig,
+    parties: Vec<MulticastPartyConfig<PartyID, Frags, Stream>>
+}
+
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -354,6 +418,151 @@ where
     retry: Retry,
     #[serde(default)]
     size_hint: Option<usize>
+}
+
+impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
+    #[inline]
+    pub fn new(
+        channels: Channels,
+        mode: Mode,
+        num_events: usize,
+        num_sessions: Option<usize>,
+        num_dispatched: Option<usize>,
+        num_tokens: Option<usize>
+    ) -> Self {
+        DispatchThreadConfig {
+            channels: channels,
+            mode: mode,
+            num_events: num_events,
+            num_sessions: num_sessions,
+            num_dispatched: num_dispatched,
+            num_tokens: num_tokens
+        }
+    }
+
+    #[inline]
+    pub fn channels(&self) -> &Channels {
+        &self.channels
+    }
+
+    #[inline]
+    pub fn mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    #[inline]
+    pub fn nevents(&self) -> usize {
+        self.num_events
+    }
+
+    #[inline]
+    pub fn nsession(&self) -> Option<usize> {
+        self.num_sessions
+    }
+
+    #[inline]
+    pub fn ndispatched(&self) -> Option<usize> {
+        self.num_dispatched
+    }
+
+    #[inline]
+    pub fn ntokens(&self) -> Option<usize> {
+        self.num_tokens
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (
+        Channels,
+        Mode,
+        usize,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>
+    ) {
+        (
+            self.channels,
+            self.mode,
+            self.num_events,
+            self.num_sessions,
+            self.num_dispatched,
+            self.num_tokens
+        )
+    }
+
+    fn default_nevents() -> usize {
+        1024
+    }
+}
+
+impl<Channels, Mode, Stream, AuthN>
+    PollThreadConfig<Channels, Mode, Stream, AuthN>
+{
+    #[inline]
+    pub fn new(
+        channels: Channels,
+        mode: Mode,
+        stream: Stream,
+        authn: AuthN,
+        nevents: usize,
+        nsessions: Option<usize>
+    ) -> Self {
+        PollThreadConfig {
+            channels: channels,
+            mode: mode,
+            stream: stream,
+            authn: authn,
+            num_events: nevents,
+            num_sessions: nsessions
+        }
+    }
+
+    #[inline]
+    pub fn channels(&self) -> &Channels {
+        &self.channels
+    }
+
+    #[inline]
+    pub fn mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    #[inline]
+    pub fn stream(&self) -> &Stream {
+        &self.stream
+    }
+
+    #[inline]
+    pub fn authn(&self) -> &AuthN {
+        &self.authn
+    }
+
+    #[inline]
+    pub fn nevents(&self) -> usize {
+        self.num_events
+    }
+
+    #[inline]
+    pub fn nsession(&self) -> Option<usize> {
+        self.num_sessions
+    }
+
+    #[inline]
+    pub fn take(self) -> (Channels, Mode, Stream, AuthN, usize, Option<usize>) {
+        (
+            self.channels,
+            self.mode,
+            self.stream,
+            self.authn,
+            self.num_events,
+            self.num_sessions
+        )
+    }
+
+    fn default_nevents() -> usize {
+        1024
+    }
 }
 
 impl PrivateDatagramModeConfig {
@@ -897,6 +1106,80 @@ where
             self.size_hint,
             self.connections
         )
+    }
+}
+
+impl<PartyID, Frags, Stream> StreamMulticasterConfig<PartyID, Frags, Stream>
+where
+    Frags: Default
+{
+    #[inline]
+    pub fn new(
+        parties: Vec<MulticastPartyConfig<PartyID, Frags, Stream>>,
+        batch_slots: BatchSlotsConfig
+    ) -> Self {
+        StreamMulticasterConfig {
+            batch_slots: batch_slots,
+            parties: parties
+        }
+    }
+
+    #[inline]
+    pub fn batch_slots(&self) -> &BatchSlotsConfig {
+        &self.batch_slots
+    }
+
+    #[inline]
+    pub fn parties(&self) -> &[MulticastPartyConfig<PartyID, Frags, Stream>] {
+        &self.parties
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (
+        Vec<MulticastPartyConfig<PartyID, Frags, Stream>>,
+        BatchSlotsConfig
+    ) {
+        (self.parties, self.batch_slots)
+    }
+}
+
+impl<PartyID, Frags, Stream> MulticastPartyConfig<PartyID, Frags, Stream>
+where
+    Frags: Default
+{
+    #[inline]
+    pub fn new(
+        party: PartyID,
+        stream: Stream,
+        frags: Frags
+    ) -> Self {
+        MulticastPartyConfig {
+            party: party,
+            stream: stream,
+            frags: frags
+        }
+    }
+
+    #[inline]
+    pub fn party(&self) -> &PartyID {
+        &self.party
+    }
+
+    #[inline]
+    pub fn stream(&self) -> &Stream {
+        &self.stream
+    }
+
+    #[inline]
+    pub fn frags(&self) -> &Frags {
+        &self.frags
+    }
+
+    #[inline]
+    pub fn take(self) -> (PartyID, Stream, Frags) {
+        (self.party, self.stream, self.frags)
     }
 }
 

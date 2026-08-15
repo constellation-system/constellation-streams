@@ -195,6 +195,18 @@ where
     }
 }
 
+impl<Epochs> ScopedError for DispatchSelectorCreateError<Epochs>
+where
+    Epochs: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            DispatchSelectorCreateError::Refresh { err } => err.scope(),
+            DispatchSelectorCreateError::Epochs { err } => err.scope()
+        }
+    }
+}
+
 impl<Item> ScopedError for DispatchSelectorSelectError<Item> {
     fn scope(&self) -> ErrorScope {
         match self {

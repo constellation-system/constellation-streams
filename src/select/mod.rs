@@ -43,6 +43,7 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use constellation_common::config::Create;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -97,10 +98,8 @@ use crate::stream::StreamReporter;
 pub mod dispatch;
 mod sched;
 
-pub trait OutboundEndpointConfig<Endpoint, OutboundNego> {
-    fn endpoint(&self) -> &Endpoint;
-
-    fn take(self) -> (Endpoint, OutboundNego);
+pub trait OutboundEndpointConfig<OutboundNego> {
+    fn outbound_nego_param(&self) -> OutboundNego;
 }
 
 /// Newtype for the index for a set of connections.
@@ -484,35 +483,34 @@ where
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     /// Create a single connections from its configuration objects.
-    fn create<EndpointConfig>(
+    fn create(
         ctx: &mut Ctx,
         addrs_config: &Resolve::Config,
-        config: ConnectionConfig<String, EndpointConfig>
+        config: ConnectionConfig<String, Resolve::OriginConfig>
     ) -> Result<Self, StreamSelectorConnectionCreateError<Resolve::CreateError>>
     where
-        EndpointConfig:
-            OutboundEndpointConfig<Resolve::OriginConfig, Ctx::OutNegoParam>,
+        Resolve::OriginConfig:
+            Clone + OutboundEndpointConfig<Ctx::OutNegoParam>,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
         debug!(target: "stream-selector-connections",
                "creating threaded stream selector connections");
 
         let (srcs, endpoints) = config.take();
-        let origins =
-            endpoints.iter().map(|endpoint| endpoint.endpoint().clone());
-        let addrs = Resolve::create(ctx, addrs_config.clone(), origins)
-            .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
-                err: err
-            })?;
         let params: HashMap<Resolve::Origin, Ctx::OutNegoParam> = endpoints
-            .into_iter()
+            .iter()
             .map(|endpoint| {
-                let (endpoint, param) = endpoint.take();
-                let endpoint: Resolve::Origin = endpoint.into();
+                let param = endpoint.outbound_nego_param();
+                let endpoint: Resolve::Origin = endpoint.clone().into();
 
                 (endpoint, param)
             })
             .collect();
+        let addrs =
+            Resolve::create(ctx, addrs_config.clone(), endpoints.into_iter())
+                .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
+                err: err
+            })?;
         let mut channels = Vec::with_capacity(srcs.len());
 
         for src in srcs {
@@ -1134,7 +1132,8 @@ where
     }
 }
 
-impl<Epochs, Resolve, Ctx> StreamSelector<Epochs, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx> CreateWithParam<&'_ mut Ctx>
+    for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
@@ -1143,32 +1142,32 @@ where
     Ctx::OutNegoParam: Clone + Eq + Hash,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
-    Resolve::Origin: Clone + Display + Eq + Hash
+    Resolve::Origin: Clone + Display + Eq + Hash,
+    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Ctx::OutNegoParam>,
+    Resolve: AddrsCreate<Ctx>,
+    Resolve::Config: Clone + Default
 {
-    /// Create a new [StreamSelector] from a configuration and other
-    /// necessary objects.
-    ///
-    /// The `reporter` parameter is a [StreamReporter] instance that
-    /// will be used to report *both* newly-created streams as well as
-    /// incoming streams reported to *this* `StreamSelector` by a
-    /// [StreamSelectorReporter].  (This is necessary to avoid deadlocks.)
-    pub fn create<EndpointConfig>(
-        ctx: &mut Ctx,
+    type Config = PartyConfig<
+        Resolve::Config,
+        Epochs::Config,
+        String,
+        Resolve::OriginConfig
+    >;
+    type CreateError =
+        StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>;
+
+    fn create(
         config: PartyConfig<
             Resolve::Config,
             Epochs::Config,
             String,
-            EndpointConfig
-        >
+            Resolve::OriginConfig
+        >,
+        ctx: &mut Ctx
     ) -> Result<
         Self,
         StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>
-    >
-    where
-        EndpointConfig:
-            OutboundEndpointConfig<Resolve::OriginConfig, Ctx::OutNegoParam>,
-        Resolve: AddrsCreate<Ctx>,
-        Resolve::Config: Clone + Default {
+    > {
         debug!(target: "stream-selector",
                "creating stream selector");
 
@@ -1203,7 +1202,19 @@ where
             refresh_when: Arc::new(RwLock::new(Some(now)))
         })
     }
+}
 
+impl<Epochs, Resolve, Ctx> StreamSelector<Epochs, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Default + Display + Eq,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Resolve::Origin: Clone + Display + Eq + Hash
+{
     fn get_refreshes(
         &mut self,
         ctx: &mut Ctx

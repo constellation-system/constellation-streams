@@ -34,6 +34,7 @@ use std::time::Instant;
 use std::vec::IntoIter;
 
 use bitvec::bitvec;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -48,7 +49,7 @@ use log::debug;
 use log::error;
 use log::trace;
 
-use crate::config::BatchSlotsConfig;
+use crate::config::StreamMulticasterConfig;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
 use crate::error::SelectionsError;
@@ -247,6 +248,12 @@ pub enum StreamMulticasterPushReportError<Start, Add, Finish> {
         /// Err while reporting.
         finish: Finish
     }
+}
+
+#[derive(Debug)]
+pub enum StreamMulticasterCreateError<Stream, Refresh> {
+    Stream { err: Stream },
+    Refresh { err: Refresh }
 }
 
 /// Retry information for an attempt to cancel a push operation.
@@ -734,6 +741,60 @@ where
     }
 }
 
+impl<'a, Party, Idx, Stream, F, Ctx>
+    CreateWithParam<(&'a mut Ctx, Option<&'a Party>)>
+    for StreamMulticaster<Party, Idx, Stream, F, Ctx>
+where
+    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Stream::BatchID: Clone,
+    Party: Clone + Display + Eq + Hash,
+    Stream: CreateWithParam<&'a Ctx> + PushStream<Ctx>,
+    F: Default
+{
+    type Config = StreamMulticasterConfig<Party, F, Stream::Config>;
+    type CreateError = Stream::CreateError;
+
+    fn create(
+        config: Self::Config,
+        param: (&'a mut Ctx, Option<&'a Party>)
+    ) -> Result<Self, Self::CreateError> {
+        let (ctx, self_party) = param;
+        let (parties, slots_config) = config.take();
+        let mut rev_map = Vec::with_capacity(parties.len());
+        let mut fwd_map = HashMap::with_capacity(rev_map.len());
+
+        debug!(target: "stream-multicaster",
+               "creating stream multicaster");
+
+        for (i, config) in parties.into_iter().enumerate() {
+            let (party, stream, frags) = config.take();
+
+            debug!(target: "stream-multicaster",
+                   "creating individual stream for party {}",
+                   party);
+
+            if self_party != Some(&party) {
+                let stream = Stream::create(stream, ctx)?;
+                let ent = StreamMulticasterParty {
+                    party: party.clone(),
+                    stream: stream,
+                    frags: frags
+                };
+
+                rev_map.push(ent);
+                fwd_map.insert(party, Idx::from(i));
+            }
+        }
+
+        Ok(StreamMulticaster {
+            ctx: PhantomData,
+            batches: CompoundBatches::create(slots_config),
+            fwd_map: fwd_map,
+            rev_map: rev_map
+        })
+    }
+}
+
 impl<Party, Idx, Stream, F, Ctx> StreamMulticaster<Party, Idx, Stream, F, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
@@ -741,36 +802,6 @@ where
     Party: Clone + Display + Eq + Hash,
     Stream: PushStream<Ctx>
 {
-    /// Create a `StreamMulticaster` from an iterator over the
-    /// counterparties.
-    #[inline]
-    pub fn create<I>(
-        iter: I,
-        config: BatchSlotsConfig
-    ) -> Self
-    where
-        I: Iterator<Item = (Party, F, Stream)> {
-        let rev_map: Vec<StreamMulticasterParty<Party, Stream, F>> = iter
-            .map(|(party, param, stream)| StreamMulticasterParty {
-                party: party,
-                stream: stream,
-                frags: param
-            })
-            .collect();
-        let mut fwd_map = HashMap::with_capacity(rev_map.len());
-
-        for (i, item) in rev_map.iter().enumerate() {
-            fwd_map.insert(item.party.clone(), Idx::from(i));
-        }
-
-        StreamMulticaster {
-            ctx: PhantomData,
-            batches: CompoundBatches::create(config),
-            fwd_map: fwd_map,
-            rev_map: rev_map
-        }
-    }
-
     /// Get the number of counterparties.
     #[inline]
     pub fn nparties(&self) -> usize {
@@ -798,20 +829,15 @@ where
             None
         }
     }
-}
 
-impl<Party, Idx, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
-where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx>,
-    Frags: Clone
-{
     #[inline]
-    pub fn frags_param(&self) -> Vec<Frags> {
-        self.rev_map.iter().map(|ent| ent.frags.clone()).collect()
+    pub fn stream(
+        &self,
+        idx: Idx
+    ) -> &Stream {
+        let i: usize = idx.into();
+
+        &self.rev_map[i].stream
     }
 }
 
@@ -4115,6 +4141,22 @@ where
             StreamMulticasterReportError::NotFound { party } => {
                 write!(f, "no stream for party {}", party)
             }
+        }
+    }
+}
+
+impl<Stream, Refresh> Display for StreamMulticasterCreateError<Stream, Refresh>
+where
+    Stream: Display,
+    Refresh: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCreateError::Stream { err } => err.fmt(f),
+            StreamMulticasterCreateError::Refresh { err } => err.fmt(f)
         }
     }
 }
