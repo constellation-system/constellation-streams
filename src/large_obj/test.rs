@@ -22,15 +22,15 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::time::Instant;
 
-use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::authn::BasicAuthNed;
 use constellation_auth::authn::MsgAuthNTypes;
 use constellation_auth::authn::PassthruMsgAuthN;
+use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::cred::NullCred;
+use constellation_common::codec::Encoder;
 use constellation_common::codec::test::TestBytesCodec;
 use constellation_common::codec::test::TestDecodeError;
 use constellation_common::codec::test::TooShort;
-use constellation_common::codec::Encoder;
 use constellation_common::config::Create;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::SHA3Algo;

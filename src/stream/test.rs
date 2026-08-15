@@ -1306,15 +1306,12 @@ where
         _selections: &mut Self::Selections
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
-        let out = self
-            .script
+        self.script
             .try_borrow_mut()
             .expect("try_borrow failed")
             .select
             .pop()
-            .expect("Expected scripted action");
-
-        out
+            .expect("Expected scripted action")
     }
 
     #[inline]

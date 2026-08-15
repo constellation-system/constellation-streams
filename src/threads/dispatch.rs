@@ -16,10 +16,10 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::collections::hash_map::Entry;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -39,10 +39,10 @@ use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::retry::next_retry;
-use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::sync::Notify;
 use log::debug;
@@ -795,7 +795,7 @@ where
                         ErrorScope::Shutdown => {
                             return Err(DispatchEntryRecvError::Pull {
                                 err: err
-                            })
+                            });
                         }
                         _ => {
                             error!(target: "dispatch-entry",
@@ -2030,68 +2030,68 @@ where
                 }
             }
 
-            if let Some(when) = ent.pending.next_outbound() {
-                if when <= now {
-                    trace!(target: "dispatch-thread",
-                           "{} needs to check outbounds",
-                           id);
+            if let Some(when) = ent.pending.next_outbound() &&
+                when <= now
+            {
+                trace!(target: "dispatch-thread",
+                       "{} needs to check outbounds",
+                       id);
 
-                    match outbounds {
-                        Some(outbounds) => {
-                            *next = Some(next_retry_definite(next, &when));
-                            outbounds.push(id.clone())
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(nents);
+                match outbounds {
+                    Some(outbounds) => {
+                        *next = Some(next_retry_definite(next, &when));
+                        outbounds.push(id.clone())
+                    }
+                    None => {
+                        let mut vec = Vec::with_capacity(nents);
 
-                            *next = Some(next_retry_definite(next, &when));
-                            vec.push(id.clone());
-                            *outbounds = Some(vec);
-                        }
+                        *next = Some(next_retry_definite(next, &when));
+                        vec.push(id.clone());
+                        *outbounds = Some(vec);
                     }
                 }
             }
 
-            if let Some(when) = ent.next_shutdown_retry() {
-                if when <= now {
-                    trace!(target: "dispatch-thread",
-                           "{} needs to resend shutdown messages",
-                           id);
+            if let Some(when) = ent.next_shutdown_retry() &&
+                when <= now
+            {
+                trace!(target: "dispatch-thread",
+                       "{} needs to resend shutdown messages",
+                       id);
 
-                    match shutdown_retries {
-                        Some(shutdown_retries) => {
-                            *next = Some(next_retry_definite(next, &when));
-                            shutdown_retries.push(id.clone())
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(nents);
+                match shutdown_retries {
+                    Some(shutdown_retries) => {
+                        *next = Some(next_retry_definite(next, &when));
+                        shutdown_retries.push(id.clone())
+                    }
+                    None => {
+                        let mut vec = Vec::with_capacity(nents);
 
-                            *next = Some(next_retry_definite(next, &when));
-                            vec.push(id.clone());
-                            *shutdown_retries = Some(vec);
-                        }
+                        *next = Some(next_retry_definite(next, &when));
+                        vec.push(id.clone());
+                        *shutdown_retries = Some(vec);
                     }
                 }
             }
 
-            if let Some(when) = ent.pending.retry_pending() {
-                if when <= now {
-                    trace!(target: "dispatch-thread",
-                           "{} needs to resend messages",
-                           id);
+            if let Some(when) = ent.pending.retry_pending() &&
+                when <= now
+            {
+                trace!(target: "dispatch-thread",
+                       "{} needs to resend messages",
+                       id);
 
-                    match retries {
-                        Some(retries) => {
-                            *next = Some(next_retry_definite(next, &when));
-                            retries.push(id.clone())
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(nents);
+                match retries {
+                    Some(retries) => {
+                        *next = Some(next_retry_definite(next, &when));
+                        retries.push(id.clone())
+                    }
+                    None => {
+                        let mut vec = Vec::with_capacity(nents);
 
-                            *next = Some(next_retry_definite(next, &when));
-                            vec.push(id.clone());
-                            *retries = Some(vec);
-                        }
+                        *next = Some(next_retry_definite(next, &when));
+                        vec.push(id.clone());
+                        *retries = Some(vec);
                     }
                 }
             }

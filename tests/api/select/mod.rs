@@ -47,6 +47,14 @@ use constellation_streams::config::PartyConfig;
 use constellation_streams::frags::OutboundFrags;
 use constellation_streams::large_obj::LargeObjID;
 use constellation_streams::select::StreamSelector;
+use constellation_streams::stream::LargeObjOfferStream;
+use constellation_streams::stream::LargeObjStream;
+use constellation_streams::stream::PushStream;
+use constellation_streams::stream::PushStreamAdd;
+use constellation_streams::stream::PushStreamPrivate;
+use constellation_streams::stream::PushStreamShared;
+use constellation_streams::stream::StreamID;
+use constellation_streams::stream::StreamRefresh;
 use constellation_streams::stream::test::TestAbortRetry;
 use constellation_streams::stream::test::TestAction;
 use constellation_streams::stream::test::TestCompletableError;
@@ -60,14 +68,6 @@ use constellation_streams::stream::test::TestRetry;
 use constellation_streams::stream::test::TestSharedBatchState;
 use constellation_streams::stream::test::TestSharedStream;
 use constellation_streams::stream::test::TestSharedStreamScript;
-use constellation_streams::stream::LargeObjOfferStream;
-use constellation_streams::stream::LargeObjStream;
-use constellation_streams::stream::PushStream;
-use constellation_streams::stream::PushStreamAdd;
-use constellation_streams::stream::PushStreamPrivate;
-use constellation_streams::stream::PushStreamShared;
-use constellation_streams::stream::StreamID;
-use constellation_streams::stream::StreamRefresh;
 
 use crate::init;
 
@@ -169,37 +169,47 @@ fn test_private_select_succeed() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -275,37 +285,47 @@ fn test_private_select_req_retry() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -367,32 +387,42 @@ fn test_private_select_req_indef() {
 
     assert!(res.is_indef());
 
-    assert!(inner
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.failures.is_empty());
-    assert!(inner
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -474,37 +504,47 @@ fn test_private_select_req_error() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -580,31 +620,39 @@ fn test_private_create_batch_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -674,12 +722,14 @@ fn test_private_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_create_batch(&mut channels, &mut (), &selections, retry)
@@ -696,31 +746,39 @@ fn test_private_create_batch_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -788,49 +846,61 @@ fn test_private_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
 
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -899,12 +969,14 @@ fn test_private_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -926,31 +998,39 @@ fn test_private_create_batch_complete_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1025,12 +1105,14 @@ fn test_private_create_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1046,12 +1128,14 @@ fn test_private_create_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_create_batch(&mut channels, &mut (), &selections, retry)
@@ -1068,31 +1152,39 @@ fn test_private_create_batch_complete_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1167,12 +1259,14 @@ fn test_private_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1196,37 +1290,47 @@ fn test_private_create_batch_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1302,12 +1406,14 @@ fn test_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1326,12 +1432,14 @@ fn test_private_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1353,31 +1461,39 @@ fn test_private_create_batch_complete_complete() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1444,31 +1560,39 @@ fn test_private_start_batch_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1533,12 +1657,14 @@ fn test_private_start_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_start_batch(&mut channels, retry)
@@ -1555,31 +1681,39 @@ fn test_private_start_batch_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1658,31 +1792,39 @@ fn test_private_start_batch_permanent() {
             .deref(),
         &[TestPrivateBatchState::StartError]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1748,12 +1890,14 @@ fn test_private_start_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1775,31 +1919,39 @@ fn test_private_start_batch_complete_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -1871,12 +2023,14 @@ fn test_private_start_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -1892,12 +2046,14 @@ fn test_private_start_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_start_batch(&mut channels, retry)
@@ -1914,31 +2070,39 @@ fn test_private_start_batch_complete_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2010,12 +2174,14 @@ fn test_private_start_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2043,31 +2209,39 @@ fn test_private_start_batch_complete_permanent() {
             .deref(),
         &[TestPrivateBatchState::StartError]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2140,12 +2314,14 @@ fn test_private_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2159,12 +2335,14 @@ fn test_private_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -2186,31 +2364,39 @@ fn test_private_start_batch_complete_complete() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2285,31 +2471,39 @@ fn test_private_cancel_batch_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2408,31 +2602,39 @@ fn test_private_cancel_batch_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2528,31 +2730,39 @@ fn test_private_cancel_batch_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2654,31 +2864,39 @@ fn test_private_cancel_batch_complete_success() {
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2816,31 +3034,39 @@ fn test_private_cancel_batch_complete_retry() {
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -2987,31 +3213,39 @@ fn test_private_cancel_batch_complete_complete() {
             .deref(),
         &vec![TestPrivateBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3141,31 +3375,39 @@ fn test_private_cancel_batch_complete_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3240,31 +3482,39 @@ fn test_private_finish_batch_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3363,31 +3613,39 @@ fn test_private_finish_batch_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3483,31 +3741,39 @@ fn test_private_finish_batch_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3609,31 +3875,39 @@ fn test_private_finish_batch_complete_success() {
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3771,31 +4045,39 @@ fn test_private_finish_batch_complete_retry() {
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -3942,31 +4224,39 @@ fn test_private_finish_batch_complete_complete() {
             .deref(),
         &vec![TestPrivateBatchState::Finished { msgs: vec![] }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4096,31 +4386,39 @@ fn test_private_finish_batch_complete_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4200,9 +4498,11 @@ fn test_private_abort_start_batch_succeed() {
         &vec![TestPrivateBatchState::StartError]
     );
 
-    assert!(stream
-        .abort_start_batch(&mut channels, &mut (), permanent)
-        .is_success());
+    assert!(
+        stream
+            .abort_start_batch(&mut channels, &mut (), permanent)
+            .is_success()
+    );
 
     assert_eq!(
         inner
@@ -4213,31 +4513,39 @@ fn test_private_abort_start_batch_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Aborted,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4341,9 +4649,11 @@ fn test_private_abort_start_batch_retry_succeed() {
         &vec![TestPrivateBatchState::StartError]
     );
 
-    assert!(stream
-        .retry_abort_start_batch(&mut channels, &mut (), retry)
-        .is_success());
+    assert!(
+        stream
+            .retry_abort_start_batch(&mut channels, &mut (), retry)
+            .is_success()
+    );
 
     assert_eq!(
         inner
@@ -4354,31 +4664,39 @@ fn test_private_abort_start_batch_retry_succeed() {
             .deref(),
         &vec![TestPrivateBatchState::Aborted,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4455,31 +4773,39 @@ fn test_private_add_succeed() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4580,31 +4906,39 @@ fn test_private_add_retry_succeed() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4700,31 +5034,39 @@ fn test_private_add_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4829,31 +5171,39 @@ fn test_private_add_complete_success() {
             msgs: vec!["hello"]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -4993,31 +5343,39 @@ fn test_private_add_complete_retry() {
             msgs: vec!["hello"]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5167,31 +5525,39 @@ fn test_private_add_complete_complete() {
             msgs: vec!["hello"]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5322,31 +5688,39 @@ fn test_private_add_complete_permanent() {
             .deref(),
         &vec![TestPrivateBatchState::Live { msgs: vec![] },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5435,12 +5809,14 @@ fn test_private_frags_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -5450,25 +5826,31 @@ fn test_private_frags_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64), LargeObjID::from(2 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5561,12 +5943,14 @@ fn test_private_frags_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -5576,25 +5960,31 @@ fn test_private_frags_retry_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5669,12 +6059,14 @@ fn test_private_frags_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -5684,25 +6076,31 @@ fn test_private_frags_permanent() {
             .deref(),
         &vec![]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5804,12 +6202,14 @@ fn test_private_frags_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -5819,25 +6219,31 @@ fn test_private_frags_complete_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -5963,12 +6369,14 @@ fn test_private_frags_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -5978,25 +6386,31 @@ fn test_private_frags_complete_retry() {
             .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6127,12 +6541,14 @@ fn test_private_frags_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6142,25 +6558,31 @@ fn test_private_frags_complete_complete() {
             .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6279,12 +6701,14 @@ fn test_private_frags_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6294,25 +6718,31 @@ fn test_private_frags_complete_permanent() {
             .deref(),
         &vec![]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6404,18 +6834,22 @@ fn test_private_offer_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6426,18 +6860,22 @@ fn test_private_offer_succeed() {
         &vec![hash_0, hash_1]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6527,18 +6965,22 @@ fn test_private_offer_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6549,18 +6991,22 @@ fn test_private_offer_retry_succeed() {
         &vec![hash.clone()]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6633,37 +7079,47 @@ fn test_private_offer_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6763,18 +7219,22 @@ fn test_private_offer_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6785,18 +7245,22 @@ fn test_private_offer_complete_succeed() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -6915,18 +7379,22 @@ fn test_private_offer_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -6937,18 +7405,22 @@ fn test_private_offer_complete_retry() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7077,18 +7549,22 @@ fn test_private_offer_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -7099,18 +7575,22 @@ fn test_private_offer_complete_complete() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7227,18 +7707,22 @@ fn test_private_offer_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -7249,18 +7733,22 @@ fn test_private_offer_complete_permanent() {
         &vec![]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7322,37 +7810,47 @@ fn test_shared_select_succeed() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7428,37 +7926,47 @@ fn test_shared_select_req_retry() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7521,37 +8029,47 @@ fn test_shared_select_req_indef() {
 
     assert!(res.is_indef());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7633,37 +8151,47 @@ fn test_shared_select_req_error() {
 
     assert!(res.is_success());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7742,31 +8270,39 @@ fn test_shared_create_batch_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7825,9 +8361,11 @@ fn test_shared_create_batch_retry_succeed() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let retry = stream
         .create_batch(&mut channels, &mut (), &selections)
@@ -7838,12 +8376,14 @@ fn test_shared_create_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_create_batch(&mut channels, &mut (), &selections, retry)
@@ -7863,31 +8403,39 @@ fn test_shared_create_batch_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -7946,9 +8494,11 @@ fn test_shared_create_batch_permanent() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let err = stream.create_batch(&mut channels, &mut (), &selections);
     let err = if let Err(err) = err {
@@ -7957,49 +8507,61 @@ fn test_shared_create_batch_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
 
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8059,9 +8621,11 @@ fn test_shared_create_batch_complete_succeed() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let err = stream.create_batch(&mut channels, &mut (), &selections);
     let err = if let Err(err) = err {
@@ -8070,12 +8634,14 @@ fn test_shared_create_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8100,31 +8666,39 @@ fn test_shared_create_batch_complete_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8190,9 +8764,11 @@ fn test_shared_create_batch_complete_retry_succeed() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let err = stream.create_batch(&mut channels, &mut (), &selections);
     let err = if let Err(err) = err {
@@ -8201,12 +8777,14 @@ fn test_shared_create_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8222,12 +8800,14 @@ fn test_shared_create_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_create_batch(&mut channels, &mut (), &selections, retry)
@@ -8247,31 +8827,39 @@ fn test_shared_create_batch_complete_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8337,9 +8925,11 @@ fn test_shared_create_batch_complete_permanent() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let err = stream.create_batch(&mut channels, &mut (), &selections);
     let err = if let Err(err) = err {
@@ -8348,12 +8938,14 @@ fn test_shared_create_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8377,37 +8969,47 @@ fn test_shared_create_batch_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8474,9 +9076,11 @@ fn test_shared_create_batch_complete_complete() {
     }
     let mut selections = stream.empty_selections();
 
-    assert!(stream
-        .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
-        .is_ok());
+    assert!(
+        stream
+            .select(&mut channels, &mut selections, vec![1, 2, 3].iter())
+            .is_ok()
+    );
 
     let err = stream.create_batch(&mut channels, &mut (), &selections);
     let err = if let Err(err) = err {
@@ -8485,12 +9089,14 @@ fn test_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8509,12 +9115,14 @@ fn test_shared_create_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8539,31 +9147,39 @@ fn test_shared_create_batch_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8635,31 +9251,39 @@ fn test_shared_start_batch_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8726,12 +9350,14 @@ fn test_shared_start_batch_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_start_batch(&mut channels, retry)
@@ -8751,31 +9377,39 @@ fn test_shared_start_batch_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8854,31 +9488,39 @@ fn test_shared_start_batch_permanent() {
             .deref(),
         &[TestSharedBatchState::StartError]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -8944,12 +9586,14 @@ fn test_shared_start_batch_complete_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -8974,31 +9618,39 @@ fn test_shared_start_batch_complete_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9070,12 +9722,14 @@ fn test_shared_start_batch_complete_retry_succeed() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9091,12 +9745,14 @@ fn test_shared_start_batch_complete_retry_succeed() {
         panic!("Expected retry")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let batch = stream
         .retry_start_batch(&mut channels, retry)
@@ -9116,31 +9772,39 @@ fn test_shared_start_batch_complete_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9212,12 +9876,14 @@ fn test_shared_start_batch_complete_permanent() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9245,31 +9911,39 @@ fn test_shared_start_batch_complete_permanent() {
             .deref(),
         &[TestSharedBatchState::StartError]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9342,12 +10016,14 @@ fn test_shared_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9361,12 +10037,14 @@ fn test_shared_start_batch_complete_complete() {
         panic!("Expected error")
     };
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -9391,31 +10069,39 @@ fn test_shared_start_batch_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9492,31 +10178,39 @@ fn test_shared_cancel_batch_succeed() {
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9620,31 +10314,39 @@ fn test_shared_cancel_batch_retry_succeed() {
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9748,31 +10450,39 @@ fn test_shared_cancel_batch_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -9879,31 +10589,39 @@ fn test_shared_cancel_batch_complete_success() {
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10052,31 +10770,39 @@ fn test_shared_cancel_batch_complete_retry() {
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10234,31 +10960,39 @@ fn test_shared_cancel_batch_complete_complete() {
             .deref(),
         &vec![TestSharedBatchState::Canceled,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10399,31 +11133,39 @@ fn test_shared_cancel_batch_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10503,31 +11245,39 @@ fn test_shared_finish_batch_succeed() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10634,31 +11384,39 @@ fn test_shared_finish_batch_retry_succeed() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10762,31 +11520,39 @@ fn test_shared_finish_batch_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -10896,31 +11662,39 @@ fn test_shared_finish_batch_complete_success() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11072,31 +11846,39 @@ fn test_shared_finish_batch_complete_retry() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11257,31 +12039,39 @@ fn test_shared_finish_batch_complete_complete() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11422,31 +12212,39 @@ fn test_shared_finish_batch_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11526,9 +12324,11 @@ fn test_shared_abort_start_batch_succeed() {
         &vec![TestSharedBatchState::StartError]
     );
 
-    assert!(stream
-        .abort_start_batch(&mut channels, &mut false, permanent)
-        .is_success());
+    assert!(
+        stream
+            .abort_start_batch(&mut channels, &mut false, permanent)
+            .is_success()
+    );
 
     assert_eq!(
         inner
@@ -11539,31 +12339,39 @@ fn test_shared_abort_start_batch_succeed() {
             .deref(),
         &vec![TestSharedBatchState::Aborted,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11667,9 +12475,11 @@ fn test_shared_abort_start_batch_retry_succeed() {
         &vec![TestSharedBatchState::StartError]
     );
 
-    assert!(stream
-        .retry_abort_start_batch(&mut channels, &mut false, retry)
-        .is_success());
+    assert!(
+        stream
+            .retry_abort_start_batch(&mut channels, &mut false, retry)
+            .is_success()
+    );
 
     assert_eq!(
         inner
@@ -11680,31 +12490,39 @@ fn test_shared_abort_start_batch_retry_succeed() {
             .deref(),
         &vec![TestSharedBatchState::Aborted,]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11784,31 +12602,39 @@ fn test_shared_add_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -11915,31 +12741,39 @@ fn test_shared_add_retry_succeed() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12043,31 +12877,39 @@ fn test_shared_add_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12178,31 +13020,39 @@ fn test_shared_add_complete_success() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12360,31 +13210,39 @@ fn test_shared_add_complete_retry() {
             parties: vec![1, 2]
         }]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12546,31 +13404,39 @@ fn test_shared_add_complete_complete() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12712,31 +13578,39 @@ fn test_shared_add_complete_permanent() {
             parties: vec![1, 2]
         },]
     );
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12825,12 +13699,14 @@ fn test_shared_frags_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -12840,25 +13716,31 @@ fn test_shared_frags_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64), LargeObjID::from(2 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -12951,12 +13833,14 @@ fn test_shared_frags_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -12966,25 +13850,31 @@ fn test_shared_frags_retry_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13059,12 +13949,14 @@ fn test_shared_frags_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13074,25 +13966,31 @@ fn test_shared_frags_permanent() {
             .deref(),
         &vec![]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13194,12 +14092,14 @@ fn test_shared_frags_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13209,25 +14109,31 @@ fn test_shared_frags_complete_succeed() {
             .deref(),
         &vec![LargeObjID::from(1 as u64)]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13353,12 +14259,14 @@ fn test_shared_frags_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13368,25 +14276,31 @@ fn test_shared_frags_complete_retry() {
             .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13517,12 +14431,14 @@ fn test_shared_frags_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13532,25 +14448,31 @@ fn test_shared_frags_complete_complete() {
             .deref(),
         &vec![LargeObjID::from(1 as u64),]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13669,12 +14591,14 @@ fn test_shared_frags_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13684,25 +14608,31 @@ fn test_shared_frags_complete_permanent() {
             .deref(),
         &vec![]
     );
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13794,18 +14724,22 @@ fn test_shared_offer_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13816,18 +14750,22 @@ fn test_shared_offer_succeed() {
         &vec![hash_0, hash_1]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -13917,18 +14855,22 @@ fn test_shared_offer_retry_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -13939,18 +14881,22 @@ fn test_shared_offer_retry_succeed() {
         &vec![hash.clone()]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -14023,37 +14969,47 @@ fn test_shared_offer_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .offers
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -14153,18 +15109,22 @@ fn test_shared_offer_complete_succeed() {
         panic!("Expected success")
     }
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -14175,18 +15135,22 @@ fn test_shared_offer_complete_succeed() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -14305,18 +15269,22 @@ fn test_shared_offer_complete_retry() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -14327,18 +15295,22 @@ fn test_shared_offer_complete_retry() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -14467,18 +15439,22 @@ fn test_shared_offer_complete_complete() {
         .expect("Expected success");
 
     assert!(res.is_success());
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -14489,18 +15465,22 @@ fn test_shared_offer_complete_complete() {
         &vec![hash]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -14617,18 +15597,22 @@ fn test_shared_offer_complete_permanent() {
     assert!(completable.is_none());
     assert!(permanent.is_some());
 
-    assert!(inner
-        .inner()
-        .batches
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .frags
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
     assert_eq!(
         inner
             .inner()
@@ -14639,16 +15623,20 @@ fn test_shared_offer_complete_permanent() {
         &vec![]
     );
     assert!(inner.inner().failures.is_empty());
-    assert!(inner
-        .inner()
-        .reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
-    assert!(inner
-        .inner()
-        .batch_reports
-        .try_borrow()
-        .expect("try_borrow failed")
-        .is_empty());
+    assert!(
+        inner
+            .inner()
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        inner
+            .inner()
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
 }

@@ -38,9 +38,9 @@ use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::retry::next_retry;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
 use log::debug;
 use log::error;
@@ -534,7 +534,7 @@ where
                         ErrorScope::Session |
                         ErrorScope::System |
                         ErrorScope::Shutdown => {
-                            return Err(PollThreadRecvError::Pull { err: err })
+                            return Err(PollThreadRecvError::Pull { err: err });
                         }
                         _ => {
                             error!(target: "poll-thread",

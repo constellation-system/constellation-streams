@@ -25,9 +25,9 @@ use std::time::Instant;
 
 use constellation_common::error::ErrorScope;
 use constellation_common::error::ScopedError;
-use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryResult;
+use constellation_common::retry::next_retry_definite;
 
 use crate::error::ErrorReportInfo;
 use crate::generated::large_obj::LargeObjFragReq;

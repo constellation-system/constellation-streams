@@ -2,7 +2,7 @@ use std::io::Result;
 use std::path::Path;
 
 use asn1rs::converter::Converter;
-use asn1rs::gen::rust::RustCodeGenerator;
+use asn1rs::r#gen::rust::RustCodeGenerator;
 
 fn load_files(
     dir: &Path,
@@ -44,9 +44,9 @@ pub fn main() {
     }
 
     if let Err(e) =
-        converter.to_rust(generated, |gen: &mut RustCodeGenerator| {
-            gen.add_global_derive("serde::Deserialize");
-            gen.add_global_derive("serde::Serialize");
+        converter.to_rust(generated, |generator: &mut RustCodeGenerator| {
+            generator.add_global_derive("serde::Deserialize");
+            generator.add_global_derive("serde::Serialize");
         })
     {
         panic!("Error generating rust: {:?}", e);

@@ -20,9 +20,9 @@
 
 use std::array::TryFromSliceError;
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -42,10 +42,10 @@ use constellation_auth::authn::AuthNResult;
 use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::authn::MsgAuthNTypes;
-use constellation_common::codec::per::PERCodec;
 use constellation_common::codec::DatagramCodec;
 use constellation_common::codec::Decoder;
 use constellation_common::codec::Encoder;
+use constellation_common::codec::per::PERCodec;
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
@@ -55,12 +55,12 @@ use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
 use constellation_common::net::SharedMsgs;
-use constellation_common::retry::next_retry;
-use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
@@ -136,25 +136,25 @@ pub trait LargeObjProtoTypes<InMsg, OutMsg> {
     type AuthNMsg: AuthNed<Self::Prin, InMsg>;
     type AuthNError: Debug + Display;
     type MsgAuthN: MsgAuthN<
-        InMsg,
-        Self::Wrapper,
-        SessionPrin = Self::SessionPrin,
-        Prin = Self::Prin,
-        AuthNMsg = Self::AuthNMsg,
-        Error = Self::AuthNError
-    >;
+            InMsg,
+            Self::Wrapper,
+            SessionPrin = Self::SessionPrin,
+            Prin = Self::Prin,
+            AuthNMsg = Self::AuthNMsg,
+            Error = Self::AuthNError
+        >;
     /// Message authentication types.
     type AuthNTypes: MsgAuthNTypes<
-        InMsg,
-        Wrapper = Self::Wrapper,
-        Prin = Self::Prin,
-        SessionPrin = Self::SessionPrin,
-        Decoder = Self::Decoder,
-        DecoderConfig = Self::DecoderConfig,
-        DecodeError = Self::DecodeError,
-        AuthNError = Self::AuthNError,
-        MsgAuthN = Self::MsgAuthN
-    >;
+            InMsg,
+            Wrapper = Self::Wrapper,
+            Prin = Self::Prin,
+            SessionPrin = Self::SessionPrin,
+            Decoder = Self::Decoder,
+            DecoderConfig = Self::DecoderConfig,
+            DecodeError = Self::DecodeError,
+            AuthNError = Self::AuthNError,
+            MsgAuthN = Self::MsgAuthN
+        >;
 }
 
 const LARGE_OBJ_METADATA_SIZE: usize = 1171;
@@ -672,7 +672,7 @@ where
                                 data: data.to_vec()
                             }),
                             Err(_) => {
-                                return Err(LargeObjDataError::OutOfBounds)
+                                return Err(LargeObjDataError::OutOfBounds);
                             }
                         }
                     }
@@ -3397,9 +3397,9 @@ fn test_encode_decode_msg_finish() {
 use std::ops::Deref;
 
 #[cfg(test)]
-use constellation_auth::authn::test::TestAuthNMsgRecv;
-#[cfg(test)]
 use constellation_auth::authn::PassthruMsgAuthN;
+#[cfg(test)]
+use constellation_auth::authn::test::TestAuthNMsgRecv;
 #[cfg(test)]
 use constellation_auth::cred::NullCred;
 #[cfg(test)]
@@ -3663,10 +3663,12 @@ fn test_offer_complete() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -3783,10 +3785,12 @@ fn test_offer_complete_repeat() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -3917,10 +3921,12 @@ fn test_offer_complete_repeat_multi_finish() {
     // Deliver second accept to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -4037,10 +4043,12 @@ fn test_long_offer_complete_repeat() {
     // Deliver accept to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -4179,10 +4187,12 @@ fn test_offer_req_obj_frag_complete() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -4313,10 +4323,12 @@ fn test_offer_req_obj_offer_complete() {
     // Deliver finish to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -4471,10 +4483,12 @@ fn test_offer_req_frag_complete_repeat() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef());
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    );
 
     // Deliver second frags to receiver.
     receiver
@@ -4497,10 +4511,12 @@ fn test_offer_req_frag_complete_repeat() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }
 
 #[test]
@@ -4639,8 +4655,10 @@ fn test_offer_req_obj_frag_req_complete() {
     // Deliver to sender.
     sender.recv_msg(NullCred, recved).expect("Expected success");
 
-    assert!(sender
-        .try_push(&mut (), &mut sender_stream, Instant::now())
-        .expect("Expected success")
-        .is_indef())
+    assert!(
+        sender
+            .try_push(&mut (), &mut sender_stream, Instant::now())
+            .expect("Expected success")
+            .is_indef()
+    )
 }

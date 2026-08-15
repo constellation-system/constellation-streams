@@ -39,12 +39,12 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
-use constellation_common::retry::next_retry;
-use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::Retry;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use log::debug;
 use log::error;
 use log::trace;
@@ -632,19 +632,18 @@ where
                 for (idx, _) in errors.errors() {
                     let i: usize = idx.clone().into();
 
-                    if let Some(batch_id) = &batch_ids[i] {
-                        if let Err(err) =
+                    if let Some(batch_id) = &batch_ids[i] &&
+                        let Err(err) =
                             self.rev_map[i].stream.report_failure(batch_id)
-                        {
-                            match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
+                    {
+                        match &mut errs {
+                            Some(errs) => errs.push((idx.clone(), err)),
+                            None => {
+                                let mut vec = Vec::with_capacity(len);
 
-                                    vec.push((idx.clone(), err));
+                                vec.push((idx.clone(), err));
 
-                                    errs = Some(vec)
-                                }
+                                errs = Some(vec)
                             }
                         }
                     }
@@ -676,9 +675,9 @@ where
     Stream: PushStream<Ctx>,
     StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
         PushStreamReportBatchError<
-            ErrorSet<Idx, Success, Err>,
-            CompoundBatchID
-        >
+                ErrorSet<Idx, Success, Err>,
+                CompoundBatchID
+            >
 {
     type ReportBatchError = <Self as PushStreamReportBatchError<
         ErrorSet<Idx, Success, Err>,

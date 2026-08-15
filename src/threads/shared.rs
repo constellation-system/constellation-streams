@@ -1623,11 +1623,11 @@ where
     ) -> PushModeResult
     where
         LargeObjTypes: LargeObjProtoTypes<
-            InMsg,
-            OutMsg,
-            Hash = Types::Hash,
-            HashID = Types::HashID
-        > {
+                InMsg,
+                OutMsg,
+                Hash = Types::Hash,
+                HashID = Types::HashID
+            > {
         let (completable, permanent) = err.split();
         let mut next = PushModeResult::default();
 
@@ -1790,11 +1790,11 @@ where
     ) -> PushModeResult
     where
         LargeObjTypes: LargeObjProtoTypes<
-            InMsg,
-            OutMsg,
-            Hash = Types::Hash,
-            HashID = Types::HashID
-        > {
+                InMsg,
+                OutMsg,
+                Hash = Types::Hash,
+                HashID = Types::HashID
+            > {
         let (completable, permanent) = err.split();
 
         if let Some(permanent) = permanent {
@@ -1997,11 +1997,11 @@ impl<InMsg, OutMsg, LargeObjTypes, Types, Ctx>
     > for SharedLargeObjPushMode<Types, Ctx>
 where
     LargeObjTypes: LargeObjProtoTypes<
-        InMsg,
-        OutMsg,
-        Hash = Types::Hash,
-        HashID = Types::HashID
-    >,
+            InMsg,
+            OutMsg,
+            Hash = Types::Hash,
+            HashID = Types::HashID
+        >,
     Types: SharedLargeObjPushModeTypes<Ctx>
 {
     type RetryError = Infallible;

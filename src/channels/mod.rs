@@ -33,10 +33,10 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
-use std::iter::empty;
-use std::iter::once;
 use std::iter::Empty;
 use std::iter::FusedIterator;
+use std::iter::empty;
+use std::iter::once;
 use std::net::SocketAddr;
 use std::time::Instant;
 use std::vec::IntoIter;
@@ -45,11 +45,11 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
-use constellation_common::retry::next_retry;
-use constellation_common::retry::next_retry_definite;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
 use constellation_common::unix::UnixSocketAddr;
 use log::error;
 use mio::Token;
@@ -1572,14 +1572,8 @@ where
     }
 }
 
-impl<
-        PrivateID,
-        PrivateParam,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedIter
-    > Iterator
+impl<PrivateID, PrivateParam, PrivateIter, SharedID, SharedParam, SharedIter>
+    Iterator
     for SharedPrivateParamIter<
         PrivateID,
         PrivateParam,
@@ -1651,14 +1645,8 @@ where
     }
 }
 
-impl<
-        PrivateID,
-        PrivateParam,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedIter
-    > ExactSizeIterator
+impl<PrivateID, PrivateParam, PrivateIter, SharedID, SharedParam, SharedIter>
+    ExactSizeIterator
     for SharedPrivateParamIter<
         PrivateID,
         PrivateParam,
@@ -1684,14 +1672,8 @@ where
     }
 }
 
-impl<
-        PrivateID,
-        PrivateParam,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedIter
-    > FusedIterator
+impl<PrivateID, PrivateParam, PrivateIter, SharedID, SharedParam, SharedIter>
+    FusedIterator
     for SharedPrivateParamIter<
         PrivateID,
         PrivateParam,
@@ -1707,15 +1689,15 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedIter
-    > Iterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedIter
+> Iterator
     for SharedPrivateEndpointIter<
         PrivateID,
         PrivateParam,
@@ -1794,15 +1776,15 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedIter
-    > ExactSizeIterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedIter
+> ExactSizeIterator
     for SharedPrivateEndpointIter<
         PrivateID,
         PrivateParam,
@@ -1832,15 +1814,15 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedIter
-    > FusedIterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedIter
+> FusedIterator
     for SharedPrivateEndpointIter<
         PrivateID,
         PrivateParam,
@@ -1860,17 +1842,17 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateStream,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedStream,
-        SharedIter
-    > Iterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateStream,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedStream,
+    SharedIter
+> Iterator
     for SharedPrivateStreamIter<
         PrivateID,
         PrivateParam,
@@ -1961,17 +1943,17 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateStream,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedStream,
-        SharedIter
-    > ExactSizeIterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateStream,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedStream,
+    SharedIter
+> ExactSizeIterator
     for SharedPrivateStreamIter<
         PrivateID,
         PrivateParam,
@@ -2004,17 +1986,17 @@ where
 }
 
 impl<
-        PrivateID,
-        PrivateParam,
-        PrivateAddr,
-        PrivateStream,
-        PrivateIter,
-        SharedID,
-        SharedParam,
-        SharedAddr,
-        SharedStream,
-        SharedIter
-    > FusedIterator
+    PrivateID,
+    PrivateParam,
+    PrivateAddr,
+    PrivateStream,
+    PrivateIter,
+    SharedID,
+    SharedParam,
+    SharedAddr,
+    SharedStream,
+    SharedIter
+> FusedIterator
     for SharedPrivateStreamIter<
         PrivateID,
         PrivateParam,
@@ -2362,14 +2344,14 @@ where
 }
 
 impl<
-        Shared,
-        Private,
-        SharedError,
-        PrivateError,
-        SharedBatch,
-        PrivateBatch,
-        PartyID
-    >
+    Shared,
+    Private,
+    SharedError,
+    PrivateError,
+    SharedBatch,
+    PrivateBatch,
+    PartyID
+>
     PushStreamReportBatchError<
         SharedPrivateMatchError<PrivateError, SharedError>,
         SharedPrivateValue<PrivateBatch, SharedBatch>

@@ -265,7 +265,7 @@ where
                 OnceMachineAction::Stop(out) => {
                     return out.map_err(|err| RawStateMachineError::Permanent {
                         err: err
-                    })
+                    });
                 }
             };
 
@@ -331,7 +331,7 @@ where
                 OnceMachineAction::Stop(out) => {
                     return out.map_err(|err| RawStateMachineError::Permanent {
                         err: err
-                    })
+                    });
                 }
             };
 

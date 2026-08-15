@@ -16,9 +16,9 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -928,13 +928,13 @@ where
         )> = Vec::with_capacity(self.req_streams.len());
 
         for (id, script) in self.req_streams.iter() {
-            if channels.contains(id.channel()) {
-                if let Some((_, when)) = script.last() {
-                    params.push((
-                        id.channel().clone(),
-                        RetryResult::Success((vec![id.param().clone()], *when))
-                    ));
-                }
+            if channels.contains(id.channel()) &&
+                let Some((_, when)) = script.last()
+            {
+                params.push((
+                    id.channel().clone(),
+                    RetryResult::Success((vec![id.param().clone()], *when))
+                ));
             }
         }
 

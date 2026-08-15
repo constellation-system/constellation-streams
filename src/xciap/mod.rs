@@ -24,10 +24,10 @@
 
 use constellation_common::codec::per::PERCodec;
 
-pub use crate::generated::xciap::Xciap16Header;
-pub use crate::generated::xciap::Xciap256Header;
 pub use crate::generated::xciap::Xciap4Header;
+pub use crate::generated::xciap::Xciap16Header;
 pub use crate::generated::xciap::Xciap64Header;
+pub use crate::generated::xciap::Xciap256Header;
 pub use crate::generated::xciap::XciapHeader;
 
 pub type XCIAP4HeaderPERCodec = PERCodec<Xciap4Header, 38>;
