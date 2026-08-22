@@ -73,6 +73,7 @@ use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamFinishCancel;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::threads::SelfPartyCtx;
 
 /// Information about counterparty streams.
 struct StreamMulticasterParty<Party, Stream> {
@@ -726,10 +727,10 @@ where
     }
 }
 
-impl<'a, Party, Idx, Stream, Ctx>
-    CreateWithParam<(&'a mut Ctx, Option<&'a Party>)>
+impl<'a, Party, Idx, Stream, Ctx> CreateWithParam<&'a mut Ctx>
     for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
+    Ctx: SelfPartyCtx<Party>,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
@@ -740,9 +741,9 @@ where
 
     fn create(
         config: Self::Config,
-        param: (&'a mut Ctx, Option<&'a Party>)
+        ctx: &'a mut Ctx
     ) -> Result<Self, Self::CreateError> {
-        let (ctx, self_party) = param;
+        let self_party = ctx.self_party();
         let (parties, slots_config) = config.take();
         let mut rev_map = Vec::with_capacity(parties.len());
         let mut fwd_map = HashMap::with_capacity(rev_map.len());

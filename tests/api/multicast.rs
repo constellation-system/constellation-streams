@@ -107,8 +107,7 @@ fn test_select_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
@@ -251,8 +250,7 @@ fn test_select_multi_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
@@ -395,8 +393,7 @@ fn test_select_all_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
@@ -539,8 +536,7 @@ fn test_select_subset_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
@@ -683,8 +679,7 @@ fn test_select_one_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
@@ -837,8 +832,7 @@ fn test_select_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -997,8 +991,7 @@ fn test_select_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1161,8 +1154,7 @@ fn test_select_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1330,8 +1322,7 @@ fn test_select_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1490,8 +1481,7 @@ fn test_select_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1650,8 +1640,7 @@ fn test_select_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1811,8 +1800,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -1981,8 +1969,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -2151,8 +2138,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -2317,8 +2303,7 @@ fn test_select_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -2477,8 +2462,7 @@ fn test_select_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -2638,8 +2622,7 @@ fn test_select_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -2799,8 +2782,7 @@ fn test_select_one_indef_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -2960,8 +2942,7 @@ fn test_select_succeed_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -3121,8 +3102,7 @@ fn test_select_indef_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -3288,8 +3268,7 @@ fn test_select_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -3462,8 +3441,7 @@ fn test_select_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -3636,8 +3614,7 @@ fn test_select_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -3827,8 +3804,7 @@ fn test_select_retry_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -4028,8 +4004,7 @@ fn test_select_retry_complete_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -4229,8 +4204,7 @@ fn test_select_retry_indef_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
@@ -4404,8 +4378,7 @@ fn test_create_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -4558,8 +4531,7 @@ fn test_create_succeed_subset_selected() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -4711,8 +4683,7 @@ fn test_create_multi_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -4874,8 +4845,7 @@ fn test_create_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -5120,8 +5090,7 @@ fn test_create_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -5371,8 +5340,7 @@ fn test_create_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -5701,8 +5669,7 @@ fn test_create_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -5874,8 +5841,7 @@ fn test_create_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -6124,8 +6090,7 @@ fn test_create_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -6382,8 +6347,7 @@ fn test_create_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -6647,8 +6611,7 @@ fn test_create_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -6923,8 +6886,7 @@ fn test_create_retry_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -7271,8 +7233,7 @@ fn test_start_batch_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
         .start_batch(&mut (), [0, 1, 2].iter())
@@ -7410,8 +7371,7 @@ fn test_start_batch_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
         .start_batch(&mut (), [0, 1].iter())
@@ -7552,8 +7512,7 @@ fn test_start_batch_select_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
         .start_batch(&mut (), vec![0, 1, 2].iter())
@@ -7782,8 +7741,7 @@ fn test_start_batch_create_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
         .start_batch(&mut (), vec![0, 1, 2].iter())
@@ -8017,8 +7975,7 @@ fn test_start_batch_both_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
         .start_batch(&mut (), vec![0, 1, 2].iter())
@@ -8330,8 +8287,7 @@ fn test_start_batch_all_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let indef = stream
         .start_batch(&mut (), vec![0, 1, 2].iter())
@@ -8468,8 +8424,7 @@ fn test_start_batch_one_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
         .start_batch(&mut (), [0, 1, 2].iter())
@@ -8610,8 +8565,7 @@ fn test_start_batch_select_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -8758,8 +8712,7 @@ fn test_start_batch_create_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -8909,8 +8862,7 @@ fn test_start_batch_select_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -9143,8 +9095,7 @@ fn test_start_batch_create_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -9384,8 +9335,7 @@ fn test_start_batch_both_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -9715,8 +9665,7 @@ fn test_start_batch_select_complete_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -10044,8 +9993,7 @@ fn test_start_batch_create_complete_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -10389,8 +10337,7 @@ fn test_start_batch_both_complete_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -10901,8 +10848,7 @@ fn test_start_batch_complete_indef_all() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -11056,8 +11002,7 @@ fn test_start_batch_succeed_complete_indef_one() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -11299,8 +11244,7 @@ fn test_start_batch_complete_indef_one() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -11538,8 +11482,7 @@ fn test_start_batch_select_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -11863,8 +11806,7 @@ fn test_start_batch_create_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -12202,8 +12144,7 @@ fn test_start_batch_both_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -12704,8 +12645,7 @@ fn test_start_batch_select_complete_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -12871,8 +12811,7 @@ fn test_start_batch_create_complete_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -13045,8 +12984,7 @@ fn test_start_batch_both_complete_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
     let err = if let Err(err) = err {
@@ -13291,8 +13229,7 @@ fn test_cancel_batch_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -13455,8 +13392,7 @@ fn test_cancel_batch_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -13618,8 +13554,7 @@ fn test_cancel_batch_multi_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -13791,8 +13726,7 @@ fn test_cancel_batch_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -14048,8 +13982,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -14309,8 +14242,7 @@ fn test_cancel_batch_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -14654,8 +14586,7 @@ fn test_cancel_batch_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -14839,8 +14770,7 @@ fn test_cancel_batch_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -15103,8 +15033,7 @@ fn test_cancel_batch_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -15373,8 +15302,7 @@ fn test_cancel_batch_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -15662,8 +15590,7 @@ fn test_cancel_batch_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -16022,8 +15949,7 @@ fn test_finish_batch_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -16186,8 +16112,7 @@ fn test_finish_batch_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -16349,8 +16274,7 @@ fn test_finish_batch_multi_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -16522,8 +16446,7 @@ fn test_finish_batch_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -16779,8 +16702,7 @@ fn test_finish_batch_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -17040,8 +16962,7 @@ fn test_finish_batch_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -17385,8 +17306,7 @@ fn test_finish_batch_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -17570,8 +17490,7 @@ fn test_finish_batch_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -17834,8 +17753,7 @@ fn test_finish_batch_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -18104,8 +18022,7 @@ fn test_finish_batch_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -18393,8 +18310,7 @@ fn test_finish_batch_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -18753,8 +18669,7 @@ fn test_add_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -18923,8 +18838,7 @@ fn test_add_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -19090,8 +19004,7 @@ fn test_add_multi_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -19267,8 +19180,7 @@ fn test_add_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -19530,8 +19442,7 @@ fn test_add_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -19801,8 +19712,7 @@ fn test_add_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -20158,8 +20068,7 @@ fn test_add_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -20347,8 +20256,7 @@ fn test_add_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -20617,8 +20525,7 @@ fn test_add_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -20897,8 +20804,7 @@ fn test_add_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -21196,8 +21102,7 @@ fn test_add_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut flags = stream.empty_flags();
     let mut selections = stream.empty_selections();
 
@@ -21574,8 +21479,7 @@ fn test_push_frags_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -21810,8 +21714,7 @@ fn test_push_frags_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -21956,8 +21859,7 @@ fn test_push_frags_all_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22097,8 +21999,7 @@ fn test_push_frags_subset_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22243,8 +22144,7 @@ fn test_push_frags_one_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22399,8 +22299,7 @@ fn test_push_frags_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22567,8 +22466,7 @@ fn test_push_frags_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22736,8 +22634,7 @@ fn test_push_frags_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -22918,8 +22815,7 @@ fn test_push_frags_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23082,8 +22978,7 @@ fn test_push_frags_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23246,8 +23141,7 @@ fn test_push_frags_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23414,8 +23308,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23595,8 +23488,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23771,8 +23663,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -23949,8 +23840,7 @@ fn test_push_frags_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -24115,8 +24005,7 @@ fn test_push_frags_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -24362,8 +24251,7 @@ fn test_push_frags_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -24611,8 +24499,7 @@ fn test_push_frags_one_indef_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -24858,8 +24745,7 @@ fn test_push_frags_one_succeed_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -25105,8 +24991,7 @@ fn test_push_frags_one_indef_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -25351,8 +25236,7 @@ fn test_push_frags_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -25695,8 +25579,7 @@ fn test_push_frags_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -26038,8 +25921,7 @@ fn test_push_frags_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -26393,8 +26275,7 @@ fn test_push_frags_retry_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -26844,8 +26725,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -27296,8 +27176,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -27730,8 +27609,7 @@ fn test_push_offer_all_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -27969,8 +27847,7 @@ fn test_push_offer_subset_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28117,8 +27994,7 @@ fn test_push_offer_all_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28260,8 +28136,7 @@ fn test_push_offer_subset_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28408,8 +28283,7 @@ fn test_push_offer_one_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28566,8 +28440,7 @@ fn test_push_offer_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28731,8 +28604,7 @@ fn test_push_offer_succeed_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -28897,8 +28769,7 @@ fn test_push_offer_retry_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29071,8 +28942,7 @@ fn test_push_offer_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29232,8 +29102,7 @@ fn test_push_offer_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29393,8 +29262,7 @@ fn test_push_offer_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29558,8 +29426,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29731,8 +29598,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -29899,8 +29765,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -30069,8 +29934,7 @@ fn test_push_offer_one_permanent() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -30236,8 +30100,7 @@ fn test_push_offer_all_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -30479,8 +30342,7 @@ fn test_push_offer_succeed_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -30724,8 +30586,7 @@ fn test_push_offer_one_indef_complete_succeed() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -30967,8 +30828,7 @@ fn test_push_offer_one_succeed_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -31210,8 +31070,7 @@ fn test_push_offer_one_indef_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -31452,8 +31311,7 @@ fn test_push_offer_complete_retry() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -31787,8 +31645,7 @@ fn test_push_offer_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -32121,8 +31978,7 @@ fn test_push_offer_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -32467,8 +32323,7 @@ fn test_push_offer_retry_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -32910,8 +32765,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
@@ -33353,8 +33207,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
-    > = StreamMulticaster::create(config, (&mut (), None))
-        .expect("Expected success");
+    > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
     let mut frags =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);

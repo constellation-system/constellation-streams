@@ -104,6 +104,10 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
     ) -> Result<PushModeResult, Self::RetryIndefError>;
 }
 
+pub trait SelfPartyCtx<Party> {
+    fn self_party(&self) -> Option<&Party>;
+}
+
 pub trait RegistryCtx {
     fn registry(&self) -> &Registry;
 }
@@ -444,6 +448,13 @@ impl Tokens {
             freed: BinaryHeap::with_capacity(hint),
             curr: 0
         }
+    }
+}
+
+impl<T> SelfPartyCtx<T> for () {
+    #[inline]
+    fn self_party(&self) -> Option<&T> {
+        None
     }
 }
 
