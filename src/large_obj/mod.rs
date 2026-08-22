@@ -346,6 +346,7 @@ where
     F: Frags {
     wrapper: PhantomData<Msg>,
     outbound: Arc<Mutex<LargeObjOutbound<H::HashID, F>>>,
+    // XXX Replace this with a map from parties to frags parameters
     param: Arc<RwLock<F::Param>>,
     encoder: Enc,
     hash: H
@@ -362,6 +363,7 @@ where
     parties: Arc<RwLock<HashMap<Types::SessionPrin, PartyID>>>,
     inbound: Arc<Mutex<LargeObjInbound<Types::HashID, Types::SessionPrin>>>,
     param: Arc<RwLock<F::Param>>,
+    // XXX Replace this with a map from parties to frags parameters
     ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
     notify: Notify,

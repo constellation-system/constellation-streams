@@ -263,8 +263,8 @@ where
             state = match state.end(&params) {
                 OnceMachineAction::Continue(state) => state,
                 OnceMachineAction::Stop(out) => {
-                    return out.map_err(|err| RawStateMachineError::Permanent {
-                        err: err
+                    return out.map_err(|err| {
+                        RawStateMachineError::Permanent { err: err }
                     });
                 }
             };
@@ -329,8 +329,8 @@ where
             state = match state.end(&params) {
                 OnceMachineAction::Continue(state) => state,
                 OnceMachineAction::Stop(out) => {
-                    return out.map_err(|err| RawStateMachineError::Permanent {
-                        err: err
+                    return out.map_err(|err| {
+                        RawStateMachineError::Permanent { err: err }
                     });
                 }
             };

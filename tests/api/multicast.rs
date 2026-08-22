@@ -96,9 +96,9 @@ fn test_select_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -106,7 +106,6 @@ fn test_select_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -241,9 +240,9 @@ fn test_select_multi_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -251,7 +250,6 @@ fn test_select_multi_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -386,9 +384,9 @@ fn test_select_all_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -396,7 +394,6 @@ fn test_select_all_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -531,9 +528,9 @@ fn test_select_subset_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -541,7 +538,6 @@ fn test_select_subset_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -676,9 +672,9 @@ fn test_select_one_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -686,7 +682,6 @@ fn test_select_one_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -831,9 +826,9 @@ fn test_select_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -841,7 +836,6 @@ fn test_select_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -992,9 +986,9 @@ fn test_select_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1002,7 +996,6 @@ fn test_select_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1157,9 +1150,9 @@ fn test_select_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1167,7 +1160,6 @@ fn test_select_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1327,9 +1319,9 @@ fn test_select_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1337,7 +1329,6 @@ fn test_select_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1488,9 +1479,9 @@ fn test_select_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1498,7 +1489,6 @@ fn test_select_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1649,9 +1639,9 @@ fn test_select_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1659,7 +1649,6 @@ fn test_select_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1811,9 +1800,9 @@ fn test_select_indef_retry_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1821,7 +1810,6 @@ fn test_select_indef_retry_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -1982,9 +1970,9 @@ fn test_select_succeed_retry_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -1992,7 +1980,6 @@ fn test_select_succeed_retry_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2153,9 +2140,9 @@ fn test_select_indef_retry_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2163,7 +2150,6 @@ fn test_select_indef_retry_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2320,9 +2306,9 @@ fn test_select_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2330,7 +2316,6 @@ fn test_select_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2481,9 +2466,9 @@ fn test_select_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2491,7 +2476,6 @@ fn test_select_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2643,9 +2627,9 @@ fn test_select_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2653,7 +2637,6 @@ fn test_select_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2805,9 +2788,9 @@ fn test_select_one_indef_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2815,7 +2798,6 @@ fn test_select_one_indef_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -2967,9 +2949,9 @@ fn test_select_succeed_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -2977,7 +2959,6 @@ fn test_select_succeed_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -3129,9 +3110,9 @@ fn test_select_indef_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -3139,7 +3120,6 @@ fn test_select_indef_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -3297,9 +3277,9 @@ fn test_select_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -3307,7 +3287,6 @@ fn test_select_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -3472,9 +3451,9 @@ fn test_select_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -3482,7 +3461,6 @@ fn test_select_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -3647,9 +3625,9 @@ fn test_select_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -3657,7 +3635,6 @@ fn test_select_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -3839,9 +3816,9 @@ fn test_select_retry_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -3849,7 +3826,6 @@ fn test_select_retry_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4041,9 +4017,9 @@ fn test_select_retry_complete_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4051,7 +4027,6 @@ fn test_select_retry_complete_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4243,9 +4218,9 @@ fn test_select_retry_indef_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4253,7 +4228,6 @@ fn test_select_retry_indef_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4419,9 +4393,9 @@ fn test_create_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4429,7 +4403,6 @@ fn test_create_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4574,9 +4547,9 @@ fn test_create_succeed_subset_selected() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4584,7 +4557,6 @@ fn test_create_succeed_subset_selected() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4728,9 +4700,9 @@ fn test_create_multi_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4738,7 +4710,6 @@ fn test_create_multi_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -4892,9 +4863,9 @@ fn test_create_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -4902,7 +4873,6 @@ fn test_create_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -5139,9 +5109,9 @@ fn test_create_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -5149,7 +5119,6 @@ fn test_create_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -5391,9 +5360,9 @@ fn test_create_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -5401,7 +5370,6 @@ fn test_create_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -5722,9 +5690,9 @@ fn test_create_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -5732,7 +5700,6 @@ fn test_create_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -5896,9 +5863,9 @@ fn test_create_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -5906,7 +5873,6 @@ fn test_create_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -6147,9 +6113,9 @@ fn test_create_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -6157,7 +6123,6 @@ fn test_create_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -6406,9 +6371,9 @@ fn test_create_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -6416,7 +6381,6 @@ fn test_create_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -6672,9 +6636,9 @@ fn test_create_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -6682,7 +6646,6 @@ fn test_create_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -6949,9 +6912,9 @@ fn test_create_retry_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -6959,7 +6922,6 @@ fn test_create_retry_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -7298,9 +7260,9 @@ fn test_start_batch_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -7308,7 +7270,6 @@ fn test_start_batch_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -7438,9 +7399,9 @@ fn test_start_batch_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -7448,7 +7409,6 @@ fn test_start_batch_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -7581,9 +7541,9 @@ fn test_start_batch_select_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -7591,7 +7551,6 @@ fn test_start_batch_select_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -7812,9 +7771,9 @@ fn test_start_batch_create_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -7822,7 +7781,6 @@ fn test_start_batch_create_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8048,9 +8006,9 @@ fn test_start_batch_both_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8058,7 +8016,6 @@ fn test_start_batch_both_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8362,9 +8319,9 @@ fn test_start_batch_all_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8372,7 +8329,6 @@ fn test_start_batch_all_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8501,9 +8457,9 @@ fn test_start_batch_one_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8511,7 +8467,6 @@ fn test_start_batch_one_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8644,9 +8599,9 @@ fn test_start_batch_select_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8654,7 +8609,6 @@ fn test_start_batch_select_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8793,9 +8747,9 @@ fn test_start_batch_create_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8803,7 +8757,6 @@ fn test_start_batch_create_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -8945,9 +8898,9 @@ fn test_start_batch_select_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -8955,7 +8908,6 @@ fn test_start_batch_select_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -9180,9 +9132,9 @@ fn test_start_batch_create_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -9190,7 +9142,6 @@ fn test_start_batch_create_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -9422,9 +9373,9 @@ fn test_start_batch_both_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -9432,7 +9383,6 @@ fn test_start_batch_both_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -9754,9 +9704,9 @@ fn test_start_batch_select_complete_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -9764,7 +9714,6 @@ fn test_start_batch_select_complete_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -10084,9 +10033,9 @@ fn test_start_batch_create_complete_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -10094,7 +10043,6 @@ fn test_start_batch_create_complete_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -10430,9 +10378,9 @@ fn test_start_batch_both_complete_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -10440,7 +10388,6 @@ fn test_start_batch_both_complete_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -10943,9 +10890,9 @@ fn test_start_batch_complete_indef_all() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -10953,7 +10900,6 @@ fn test_start_batch_complete_indef_all() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -11099,9 +11045,9 @@ fn test_start_batch_succeed_complete_indef_one() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -11109,7 +11055,6 @@ fn test_start_batch_succeed_complete_indef_one() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -11343,9 +11288,9 @@ fn test_start_batch_complete_indef_one() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -11353,7 +11298,6 @@ fn test_start_batch_complete_indef_one() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -11583,9 +11527,9 @@ fn test_start_batch_select_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -11593,7 +11537,6 @@ fn test_start_batch_select_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -11909,9 +11852,9 @@ fn test_start_batch_create_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -11919,7 +11862,6 @@ fn test_start_batch_create_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -12249,9 +12191,9 @@ fn test_start_batch_both_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -12259,7 +12201,6 @@ fn test_start_batch_both_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -12752,9 +12693,9 @@ fn test_start_batch_select_complete_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -12762,7 +12703,6 @@ fn test_start_batch_select_complete_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -12920,9 +12860,9 @@ fn test_start_batch_create_complete_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -12930,7 +12870,6 @@ fn test_start_batch_create_complete_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -13095,9 +13034,9 @@ fn test_start_batch_both_complete_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -13105,7 +13044,6 @@ fn test_start_batch_both_complete_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -13342,9 +13280,9 @@ fn test_cancel_batch_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -13352,7 +13290,6 @@ fn test_cancel_batch_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -13507,9 +13444,9 @@ fn test_cancel_batch_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -13517,7 +13454,6 @@ fn test_cancel_batch_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -13671,9 +13607,9 @@ fn test_cancel_batch_multi_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -13681,7 +13617,6 @@ fn test_cancel_batch_multi_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -13845,9 +13780,9 @@ fn test_cancel_batch_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -13855,7 +13790,6 @@ fn test_cancel_batch_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -14103,9 +14037,9 @@ fn test_cancel_batch_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -14113,7 +14047,6 @@ fn test_cancel_batch_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -14365,9 +14298,9 @@ fn test_cancel_batch_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -14375,7 +14308,6 @@ fn test_cancel_batch_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -14711,9 +14643,9 @@ fn test_cancel_batch_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -14721,7 +14653,6 @@ fn test_cancel_batch_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -14897,9 +14828,9 @@ fn test_cancel_batch_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -14907,7 +14838,6 @@ fn test_cancel_batch_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -15162,9 +15092,9 @@ fn test_cancel_batch_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -15172,7 +15102,6 @@ fn test_cancel_batch_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -15433,9 +15362,9 @@ fn test_cancel_batch_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -15443,7 +15372,6 @@ fn test_cancel_batch_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -15723,9 +15651,9 @@ fn test_cancel_batch_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -15733,7 +15661,6 @@ fn test_cancel_batch_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -16084,9 +16011,9 @@ fn test_finish_batch_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -16094,7 +16021,6 @@ fn test_finish_batch_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -16249,9 +16175,9 @@ fn test_finish_batch_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -16259,7 +16185,6 @@ fn test_finish_batch_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -16413,9 +16338,9 @@ fn test_finish_batch_multi_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -16423,7 +16348,6 @@ fn test_finish_batch_multi_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -16587,9 +16511,9 @@ fn test_finish_batch_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -16597,7 +16521,6 @@ fn test_finish_batch_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -16845,9 +16768,9 @@ fn test_finish_batch_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -16855,7 +16778,6 @@ fn test_finish_batch_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -17107,9 +17029,9 @@ fn test_finish_batch_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -17117,7 +17039,6 @@ fn test_finish_batch_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -17453,9 +17374,9 @@ fn test_finish_batch_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -17463,7 +17384,6 @@ fn test_finish_batch_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -17639,9 +17559,9 @@ fn test_finish_batch_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -17649,7 +17569,6 @@ fn test_finish_batch_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -17904,9 +17823,9 @@ fn test_finish_batch_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -17914,7 +17833,6 @@ fn test_finish_batch_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -18175,9 +18093,9 @@ fn test_finish_batch_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -18185,7 +18103,6 @@ fn test_finish_batch_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -18465,9 +18382,9 @@ fn test_finish_batch_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -18475,7 +18392,6 @@ fn test_finish_batch_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -18826,9 +18742,9 @@ fn test_add_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -18836,7 +18752,6 @@ fn test_add_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -18997,9 +18912,9 @@ fn test_add_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -19007,7 +18922,6 @@ fn test_add_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -19165,9 +19079,9 @@ fn test_add_multi_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -19175,7 +19089,6 @@ fn test_add_multi_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -19343,9 +19256,9 @@ fn test_add_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -19353,7 +19266,6 @@ fn test_add_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -19607,9 +19519,9 @@ fn test_add_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -19617,7 +19529,6 @@ fn test_add_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -19879,9 +19790,9 @@ fn test_add_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -19889,7 +19800,6 @@ fn test_add_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -20237,9 +20147,9 @@ fn test_add_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -20247,7 +20157,6 @@ fn test_add_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -20427,9 +20336,9 @@ fn test_add_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -20437,7 +20346,6 @@ fn test_add_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -20698,9 +20606,9 @@ fn test_add_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -20708,7 +20616,6 @@ fn test_add_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -20979,9 +20886,9 @@ fn test_add_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -20989,7 +20896,6 @@ fn test_add_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -21279,9 +21185,9 @@ fn test_add_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -21289,7 +21195,6 @@ fn test_add_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -21658,9 +21563,9 @@ fn test_push_frags_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -21668,7 +21573,6 @@ fn test_push_frags_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -21895,9 +21799,9 @@ fn test_push_frags_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -21905,7 +21809,6 @@ fn test_push_frags_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22042,9 +21945,9 @@ fn test_push_frags_all_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22052,7 +21955,6 @@ fn test_push_frags_all_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22184,9 +22086,9 @@ fn test_push_frags_subset_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22194,7 +22096,6 @@ fn test_push_frags_subset_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22331,9 +22232,9 @@ fn test_push_frags_one_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22341,7 +22242,6 @@ fn test_push_frags_one_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22488,9 +22388,9 @@ fn test_push_frags_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22498,7 +22398,6 @@ fn test_push_frags_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22657,9 +22556,9 @@ fn test_push_frags_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22667,7 +22566,6 @@ fn test_push_frags_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -22827,9 +22725,9 @@ fn test_push_frags_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -22837,7 +22735,6 @@ fn test_push_frags_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23010,9 +22907,9 @@ fn test_push_frags_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23020,7 +22917,6 @@ fn test_push_frags_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23175,9 +23071,9 @@ fn test_push_frags_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23185,7 +23081,6 @@ fn test_push_frags_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23340,9 +23235,9 @@ fn test_push_frags_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23350,7 +23245,6 @@ fn test_push_frags_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23509,9 +23403,9 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23519,7 +23413,6 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23691,9 +23584,9 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23701,7 +23594,6 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -23868,9 +23760,9 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -23878,7 +23770,6 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -24047,9 +23938,9 @@ fn test_push_frags_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -24057,7 +23948,6 @@ fn test_push_frags_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -24214,9 +24104,9 @@ fn test_push_frags_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -24224,7 +24114,6 @@ fn test_push_frags_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -24462,9 +24351,9 @@ fn test_push_frags_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -24472,7 +24361,6 @@ fn test_push_frags_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -24712,9 +24600,9 @@ fn test_push_frags_one_indef_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -24722,7 +24610,6 @@ fn test_push_frags_one_indef_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -24960,9 +24847,9 @@ fn test_push_frags_one_succeed_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -24970,7 +24857,6 @@ fn test_push_frags_one_succeed_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -25208,9 +25094,9 @@ fn test_push_frags_one_indef_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -25218,7 +25104,6 @@ fn test_push_frags_one_indef_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -25455,9 +25340,9 @@ fn test_push_frags_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -25465,7 +25350,6 @@ fn test_push_frags_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -25800,9 +25684,9 @@ fn test_push_frags_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -25810,7 +25694,6 @@ fn test_push_frags_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -26144,9 +26027,9 @@ fn test_push_frags_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -26154,7 +26037,6 @@ fn test_push_frags_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -26500,9 +26382,9 @@ fn test_push_frags_retry_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -26510,7 +26392,6 @@ fn test_push_frags_retry_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -26952,9 +26833,9 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -26962,7 +26843,6 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -27405,9 +27285,9 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -27415,7 +27295,6 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -27840,9 +27719,9 @@ fn test_push_offer_all_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -27850,7 +27729,6 @@ fn test_push_offer_all_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28080,9 +27958,9 @@ fn test_push_offer_subset_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28090,7 +27968,6 @@ fn test_push_offer_subset_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28229,9 +28106,9 @@ fn test_push_offer_all_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28239,7 +28116,6 @@ fn test_push_offer_all_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28373,9 +28249,9 @@ fn test_push_offer_subset_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28383,7 +28259,6 @@ fn test_push_offer_subset_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28522,9 +28397,9 @@ fn test_push_offer_one_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28532,7 +28407,6 @@ fn test_push_offer_one_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28681,9 +28555,9 @@ fn test_push_offer_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28691,7 +28565,6 @@ fn test_push_offer_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -28847,9 +28720,9 @@ fn test_push_offer_succeed_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -28857,7 +28730,6 @@ fn test_push_offer_succeed_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29014,9 +28886,9 @@ fn test_push_offer_retry_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29024,7 +28896,6 @@ fn test_push_offer_retry_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29189,9 +29060,9 @@ fn test_push_offer_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29199,7 +29070,6 @@ fn test_push_offer_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29351,9 +29221,9 @@ fn test_push_offer_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29361,7 +29231,6 @@ fn test_push_offer_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29513,9 +29382,9 @@ fn test_push_offer_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29523,7 +29392,6 @@ fn test_push_offer_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29679,9 +29547,9 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29689,7 +29557,6 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -29853,9 +29720,9 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -29863,7 +29730,6 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -30022,9 +29888,9 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -30032,7 +29898,6 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -30193,9 +30058,9 @@ fn test_push_offer_one_permanent() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -30203,7 +30068,6 @@ fn test_push_offer_one_permanent() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -30361,9 +30225,9 @@ fn test_push_offer_all_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -30371,7 +30235,6 @@ fn test_push_offer_all_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -30605,9 +30468,9 @@ fn test_push_offer_succeed_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -30615,7 +30478,6 @@ fn test_push_offer_succeed_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -30851,9 +30713,9 @@ fn test_push_offer_one_indef_complete_succeed() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -30861,7 +30723,6 @@ fn test_push_offer_one_indef_complete_succeed() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -31095,9 +30956,9 @@ fn test_push_offer_one_succeed_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -31105,7 +30966,6 @@ fn test_push_offer_one_succeed_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -31339,9 +31199,9 @@ fn test_push_offer_one_indef_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -31349,7 +31209,6 @@ fn test_push_offer_one_indef_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -31582,9 +31441,9 @@ fn test_push_offer_complete_retry() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -31592,7 +31451,6 @@ fn test_push_offer_complete_retry() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -31918,9 +31776,9 @@ fn test_push_offer_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -31928,7 +31786,6 @@ fn test_push_offer_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -32253,9 +32110,9 @@ fn test_push_offer_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -32263,7 +32120,6 @@ fn test_push_offer_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -32600,9 +32456,9 @@ fn test_push_offer_retry_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -32610,7 +32466,6 @@ fn test_push_offer_retry_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -33044,9 +32899,9 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -33054,7 +32909,6 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");
@@ -33488,9 +33342,9 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
         inbound: vec![]
     };
     let streams = vec![
-        MulticastPartyConfig::new("stream-0", script_0, Retry::default()),
-        MulticastPartyConfig::new("stream-1", script_1, Retry::default()),
-        MulticastPartyConfig::new("stream-2", script_2, Retry::default()),
+        MulticastPartyConfig::new("stream-0", script_0),
+        MulticastPartyConfig::new("stream-1", script_1),
+        MulticastPartyConfig::new("stream-2", script_2),
     ];
     let config =
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
@@ -33498,7 +33352,6 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
         _,
         _,
         TestPrivateStream<&str, &str, SHA3ID>,
-        _,
         _
     > = StreamMulticaster::create(config, (&mut (), None))
         .expect("Expected success");

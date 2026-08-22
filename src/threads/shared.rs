@@ -1023,25 +1023,27 @@ where
                 batch,
                 retry,
                 mut flags
-            } => match stream.retry_cancel_batch(ctx, &mut flags, &batch, retry)
-            {
-                // It succeeded.
-                Ok(RetryResult::Success(_)) => {
-                    Ok(RetryIndefResult::Success(()))
+            } => {
+                match stream.retry_cancel_batch(ctx, &mut flags, &batch, retry)
+                {
+                    // It succeeded.
+                    Ok(RetryResult::Success(_)) => {
+                        Ok(RetryIndefResult::Success(()))
+                    }
+                    // We got a retry.
+                    Ok(RetryResult::Retry(retry)) => {
+                        Ok(RetryIndefResult::Retry(PushEntry::Cancel {
+                            batch: batch,
+                            retry: retry,
+                            flags: flags
+                        }))
+                    }
+                    Err(err) => Err(PushEntryRecoverableError::Cancel {
+                        batch_id: batch,
+                        flags: flags,
+                        err: err
+                    })
                 }
-                // We got a retry.
-                Ok(RetryResult::Retry(retry)) => {
-                    Ok(RetryIndefResult::Retry(PushEntry::Cancel {
-                        batch: batch,
-                        retry: retry,
-                        flags: flags
-                    }))
-                }
-                Err(err) => Err(PushEntryRecoverableError::Cancel {
-                    batch_id: batch,
-                    flags: flags,
-                    err: err
-                })
             }
         }
     }

@@ -290,14 +290,10 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct MulticastPartyConfig<PartyID, Frags, Stream>
-where
-    Frags: Default {
+pub struct MulticastPartyConfig<PartyID, Stream> {
     party: PartyID,
     #[serde(flatten)]
-    stream: Stream,
-    #[serde(default)]
-    frags: Frags
+    stream: Stream
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
@@ -390,13 +386,11 @@ pub struct SharedDatagramModeConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "stream-multicaster")]
-pub struct StreamMulticasterConfig<PartyID, Frags, Stream>
-where
-    Frags: Default {
+pub struct StreamMulticasterConfig<PartyID, Stream> {
     #[serde(default)]
     #[serde(flatten)]
     batch_slots: BatchSlotsConfig,
-    parties: Vec<MulticastPartyConfig<PartyID, Frags, Stream>>
+    parties: Vec<MulticastPartyConfig<PartyID, Stream>>
 }
 
 #[derive(
@@ -1109,13 +1103,10 @@ where
     }
 }
 
-impl<PartyID, Frags, Stream> StreamMulticasterConfig<PartyID, Frags, Stream>
-where
-    Frags: Default
-{
+impl<PartyID, Stream> StreamMulticasterConfig<PartyID, Stream> {
     #[inline]
     pub fn new(
-        parties: Vec<MulticastPartyConfig<PartyID, Frags, Stream>>,
+        parties: Vec<MulticastPartyConfig<PartyID, Stream>>,
         batch_slots: BatchSlotsConfig
     ) -> Self {
         StreamMulticasterConfig {
@@ -1130,35 +1121,27 @@ where
     }
 
     #[inline]
-    pub fn parties(&self) -> &[MulticastPartyConfig<PartyID, Frags, Stream>] {
+    pub fn parties(&self) -> &[MulticastPartyConfig<PartyID, Stream>] {
         &self.parties
     }
 
     #[inline]
     pub fn take(
         self
-    ) -> (
-        Vec<MulticastPartyConfig<PartyID, Frags, Stream>>,
-        BatchSlotsConfig
-    ) {
+    ) -> (Vec<MulticastPartyConfig<PartyID, Stream>>, BatchSlotsConfig) {
         (self.parties, self.batch_slots)
     }
 }
 
-impl<PartyID, Frags, Stream> MulticastPartyConfig<PartyID, Frags, Stream>
-where
-    Frags: Default
-{
+impl<PartyID, Stream> MulticastPartyConfig<PartyID, Stream> {
     #[inline]
     pub fn new(
         party: PartyID,
-        stream: Stream,
-        frags: Frags
+        stream: Stream
     ) -> Self {
         MulticastPartyConfig {
             party: party,
-            stream: stream,
-            frags: frags
+            stream: stream
         }
     }
 
@@ -1173,13 +1156,8 @@ where
     }
 
     #[inline]
-    pub fn frags(&self) -> &Frags {
-        &self.frags
-    }
-
-    #[inline]
-    pub fn take(self) -> (PartyID, Stream, Frags) {
-        (self.party, self.stream, self.frags)
+    pub fn take(self) -> (PartyID, Stream) {
+        (self.party, self.stream)
     }
 }
 

@@ -75,13 +75,11 @@ use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 
 /// Information about counterparty streams.
-struct StreamMulticasterParty<Party, Stream, Frags> {
+struct StreamMulticasterParty<Party, Stream> {
     /// The counterparty for this stream.
     party: Party,
     /// The lower-level stream to use.
-    stream: Stream,
-    /// Parameter for creating fragments.
-    frags: Frags
+    stream: Stream
 }
 
 /// Type of batch IDs used by [StreamMulticaster].
@@ -98,15 +96,10 @@ pub struct StreamMulticasterSelections<Inner> {
 }
 
 pub type DatagramStreamMulticaster<Party, Idx, Stream, Ctx> =
-    StreamMulticaster<Party, Idx, Stream, (), Ctx>;
+    StreamMulticaster<Party, Idx, Stream, Ctx>;
 
-pub type LargeObjStreamMulticaster<Party, Idx, Stream, Ctx> = StreamMulticaster<
-    Party,
-    Idx,
-    Stream,
-    <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-    Ctx
->;
+pub type LargeObjStreamMulticaster<Party, Idx, Stream, Ctx> =
+    StreamMulticaster<Party, Idx, Stream, Ctx>;
 
 /// Synthetic multicasting combinator for [PushStream]s.
 ///
@@ -124,14 +117,13 @@ pub struct StreamMulticaster<
     Party: Clone + Display + Eq + Hash,
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream: PushStream<Ctx>,
-    Frags,
     Ctx
 > {
     ctx: PhantomData<Ctx>,
     /// Map from the `Party` type to a dense index type.
     fwd_map: HashMap<Party, Idx>,
     /// Map from dense index types to party and stream data.
-    rev_map: Vec<StreamMulticasterParty<Party, Stream, Frags>>,
+    rev_map: Vec<StreamMulticasterParty<Party, Stream>>,
     /// Currently-live batches.
     batches: CompoundBatches<StreamMulticasterBatch<Stream::BatchID>>
 }
@@ -495,15 +487,14 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Inner, Info>
+impl<Party, Idx, Stream, Ctx, Inner, Info>
     PushStreamReportError<SelectionsError<Inner, Info>>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStream<Ctx>,
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
-        PushStreamReportError<Inner>
+    StreamMulticaster<Party, Idx, Stream, Ctx>: PushStreamReportError<Inner>
 {
     type ReportError = <Self as PushStreamReportError<Inner>>::ReportError;
 
@@ -519,15 +510,15 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Select, Create, Selections, Batches>
+impl<Party, Idx, Stream, Ctx, Select, Create, Selections, Batches>
     PushStreamReportError<
         StreamMulticasterStartError<Select, Create, Selections, Batches>
-    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStream<Ctx>,
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
+    StreamMulticaster<Party, Idx, Stream, Ctx>:
         PushStreamReportError<Select> + PushStreamReportError<Create>
 {
     type ReportError = StreamMulticasterStartReportError<
@@ -559,9 +550,9 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Ctx, Success, Err>
     PushStreamReportError<ErrorSet<Idx, Success, Err>>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
@@ -605,9 +596,9 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Ctx, Success, Err>
     PushStreamReportBatchError<ErrorSet<Idx, Success, Err>, CompoundBatchID>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
@@ -663,21 +654,17 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Success, Err>
+impl<Party, Idx, Stream, Ctx, Success, Err>
     PushStreamReportBatchError<
         CompoundBatchError<Idx, Success, Err>,
         CompoundBatchID
-    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStream<Ctx>,
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
-        PushStreamReportBatchError<
-                ErrorSet<Idx, Success, Err>,
-                CompoundBatchID
-            >
+    StreamMulticaster<Party, Idx, Stream, Ctx>: PushStreamReportBatchError<ErrorSet<Idx, Success, Err>, CompoundBatchID>
 {
     type ReportBatchError = <Self as PushStreamReportBatchError<
         ErrorSet<Idx, Success, Err>,
@@ -697,18 +684,17 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx, Start, Add, Finish, BatchID>
+impl<Party, Idx, Stream, Ctx, Start, Add, Finish, BatchID>
     PushStreamReportError<
         StreamMulticasterPushError<Start, Add, Finish, BatchID>
-    > for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
     Stream: PushStream<Ctx>,
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>:
-        PushStreamReportError<Start>
-            + PushStreamReportBatchError<Add, BatchID>
-            + PushStreamReportBatchError<Finish, BatchID>
+    StreamMulticaster<Party, Idx, Stream, Ctx>: PushStreamReportError<Start>
+        + PushStreamReportBatchError<Add, BatchID>
+        + PushStreamReportBatchError<Finish, BatchID>
 {
     type ReportError = StreamMulticasterPushReportError<
         <Self as PushStreamReportError<Start>>::ReportError,
@@ -740,17 +726,16 @@ where
     }
 }
 
-impl<'a, Party, Idx, Stream, F, Ctx>
+impl<'a, Party, Idx, Stream, Ctx>
     CreateWithParam<(&'a mut Ctx, Option<&'a Party>)>
-    for StreamMulticaster<Party, Idx, Stream, F, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
     Party: Clone + Display + Eq + Hash,
-    Stream: CreateWithParam<&'a Ctx> + PushStream<Ctx>,
-    F: Default
+    Stream: CreateWithParam<&'a Ctx> + PushStream<Ctx>
 {
-    type Config = StreamMulticasterConfig<Party, F, Stream::Config>;
+    type Config = StreamMulticasterConfig<Party, Stream::Config>;
     type CreateError = Stream::CreateError;
 
     fn create(
@@ -766,7 +751,7 @@ where
                "creating stream multicaster");
 
         for (i, config) in parties.into_iter().enumerate() {
-            let (party, stream, frags) = config.take();
+            let (party, stream) = config.take();
 
             debug!(target: "stream-multicaster",
                    "creating individual stream for party {}",
@@ -776,8 +761,7 @@ where
                 let stream = Stream::create(stream, ctx)?;
                 let ent = StreamMulticasterParty {
                     party: party.clone(),
-                    stream: stream,
-                    frags: frags
+                    stream: stream
                 };
 
                 rev_map.push(ent);
@@ -794,7 +778,7 @@ where
     }
 }
 
-impl<Party, Idx, Stream, F, Ctx> StreamMulticaster<Party, Idx, Stream, F, Ctx>
+impl<Party, Idx, Stream, Ctx> StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
@@ -1017,8 +1001,7 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1123,14 +1106,7 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Ctx>
-    StreamMulticaster<
-        Party,
-        Idx,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+impl<Party, Idx, Stream, Ctx> StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1281,8 +1257,7 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1488,8 +1463,7 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1539,9 +1513,9 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, ChannelID, Chan, Ctx>
+impl<Party, Idx, Stream, ChannelID, Chan, Ctx>
     StreamReporter<Party, ChannelID, Chan>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1580,8 +1554,8 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx> StreamRefresh<Ctx>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> StreamRefresh<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -1702,8 +1676,8 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx> PushStream<Ctx>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> PushStream<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -2272,8 +2246,8 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamAdd<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Msg, Stream, Ctx> PushStreamAdd<Msg, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -2419,8 +2393,8 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx> PushStreamPartyID
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> PushStreamPartyID
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
@@ -2430,8 +2404,8 @@ where
     type PartyID = Idx;
 }
 
-impl<Party, Idx, Stream, Frags, Ctx> PushStreamParties
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> PushStreamParties
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Display + Eq + Hash,
@@ -2454,8 +2428,8 @@ where
     }
 }
 
-impl<Party, Idx, Stream, Frags, Ctx> PushStreamShared<Ctx>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Stream, Ctx> PushStreamShared<Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -3308,13 +3282,7 @@ where
 }
 
 impl<Party, Idx, Stream, Ctx> LargeObjStream<Ctx>
-    for StreamMulticaster<
-        Party,
-        Idx,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -3507,13 +3475,7 @@ where
 }
 
 impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
-    for StreamMulticaster<
-        Party,
-        Idx,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
@@ -3705,8 +3667,8 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamSharedSingle<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Stream, Frags, Ctx>
+impl<Party, Idx, Msg, Stream, Ctx> PushStreamSharedSingle<Msg, Ctx>
+    for StreamMulticaster<Party, Idx, Stream, Ctx>
 where
     Idx: Clone + Debug + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Party: Clone + Debug + Display + Eq + Hash,
