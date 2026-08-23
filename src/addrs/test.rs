@@ -153,7 +153,9 @@ impl Addrs for TestAddrs {
                         panic!("Shouldn't be empty")
                     }
                 }
-                RetryResult::Retry(when) => return Ok(RetryResult::Retry(when))
+                RetryResult::Retry(when) => {
+                    return Ok(RetryResult::Retry(when));
+                }
             }
         };
 

@@ -4426,6 +4426,19 @@ where
     }
 }
 
+impl<Epoch, BatchID> Display for StreamSelectorBatch<Epoch, BatchID>
+where
+    Epoch: Display,
+    BatchID: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "{} on {}", self.batch_id, self.stream)
+    }
+}
+
 impl Display for ConnectionsIdx {
     fn fmt(
         &self,

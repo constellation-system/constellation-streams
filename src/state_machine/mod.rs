@@ -244,7 +244,9 @@ where
     > {
         self.state = match self.state.end(&self.params) {
             OnceMachineAction::Continue(state) => state,
-            OnceMachineAction::Stop(out) => return OnceMachineAction::Stop(out)
+            OnceMachineAction::Stop(out) => {
+                return OnceMachineAction::Stop(out);
+            }
         };
 
         OnceMachineAction::Continue(self)

@@ -104,14 +104,17 @@ fn test_select_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -119,11 +122,11 @@ fn test_select_all_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -131,7 +134,7 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -139,16 +142,16 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -156,7 +159,7 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -164,16 +167,16 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -181,7 +184,7 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -189,13 +192,13 @@ fn test_select_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -247,14 +250,13 @@ fn test_select_multi_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1].iter())
+        .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -262,11 +264,11 @@ fn test_select_multi_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1]);
+    assert_eq!(parties, vec![0.into(), 1.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -274,7 +276,7 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -282,16 +284,16 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -299,7 +301,7 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -307,16 +309,16 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -324,7 +326,7 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -332,13 +334,13 @@ fn test_select_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -390,14 +392,17 @@ fn test_select_all_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -405,11 +410,11 @@ fn test_select_all_indef() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, Parties::Some(vec![0, 1, 2]));
+    assert_eq!(parties, Parties::Some(vec![0.into(), 1.into(), 2.into()]));
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -417,7 +422,7 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -425,16 +430,16 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -442,7 +447,7 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -450,16 +455,16 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -467,7 +472,7 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -475,13 +480,13 @@ fn test_select_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -533,14 +538,13 @@ fn test_select_subset_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
-        .select(&mut (), &mut selections, [0, 1].iter())
+        .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -548,11 +552,11 @@ fn test_select_subset_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, Parties::Some(vec![0, 1]));
+    assert_eq!(parties, Parties::Some(vec![0.into(), 1.into()]));
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -560,7 +564,7 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -568,16 +572,16 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -585,7 +589,7 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -593,16 +597,16 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -610,7 +614,7 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -618,13 +622,13 @@ fn test_select_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -676,14 +680,17 @@ fn test_select_one_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -691,11 +698,11 @@ fn test_select_one_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 2]);
+    assert_eq!(parties, vec![0.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -703,7 +710,7 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -711,16 +718,16 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -728,7 +735,7 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -736,16 +743,16 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -753,7 +760,7 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -761,13 +768,13 @@ fn test_select_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -829,14 +836,17 @@ fn test_select_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -853,11 +863,11 @@ fn test_select_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -865,7 +875,7 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -873,16 +883,16 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -890,7 +900,7 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -898,16 +908,16 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -915,7 +925,7 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -923,13 +933,13 @@ fn test_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -988,14 +998,17 @@ fn test_select_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1012,11 +1025,11 @@ fn test_select_succeed_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1024,7 +1037,7 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1032,16 +1045,16 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1049,7 +1062,7 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1057,16 +1070,16 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1074,7 +1087,7 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1082,13 +1095,13 @@ fn test_select_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1151,14 +1164,17 @@ fn test_select_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1184,11 +1200,11 @@ fn test_select_retry_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1196,7 +1212,7 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1204,16 +1220,16 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1221,7 +1237,7 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1229,16 +1245,16 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1246,7 +1262,7 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1254,13 +1270,13 @@ fn test_select_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1319,14 +1335,17 @@ fn test_select_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1343,11 +1362,11 @@ fn test_select_indef_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1355,7 +1374,7 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1363,16 +1382,16 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1380,7 +1399,7 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1388,16 +1407,16 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1405,7 +1424,7 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1413,13 +1432,13 @@ fn test_select_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1478,14 +1497,17 @@ fn test_select_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1502,11 +1524,11 @@ fn test_select_indef_retry_indef() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, Parties::Some(vec![0, 1, 2]));
+    assert_eq!(parties, Parties::Some(vec![0.into(), 1.into(), 2.into()]));
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1514,7 +1536,7 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1522,16 +1544,16 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1539,7 +1561,7 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1547,16 +1569,16 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1564,7 +1586,7 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1572,13 +1594,13 @@ fn test_select_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1637,14 +1659,17 @@ fn test_select_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1661,11 +1686,11 @@ fn test_select_succeed_retry_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0]);
+    assert_eq!(parties, vec![0.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1673,7 +1698,7 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1681,16 +1706,16 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1698,7 +1723,7 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1706,16 +1731,16 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1723,7 +1748,7 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1731,13 +1756,13 @@ fn test_select_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1797,14 +1822,17 @@ fn test_select_indef_retry_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1830,11 +1858,11 @@ fn test_select_indef_retry_indef_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0]);
+    assert_eq!(parties, vec![0.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1842,7 +1870,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1850,16 +1878,16 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1867,7 +1895,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1875,16 +1903,16 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -1892,7 +1920,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -1900,13 +1928,13 @@ fn test_select_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -1966,14 +1994,17 @@ fn test_select_succeed_retry_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -1999,11 +2030,11 @@ fn test_select_succeed_retry_indef_retry_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![2]);
+    assert_eq!(parties, vec![2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2011,7 +2042,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2019,16 +2050,16 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2036,7 +2067,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2044,16 +2075,16 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2061,7 +2092,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2069,13 +2100,13 @@ fn test_select_succeed_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2135,14 +2166,17 @@ fn test_select_indef_retry_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         retry
@@ -2168,11 +2202,11 @@ fn test_select_indef_retry_succeed_retry_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1]);
+    assert_eq!(parties, vec![1.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2180,7 +2214,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2188,16 +2222,16 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2205,7 +2239,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2213,16 +2247,16 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2230,7 +2264,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2238,13 +2272,13 @@ fn test_select_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2300,13 +2334,16 @@ fn test_select_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -2320,7 +2357,7 @@ fn test_select_one_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2328,7 +2365,7 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2336,16 +2373,16 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2353,7 +2390,7 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2361,16 +2398,16 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2378,7 +2415,7 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2386,13 +2423,13 @@ fn test_select_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2459,13 +2496,16 @@ fn test_select_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -2486,11 +2526,11 @@ fn test_select_all_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2498,7 +2538,7 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2506,16 +2546,16 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2523,7 +2563,7 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2531,16 +2571,16 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2548,7 +2588,7 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2556,13 +2596,13 @@ fn test_select_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2619,13 +2659,16 @@ fn test_select_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -2646,11 +2689,11 @@ fn test_select_succeed_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2658,7 +2701,7 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2666,16 +2709,16 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2683,7 +2726,7 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2691,16 +2734,16 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2708,7 +2751,7 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2716,13 +2759,13 @@ fn test_select_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2779,13 +2822,16 @@ fn test_select_one_indef_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -2806,11 +2852,11 @@ fn test_select_one_indef_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1]);
+    assert_eq!(parties, vec![0.into(), 1.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2818,7 +2864,7 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2826,16 +2872,16 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2843,7 +2889,7 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2851,16 +2897,16 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2868,7 +2914,7 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2876,13 +2922,13 @@ fn test_select_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -2939,13 +2985,16 @@ fn test_select_succeed_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -2966,11 +3015,11 @@ fn test_select_succeed_complete_indef() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -2978,7 +3027,7 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -2986,16 +3035,16 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3003,7 +3052,7 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3011,16 +3060,16 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3028,7 +3077,7 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3036,13 +3085,13 @@ fn test_select_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -3099,13 +3148,16 @@ fn test_select_indef_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -3126,11 +3178,11 @@ fn test_select_indef_complete_indef() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, Parties::Some(vec![0, 1, 2]));
+    assert_eq!(parties, Parties::Some(vec![0.into(), 1.into(), 2.into()]));
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3138,7 +3190,7 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3146,16 +3198,16 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3163,7 +3215,7 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3171,16 +3223,16 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3188,7 +3240,7 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3196,13 +3248,13 @@ fn test_select_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -3265,13 +3317,16 @@ fn test_select_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -3301,11 +3356,11 @@ fn test_select_complete_retry() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3313,7 +3368,7 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3321,16 +3376,16 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3338,7 +3393,7 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3346,16 +3401,16 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3363,7 +3418,7 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3371,13 +3426,13 @@ fn test_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -3438,13 +3493,16 @@ fn test_select_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -3474,11 +3532,11 @@ fn test_select_retry_complete() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3486,7 +3544,7 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3494,16 +3552,16 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3511,7 +3569,7 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3519,16 +3577,16 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3536,7 +3594,7 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3544,13 +3602,13 @@ fn test_select_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -3611,13 +3669,16 @@ fn test_select_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -3647,11 +3708,11 @@ fn test_select_retry_complete_indef() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3659,7 +3720,7 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3667,16 +3728,16 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3684,7 +3745,7 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3692,16 +3753,16 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3709,7 +3770,7 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3717,13 +3778,13 @@ fn test_select_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -3801,13 +3862,16 @@ fn test_select_retry_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -3847,11 +3911,11 @@ fn test_select_retry_complete_retry_complete() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3859,7 +3923,7 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3867,16 +3931,16 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3884,7 +3948,7 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3892,16 +3956,16 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -3909,7 +3973,7 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -3917,13 +3981,13 @@ fn test_select_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4001,13 +4065,16 @@ fn test_select_retry_complete_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -4047,11 +4114,11 @@ fn test_select_retry_complete_retry_complete_indef() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4059,7 +4126,7 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4067,16 +4134,16 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4084,7 +4151,7 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4092,16 +4159,16 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4109,7 +4176,7 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4117,13 +4184,13 @@ fn test_select_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4201,13 +4268,16 @@ fn test_select_retry_indef_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let mut selections = stream.empty_selections();
 
-    let err = stream.select(&mut (), &mut selections, vec![0, 1, 2].iter());
+    let err = stream.select(
+        &mut (),
+        &mut selections,
+        vec![0.into(), 1.into(), 2.into()].iter()
+    );
     let err = if let Err(err) = err {
         err
     } else {
@@ -4247,11 +4317,11 @@ fn test_select_retry_indef_complete_retry_complete() {
         panic!("Expected indef")
     };
 
-    assert_eq!(parties, vec![0, 1]);
+    assert_eq!(parties, vec![0.into(), 1.into()]);
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4259,7 +4329,7 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4267,16 +4337,16 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4284,7 +4354,7 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4292,16 +4362,16 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4309,7 +4379,7 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4317,13 +4387,13 @@ fn test_select_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4375,7 +4445,6 @@ fn test_create_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -4383,7 +4452,11 @@ fn test_create_all_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -4391,7 +4464,7 @@ fn test_create_all_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -4401,7 +4474,7 @@ fn test_create_all_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4410,7 +4483,7 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4418,16 +4491,16 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4436,7 +4509,7 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4444,16 +4517,16 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4462,7 +4535,7 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4470,13 +4543,13 @@ fn test_create_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4528,7 +4601,6 @@ fn test_create_succeed_subset_selected() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -4536,7 +4608,11 @@ fn test_create_succeed_subset_selected() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -4544,7 +4620,7 @@ fn test_create_succeed_subset_selected() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1]);
+    assert_eq!(parties, vec![0.into(), 1.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -4554,7 +4630,7 @@ fn test_create_succeed_subset_selected() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4563,7 +4639,7 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4571,16 +4647,16 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4589,7 +4665,7 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4597,16 +4673,16 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4614,7 +4690,7 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4622,13 +4698,13 @@ fn test_create_succeed_subset_selected() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4680,7 +4756,6 @@ fn test_create_multi_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -4688,7 +4763,7 @@ fn test_create_multi_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1].iter())
+        .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -4696,7 +4771,7 @@ fn test_create_multi_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1]);
+    assert_eq!(parties, vec![0.into(), 1.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -4706,7 +4781,7 @@ fn test_create_multi_subset_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4715,7 +4790,7 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4723,16 +4798,16 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4741,7 +4816,7 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4749,16 +4824,16 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4766,7 +4841,7 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4774,13 +4849,13 @@ fn test_create_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -4842,7 +4917,6 @@ fn test_create_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -4850,7 +4924,11 @@ fn test_create_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -4858,7 +4936,7 @@ fn test_create_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let retry = if let RetryResult::Retry(retry) = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -4871,7 +4949,7 @@ fn test_create_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4879,7 +4957,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4887,16 +4965,16 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4904,7 +4982,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4912,16 +4990,16 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4929,7 +5007,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4937,13 +5015,13 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_create_batch(&mut (), &mut flags, &selections, retry)
@@ -4953,7 +5031,7 @@ fn test_create_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4962,7 +5040,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4970,16 +5048,16 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -4988,7 +5066,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -4996,16 +5074,16 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5014,7 +5092,7 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5022,13 +5100,13 @@ fn test_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -5087,7 +5165,6 @@ fn test_create_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -5095,7 +5172,11 @@ fn test_create_succeed_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -5103,7 +5184,7 @@ fn test_create_succeed_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let retry = if let RetryResult::Retry(retry) = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -5116,7 +5197,7 @@ fn test_create_succeed_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5124,7 +5205,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5132,16 +5213,16 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5149,7 +5230,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5157,16 +5238,16 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5175,7 +5256,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5183,13 +5264,13 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_create_batch(&mut (), &mut flags, &selections, retry)
@@ -5199,7 +5280,7 @@ fn test_create_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5208,7 +5289,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5216,16 +5297,16 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5234,7 +5315,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5242,16 +5323,16 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5260,7 +5341,7 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5268,13 +5349,13 @@ fn test_create_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -5337,7 +5418,6 @@ fn test_create_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -5345,7 +5425,11 @@ fn test_create_retry_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -5353,7 +5437,7 @@ fn test_create_retry_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let retry = if let RetryResult::Retry(retry) = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -5366,7 +5450,7 @@ fn test_create_retry_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5374,7 +5458,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5382,16 +5466,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5399,7 +5483,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5407,16 +5491,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5424,7 +5508,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5432,13 +5516,13 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryResult::Retry(retry) = stream
         .retry_create_batch(&mut (), &mut flags, &selections, retry)
@@ -5451,7 +5535,7 @@ fn test_create_retry_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5459,7 +5543,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5467,16 +5551,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5485,7 +5569,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5493,16 +5577,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5511,7 +5595,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5519,13 +5603,13 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_create_batch(&mut (), &mut flags, &selections, retry)
@@ -5535,7 +5619,7 @@ fn test_create_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5544,7 +5628,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5552,16 +5636,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5570,7 +5654,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5578,16 +5662,16 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5596,7 +5680,7 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5604,13 +5688,13 @@ fn test_create_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -5666,7 +5750,6 @@ fn test_create_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -5674,7 +5757,11 @@ fn test_create_one_permanent() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -5682,7 +5769,7 @@ fn test_create_one_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -5697,7 +5784,7 @@ fn test_create_one_permanent() {
     assert!(permanent.is_some());
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5705,7 +5792,7 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5713,16 +5800,16 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5731,7 +5818,7 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5739,16 +5826,16 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5757,7 +5844,7 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5765,13 +5852,13 @@ fn test_create_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -5838,7 +5925,6 @@ fn test_create_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -5846,7 +5932,11 @@ fn test_create_all_complete_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -5854,7 +5944,7 @@ fn test_create_all_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -5865,7 +5955,7 @@ fn test_create_all_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5873,7 +5963,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5881,16 +5971,16 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5898,7 +5988,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5906,16 +5996,16 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5923,7 +6013,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5931,13 +6021,13 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -5955,7 +6045,7 @@ fn test_create_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5964,7 +6054,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5972,16 +6062,16 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -5990,7 +6080,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -5998,16 +6088,16 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6016,7 +6106,7 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6024,13 +6114,13 @@ fn test_create_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -6087,7 +6177,6 @@ fn test_create_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -6095,7 +6184,11 @@ fn test_create_complete_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -6103,7 +6196,7 @@ fn test_create_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -6114,7 +6207,7 @@ fn test_create_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6122,7 +6215,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6130,16 +6223,16 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6148,7 +6241,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6156,16 +6249,16 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6174,7 +6267,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6182,13 +6275,13 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6206,7 +6299,7 @@ fn test_create_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6215,7 +6308,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6223,16 +6316,16 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6241,7 +6334,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6249,16 +6342,16 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6267,7 +6360,7 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6275,13 +6368,13 @@ fn test_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -6344,7 +6437,6 @@ fn test_create_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -6352,7 +6444,11 @@ fn test_create_complete_retry() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -6360,7 +6456,7 @@ fn test_create_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -6371,7 +6467,7 @@ fn test_create_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6379,7 +6475,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6387,16 +6483,16 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6405,7 +6501,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6413,16 +6509,16 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6431,7 +6527,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6439,13 +6535,13 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6472,7 +6568,7 @@ fn test_create_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6481,7 +6577,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6489,16 +6585,16 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6507,7 +6603,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6515,16 +6611,16 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6533,7 +6629,7 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6541,13 +6637,13 @@ fn test_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -6608,7 +6704,6 @@ fn test_create_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -6616,7 +6711,11 @@ fn test_create_retry_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -6624,7 +6723,7 @@ fn test_create_retry_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -6635,7 +6734,7 @@ fn test_create_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6643,7 +6742,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6651,16 +6750,16 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6668,7 +6767,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6676,16 +6775,16 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6694,7 +6793,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6702,13 +6801,13 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -6735,7 +6834,7 @@ fn test_create_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6744,7 +6843,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6752,16 +6851,16 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6770,7 +6869,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6778,16 +6877,16 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6796,7 +6895,7 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6804,13 +6903,13 @@ fn test_create_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -6883,7 +6982,6 @@ fn test_create_retry_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -6891,7 +6989,11 @@ fn test_create_retry_complete_retry_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -6899,7 +7001,7 @@ fn test_create_retry_complete_retry_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let err = stream.create_batch(&mut (), &mut flags, &selections);
     let err = if let Err(err) = err {
@@ -6910,7 +7012,7 @@ fn test_create_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6918,7 +7020,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6926,16 +7028,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6943,7 +7045,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6951,16 +7053,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -6968,7 +7070,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -6976,13 +7078,13 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -7003,7 +7105,7 @@ fn test_create_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7011,7 +7113,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7019,16 +7121,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7037,7 +7139,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7045,16 +7147,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7062,7 +7164,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7070,13 +7172,13 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -7103,7 +7205,7 @@ fn test_create_retry_complete_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7112,7 +7214,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7120,16 +7222,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7138,7 +7240,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7146,16 +7248,16 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7164,7 +7266,7 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7172,13 +7274,13 @@ fn test_create_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -7230,18 +7332,17 @@ fn test_start_batch_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
-        .start_batch(&mut (), [0, 1, 2].iter())
+        .start_batch(&mut (), [0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7250,7 +7351,7 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7258,16 +7359,16 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7276,7 +7377,7 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7284,16 +7385,16 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7302,7 +7403,7 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7310,13 +7411,13 @@ fn test_start_batch_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -7368,18 +7469,17 @@ fn test_start_batch_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
-        .start_batch(&mut (), [0, 1].iter())
+        .start_batch(&mut (), [0.into(), 1.into()].iter())
         .expect("Expected success");
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7388,7 +7488,7 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7396,16 +7496,16 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7414,7 +7514,7 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7422,16 +7522,16 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7439,7 +7539,7 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7447,13 +7547,13 @@ fn test_start_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -7509,13 +7609,12 @@ fn test_start_batch_select_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
-        .start_batch(&mut (), vec![0, 1, 2].iter())
+        .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -7525,7 +7624,7 @@ fn test_start_batch_select_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7533,7 +7632,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7541,16 +7640,16 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7558,7 +7657,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7566,16 +7665,16 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7583,7 +7682,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7591,13 +7690,13 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -7607,7 +7706,7 @@ fn test_start_batch_select_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7616,7 +7715,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7624,16 +7723,16 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7642,7 +7741,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7650,16 +7749,16 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7668,7 +7767,7 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7676,13 +7775,13 @@ fn test_start_batch_select_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -7738,13 +7837,12 @@ fn test_start_batch_create_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
-        .start_batch(&mut (), vec![0, 1, 2].iter())
+        .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -7754,7 +7852,7 @@ fn test_start_batch_create_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7762,7 +7860,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7770,16 +7868,16 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7788,7 +7886,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7796,16 +7894,16 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7814,7 +7912,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7822,13 +7920,13 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -7838,7 +7936,7 @@ fn test_start_batch_create_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7847,7 +7945,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7855,16 +7953,16 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7873,7 +7971,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7881,16 +7979,16 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7899,7 +7997,7 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -7907,13 +8005,13 @@ fn test_start_batch_create_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -7972,13 +8070,12 @@ fn test_start_batch_both_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let retry = stream
-        .start_batch(&mut (), vec![0, 1, 2].iter())
+        .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -7988,7 +8085,7 @@ fn test_start_batch_both_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -7996,7 +8093,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8004,16 +8101,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8021,7 +8118,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8029,16 +8126,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8046,7 +8143,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8054,13 +8151,13 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = stream
         .retry_start_batch(&mut (), retry)
@@ -8073,7 +8170,7 @@ fn test_start_batch_both_retry_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8081,7 +8178,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8089,16 +8186,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8107,7 +8204,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8115,16 +8212,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8133,7 +8230,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8141,13 +8238,13 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -8157,7 +8254,7 @@ fn test_start_batch_both_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8166,7 +8263,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8174,16 +8271,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8192,7 +8289,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8200,16 +8297,16 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8218,7 +8315,7 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8226,13 +8323,13 @@ fn test_start_batch_both_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -8284,20 +8381,19 @@ fn test_start_batch_all_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     let indef = stream
-        .start_batch(&mut (), vec![0, 1, 2].iter())
+        .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
 
     assert!(indef.is_indef());
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8305,7 +8401,7 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8313,16 +8409,16 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8330,7 +8426,7 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8338,16 +8434,16 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8355,7 +8451,7 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8363,13 +8459,13 @@ fn test_start_batch_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -8421,18 +8517,17 @@ fn test_start_batch_one_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
     stream
-        .start_batch(&mut (), [0, 1, 2].iter())
+        .start_batch(&mut (), [0.into(), 1.into(), 2.into()].iter())
         .expect("Expected success");
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8440,7 +8535,7 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8448,16 +8543,16 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8466,7 +8561,7 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8474,16 +8569,16 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8492,7 +8587,7 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8500,13 +8595,13 @@ fn test_start_batch_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -8562,12 +8657,12 @@ fn test_start_batch_select_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8581,7 +8676,7 @@ fn test_start_batch_select_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8589,7 +8684,7 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8597,16 +8692,16 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8614,7 +8709,7 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8622,16 +8717,16 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8639,7 +8734,7 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8647,13 +8742,13 @@ fn test_start_batch_select_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -8709,12 +8804,12 @@ fn test_start_batch_create_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8728,7 +8823,7 @@ fn test_start_batch_create_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8736,7 +8831,7 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8744,16 +8839,16 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8762,7 +8857,7 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8770,16 +8865,16 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8788,7 +8883,7 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8796,13 +8891,13 @@ fn test_start_batch_create_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -8859,12 +8954,12 @@ fn test_start_batch_select_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -8878,7 +8973,7 @@ fn test_start_batch_select_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8886,7 +8981,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8894,16 +8989,16 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8911,7 +9006,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8919,16 +9014,16 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8936,7 +9031,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8944,13 +9039,13 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -8960,7 +9055,7 @@ fn test_start_batch_select_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8969,7 +9064,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -8977,16 +9072,16 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -8995,7 +9090,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9003,16 +9098,16 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9021,7 +9116,7 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9029,13 +9124,13 @@ fn test_start_batch_select_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -9092,12 +9187,12 @@ fn test_start_batch_create_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -9111,7 +9206,7 @@ fn test_start_batch_create_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9119,7 +9214,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9127,16 +9222,16 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9145,7 +9240,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9153,16 +9248,16 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9171,7 +9266,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9179,13 +9274,13 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -9195,7 +9290,7 @@ fn test_start_batch_create_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9204,7 +9299,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9212,16 +9307,16 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9230,7 +9325,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9238,16 +9333,16 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9256,7 +9351,7 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9264,13 +9359,13 @@ fn test_start_batch_create_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -9332,12 +9427,12 @@ fn test_start_batch_both_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -9351,7 +9446,7 @@ fn test_start_batch_both_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9359,7 +9454,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9367,16 +9462,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9384,7 +9479,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9392,16 +9487,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9409,7 +9504,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9417,13 +9512,13 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -9437,7 +9532,7 @@ fn test_start_batch_both_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9445,7 +9540,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9453,16 +9548,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9471,7 +9566,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9479,16 +9574,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9497,7 +9592,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9505,13 +9600,13 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     assert!(permanent.is_none());
 
@@ -9523,7 +9618,7 @@ fn test_start_batch_both_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9532,7 +9627,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9540,16 +9635,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9558,7 +9653,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9566,16 +9661,16 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9584,7 +9679,7 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9592,13 +9687,13 @@ fn test_start_batch_both_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -9662,12 +9757,12 @@ fn test_start_batch_select_complete_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -9681,7 +9776,7 @@ fn test_start_batch_select_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9689,7 +9784,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9697,16 +9792,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9714,7 +9809,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9722,16 +9817,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9739,7 +9834,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9747,13 +9842,13 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -9769,7 +9864,7 @@ fn test_start_batch_select_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9777,7 +9872,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9785,16 +9880,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9802,7 +9897,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9810,16 +9905,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9827,7 +9922,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9835,13 +9930,13 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -9851,7 +9946,7 @@ fn test_start_batch_select_complete_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9860,7 +9955,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9868,16 +9963,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9886,7 +9981,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9894,16 +9989,16 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -9912,7 +10007,7 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -9920,13 +10015,13 @@ fn test_start_batch_select_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -9990,12 +10085,12 @@ fn test_start_batch_create_complete_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -10009,7 +10104,7 @@ fn test_start_batch_create_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10017,7 +10112,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10025,16 +10120,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10043,7 +10138,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10051,16 +10146,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10069,7 +10164,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10077,13 +10172,13 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -10099,7 +10194,7 @@ fn test_start_batch_create_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10107,7 +10202,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10115,16 +10210,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10133,7 +10228,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10141,16 +10236,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10159,7 +10254,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10167,13 +10262,13 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -10183,7 +10278,7 @@ fn test_start_batch_create_complete_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10192,7 +10287,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10200,16 +10295,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10218,7 +10313,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10226,16 +10321,16 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10244,7 +10339,7 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10252,13 +10347,13 @@ fn test_start_batch_create_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -10334,12 +10429,12 @@ fn test_start_batch_both_complete_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -10353,7 +10448,7 @@ fn test_start_batch_both_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10361,7 +10456,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10369,16 +10464,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10386,7 +10481,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10394,16 +10489,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10411,7 +10506,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10419,13 +10514,13 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -10441,7 +10536,7 @@ fn test_start_batch_both_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10449,7 +10544,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10457,16 +10552,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10474,7 +10569,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10482,16 +10577,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10499,7 +10594,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10507,13 +10602,13 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -10529,7 +10624,7 @@ fn test_start_batch_both_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10537,7 +10632,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10545,16 +10640,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10563,7 +10658,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10571,16 +10666,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10589,7 +10684,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10597,13 +10692,13 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -10619,7 +10714,7 @@ fn test_start_batch_both_complete_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10627,7 +10722,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10635,16 +10730,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10653,7 +10748,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10661,16 +10756,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10679,7 +10774,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10687,13 +10782,13 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -10703,7 +10798,7 @@ fn test_start_batch_both_complete_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10712,7 +10807,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10720,16 +10815,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10738,7 +10833,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10746,16 +10841,16 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10764,7 +10859,7 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10772,13 +10867,13 @@ fn test_start_batch_both_complete_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -10845,12 +10940,12 @@ fn test_start_batch_complete_indef_all() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -10870,7 +10965,7 @@ fn test_start_batch_complete_indef_all() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10878,7 +10973,7 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10886,16 +10981,16 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10903,7 +10998,7 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10911,16 +11006,16 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -10928,7 +11023,7 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -10936,13 +11031,13 @@ fn test_start_batch_complete_indef_all() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -10999,12 +11094,12 @@ fn test_start_batch_succeed_complete_indef_one() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -11018,7 +11113,7 @@ fn test_start_batch_succeed_complete_indef_one() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11026,7 +11121,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11034,16 +11129,16 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11051,7 +11146,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11059,16 +11154,16 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11076,7 +11171,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11084,13 +11179,13 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -11100,7 +11195,7 @@ fn test_start_batch_succeed_complete_indef_one() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11108,7 +11203,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11116,16 +11211,16 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11134,7 +11229,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11142,16 +11237,16 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11160,7 +11255,7 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11168,13 +11263,13 @@ fn test_start_batch_succeed_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -11241,12 +11336,12 @@ fn test_start_batch_complete_indef_one() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -11260,7 +11355,7 @@ fn test_start_batch_complete_indef_one() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11268,7 +11363,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11276,16 +11371,16 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11293,7 +11388,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11301,16 +11396,16 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11318,7 +11413,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11326,13 +11421,13 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
@@ -11342,7 +11437,7 @@ fn test_start_batch_complete_indef_one() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11350,7 +11445,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11358,16 +11453,16 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11376,7 +11471,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11384,16 +11479,16 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11402,7 +11497,7 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11410,13 +11505,13 @@ fn test_start_batch_complete_indef_one() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -11479,12 +11574,12 @@ fn test_start_batch_select_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -11498,7 +11593,7 @@ fn test_start_batch_select_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11506,7 +11601,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11514,16 +11609,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11531,7 +11626,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11539,16 +11634,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11556,7 +11651,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11564,13 +11659,13 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
@@ -11583,7 +11678,7 @@ fn test_start_batch_select_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11591,7 +11686,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11599,16 +11694,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11616,7 +11711,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11624,16 +11719,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11641,7 +11736,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11649,13 +11744,13 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -11665,7 +11760,7 @@ fn test_start_batch_select_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11674,7 +11769,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11682,16 +11777,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11700,7 +11795,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11708,16 +11803,16 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11726,7 +11821,7 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11734,13 +11829,13 @@ fn test_start_batch_select_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -11803,12 +11898,12 @@ fn test_start_batch_create_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -11822,7 +11917,7 @@ fn test_start_batch_create_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11830,7 +11925,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11838,16 +11933,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11856,7 +11951,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11864,16 +11959,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11882,7 +11977,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11890,13 +11985,13 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
@@ -11909,7 +12004,7 @@ fn test_start_batch_create_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11917,7 +12012,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11925,16 +12020,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11943,7 +12038,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11951,16 +12046,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -11969,7 +12064,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -11977,13 +12072,13 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -11993,7 +12088,7 @@ fn test_start_batch_create_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12002,7 +12097,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12010,16 +12105,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12028,7 +12123,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12036,16 +12131,16 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12054,7 +12149,7 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12062,13 +12157,13 @@ fn test_start_batch_create_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -12141,12 +12236,12 @@ fn test_start_batch_both_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -12160,7 +12255,7 @@ fn test_start_batch_both_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12168,7 +12263,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12176,16 +12271,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12193,7 +12288,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12201,16 +12296,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12218,7 +12313,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12226,13 +12321,13 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
@@ -12245,7 +12340,7 @@ fn test_start_batch_both_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12253,7 +12348,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12261,16 +12356,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12278,7 +12373,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12286,16 +12381,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12303,7 +12398,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12311,13 +12406,13 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.retry_start_batch(&mut (), retry);
     let err = if let Err(err) = err {
@@ -12333,7 +12428,7 @@ fn test_start_batch_both_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12341,7 +12436,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12349,16 +12444,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12367,7 +12462,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12375,16 +12470,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12393,7 +12488,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12401,13 +12496,13 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
@@ -12420,7 +12515,7 @@ fn test_start_batch_both_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12428,7 +12523,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12436,16 +12531,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12454,7 +12549,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12462,16 +12557,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12480,7 +12575,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12488,13 +12583,13 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
@@ -12504,7 +12599,7 @@ fn test_start_batch_both_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12513,7 +12608,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12521,16 +12616,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12539,7 +12634,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12547,16 +12642,16 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12565,7 +12660,7 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12573,13 +12668,13 @@ fn test_start_batch_both_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -12642,12 +12737,12 @@ fn test_start_batch_select_complete_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -12673,7 +12768,7 @@ fn test_start_batch_select_complete_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12681,7 +12776,7 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12689,16 +12784,16 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12706,7 +12801,7 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12714,16 +12809,16 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12731,7 +12826,7 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12739,13 +12834,13 @@ fn test_start_batch_select_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -12808,12 +12903,12 @@ fn test_start_batch_create_complete_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -12839,7 +12934,7 @@ fn test_start_batch_create_complete_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12847,7 +12942,7 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12855,16 +12950,16 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12873,7 +12968,7 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12881,16 +12976,16 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -12899,7 +12994,7 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -12907,13 +13002,13 @@ fn test_start_batch_create_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -12981,12 +13076,12 @@ fn test_start_batch_both_complete_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
 
-    let err = stream.start_batch(&mut (), vec![0, 1, 2].iter());
+    let err =
+        stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
     let err = if let Err(err) = err {
         err
     } else {
@@ -13000,7 +13095,7 @@ fn test_start_batch_both_complete_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13008,7 +13103,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13016,16 +13111,16 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13033,7 +13128,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13041,16 +13136,16 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13058,7 +13153,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13066,13 +13161,13 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
     let err = if let Err(err) = err {
@@ -13100,7 +13195,7 @@ fn test_start_batch_both_complete_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13108,7 +13203,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13116,16 +13211,16 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13134,7 +13229,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13142,16 +13237,16 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13160,7 +13255,7 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13168,13 +13263,13 @@ fn test_start_batch_both_complete_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -13226,7 +13321,6 @@ fn test_cancel_batch_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -13234,7 +13328,11 @@ fn test_cancel_batch_all_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -13242,7 +13340,7 @@ fn test_cancel_batch_all_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -13262,7 +13360,7 @@ fn test_cancel_batch_all_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13271,7 +13369,7 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13279,16 +13377,16 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13297,7 +13395,7 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13305,16 +13403,16 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13323,7 +13421,7 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13331,13 +13429,13 @@ fn test_cancel_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -13389,7 +13487,6 @@ fn test_cancel_batch_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -13397,7 +13494,11 @@ fn test_cancel_batch_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -13405,7 +13506,7 @@ fn test_cancel_batch_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -13425,7 +13526,7 @@ fn test_cancel_batch_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13433,7 +13534,7 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13441,16 +13542,16 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13459,7 +13560,7 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13467,16 +13568,16 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13485,7 +13586,7 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13493,13 +13594,13 @@ fn test_cancel_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -13551,7 +13652,6 @@ fn test_cancel_batch_multi_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -13559,7 +13659,7 @@ fn test_cancel_batch_multi_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [1, 2].iter())
+        .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -13567,7 +13667,7 @@ fn test_cancel_batch_multi_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -13587,7 +13687,7 @@ fn test_cancel_batch_multi_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13595,7 +13695,7 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13603,16 +13703,16 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13621,7 +13721,7 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13629,16 +13729,16 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13647,7 +13747,7 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13655,13 +13755,13 @@ fn test_cancel_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -13723,7 +13823,6 @@ fn test_cancel_batch_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -13731,7 +13830,11 @@ fn test_cancel_batch_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -13739,7 +13842,7 @@ fn test_cancel_batch_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -13763,7 +13866,7 @@ fn test_cancel_batch_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13772,7 +13875,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13780,16 +13883,16 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13798,7 +13901,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13806,16 +13909,16 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13824,7 +13927,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13832,13 +13935,13 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_cancel_batch(&mut (), &mut flags, &batch, retry)
@@ -13848,7 +13951,7 @@ fn test_cancel_batch_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13857,7 +13960,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13865,16 +13968,16 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13883,7 +13986,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13891,16 +13994,16 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -13909,7 +14012,7 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -13917,13 +14020,13 @@ fn test_cancel_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -13979,7 +14082,6 @@ fn test_cancel_batch_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -13987,7 +14089,11 @@ fn test_cancel_batch_succeed_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -13995,7 +14101,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -14019,7 +14125,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14028,7 +14134,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14036,16 +14142,16 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14054,7 +14160,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14062,16 +14168,16 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14080,7 +14186,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14088,13 +14194,13 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_cancel_batch(&mut (), &mut flags, &batch, retry)
@@ -14104,7 +14210,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14113,7 +14219,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14121,16 +14227,16 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14139,7 +14245,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14147,16 +14253,16 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14165,7 +14271,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14173,13 +14279,13 @@ fn test_cancel_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -14239,7 +14345,6 @@ fn test_cancel_batch_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -14247,7 +14352,11 @@ fn test_cancel_batch_retry_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -14255,7 +14364,7 @@ fn test_cancel_batch_retry_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -14279,7 +14388,7 @@ fn test_cancel_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14288,7 +14397,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14296,16 +14405,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14314,7 +14423,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14322,16 +14431,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14340,7 +14449,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14348,13 +14457,13 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryResult::Retry(retry) = stream
         .retry_cancel_batch(&mut (), &mut flags, &batch, retry)
@@ -14367,7 +14476,7 @@ fn test_cancel_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14376,7 +14485,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14384,16 +14493,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14402,7 +14511,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14410,16 +14519,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14428,7 +14537,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14436,13 +14545,13 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_cancel_batch(&mut (), &mut flags, &batch, retry)
@@ -14452,7 +14561,7 @@ fn test_cancel_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14461,7 +14570,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14469,16 +14578,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14487,7 +14596,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14495,16 +14604,16 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14513,7 +14622,7 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14521,13 +14630,13 @@ fn test_cancel_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -14583,7 +14692,6 @@ fn test_cancel_batch_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -14591,7 +14699,11 @@ fn test_cancel_batch_one_permanent() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -14599,7 +14711,7 @@ fn test_cancel_batch_one_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -14625,7 +14737,7 @@ fn test_cancel_batch_one_permanent() {
     assert!(permanent.is_some());
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14634,7 +14746,7 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14642,16 +14754,16 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14660,7 +14772,7 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14668,16 +14780,16 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14686,7 +14798,7 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14694,13 +14806,13 @@ fn test_cancel_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -14767,7 +14879,6 @@ fn test_cancel_batch_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -14775,7 +14886,11 @@ fn test_cancel_batch_all_complete_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -14783,7 +14898,7 @@ fn test_cancel_batch_all_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -14805,7 +14920,7 @@ fn test_cancel_batch_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14814,7 +14929,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14822,16 +14937,16 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14840,7 +14955,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14848,16 +14963,16 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14866,7 +14981,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14874,13 +14989,13 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -14898,7 +15013,7 @@ fn test_cancel_batch_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14907,7 +15022,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14915,16 +15030,16 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14933,7 +15048,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14941,16 +15056,16 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -14959,7 +15074,7 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -14967,13 +15082,13 @@ fn test_cancel_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -15030,7 +15145,6 @@ fn test_cancel_batch_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -15038,7 +15152,11 @@ fn test_cancel_batch_succeed_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -15046,7 +15164,7 @@ fn test_cancel_batch_succeed_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -15068,7 +15186,7 @@ fn test_cancel_batch_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15077,7 +15195,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15085,16 +15203,16 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15103,7 +15221,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15111,16 +15229,16 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15129,7 +15247,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15137,13 +15255,13 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -15161,7 +15279,7 @@ fn test_cancel_batch_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15170,7 +15288,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15178,16 +15296,16 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15196,7 +15314,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15204,16 +15322,16 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15222,7 +15340,7 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15230,13 +15348,13 @@ fn test_cancel_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -15299,7 +15417,6 @@ fn test_cancel_batch_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -15307,7 +15424,11 @@ fn test_cancel_batch_complete_retry() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -15315,7 +15436,7 @@ fn test_cancel_batch_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -15337,7 +15458,7 @@ fn test_cancel_batch_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15346,7 +15467,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15354,16 +15475,16 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15372,7 +15493,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15380,16 +15501,16 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15398,7 +15519,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15406,13 +15527,13 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -15439,7 +15560,7 @@ fn test_cancel_batch_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15448,7 +15569,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15456,16 +15577,16 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15474,7 +15595,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15482,16 +15603,16 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15500,7 +15621,7 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15508,13 +15629,13 @@ fn test_cancel_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -15587,7 +15708,6 @@ fn test_cancel_batch_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -15595,7 +15715,11 @@ fn test_cancel_batch_retry_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -15603,7 +15727,7 @@ fn test_cancel_batch_retry_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -15625,7 +15749,7 @@ fn test_cancel_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15634,7 +15758,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15642,16 +15766,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15660,7 +15784,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15668,16 +15792,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15686,7 +15810,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15694,13 +15818,13 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -15717,7 +15841,7 @@ fn test_cancel_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15726,7 +15850,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15734,16 +15858,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15752,7 +15876,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15760,16 +15884,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15778,7 +15902,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15786,13 +15910,13 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -15819,7 +15943,7 @@ fn test_cancel_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15828,7 +15952,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15836,16 +15960,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15854,7 +15978,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15862,16 +15986,16 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15880,7 +16004,7 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15888,13 +16012,13 @@ fn test_cancel_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -15946,7 +16070,6 @@ fn test_finish_batch_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -15954,7 +16077,11 @@ fn test_finish_batch_all_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -15962,7 +16089,7 @@ fn test_finish_batch_all_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -15982,7 +16109,7 @@ fn test_finish_batch_all_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -15991,7 +16118,7 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -15999,16 +16126,16 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16017,7 +16144,7 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16025,16 +16152,16 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16043,7 +16170,7 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16051,13 +16178,13 @@ fn test_finish_batch_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -16109,7 +16236,6 @@ fn test_finish_batch_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -16117,7 +16243,11 @@ fn test_finish_batch_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -16125,7 +16255,7 @@ fn test_finish_batch_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -16145,7 +16275,7 @@ fn test_finish_batch_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16153,7 +16283,7 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16161,16 +16291,16 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16179,7 +16309,7 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16187,16 +16317,16 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16205,7 +16335,7 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16213,13 +16343,13 @@ fn test_finish_batch_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -16271,7 +16401,6 @@ fn test_finish_batch_multi_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -16279,7 +16408,7 @@ fn test_finish_batch_multi_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [1, 2].iter())
+        .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -16287,7 +16416,7 @@ fn test_finish_batch_multi_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -16307,7 +16436,7 @@ fn test_finish_batch_multi_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16315,7 +16444,7 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16323,16 +16452,16 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16341,7 +16470,7 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16349,16 +16478,16 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16367,7 +16496,7 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16375,13 +16504,13 @@ fn test_finish_batch_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -16443,7 +16572,6 @@ fn test_finish_batch_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -16451,7 +16579,11 @@ fn test_finish_batch_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -16459,7 +16591,7 @@ fn test_finish_batch_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -16483,7 +16615,7 @@ fn test_finish_batch_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16492,7 +16624,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16500,16 +16632,16 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16518,7 +16650,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16526,16 +16658,16 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16544,7 +16676,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16552,13 +16684,13 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_finish_batch(&mut (), &mut flags, &batch, retry)
@@ -16568,7 +16700,7 @@ fn test_finish_batch_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16577,7 +16709,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16585,16 +16717,16 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16603,7 +16735,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16611,16 +16743,16 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16629,7 +16761,7 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16637,13 +16769,13 @@ fn test_finish_batch_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -16699,7 +16831,6 @@ fn test_finish_batch_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -16707,7 +16838,11 @@ fn test_finish_batch_succeed_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -16715,7 +16850,7 @@ fn test_finish_batch_succeed_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -16739,7 +16874,7 @@ fn test_finish_batch_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16748,7 +16883,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16756,16 +16891,16 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16774,7 +16909,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16782,16 +16917,16 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16800,7 +16935,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16808,13 +16943,13 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_finish_batch(&mut (), &mut flags, &batch, retry)
@@ -16824,7 +16959,7 @@ fn test_finish_batch_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16833,7 +16968,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16841,16 +16976,16 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16859,7 +16994,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16867,16 +17002,16 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -16885,7 +17020,7 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -16893,13 +17028,13 @@ fn test_finish_batch_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -16959,7 +17094,6 @@ fn test_finish_batch_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -16967,7 +17101,11 @@ fn test_finish_batch_retry_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -16975,7 +17113,7 @@ fn test_finish_batch_retry_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -16999,7 +17137,7 @@ fn test_finish_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17008,7 +17146,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17016,16 +17154,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17034,7 +17172,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17042,16 +17180,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17060,7 +17198,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17068,13 +17206,13 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryResult::Retry(retry) = stream
         .retry_finish_batch(&mut (), &mut flags, &batch, retry)
@@ -17087,7 +17225,7 @@ fn test_finish_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17096,7 +17234,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17104,16 +17242,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17122,7 +17260,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17130,16 +17268,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17148,7 +17286,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17156,13 +17294,13 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_finish_batch(&mut (), &mut flags, &batch, retry)
@@ -17172,7 +17310,7 @@ fn test_finish_batch_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17181,7 +17319,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17189,16 +17327,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17207,7 +17345,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17215,16 +17353,16 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17233,7 +17371,7 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17241,13 +17379,13 @@ fn test_finish_batch_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -17303,7 +17441,6 @@ fn test_finish_batch_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -17311,7 +17448,11 @@ fn test_finish_batch_one_permanent() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -17319,7 +17460,7 @@ fn test_finish_batch_one_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -17345,7 +17486,7 @@ fn test_finish_batch_one_permanent() {
     assert!(permanent.is_some());
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17354,7 +17495,7 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17362,16 +17503,16 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17380,7 +17521,7 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17388,16 +17529,16 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17406,7 +17547,7 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17414,13 +17555,13 @@ fn test_finish_batch_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -17487,7 +17628,6 @@ fn test_finish_batch_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -17495,7 +17635,11 @@ fn test_finish_batch_all_complete_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -17503,7 +17647,7 @@ fn test_finish_batch_all_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -17525,7 +17669,7 @@ fn test_finish_batch_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17534,7 +17678,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17542,16 +17686,16 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17560,7 +17704,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17568,16 +17712,16 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17586,7 +17730,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17594,13 +17738,13 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -17618,7 +17762,7 @@ fn test_finish_batch_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17627,7 +17771,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17635,16 +17779,16 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17653,7 +17797,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17661,16 +17805,16 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17679,7 +17823,7 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17687,13 +17831,13 @@ fn test_finish_batch_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -17750,7 +17894,6 @@ fn test_finish_batch_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -17758,7 +17901,11 @@ fn test_finish_batch_succeed_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -17766,7 +17913,7 @@ fn test_finish_batch_succeed_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -17788,7 +17935,7 @@ fn test_finish_batch_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17797,7 +17944,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17805,16 +17952,16 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17823,7 +17970,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17831,16 +17978,16 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17849,7 +17996,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17857,13 +18004,13 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -17881,7 +18028,7 @@ fn test_finish_batch_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17890,7 +18037,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17898,16 +18045,16 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17916,7 +18063,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17924,16 +18071,16 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -17942,7 +18089,7 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -17950,13 +18097,13 @@ fn test_finish_batch_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -18019,7 +18166,6 @@ fn test_finish_batch_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -18027,7 +18173,11 @@ fn test_finish_batch_complete_retry() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -18035,7 +18185,7 @@ fn test_finish_batch_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -18057,7 +18207,7 @@ fn test_finish_batch_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18066,7 +18216,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18074,16 +18224,16 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18092,7 +18242,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18100,16 +18250,16 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18118,7 +18268,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18126,13 +18276,13 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -18159,7 +18309,7 @@ fn test_finish_batch_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18168,7 +18318,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18176,16 +18326,16 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18194,7 +18344,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18202,16 +18352,16 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18220,7 +18370,7 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18228,13 +18378,13 @@ fn test_finish_batch_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -18307,7 +18457,6 @@ fn test_finish_batch_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -18315,7 +18464,11 @@ fn test_finish_batch_retry_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -18323,7 +18476,7 @@ fn test_finish_batch_retry_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -18345,7 +18498,7 @@ fn test_finish_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18354,7 +18507,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18362,16 +18515,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18380,7 +18533,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18388,16 +18541,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18406,7 +18559,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18414,13 +18567,13 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -18437,7 +18590,7 @@ fn test_finish_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18446,7 +18599,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18454,16 +18607,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18472,7 +18625,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18480,16 +18633,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18498,7 +18651,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18506,13 +18659,13 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -18539,7 +18692,7 @@ fn test_finish_batch_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18548,7 +18701,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18556,16 +18709,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18574,7 +18727,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18582,16 +18735,16 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18600,7 +18753,7 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18608,13 +18761,13 @@ fn test_finish_batch_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -18666,7 +18819,6 @@ fn test_add_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -18674,7 +18826,11 @@ fn test_add_all_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -18682,7 +18838,7 @@ fn test_add_all_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -18702,7 +18858,7 @@ fn test_add_all_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18713,7 +18869,7 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18721,16 +18877,16 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18741,7 +18897,7 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18749,16 +18905,16 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18769,7 +18925,7 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18777,13 +18933,13 @@ fn test_add_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -18835,7 +18991,6 @@ fn test_add_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -18843,7 +18998,11 @@ fn test_add_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -18851,7 +19010,7 @@ fn test_add_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -18871,7 +19030,7 @@ fn test_add_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18879,7 +19038,7 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18887,16 +19046,16 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18907,7 +19066,7 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18915,16 +19074,16 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -18935,7 +19094,7 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -18943,13 +19102,13 @@ fn test_add_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -19001,7 +19160,6 @@ fn test_add_multi_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -19009,7 +19167,7 @@ fn test_add_multi_subset_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [1, 2].iter())
+        .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
         .expect("Expected success")
     {
         parties
@@ -19017,7 +19175,7 @@ fn test_add_multi_subset_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![1, 2]);
+    assert_eq!(parties, vec![1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -19037,7 +19195,7 @@ fn test_add_multi_subset_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19045,7 +19203,7 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19053,16 +19211,16 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19073,7 +19231,7 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19081,16 +19239,16 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19101,7 +19259,7 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19109,13 +19267,13 @@ fn test_add_multi_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -19177,7 +19335,6 @@ fn test_add_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -19185,7 +19342,11 @@ fn test_add_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -19193,7 +19354,7 @@ fn test_add_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -19217,7 +19378,7 @@ fn test_add_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19226,7 +19387,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19234,16 +19395,16 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19252,7 +19413,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19260,16 +19421,16 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19278,7 +19439,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19286,13 +19447,13 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_add(&mut (), &mut flags, &"hello", &batch, retry)
@@ -19302,7 +19463,7 @@ fn test_add_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19313,7 +19474,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19321,16 +19482,16 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19341,7 +19502,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19349,16 +19510,16 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19369,7 +19530,7 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19377,13 +19538,13 @@ fn test_add_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -19439,7 +19600,6 @@ fn test_add_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -19447,7 +19607,11 @@ fn test_add_succeed_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -19455,7 +19619,7 @@ fn test_add_succeed_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -19479,7 +19643,7 @@ fn test_add_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19488,7 +19652,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19496,16 +19660,16 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19516,7 +19680,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19524,16 +19688,16 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19544,7 +19708,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19552,13 +19716,13 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_add(&mut (), &mut flags, &"hello", &batch, retry)
@@ -19568,7 +19732,7 @@ fn test_add_succeed_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19579,7 +19743,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19587,16 +19751,16 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19607,7 +19771,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19615,16 +19779,16 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19635,7 +19799,7 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19643,13 +19807,13 @@ fn test_add_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -19709,7 +19873,6 @@ fn test_add_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -19717,7 +19880,11 @@ fn test_add_retry_retry_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -19725,7 +19892,7 @@ fn test_add_retry_retry_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -19749,7 +19916,7 @@ fn test_add_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19758,7 +19925,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19766,16 +19933,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19784,7 +19951,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19792,16 +19959,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19812,7 +19979,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19820,13 +19987,13 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryResult::Retry(retry) = stream
         .retry_add(&mut (), &mut flags, &"hello", &batch, retry)
@@ -19839,7 +20006,7 @@ fn test_add_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19848,7 +20015,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19856,16 +20023,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19876,7 +20043,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19884,16 +20051,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19904,7 +20071,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19912,13 +20079,13 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let batch = stream
         .retry_add(&mut (), &mut flags, &"hello", &batch, retry)
@@ -19928,7 +20095,7 @@ fn test_add_retry_retry_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19939,7 +20106,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19947,16 +20114,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19967,7 +20134,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -19975,16 +20142,16 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -19995,7 +20162,7 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20003,13 +20170,13 @@ fn test_add_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -20065,7 +20232,6 @@ fn test_add_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -20073,7 +20239,11 @@ fn test_add_one_permanent() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -20081,7 +20251,7 @@ fn test_add_one_permanent() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -20107,7 +20277,7 @@ fn test_add_one_permanent() {
     assert!(permanent.is_some());
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20116,7 +20286,7 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20124,16 +20294,16 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20144,7 +20314,7 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20152,16 +20322,16 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20172,7 +20342,7 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20180,13 +20350,13 @@ fn test_add_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -20253,7 +20423,6 @@ fn test_add_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -20261,7 +20430,11 @@ fn test_add_all_complete_succeed() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -20269,7 +20442,7 @@ fn test_add_all_complete_succeed() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -20291,7 +20464,7 @@ fn test_add_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20300,7 +20473,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20308,16 +20481,16 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20326,7 +20499,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20334,16 +20507,16 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20352,7 +20525,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20360,13 +20533,13 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -20384,7 +20557,7 @@ fn test_add_all_complete_succeed() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20395,7 +20568,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20403,16 +20576,16 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20423,7 +20596,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20431,16 +20604,16 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20451,7 +20624,7 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20459,13 +20632,13 @@ fn test_add_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -20522,7 +20695,6 @@ fn test_add_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -20530,7 +20702,11 @@ fn test_add_succeed_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -20538,7 +20714,7 @@ fn test_add_succeed_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -20560,7 +20736,7 @@ fn test_add_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20569,7 +20745,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20577,16 +20753,16 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20597,7 +20773,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20605,16 +20781,16 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20625,7 +20801,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20633,13 +20809,13 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -20657,7 +20833,7 @@ fn test_add_succeed_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20668,7 +20844,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20676,16 +20852,16 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20696,7 +20872,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20704,16 +20880,16 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20724,7 +20900,7 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20732,13 +20908,13 @@ fn test_add_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -20801,7 +20977,6 @@ fn test_add_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -20809,7 +20984,11 @@ fn test_add_complete_retry() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -20817,7 +20996,7 @@ fn test_add_complete_retry() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -20839,7 +21018,7 @@ fn test_add_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20848,7 +21027,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20856,16 +21035,16 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20876,7 +21055,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20884,16 +21063,16 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20904,7 +21083,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20912,13 +21091,13 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -20945,7 +21124,7 @@ fn test_add_complete_retry() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20956,7 +21135,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20964,16 +21143,16 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -20984,7 +21163,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -20992,16 +21171,16 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21012,7 +21191,7 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21020,13 +21199,13 @@ fn test_add_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -21099,7 +21278,6 @@ fn test_add_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -21107,7 +21285,11 @@ fn test_add_retry_complete() {
     let mut selections = stream.empty_selections();
 
     let parties = if let RetryIndefResult::Success(parties) = stream
-        .select(&mut (), &mut selections, [0, 1, 2].iter())
+        .select(
+            &mut (),
+            &mut selections,
+            [0.into(), 1.into(), 2.into()].iter()
+        )
         .expect("Expected success")
     {
         parties
@@ -21115,7 +21297,7 @@ fn test_add_retry_complete() {
         panic!("Expected success")
     };
 
-    assert_eq!(parties, vec![0, 1, 2]);
+    assert_eq!(parties, vec![0.into(), 1.into(), 2.into()]);
 
     let batch = stream
         .create_batch(&mut (), &mut flags, &selections)
@@ -21137,7 +21319,7 @@ fn test_add_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21146,7 +21328,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21154,16 +21336,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21172,7 +21354,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21180,16 +21362,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21198,7 +21380,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21206,13 +21388,13 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -21229,7 +21411,7 @@ fn test_add_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21238,7 +21420,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21246,16 +21428,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21266,7 +21448,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21274,16 +21456,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21292,7 +21474,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21300,13 +21482,13 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let (completable, permanent) = err.split();
     let completable = completable.expect("Expected Some");
@@ -21333,7 +21515,7 @@ fn test_add_retry_complete() {
 
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21344,7 +21526,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21352,16 +21534,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21372,7 +21554,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21380,16 +21562,16 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21400,7 +21582,7 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21408,13 +21590,13 @@ fn test_add_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -21476,7 +21658,6 @@ fn test_push_frags_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -21488,14 +21669,14 @@ fn test_push_frags_all_succeed() {
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21503,7 +21684,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21512,16 +21693,16 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21529,7 +21710,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21538,16 +21719,16 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21555,7 +21736,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21564,26 +21745,26 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21591,7 +21772,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21600,16 +21781,16 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21617,7 +21798,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21626,16 +21807,16 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21643,7 +21824,7 @@ fn test_push_frags_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21652,13 +21833,13 @@ fn test_push_frags_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -21711,7 +21892,6 @@ fn test_push_frags_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -21723,14 +21903,14 @@ fn test_push_frags_subset_succeed() {
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21738,7 +21918,7 @@ fn test_push_frags_subset_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21747,16 +21927,16 @@ fn test_push_frags_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21764,7 +21944,7 @@ fn test_push_frags_subset_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21773,16 +21953,16 @@ fn test_push_frags_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21790,7 +21970,7 @@ fn test_push_frags_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21798,13 +21978,13 @@ fn test_push_frags_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -21856,12 +22036,11 @@ fn test_push_frags_all_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
 
     assert!(matches!(
@@ -21871,7 +22050,7 @@ fn test_push_frags_all_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21879,7 +22058,7 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21887,16 +22066,16 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21904,7 +22083,7 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21912,16 +22091,16 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -21929,7 +22108,7 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -21937,13 +22116,13 @@ fn test_push_frags_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -21996,7 +22175,6 @@ fn test_push_frags_subset_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22008,14 +22186,14 @@ fn test_push_frags_subset_indef() {
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0]))
+        assert_eq!(res, (None, vec![0.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22023,7 +22201,7 @@ fn test_push_frags_subset_indef() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22032,16 +22210,16 @@ fn test_push_frags_subset_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22049,7 +22227,7 @@ fn test_push_frags_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22057,16 +22235,16 @@ fn test_push_frags_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22074,7 +22252,7 @@ fn test_push_frags_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22082,13 +22260,13 @@ fn test_push_frags_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22141,7 +22319,6 @@ fn test_push_frags_one_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22153,14 +22330,14 @@ fn test_push_frags_one_indef() {
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22168,7 +22345,7 @@ fn test_push_frags_one_indef() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22177,16 +22354,16 @@ fn test_push_frags_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22194,7 +22371,7 @@ fn test_push_frags_one_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22203,16 +22380,16 @@ fn test_push_frags_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22220,7 +22397,7 @@ fn test_push_frags_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22228,13 +22405,13 @@ fn test_push_frags_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22296,7 +22473,6 @@ fn test_push_frags_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22322,14 +22498,14 @@ fn test_push_frags_retry_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22337,7 +22513,7 @@ fn test_push_frags_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22346,16 +22522,16 @@ fn test_push_frags_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22363,7 +22539,7 @@ fn test_push_frags_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22372,16 +22548,16 @@ fn test_push_frags_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22389,7 +22565,7 @@ fn test_push_frags_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22398,13 +22574,13 @@ fn test_push_frags_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22463,7 +22639,6 @@ fn test_push_frags_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22489,14 +22664,14 @@ fn test_push_frags_succeed_retry_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22504,7 +22679,7 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22513,16 +22688,16 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22530,7 +22705,7 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22539,16 +22714,16 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22556,7 +22731,7 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22565,13 +22740,13 @@ fn test_push_frags_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22631,7 +22806,6 @@ fn test_push_frags_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22671,14 +22845,14 @@ fn test_push_frags_retry_retry_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22686,7 +22860,7 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22695,16 +22869,16 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22712,7 +22886,7 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22721,16 +22895,16 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22738,7 +22912,7 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22747,13 +22921,13 @@ fn test_push_frags_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22812,7 +22986,6 @@ fn test_push_frags_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -22838,14 +23011,14 @@ fn test_push_frags_indef_retry_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22853,7 +23026,7 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22861,16 +23034,16 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22878,7 +23051,7 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22887,16 +23060,16 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -22904,7 +23077,7 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -22913,13 +23086,13 @@ fn test_push_frags_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -22975,12 +23148,11 @@ fn test_push_frags_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -23004,7 +23176,7 @@ fn test_push_frags_indef_retry_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23012,7 +23184,7 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23020,16 +23192,16 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23037,7 +23209,7 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23045,16 +23217,16 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23062,7 +23234,7 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23070,13 +23242,13 @@ fn test_push_frags_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -23138,7 +23310,6 @@ fn test_push_frags_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -23164,14 +23335,14 @@ fn test_push_frags_succeed_retry_indef() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23179,7 +23350,7 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23187,16 +23358,16 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23204,7 +23375,7 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23213,16 +23384,16 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23230,7 +23401,7 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23239,13 +23410,13 @@ fn test_push_frags_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -23305,7 +23476,6 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -23345,14 +23515,14 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0]))
+        assert_eq!(res, (None, vec![0.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23360,7 +23530,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23369,16 +23539,16 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23386,7 +23556,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23394,16 +23564,16 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23411,7 +23581,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23419,13 +23589,13 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -23485,12 +23655,11 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
@@ -23528,7 +23697,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23536,7 +23705,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23544,16 +23713,16 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23561,7 +23730,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23569,16 +23738,16 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23586,7 +23755,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23594,13 +23763,13 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -23660,7 +23829,6 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -23700,14 +23868,14 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1]))
+        assert_eq!(res, (None, vec![1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23715,7 +23883,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23723,16 +23891,16 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23740,7 +23908,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23749,16 +23917,16 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23766,7 +23934,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23774,13 +23942,13 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -23837,12 +24005,11 @@ fn test_push_frags_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
 
     let err =
@@ -23860,7 +24027,7 @@ fn test_push_frags_one_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23868,7 +24035,7 @@ fn test_push_frags_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23876,16 +24043,16 @@ fn test_push_frags_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23893,7 +24060,7 @@ fn test_push_frags_one_permanent() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23902,16 +24069,16 @@ fn test_push_frags_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -23919,7 +24086,7 @@ fn test_push_frags_one_permanent() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -23928,13 +24095,13 @@ fn test_push_frags_one_permanent() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -24002,7 +24169,6 @@ fn test_push_frags_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -24025,7 +24191,7 @@ fn test_push_frags_all_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24033,7 +24199,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24041,16 +24207,16 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24058,7 +24224,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24066,16 +24232,16 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24083,7 +24249,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24091,13 +24257,13 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_frags(
@@ -24108,14 +24274,14 @@ fn test_push_frags_all_complete_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24123,7 +24289,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24132,16 +24298,16 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24149,7 +24315,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24158,16 +24324,16 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24175,7 +24341,7 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24184,13 +24350,13 @@ fn test_push_frags_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -24248,7 +24414,6 @@ fn test_push_frags_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -24271,7 +24436,7 @@ fn test_push_frags_succeed_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24279,7 +24444,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24287,16 +24452,16 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24304,7 +24469,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24313,16 +24478,16 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24330,7 +24495,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24339,13 +24504,13 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_frags(
@@ -24356,14 +24521,14 @@ fn test_push_frags_succeed_complete() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24371,7 +24536,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24380,16 +24545,16 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24397,7 +24562,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24406,16 +24571,16 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24423,7 +24588,7 @@ fn test_push_frags_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24432,13 +24597,13 @@ fn test_push_frags_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -24496,7 +24661,6 @@ fn test_push_frags_one_indef_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -24519,7 +24683,7 @@ fn test_push_frags_one_indef_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24527,7 +24691,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24535,16 +24699,16 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24552,7 +24716,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24561,16 +24725,16 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24578,7 +24742,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24586,13 +24750,13 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_frags(
@@ -24603,14 +24767,14 @@ fn test_push_frags_one_indef_complete_succeed() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24618,7 +24782,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24627,16 +24791,16 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24644,7 +24808,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24653,16 +24817,16 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24670,7 +24834,7 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24678,13 +24842,13 @@ fn test_push_frags_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -24742,7 +24906,6 @@ fn test_push_frags_one_succeed_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -24765,7 +24928,7 @@ fn test_push_frags_one_succeed_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24773,7 +24936,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24781,16 +24944,16 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24798,7 +24961,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24807,16 +24970,16 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24824,7 +24987,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24833,13 +24996,13 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_frags(
@@ -24850,14 +25013,14 @@ fn test_push_frags_one_succeed_complete_indef() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24865,7 +25028,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24873,16 +25036,16 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24890,7 +25053,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24899,16 +25062,16 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -24916,7 +25079,7 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -24925,13 +25088,13 @@ fn test_push_frags_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -24988,12 +25151,11 @@ fn test_push_frags_one_indef_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
 
     let err =
@@ -25011,7 +25173,7 @@ fn test_push_frags_one_indef_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25019,7 +25181,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25027,16 +25189,16 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25044,7 +25206,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25052,16 +25214,16 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25069,7 +25231,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25077,13 +25239,13 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let indef = stream
         .complete_push_frags(
@@ -25098,7 +25260,7 @@ fn test_push_frags_one_indef_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25106,7 +25268,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25114,16 +25276,16 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25131,7 +25293,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25139,16 +25301,16 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25156,7 +25318,7 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25164,13 +25326,13 @@ fn test_push_frags_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -25233,7 +25395,6 @@ fn test_push_frags_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -25256,7 +25417,7 @@ fn test_push_frags_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25264,7 +25425,7 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25272,16 +25433,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25289,7 +25450,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25298,16 +25459,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25315,7 +25476,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25324,13 +25485,13 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -25348,7 +25509,7 @@ fn test_push_frags_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25356,7 +25517,7 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25364,16 +25525,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25381,7 +25542,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25390,16 +25551,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25407,7 +25568,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25416,13 +25577,13 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -25433,14 +25594,14 @@ fn test_push_frags_complete_retry() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25448,7 +25609,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25457,16 +25618,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25474,7 +25635,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25483,16 +25644,16 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25500,7 +25661,7 @@ fn test_push_frags_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25509,13 +25670,13 @@ fn test_push_frags_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -25576,7 +25737,6 @@ fn test_push_frags_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -25599,7 +25759,7 @@ fn test_push_frags_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25607,7 +25767,7 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25615,16 +25775,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25632,7 +25792,7 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25640,16 +25800,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25657,7 +25817,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25666,13 +25826,13 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -25690,7 +25850,7 @@ fn test_push_frags_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25698,7 +25858,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25707,16 +25867,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25724,7 +25884,7 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25732,16 +25892,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25749,7 +25909,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25758,13 +25918,13 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -25775,14 +25935,14 @@ fn test_push_frags_retry_complete() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25790,7 +25950,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25799,16 +25959,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25816,7 +25976,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25825,16 +25985,16 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25842,7 +26002,7 @@ fn test_push_frags_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25851,13 +26011,13 @@ fn test_push_frags_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -25918,7 +26078,6 @@ fn test_push_frags_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -25941,7 +26100,7 @@ fn test_push_frags_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25949,7 +26108,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25957,16 +26116,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25974,7 +26133,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -25982,16 +26141,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -25999,7 +26158,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26008,13 +26167,13 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -26032,7 +26191,7 @@ fn test_push_frags_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26040,7 +26199,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26048,16 +26207,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26065,7 +26224,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26073,16 +26232,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26090,7 +26249,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26099,13 +26258,13 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -26116,14 +26275,14 @@ fn test_push_frags_retry_complete_indef() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26131,7 +26290,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26139,16 +26298,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26156,7 +26315,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26165,16 +26324,16 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26182,7 +26341,7 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26191,13 +26350,13 @@ fn test_push_frags_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -26272,7 +26431,6 @@ fn test_push_frags_retry_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -26295,7 +26453,7 @@ fn test_push_frags_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26303,7 +26461,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26311,16 +26469,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26328,7 +26486,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26336,16 +26494,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26353,7 +26511,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26362,13 +26520,13 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_frags(
         &mut (),
@@ -26389,7 +26547,7 @@ fn test_push_frags_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26397,7 +26555,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26405,16 +26563,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26422,7 +26580,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26430,16 +26588,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26447,7 +26605,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26456,13 +26614,13 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -26480,7 +26638,7 @@ fn test_push_frags_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26488,7 +26646,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26497,16 +26655,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26514,7 +26672,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26522,16 +26680,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26539,7 +26697,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26548,13 +26706,13 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -26565,14 +26723,14 @@ fn test_push_frags_retry_complete_retry_complete() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26580,7 +26738,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26589,16 +26747,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26606,7 +26764,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26615,16 +26773,16 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26632,7 +26790,7 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26641,13 +26799,13 @@ fn test_push_frags_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -26722,7 +26880,6 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -26745,7 +26902,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26753,7 +26910,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26761,16 +26918,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26778,7 +26935,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26786,16 +26943,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26803,7 +26960,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26812,13 +26969,13 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_frags(
         &mut (),
@@ -26839,7 +26996,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26847,7 +27004,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26855,16 +27012,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26872,7 +27029,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26880,16 +27037,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26897,7 +27054,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26906,13 +27063,13 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -26930,7 +27087,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26938,7 +27095,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26946,16 +27103,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26963,7 +27120,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26971,16 +27128,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -26988,7 +27145,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -26997,13 +27154,13 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -27014,14 +27171,14 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27029,7 +27186,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27037,16 +27194,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27054,7 +27211,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27063,16 +27220,16 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27080,7 +27237,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27089,13 +27246,13 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -27173,7 +27330,6 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -27196,7 +27352,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27204,7 +27360,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27212,16 +27368,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27229,7 +27385,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27237,16 +27393,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27254,7 +27410,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27262,13 +27418,13 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_frags(
         &mut (),
@@ -27289,7 +27445,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27297,7 +27453,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27305,16 +27461,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27322,7 +27478,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27330,16 +27486,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27347,7 +27503,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27355,13 +27511,13 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_frags(
@@ -27379,7 +27535,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27387,7 +27543,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27396,16 +27552,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27413,7 +27569,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27421,16 +27577,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27438,7 +27594,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27446,13 +27602,13 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_frags(
@@ -27463,14 +27619,14 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         )
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27478,7 +27634,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27487,16 +27643,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27504,7 +27660,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27513,16 +27669,16 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27530,7 +27686,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27538,13 +27694,13 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -27606,7 +27762,6 @@ fn test_push_offer_all_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -27621,14 +27776,14 @@ fn test_push_offer_all_succeed() {
         .push_offer(&mut (), hash_0.clone(), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27636,7 +27791,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27644,17 +27799,17 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27662,7 +27817,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27670,17 +27825,17 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27688,7 +27843,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27696,27 +27851,27 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_1.clone(), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27724,7 +27879,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27732,17 +27887,17 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(), hash_1.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27750,7 +27905,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27758,17 +27913,17 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(), hash_1.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27776,7 +27931,7 @@ fn test_push_offer_all_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27784,14 +27939,14 @@ fn test_push_offer_all_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(), hash_1.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -27844,7 +27999,6 @@ fn test_push_offer_subset_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -27858,14 +28012,14 @@ fn test_push_offer_subset_succeed() {
         .push_offer(&mut (), hash_0.clone(), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27873,7 +28027,7 @@ fn test_push_offer_subset_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27881,17 +28035,17 @@ fn test_push_offer_subset_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27899,7 +28053,7 @@ fn test_push_offer_subset_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27907,17 +28061,17 @@ fn test_push_offer_subset_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -27925,7 +28079,7 @@ fn test_push_offer_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -27933,13 +28087,13 @@ fn test_push_offer_subset_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -27991,12 +28145,11 @@ fn test_push_offer_all_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -28008,7 +28161,7 @@ fn test_push_offer_all_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28016,7 +28169,7 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28024,16 +28177,16 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28041,7 +28194,7 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28049,16 +28202,16 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28066,7 +28219,7 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28074,13 +28227,13 @@ fn test_push_offer_all_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28133,7 +28286,6 @@ fn test_push_offer_subset_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28147,14 +28299,14 @@ fn test_push_offer_subset_indef() {
         .push_offer(&mut (), hash_0.clone(), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0]))
+        assert_eq!(res, (None, vec![0.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28162,7 +28314,7 @@ fn test_push_offer_subset_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28170,17 +28322,17 @@ fn test_push_offer_subset_indef() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28188,7 +28340,7 @@ fn test_push_offer_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28196,16 +28348,16 @@ fn test_push_offer_subset_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28213,7 +28365,7 @@ fn test_push_offer_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28221,13 +28373,13 @@ fn test_push_offer_subset_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28280,7 +28432,6 @@ fn test_push_offer_one_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28294,14 +28445,14 @@ fn test_push_offer_one_indef() {
         .push_offer(&mut (), hash_0.clone(), &mut frags)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28309,7 +28460,7 @@ fn test_push_offer_one_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28317,17 +28468,17 @@ fn test_push_offer_one_indef() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28335,7 +28486,7 @@ fn test_push_offer_one_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28343,17 +28494,17 @@ fn test_push_offer_one_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28361,7 +28512,7 @@ fn test_push_offer_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28369,13 +28520,13 @@ fn test_push_offer_one_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28437,7 +28588,6 @@ fn test_push_offer_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28460,14 +28610,14 @@ fn test_push_offer_retry_succeed() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28475,7 +28625,7 @@ fn test_push_offer_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28483,17 +28633,17 @@ fn test_push_offer_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28501,7 +28651,7 @@ fn test_push_offer_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28509,17 +28659,17 @@ fn test_push_offer_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28527,7 +28677,7 @@ fn test_push_offer_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28535,14 +28685,14 @@ fn test_push_offer_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28601,7 +28751,6 @@ fn test_push_offer_succeed_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28624,14 +28773,14 @@ fn test_push_offer_succeed_retry_succeed() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28639,7 +28788,7 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28647,17 +28796,17 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28665,7 +28814,7 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28673,17 +28822,17 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28691,7 +28840,7 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28699,14 +28848,14 @@ fn test_push_offer_succeed_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28766,7 +28915,6 @@ fn test_push_offer_retry_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28798,14 +28946,14 @@ fn test_push_offer_retry_retry_succeed() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28813,7 +28961,7 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28821,17 +28969,17 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28839,7 +28987,7 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28847,17 +28995,17 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28865,7 +29013,7 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28873,14 +29021,14 @@ fn test_push_offer_retry_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -28939,7 +29087,6 @@ fn test_push_offer_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -28962,14 +29109,14 @@ fn test_push_offer_indef_retry_succeed() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -28977,7 +29124,7 @@ fn test_push_offer_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -28985,16 +29132,16 @@ fn test_push_offer_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29002,33 +29149,7 @@ fn test_push_offer_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29036,14 +29157,40 @@ fn test_push_offer_indef_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29099,12 +29246,11 @@ fn test_push_offer_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -29125,7 +29271,7 @@ fn test_push_offer_indef_retry_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29133,7 +29279,7 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29141,16 +29287,16 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29158,7 +29304,7 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29166,16 +29312,16 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29183,7 +29329,7 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29191,13 +29337,13 @@ fn test_push_offer_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29259,7 +29405,6 @@ fn test_push_offer_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -29282,14 +29427,14 @@ fn test_push_offer_succeed_retry_indef() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29297,7 +29442,7 @@ fn test_push_offer_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29305,16 +29450,16 @@ fn test_push_offer_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29322,33 +29467,7 @@ fn test_push_offer_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29356,14 +29475,40 @@ fn test_push_offer_succeed_retry_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29423,7 +29568,6 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -29455,14 +29599,14 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0]))
+        assert_eq!(res, (None, vec![0.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29470,7 +29614,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29478,17 +29622,17 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29496,7 +29640,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29504,16 +29648,16 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29521,7 +29665,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29529,13 +29673,13 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29595,12 +29739,11 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -29630,7 +29773,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29638,7 +29781,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29646,16 +29789,16 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29663,7 +29806,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29671,16 +29814,16 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29688,7 +29831,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29696,13 +29839,13 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29762,7 +29905,6 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -29794,14 +29936,14 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1]))
+        assert_eq!(res, (None, vec![1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29809,7 +29951,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29817,16 +29959,16 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29834,7 +29976,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29842,17 +29984,17 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29860,7 +30002,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29868,13 +30010,13 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -29931,12 +30073,11 @@ fn test_push_offer_one_permanent() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -29955,7 +30096,7 @@ fn test_push_offer_one_permanent() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29963,7 +30104,7 @@ fn test_push_offer_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -29971,16 +30112,16 @@ fn test_push_offer_one_permanent() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -29988,33 +30129,7 @@ fn test_push_offer_one_permanent() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30022,14 +30137,40 @@ fn test_push_offer_one_permanent() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -30097,7 +30238,6 @@ fn test_push_offer_all_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -30121,7 +30261,7 @@ fn test_push_offer_all_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30129,7 +30269,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30137,16 +30277,16 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30154,7 +30294,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30162,16 +30302,16 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30179,7 +30319,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30187,26 +30327,26 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30214,7 +30354,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30222,17 +30362,17 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30240,7 +30380,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30248,17 +30388,17 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30266,7 +30406,7 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30274,14 +30414,14 @@ fn test_push_offer_all_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -30339,7 +30479,6 @@ fn test_push_offer_succeed_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -30363,7 +30502,7 @@ fn test_push_offer_succeed_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30371,7 +30510,7 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30379,16 +30518,16 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30396,33 +30535,7 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30430,27 +30543,53 @@ fn test_push_offer_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30458,7 +30597,7 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30466,17 +30605,17 @@ fn test_push_offer_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30484,7 +30623,7 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30492,17 +30631,17 @@ fn test_push_offer_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30510,7 +30649,7 @@ fn test_push_offer_succeed_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30518,14 +30657,14 @@ fn test_push_offer_succeed_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -30583,7 +30722,6 @@ fn test_push_offer_one_indef_complete_succeed() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -30607,7 +30745,7 @@ fn test_push_offer_one_indef_complete_succeed() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30615,7 +30753,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30623,16 +30761,16 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30640,7 +30778,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30648,17 +30786,17 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30666,7 +30804,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30674,26 +30812,26 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30701,7 +30839,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30709,17 +30847,17 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30727,7 +30865,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30735,17 +30873,17 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30753,7 +30891,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30761,13 +30899,13 @@ fn test_push_offer_one_indef_complete_succeed() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -30825,7 +30963,6 @@ fn test_push_offer_one_succeed_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -30849,7 +30986,7 @@ fn test_push_offer_one_succeed_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30857,7 +30994,7 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30865,16 +31002,16 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30882,33 +31019,7 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30916,27 +31027,53 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected success")
     }
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30944,7 +31081,7 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -30952,16 +31089,16 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -30969,33 +31106,7 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31003,14 +31114,40 @@ fn test_push_offer_one_succeed_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -31067,12 +31204,11 @@ fn test_push_offer_one_indef_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
     let frags_params = vec![Retry::default(); 3];
-    let mut frags: StreamMulticasterFrags<usize, OutboundFrags> =
+    let mut frags: StreamMulticasterFrags<OutboundFrags> =
         StreamMulticasterFrags::from_data(frags_params, vec![0x55; 2048]);
     let hasher = SHA3Algo::default();
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
@@ -31091,7 +31227,7 @@ fn test_push_offer_one_indef_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31099,7 +31235,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31107,16 +31243,16 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31124,7 +31260,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31132,16 +31268,16 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31149,7 +31285,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31157,13 +31293,13 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let indef = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -31173,7 +31309,7 @@ fn test_push_offer_one_indef_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31181,7 +31317,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31189,16 +31325,16 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31206,7 +31342,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31214,16 +31350,16 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31231,7 +31367,7 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31239,13 +31375,13 @@ fn test_push_offer_one_indef_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -31308,7 +31444,6 @@ fn test_push_offer_complete_retry() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -31332,7 +31467,7 @@ fn test_push_offer_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31340,7 +31475,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31348,16 +31483,16 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31365,33 +31500,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31399,14 +31508,40 @@ fn test_push_offer_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -31419,7 +31554,7 @@ fn test_push_offer_complete_retry() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31427,7 +31562,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31435,16 +31570,16 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31452,33 +31587,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31486,27 +31595,53 @@ fn test_push_offer_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31514,7 +31649,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31522,17 +31657,17 @@ fn test_push_offer_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31540,7 +31675,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31548,17 +31683,17 @@ fn test_push_offer_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31566,7 +31701,7 @@ fn test_push_offer_complete_retry() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31574,14 +31709,14 @@ fn test_push_offer_complete_retry() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -31642,7 +31777,6 @@ fn test_push_offer_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -31666,7 +31800,7 @@ fn test_push_offer_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31674,7 +31808,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31682,16 +31816,16 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31699,7 +31833,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31707,16 +31841,16 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31724,7 +31858,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31732,14 +31866,14 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -31752,7 +31886,7 @@ fn test_push_offer_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31760,7 +31894,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31768,17 +31902,17 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31786,7 +31920,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31794,16 +31928,16 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31811,7 +31945,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31819,27 +31953,27 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31847,7 +31981,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31855,17 +31989,17 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31873,7 +32007,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31881,17 +32015,17 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -31899,7 +32033,7 @@ fn test_push_offer_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -31907,14 +32041,14 @@ fn test_push_offer_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -31975,7 +32109,6 @@ fn test_push_offer_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -31999,7 +32132,7 @@ fn test_push_offer_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32007,7 +32140,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32015,16 +32148,16 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32032,7 +32165,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32040,16 +32173,16 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32057,7 +32190,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32065,14 +32198,14 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -32085,7 +32218,7 @@ fn test_push_offer_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32093,7 +32226,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32101,16 +32234,16 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32118,7 +32251,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32126,16 +32259,16 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32143,7 +32276,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32151,27 +32284,27 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32179,7 +32312,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32187,16 +32320,16 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32204,33 +32337,7 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32238,14 +32345,40 @@ fn test_push_offer_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -32320,7 +32453,6 @@ fn test_push_offer_retry_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -32344,7 +32476,7 @@ fn test_push_offer_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32352,7 +32484,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32360,16 +32492,16 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32377,7 +32509,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32385,16 +32517,16 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32402,7 +32534,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32410,14 +32542,14 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_offer(
         &mut (),
@@ -32438,7 +32570,7 @@ fn test_push_offer_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32446,7 +32578,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32454,16 +32586,16 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32471,7 +32603,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32479,16 +32611,16 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32496,7 +32628,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32504,14 +32636,14 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -32524,7 +32656,7 @@ fn test_push_offer_retry_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32532,7 +32664,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32540,18 +32672,18 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32559,7 +32691,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32567,16 +32699,16 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32584,7 +32716,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32592,27 +32724,27 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1, 2]))
+        assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32620,7 +32752,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32628,17 +32760,17 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32646,7 +32778,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32654,17 +32786,17 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32672,7 +32804,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32680,14 +32812,14 @@ fn test_push_offer_retry_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -32762,7 +32894,6 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -32786,7 +32917,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32794,7 +32925,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32802,16 +32933,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32819,7 +32950,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32827,16 +32958,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32844,7 +32975,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32852,14 +32983,14 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_offer(
         &mut (),
@@ -32880,7 +33011,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32888,7 +33019,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32896,16 +33027,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32913,7 +33044,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32921,16 +33052,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32938,7 +33069,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32946,14 +33077,14 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -32966,7 +33097,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32974,7 +33105,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -32982,16 +33113,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -32999,7 +33130,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33007,16 +33138,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33024,7 +33155,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33032,27 +33163,27 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![1, 2]))
+        assert_eq!(res, (None, vec![1.into(), 2.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33060,7 +33191,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33068,16 +33199,16 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33085,33 +33216,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert!(
         stream
-            .stream(1)
-            .frags
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert_eq!(
-        stream
-            .stream(1)
-            .offers
-            .try_borrow()
-            .expect("try_borrow failed")
-            .deref(),
-        &vec![hash_0.clone(),]
-    );
-    assert!(stream.stream(1).failures.is_empty());
-    assert!(
-        stream
-            .stream(2)
-            .batches
-            .try_borrow()
-            .expect("try_borrow failed")
-            .is_empty()
-    );
-    assert!(
-        stream
-            .stream(2)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33119,14 +33224,40 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     );
     assert_eq!(
         stream
-            .stream(2)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
+    assert!(
+        stream
+            .stream(2.into())
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .stream(2.into())
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .stream(2.into())
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![hash_0.clone(),]
+    );
+    assert!(stream.stream(2.into()).failures.is_empty());
 }
 
 #[test]
@@ -33204,7 +33335,6 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
         StreamMulticasterConfig::new(streams, BatchSlotsConfig::default());
     let mut stream: StreamMulticaster<
         _,
-        _,
         TestPrivateStream<&str, &str, SHA3ID>,
         _
     > = StreamMulticaster::create(config, &mut ()).expect("Expected success");
@@ -33228,7 +33358,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33236,7 +33366,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33244,16 +33374,16 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33261,7 +33391,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33269,16 +33399,16 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33286,7 +33416,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33294,13 +33424,13 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_push_offer(
         &mut (),
@@ -33321,7 +33451,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33329,7 +33459,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33337,16 +33467,16 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33354,7 +33484,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33362,16 +33492,16 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33379,7 +33509,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33387,13 +33517,13 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
@@ -33406,7 +33536,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33414,7 +33544,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33422,18 +33552,18 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33441,7 +33571,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33449,16 +33579,16 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33466,7 +33596,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33474,26 +33604,26 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
         .expect("Expected success")
     {
-        assert_eq!(res, (None, vec![0, 1]))
+        assert_eq!(res, (None, vec![0.into(), 1.into()]))
     } else {
         panic!("Expected indef")
     };
 
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33501,7 +33631,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(0)
+            .stream(0.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33509,17 +33639,17 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(0)
+            .stream(0.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(0).failures.is_empty());
+    assert!(stream.stream(0.into()).failures.is_empty());
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33527,7 +33657,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(1)
+            .stream(1.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33535,17 +33665,17 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert_eq!(
         stream
-            .stream(1)
+            .stream(1.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .deref(),
         &vec![hash_0.clone(),]
     );
-    assert!(stream.stream(1).failures.is_empty());
+    assert!(stream.stream(1.into()).failures.is_empty());
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .batches
             .try_borrow()
             .expect("try_borrow failed")
@@ -33553,7 +33683,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .frags
             .try_borrow()
             .expect("try_borrow failed")
@@ -33561,11 +33691,11 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     );
     assert!(
         stream
-            .stream(2)
+            .stream(2.into())
             .offers
             .try_borrow()
             .expect("try_borrow failed")
             .is_empty()
     );
-    assert!(stream.stream(2).failures.is_empty());
+    assert!(stream.stream(2.into()).failures.is_empty());
 }

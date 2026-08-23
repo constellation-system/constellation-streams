@@ -24,9 +24,11 @@ use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::iter::IntoIterator;
+use std::marker::PhantomData;
 use std::time::Instant;
 
 use constellation_auth::authn::MsgAuthNTypes;
+use constellation_common::config::Create;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
@@ -37,14 +39,21 @@ use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::sched::DenseItemID;
 use log::debug;
 use log::error;
 use log::trace;
 use log::warn;
 use mio::Token;
 
+use crate::addrs::Addrs;
+use crate::channels::Channels;
 use crate::config::SharedDatagramModeConfig;
 use crate::config::SharedLargeObjModeConfig;
+use crate::error::CompoundBatchError;
+use crate::error::ErrorReportInfo;
+use crate::error::ErrorSet;
+use crate::error::SelectionsError;
 use crate::frags::Frags;
 use crate::large_obj::FragsOrOffer;
 use crate::large_obj::LargeObjMsg;
@@ -53,6 +62,19 @@ use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
+use crate::multicast::MulticastStreamIdx;
+use crate::multicast::StreamMulticaster;
+use crate::multicast::StreamMulticasterFrags;
+use crate::multicast::StreamMulticasterSelections;
+use crate::multicast::StreamMulticasterStartError;
+use crate::select::ConnChannelID;
+use crate::select::SelectorBatchError;
+use crate::select::SelectorBatchSelectError;
+use crate::select::SelectorSelections;
+use crate::select::StreamSelector;
+use crate::select::StreamSelectorBatch;
+use crate::select::StreamSelectorSelectRefreshError;
+use crate::stream::CompoundBatchID;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::Parties;
@@ -60,9 +82,12 @@ use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
 use crate::stream::PushStreamPartyID;
+use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
+use crate::stream::StreamFinishCancel;
+use crate::stream::StreamID;
 use crate::threads::LargeObjEntry;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
@@ -134,6 +159,22 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
             CancelBatchError = Self::CancelBatchError,
             FinishBatchError = Self::FinishBatchError
         >;
+}
+
+pub struct MulticastLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr> {
+    resolve: PhantomData<Resolve>,
+    epochs: PhantomData<Epochs>,
+    ctx: PhantomData<Ctx>,
+    hash: PhantomData<H>
 }
 
 /// Backlog entry for push threads.
@@ -333,6 +374,384 @@ pub enum PushEntryError<ID, Batch, Add, Finish, Cancel> {
         /// The error that occurred canceling the batch.
         err: Cancel
     }
+}
+
+impl<Epochs, H, Resolve, Ctx> Clone
+    for MulticastLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        MulticastLargeObjDatagramPushModeTypes {
+            resolve: self.resolve,
+            epochs: self.epochs,
+            hash: self.hash,
+            ctx: self.ctx
+        }
+    }
+}
+
+unsafe impl<Epochs, H, Resolve, Ctx> Send
+    for MulticastLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+}
+
+unsafe impl<Epochs, H, Resolve, Ctx> Sync
+    for MulticastLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+}
+
+impl<Epochs, H, Resolve, Ctx> SharedLargeObjPushModeTypes<Ctx>
+    for MulticastLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
+        + LargeObjStream<Ctx>
+        + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
+        + PushStreamParties
+        + PushStreamPrivate<Ctx>
+        + PushStream<Ctx>,
+    <Ctx::Stream as PushStreamPartyID>::PartyID: Debug + Display,
+    <Ctx::Stream as PushStream<Ctx>>::BatchID: Display,
+    <<Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStream<Ctx>>::FinishBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
+     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError
+     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Resolve::Origin: Clone + Display + Eq + Hash
+{
+    type Parties = Vec<MulticastStreamIdx>;
+    type Frags = StreamMulticasterFrags<<Ctx::Stream as LargeObjStream<Ctx>>::Frags>;
+    type BatchID = CompoundBatchID;
+    type PartyID = MulticastStreamIdx;
+    type HashID = H::HashID;
+    type Hash = H;
+    type AddErrorCompletable = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            <Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddRetry
+        >,
+        <<Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+         as RecoverableError>::Completable
+    >;
+    type AddError = CompoundBatchError<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            <Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddRetry
+        >,
+        SelectorBatchError<
+            Epochs::Item,
+            <Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+        >
+    >;
+    type CancelBatchErrorCompletable = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            <Ctx::Stream as PushStream<Ctx>>::CancelBatchRetry
+        >,
+        <<Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+         as RecoverableError>::Completable
+    >;
+    type CancelBatchError = CompoundBatchError<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            <Ctx::Stream as PushStream<Ctx>>::CancelBatchRetry
+        >,
+        SelectorBatchError<
+            Epochs::Item,
+            <Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+        >
+    >;
+    type FinishBatchErrorCompletable = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            StreamFinishCancel<
+                <Ctx::Stream as PushStream<Ctx>>::FinishBatchRetry,
+                <Ctx::Stream as PushStream<Ctx>>::CancelBatchRetry
+            >
+        >,
+        StreamFinishCancel<
+            <<Ctx::Stream as PushStream<Ctx>>::FinishBatchError
+             as RecoverableError>::Completable,
+            <<Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+             as RecoverableError>::Completable,
+        >
+    >;
+    type FinishBatchError = CompoundBatchError<
+        MulticastStreamIdx,
+        RetryResult<
+            (),
+            StreamFinishCancel<
+                <Ctx::Stream as PushStream<Ctx>>::FinishBatchRetry,
+                <Ctx::Stream as PushStream<Ctx>>::CancelBatchRetry
+            >
+        >,
+        StreamFinishCancel<
+            SelectorBatchError<
+                Epochs::Item,
+                <Ctx::Stream as PushStream<Ctx>>::FinishBatchError
+            >,
+            SelectorBatchError<
+                Epochs::Item,
+                <Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+            >
+        >
+    >;
+    type StartBatchErrorCompletable = StreamMulticasterStartError<
+        ErrorSet<
+            MulticastStreamIdx,
+            RetryIndefResult<
+                (),
+                SelectorBatchSelectError<
+                    Instant,
+                    (),
+                    <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+                    Epochs::Item
+                >
+            >,
+            SelectorBatchSelectError<
+                Infallible,
+                (),
+                <<Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError
+                 as RecoverableError>::Completable,
+                Epochs::Item
+            >
+        >,
+        ErrorSet<
+            MulticastStreamIdx,
+            RetryResult<
+                StreamSelectorBatch<
+                    Epochs::Item,
+                    <Ctx::Stream as PushStream<Ctx>>::BatchID
+                >,
+                <Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry
+            >,
+            <<Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+             as RecoverableError>::Completable
+        >,
+        StreamMulticasterSelections<
+            SelectorSelections<
+                DenseItemID<Epochs::Item>,
+                <Ctx::Stream as PushStreamPrivate<Ctx>>::Selections
+            >
+        >,
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches
+    >;
+    type StartBatchError = StreamMulticasterStartError<
+        SelectionsError<
+            ErrorSet<
+                MulticastStreamIdx,
+                RetryIndefResult<
+                    (),
+                    SelectorBatchSelectError<
+                        Instant,
+                        (),
+                        <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+                        Epochs::Item
+                    >
+                >,
+                SelectorBatchError<
+                    Epochs::Item,
+                    SelectorBatchSelectError<
+                        StreamSelectorSelectRefreshError<
+                            Resolve::AddrsError,
+                            Ctx::ParamsError,
+                            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>,
+                                     Ctx::Param>
+                        >,
+                        (),
+                        <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError,
+                        Epochs::Item
+                    >
+                >
+            >,
+            usize
+        >,
+        SelectionsError<
+            ErrorSet<
+                MulticastStreamIdx,
+                RetryResult<
+                    StreamSelectorBatch<
+                        Epochs::Item,
+                        <Ctx::Stream as PushStream<Ctx>>::BatchID
+                    >,
+                    <Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry
+                >,
+                SelectionsError<
+                    SelectorBatchError<
+                        Epochs::Item,
+                        <Ctx::Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+                    >,
+                    ()
+                >
+            >,
+            usize
+        >,
+        StreamMulticasterSelections<
+            SelectorSelections<
+                DenseItemID<Epochs::Item>,
+                <Ctx::Stream as PushStreamPrivate<Ctx>>::Selections
+            >
+        >,
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches
+    >;
+    type PushFragErrorCompletable = ErrorSet<
+        MulticastStreamIdx,
+        RetryIndefResult<
+            Option<Instant>,
+            SelectorBatchSelectError<
+                Instant,
+                (),
+                <Ctx::Stream as LargeObjStream<Ctx>>::PushFragRetry,
+                Epochs::Item
+            >
+        >,
+        SelectorBatchSelectError<
+            Infallible,
+            (),
+            <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+             as RecoverableError>::Completable,
+            Epochs::Item
+        >
+    >;
+    type PushFragError = ErrorSet<
+        MulticastStreamIdx,
+        RetryIndefResult<
+            Option<Instant>,
+            SelectorBatchSelectError<
+                Instant,
+                (),
+                <Ctx::Stream as LargeObjStream<Ctx>>::PushFragRetry,
+                Epochs::Item
+            >
+        >,
+        SelectorBatchError<
+            Epochs::Item,
+            SelectorBatchSelectError<
+                StreamSelectorSelectRefreshError<
+                    Resolve::AddrsError,
+                    Ctx::ParamsError,
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>,
+                             Ctx::Param>
+                >,
+                (),
+                <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
+                Epochs::Item
+            >
+        >
+    >;
+    type PushOfferErrorCompletable = ErrorSet<
+        MulticastStreamIdx,
+        RetryIndefResult<
+            Option<Instant>,
+            SelectorBatchSelectError<
+                Instant,
+                (),
+                <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferRetry,
+                Epochs::Item
+            >
+        >,
+        SelectorBatchSelectError<
+            Infallible,
+            (),
+            <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
+             as RecoverableError>::Completable,
+            Epochs::Item
+        >
+    >;
+    type PushOfferError = ErrorSet<
+        MulticastStreamIdx,
+        RetryIndefResult<
+            Option<Instant>,
+            SelectorBatchSelectError<
+                Instant,
+                (),
+                <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferRetry,
+                Epochs::Item
+            >
+        >,
+        SelectorBatchError<
+            Epochs::Item,
+            SelectorBatchSelectError<
+                StreamSelectorSelectRefreshError<
+                    Resolve::AddrsError,
+                    Ctx::ParamsError,
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
+                >,
+                (),
+                <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError,
+                Epochs::Item
+            >
+        >
+    >;
+    type IndefParties = Vec<MulticastStreamIdx>;
+    type PartiesError = Infallible;
+    type StreamFlags = <Ctx::Stream as PushStream<Ctx>>::StreamFlags;
+    type Stream = StreamMulticaster<
+        <Ctx::Stream as PushStreamPartyID>::PartyID,
+        StreamSelector<Epochs, Resolve, Ctx>,
+        Ctx
+    >;
 }
 
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
