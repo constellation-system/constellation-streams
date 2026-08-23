@@ -61,6 +61,8 @@ use crate::select::SelectorBatchSelectError;
 use crate::select::StreamSelector;
 use crate::select::StreamSelectorBatch;
 use crate::select::StreamSelectorSelectRefreshError;
+use crate::select::dispatch::DispatchSelector;
+use crate::select::dispatch::DispatchSelectorSelectError;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::PushStream;
@@ -130,6 +132,22 @@ pub trait PrivateLargeObjPushModeTypes<Ctx> {
             Frags = Self::Frags,
             PushFragError = Self::PushFragError
         >;
+}
+
+pub struct DispatchLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr> {
+    resolve: PhantomData<Resolve>,
+    epochs: PhantomData<Epochs>,
+    ctx: PhantomData<Ctx>,
+    hash: PhantomData<H>
 }
 
 pub struct SelectorLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
@@ -341,6 +359,29 @@ pub enum PushEntryError<ID, Batch, Add, Finish, Cancel> {
 }
 
 impl<Epochs, H, Resolve, Ctx> Clone
+    for DispatchLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        DispatchLargeObjDatagramPushModeTypes {
+            resolve: self.resolve,
+            epochs: self.epochs,
+            hash: self.hash,
+            ctx: self.ctx
+        }
+    }
+}
+
+impl<Epochs, H, Resolve, Ctx> Clone
     for SelectorLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
@@ -364,7 +405,35 @@ where
 }
 
 unsafe impl<Epochs, H, Resolve, Ctx> Send
+    for DispatchLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+}
+
+unsafe impl<Epochs, H, Resolve, Ctx> Send
     for SelectorLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Default,
+    H: Clone + HashAlgo,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>
+{
+}
+
+unsafe impl<Epochs, H, Resolve, Ctx> Sync
+    for DispatchLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
@@ -389,6 +458,130 @@ where
     Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>
 {
+}
+
+impl<Epochs, H, Resolve, Ctx> PrivateLargeObjPushModeTypes<Ctx>
+    for DispatchLargeObjDatagramPushModeTypes<Epochs, H, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    H: Clone + HashAlgo,
+    H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::Stream: Clone + LargeObjStream<Ctx>
+        + LargeObjOfferStream<H::HashID, Ctx>
+        + LargeObjStream<Ctx>
+        + PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>
+        + PushStreamPrivate<Ctx>
+        + PushStream<Ctx>,
+    <Ctx::Stream as PushStream<Ctx>>::BatchID: Display,
+    <<Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStream<Ctx>>::FinishBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+     as RecoverableError>::Completable: ScopedError,
+    <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
+     as RecoverableError>::Completable: ScopedError,
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Resolve::Origin: Clone + Display + Eq + Hash
+{
+    type Frags = <Ctx::Stream as LargeObjStream<Ctx>>::Frags;
+    type BatchID = StreamSelectorBatch<
+        Epochs::Item,
+        <Ctx::Stream as PushStream<Ctx>>::BatchID
+    >;
+    type HashID = H::HashID;
+    type Hash = H;
+    type AddErrorCompletable = <
+        <Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+            as RecoverableError
+    >::Completable;
+    type AddError = SelectorBatchError<
+        Epochs::Item,
+        <Ctx::Stream as PushStreamAdd<LargeObjMsg<H::HashID>, Ctx>>::AddError
+    >;
+    type CancelBatchErrorCompletable = <
+        <Ctx::Stream as PushStream<Ctx>>::CancelBatchError as RecoverableError
+    >::Completable;
+    type CancelBatchError = SelectorBatchError<
+        Epochs::Item,
+        <Ctx::Stream as PushStream<Ctx>>::CancelBatchError
+    >;
+    type FinishBatchErrorCompletable = <
+        <Ctx::Stream as PushStream<Ctx>>::FinishBatchError as RecoverableError
+    >::Completable;
+    type FinishBatchError = SelectorBatchError<
+        Epochs::Item,
+        <Ctx::Stream as PushStream<Ctx>>::FinishBatchError
+    >;
+    type StartBatchErrorCompletable = SelectorBatchSelectError<
+        Infallible,
+        (),
+        <<Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError
+         as RecoverableError>::Completable,
+        Epochs::Item
+    >;
+    type StartBatchError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            DispatchSelectorSelectError<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
+            >,
+            (),
+            <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
+            Epochs::Item
+        >
+    >;
+    type PushFragErrorCompletable = SelectorBatchSelectError<
+        Infallible,
+        (),
+        <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
+         as RecoverableError>::Completable,
+        Epochs::Item
+    >;
+    type PushFragError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            DispatchSelectorSelectError<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
+            >,
+            (),
+            <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
+            Epochs::Item
+        >
+    >;
+    type PushOfferErrorCompletable = SelectorBatchSelectError<
+        Infallible,
+        (),
+        <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
+         as RecoverableError>::Completable,
+        Epochs::Item
+    >;
+    type PushOfferError = SelectorBatchError<
+        Epochs::Item,
+        SelectorBatchSelectError<
+            DispatchSelectorSelectError<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>
+            >,
+            (),
+            <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError,
+            Epochs::Item
+        >
+    >;
+    type StreamFlags = <Ctx::Stream as PushStream<Ctx>>::StreamFlags;
+    type Stream = DispatchSelector<
+        Epochs,
+        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        Ctx::Stream,
+        Ctx
+    >;
 }
 
 impl<Epochs, H, Resolve, Ctx> PrivateLargeObjPushModeTypes<Ctx>
