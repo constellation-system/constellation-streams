@@ -740,22 +740,25 @@ where
     }
 }
 
-impl<'a, Party, Stream, Ctx> CreateWithParam<&'a mut Ctx>
+impl<'a, Party, Stream, Config, CreateError, Ctx> CreateWithParam<&'a mut Ctx>
     for StreamMulticaster<Party, Stream, Ctx>
 where
     Ctx: SelfPartyCtx<Party>,
     Stream::BatchID: Clone,
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: CreateWithParam<&'a Ctx> + PushStream<Ctx>
+    CreateError: Debug + Display,
+    Stream: PushStream<Ctx>
+    + for<'b> CreateWithParam<&'b mut Ctx,
+                              Config = Config,
+                              CreateError = CreateError>
 {
-    type Config = StreamMulticasterConfig<Party, Stream::Config>;
-    type CreateError = Stream::CreateError;
+    type Config = StreamMulticasterConfig<Party, Config>;
+    type CreateError = CreateError;
 
     fn create(
         config: Self::Config,
         ctx: &'a mut Ctx
     ) -> Result<Self, Self::CreateError> {
-        let self_party = ctx.self_party();
         let (parties, slots_config) = config.take();
         let mut rev_map = Vec::with_capacity(parties.len());
         let mut fwd_map = HashMap::with_capacity(rev_map.len());
@@ -770,7 +773,7 @@ where
                    "creating individual stream for party {}",
                    party);
 
-            if self_party != Some(&party) {
+            if ctx.self_party() != Some(&party) {
                 let stream = Stream::create(stream, ctx)?;
                 let ent = StreamMulticasterParty {
                     party: party.clone(),

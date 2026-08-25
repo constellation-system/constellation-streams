@@ -59,7 +59,7 @@ use crate::threads::dispatch::DispatchEntryTypes;
 use crate::threads::dispatch::DispatchInboundTypes;
 use crate::threads::dispatch::DispatchTypes;
 use crate::threads::dispatch::Dispatched;
-use crate::threads::poll::PollThreadTypes;
+use crate::threads::types::PollThreadTypes;
 
 #[derive(Default)]
 pub struct TestDispatchScriptEntry {
@@ -225,7 +225,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
     }
 }
 
-impl<'a, Ctx> CreateWithParam<&'a Ctx> for TestStream {
+impl<'a, Ctx> CreateWithParam<&'a mut Ctx> for TestStream {
     type Config = Vec<
         Result<
             RetryResult<Option<Instant>, TestRefreshRetry>,
@@ -236,7 +236,7 @@ impl<'a, Ctx> CreateWithParam<&'a Ctx> for TestStream {
 
     fn create(
         mut script: Self::Config,
-        _ctx: &'a Ctx
+        _ctx: &'a mut Ctx
     ) -> Result<Self, Self::CreateError> {
         script.reverse();
 

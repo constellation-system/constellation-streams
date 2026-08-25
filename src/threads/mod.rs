@@ -51,6 +51,7 @@ pub mod poll;
 pub mod private;
 pub mod shared;
 pub mod test;
+pub mod types;
 
 pub trait PushMode<Stream, Msgs, Ctx>: Sized {
     type SendError: Debug + Display + ScopedError;

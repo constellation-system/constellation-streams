@@ -22,7 +22,6 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::hash::Hash;
 use std::io::Error;
 use std::sync::Arc;
 use std::thread::Builder;
@@ -68,117 +67,7 @@ use crate::threads::RetryHeapEntry;
 use crate::threads::SelfPartyCtx;
 use crate::threads::Tokens;
 use crate::threads::TokensCtx;
-
-pub trait PollThreadTypes<Ctx>
-where
-    Ctx: 'static + Send {
-    type Addr: 'static + Clone + Debug + Display + Eq + Hash + Send;
-    type ChannelParam: 'static + Clone + Debug + Display + Eq + Hash + Send;
-    type ChannelID: 'static + Clone + Debug + Display + Eq + Hash + Send;
-    type MsgPrin: Clone + Display + Eq + Hash;
-    type SessionPrin: 'static + Display + Send;
-    type AuthNChan: 'static
-        + Clone
-        + AuthNed<Self::SessionPrin, Self::Chan>
-        + Send;
-    type Chan: Clone + PullStream<Self::Wrapper, PullError = Self::PullError>;
-    type PullError: Debug + Display + ScopedError;
-    type RefreshRetry: RetryWhen;
-    type RefreshCompletableError: ScopedError + Send;
-    type RefreshPermanentError: Debug + Display + ScopedError;
-    type RefreshError: Debug
-        + RecoverableError<
-            Completable = Self::RefreshCompletableError,
-            Permanent = Self::RefreshPermanentError
-        >;
-    type StreamConfig;
-    type StreamCreateError: Debug + Display;
-    type Stream: 'static
-        + StreamRefresh<
-            PollThreadCtx<Self::SessionPrin, Self::Chans, Ctx>,
-            RefreshRetry = Self::RefreshRetry,
-            RefreshError = Self::RefreshError
-        >
-        + StreamReporter<
-            Self::SessionPrin,
-            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
-            Self::AuthNChan
-        >
-        + for<'a> CreateWithParam<
-            &'a PollThreadCtx<Self::SessionPrin, Self::Chans, Ctx>,
-            Config = Self::StreamConfig,
-            CreateError = Self::StreamCreateError
-        >
-        + Send;
-    type InMsg;
-    type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
-    type Wrapper;
-    type Msgs: 'static + Send;
-    type ChansConfig;
-    type ChansCreateError: Debug + Display;
-    type ChanShutdownRetry: RetryWhen + Send;
-    type ChanShutdownError: Debug + Display;
-    type Chans: 'static
-        + for<'a> CreateWithParam<
-            &'a mut Ctx,
-            Config = Self::ChansConfig,
-            CreateError = Self::ChansCreateError
-        >
-        + Channels<
-            Ctx,
-            Addr = Self::Addr,
-            Param = Self::ChannelParam,
-            Stream = Self::AuthNChan,
-            ChannelID = Self::ChannelID
-        >
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<
-            Ctx,
-            ShutdownStreamError = Self::ChanShutdownError,
-            ShutdownStreamRetry = Self::ChanShutdownRetry
-        >
-        + Send;
-    type MsgAuthConfig;
-    type MsgAuth: 'static
-        + Create<
-            Config = Self::MsgAuthConfig,
-            CreateError = Self::MsgAuthCreateError
-        >
-        + MsgAuthN<
-            Self::InMsg,
-            Self::Wrapper,
-            Prin = Self::MsgPrin,
-            AuthNMsg = Self::AuthNMsg,
-            SessionPrin = Self::SessionPrin,
-            Error = Self::MsgAuthError
-        >
-        + Send;
-    type MsgAuthCreateError: Debug + Display;
-    type MsgAuthError: Debug + Display + ScopedError;
-    type RecvError: Debug + Display + ScopedError;
-    type Recv: 'static
-        + AuthNMsgRecv<
-            Self::MsgPrin,
-            Self::InMsg,
-            Self::AuthNMsg,
-            RecvError = Self::RecvError
-        >
-        + Send;
-    type ModeConfig;
-    type ModeCreateError: Debug + Display;
-    type Mode: 'static
-        + PushMode<
-            Self::Stream,
-            Self::Msgs,
-            PollThreadCtx<Self::SessionPrin, Self::Chans, Ctx>
-        >
-        + for<'a> CreateWithParam<
-            &'a Self::Stream,
-            Config = Self::ModeConfig,
-            CreateError = Self::ModeCreateError
-        >
-        + Send;
-}
+use crate::threads::types::PollThreadTypes;
 
 pub struct PollThreadCtx<Party, Chans, Ctx>
 where
@@ -408,7 +297,7 @@ where
             .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let mut ctx =
             PollThreadCtx::new(ctx, channels, poll, self_party, nsessions);
-        let stream = Types::Stream::create(stream_config, &ctx)
+        let stream = Types::Stream::create(stream_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Stream { err: err })?;
         let mode = Types::Mode::create(mode_config, &stream)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;

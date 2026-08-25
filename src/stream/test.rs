@@ -53,8 +53,8 @@ use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
-use crate::threads::private::PrivateLargeObjPushModeTypes;
-use crate::threads::shared::SharedLargeObjPushModeTypes;
+use crate::threads::types::PrivateLargeObjPushModeTypes;
+use crate::threads::types::SharedLargeObjPushModeTypes;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TestPrivateBatchState<T> {
@@ -450,7 +450,8 @@ where
     }
 }
 
-impl<'a, In, Out, H> CreateWithParam<&'a ()> for TestPrivateStream<In, Out, H>
+impl<'a, In, Out, H, Ctx> CreateWithParam<&'a mut Ctx>
+    for TestPrivateStream<In, Out, H>
 where
     H: HashID
 {
@@ -460,7 +461,7 @@ where
     #[inline]
     fn create(
         script: TestPrivateStreamScript<In>,
-        _ctx: &'a ()
+        _ctx: &'a mut Ctx
     ) -> Result<Self, Self::CreateError> {
         Ok(Self::new(script))
     }
