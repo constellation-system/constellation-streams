@@ -48,7 +48,6 @@ use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
-use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;

@@ -20,7 +20,7 @@ use std::iter::once;
 use std::ops::Deref;
 use std::time::Instant;
 
-use constellation_common::config::Create;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::hashid::HashAlgo;
@@ -82,7 +82,7 @@ fn test_private_select_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -154,7 +154,7 @@ fn test_private_create_batch_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -237,7 +237,7 @@ fn test_private_create_batch_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -337,7 +337,7 @@ fn test_private_create_batch_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -434,7 +434,7 @@ fn test_private_create_batch_complete_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -544,7 +544,7 @@ fn test_private_create_batch_complete_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -671,7 +671,7 @@ fn test_private_create_batch_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -792,7 +792,7 @@ fn test_private_create_batch_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -916,7 +916,7 @@ fn test_private_start_batch_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -995,7 +995,7 @@ fn test_private_start_batch_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1091,7 +1091,7 @@ fn test_private_start_batch_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1179,7 +1179,7 @@ fn test_private_start_batch_complete_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1287,7 +1287,7 @@ fn test_private_start_batch_complete_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1412,7 +1412,7 @@ fn test_private_start_batch_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1527,7 +1527,7 @@ fn test_private_start_batch_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1644,7 +1644,7 @@ fn test_private_cancel_batch_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1731,7 +1731,7 @@ fn test_private_cancel_batch_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1837,7 +1837,7 @@ fn test_private_cancel_batch_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -1941,7 +1941,7 @@ fn test_private_cancel_batch_complete_success() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2056,7 +2056,7 @@ fn test_private_cancel_batch_complete_retry() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2200,7 +2200,7 @@ fn test_private_cancel_batch_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2347,7 +2347,7 @@ fn test_private_cancel_batch_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2468,7 +2468,7 @@ fn test_private_finish_batch_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2555,7 +2555,7 @@ fn test_private_finish_batch_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2661,7 +2661,7 @@ fn test_private_finish_batch_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2765,7 +2765,7 @@ fn test_private_finish_batch_complete_success() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -2880,7 +2880,7 @@ fn test_private_finish_batch_complete_retry() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3024,7 +3024,7 @@ fn test_private_finish_batch_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3171,7 +3171,7 @@ fn test_private_finish_batch_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3296,7 +3296,7 @@ fn test_private_abort_start_batch_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3405,7 +3405,7 @@ fn test_private_abort_start_batch_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3519,7 +3519,7 @@ fn test_private_add_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3608,7 +3608,7 @@ fn test_private_add_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3716,7 +3716,7 @@ fn test_private_add_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3820,7 +3820,7 @@ fn test_private_add_complete_success() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -3937,7 +3937,7 @@ fn test_private_add_complete_retry() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4083,7 +4083,7 @@ fn test_private_add_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4232,7 +4232,7 @@ fn test_private_add_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4357,7 +4357,7 @@ fn test_private_frags_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4454,7 +4454,7 @@ fn test_private_frags_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4555,7 +4555,7 @@ fn test_private_frags_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4642,7 +4642,7 @@ fn test_private_frags_complete_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4754,7 +4754,7 @@ fn test_private_frags_complete_retry() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -4882,7 +4882,7 @@ fn test_private_frags_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5011,7 +5011,7 @@ fn test_private_frags_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5126,7 +5126,7 @@ fn test_private_offer_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5233,7 +5233,7 @@ fn test_private_offer_retry_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5335,7 +5335,7 @@ fn test_private_offer_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5426,7 +5426,7 @@ fn test_private_offer_complete_succeed() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5538,7 +5538,7 @@ fn test_private_offer_complete_retry() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5661,7 +5661,7 @@ fn test_private_offer_complete_complete() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5790,7 +5790,7 @@ fn test_private_offer_complete_permanent() {
         &str,
         TestPrivateStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5897,7 +5897,7 @@ fn test_shared_select_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -5983,7 +5983,7 @@ fn test_shared_create_batch_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6090,7 +6090,7 @@ fn test_shared_create_batch_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6191,7 +6191,7 @@ fn test_shared_create_batch_complete_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6308,7 +6308,7 @@ fn test_shared_create_batch_complete_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6442,7 +6442,7 @@ fn test_shared_create_batch_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6567,7 +6567,7 @@ fn test_shared_create_batch_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6698,7 +6698,7 @@ fn test_shared_start_batch_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6782,7 +6782,7 @@ fn test_shared_start_batch_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6883,7 +6883,7 @@ fn test_shared_start_batch_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -6971,7 +6971,7 @@ fn test_shared_start_batch_complete_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7082,7 +7082,7 @@ fn test_shared_start_batch_complete_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7210,7 +7210,7 @@ fn test_shared_start_batch_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7325,7 +7325,7 @@ fn test_shared_start_batch_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7445,7 +7445,7 @@ fn test_shared_cancel_batch_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7534,7 +7534,7 @@ fn test_shared_cancel_batch_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7645,7 +7645,7 @@ fn test_shared_cancel_batch_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7757,7 +7757,7 @@ fn test_shared_cancel_batch_complete_success() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -7877,7 +7877,7 @@ fn test_shared_cancel_batch_complete_retry() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8032,7 +8032,7 @@ fn test_shared_cancel_batch_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8190,7 +8190,7 @@ fn test_shared_cancel_batch_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8322,7 +8322,7 @@ fn test_shared_finish_batch_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8414,7 +8414,7 @@ fn test_shared_finish_batch_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8528,7 +8528,7 @@ fn test_shared_finish_batch_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8640,7 +8640,7 @@ fn test_shared_finish_batch_complete_success() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8763,7 +8763,7 @@ fn test_shared_finish_batch_complete_retry() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -8921,7 +8921,7 @@ fn test_shared_finish_batch_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9082,7 +9082,7 @@ fn test_shared_finish_batch_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9218,7 +9218,7 @@ fn test_shared_abort_start_batch_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9327,7 +9327,7 @@ fn test_shared_abort_start_batch_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9441,7 +9441,7 @@ fn test_shared_add_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9533,7 +9533,7 @@ fn test_shared_add_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9647,7 +9647,7 @@ fn test_shared_add_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9759,7 +9759,7 @@ fn test_shared_add_complete_success() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -9882,7 +9882,7 @@ fn test_shared_add_complete_retry() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10040,7 +10040,7 @@ fn test_shared_add_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10201,7 +10201,7 @@ fn test_shared_add_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10342,7 +10342,7 @@ fn test_shared_frags_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10439,7 +10439,7 @@ fn test_shared_frags_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10540,7 +10540,7 @@ fn test_shared_frags_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10627,7 +10627,7 @@ fn test_shared_frags_complete_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10739,7 +10739,7 @@ fn test_shared_frags_complete_retry() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10867,7 +10867,7 @@ fn test_shared_frags_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -10996,7 +10996,7 @@ fn test_shared_frags_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11111,7 +11111,7 @@ fn test_shared_offer_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11218,7 +11218,7 @@ fn test_shared_offer_retry_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11320,7 +11320,7 @@ fn test_shared_offer_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11411,7 +11411,7 @@ fn test_shared_offer_complete_succeed() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11523,7 +11523,7 @@ fn test_shared_offer_complete_retry() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11646,7 +11646,7 @@ fn test_shared_offer_complete_complete() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");
@@ -11775,7 +11775,7 @@ fn test_shared_offer_complete_permanent() {
         &str,
         TestSharedStream<&str, &str, SHA3ID>,
         ()
-    > = DispatchSelector::create(config).expect("Expected success");
+    > = DispatchSelector::create(config, &mut ()).expect("Expected success");
     let res = stream
         .report_stream(&(), test_id, inner.clone())
         .expect("Expected success");

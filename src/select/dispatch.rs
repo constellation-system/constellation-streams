@@ -29,6 +29,7 @@ use std::sync::RwLock;
 use std::time::Instant;
 
 use constellation_common::config::Create;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
 use constellation_common::error::RecoverableError;
@@ -79,6 +80,7 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
+use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 
 pub struct DispatchSelector<Epochs, StreamID, Stream, Ctx>
@@ -568,7 +570,7 @@ where
     }
 }
 
-impl<Epochs, StreamID, Stream, Ctx> Create
+impl<'a, Epochs, StreamID, Stream, Ctx> CreateWithParam<&'a mut Ctx>
     for DispatchSelector<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Create + Iterator,
@@ -581,7 +583,8 @@ where
     type CreateError = DispatchSelectorCreateError<Epochs::CreateError>;
 
     fn create(
-        config: DispatchConfig<Epochs::Config>
+        config: DispatchConfig<Epochs::Config>,
+        _ctx: &'a mut Ctx
     ) -> Result<Self, DispatchSelectorCreateError<Epochs::CreateError>> {
         let (scheduler, epochs, retry, size_hint) = config.take();
         let epochs = Epochs::create(epochs)
@@ -880,6 +883,55 @@ where
         self.failure_id(selected)
     }
 }
+
+impl<Epochs, StreamID, Stream, Ctx> StreamRefresh<Ctx>
+    for DispatchSelector<Epochs, StreamID, Stream, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Debug + Display + Default + Eq,
+    StreamID: Clone + Debug + Display + Eq + Hash,
+    Stream: Clone + PushStream<Ctx>,
+{
+    type RefreshError = Infallible;
+    type RefreshRetry = Instant;
+
+    #[inline]
+    fn refresh(
+        &mut self,
+        _ctx: &mut Ctx
+    ) -> Result<RetryResult<Option<Instant>>, Infallible> {
+        Ok(RetryResult::Success(None))
+    }
+
+    #[inline]
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        _when: Self::RefreshRetry
+    ) -> Result<RetryResult<Option<Instant>>, Infallible> {
+        error!(target: "dispatch-selector",
+               "should not call retry_refresh");
+
+        self.refresh(ctx)
+    }
+
+    #[inline]
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        _errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        error!(target: "stream-selector",
+               "should never call complete_refresh");
+
+        self.refresh(ctx)
+    }
+}
+
 
 impl<Epochs, StreamID, Stream, Ctx, Error> PushStreamReportError<Error>
     for DispatchSelector<Epochs, StreamID, Stream, Ctx>
