@@ -748,9 +748,11 @@ where
     Party: Clone + Debug + Display + Eq + Hash,
     CreateError: Debug + Display,
     Stream: PushStream<Ctx>
-    + for<'b> CreateWithParam<&'b mut Ctx,
-                              Config = Config,
-                              CreateError = CreateError>
+        + for<'b> CreateWithParam<
+            &'b mut Ctx,
+            Config = Config,
+            CreateError = CreateError
+        >
 {
     type Config = StreamMulticasterConfig<Party, Config>;
     type CreateError = CreateError;

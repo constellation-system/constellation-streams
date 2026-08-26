@@ -56,7 +56,6 @@ use mio::Registry;
 use mio::Token;
 use mio::Waker;
 
-use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
@@ -71,107 +70,9 @@ use crate::threads::RegistryCtx;
 use crate::threads::RetryHeapEntry;
 use crate::threads::Tokens;
 use crate::threads::TokensCtx;
-
-pub trait DispatchInboundTypes {
-    type InMsg;
-    type Wrapper;
-    type OutMsg: Send;
-    type SessionPrin: Clone + Display + Eq + Hash + Send;
-    type MsgPrin: Clone + Display + Eq + Hash;
-    type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
-    type MsgAuthError: Debug + Display + ScopedError;
-    type MsgAuth: Clone
-        + MsgAuthN<
-            Self::InMsg,
-            Self::Wrapper,
-            Prin = Self::MsgPrin,
-            SessionPrin = Self::SessionPrin,
-            AuthNMsg = Self::AuthNMsg,
-            Error = Self::MsgAuthError
-        > + Send;
-}
-
-pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
-    type Addr: Clone + Debug + Display + Eq + Hash + Send;
-    type ChannelParam: Clone
-        + Debug
-        + Display
-        + Eq
-        + Hash
-        + ChannelParam<Self::Addr>
-        + Send;
-    type ChannelID: Clone + Debug + Display + Eq + Hash + Send;
-    type PullError: Debug + Display + ScopedError;
-    type RefreshRetry: RetryWhen + Send;
-    type RefreshCompletableError: ScopedError + Send;
-    type RefreshPermanentError: Debug + Display + ScopedError;
-    type RefreshError: Debug
-        + RecoverableError<
-            Completable = Self::RefreshCompletableError,
-            Permanent = Self::RefreshPermanentError
-        >;
-    type ReportStreamError: Debug + Display + ScopedError;
-    type Stream: StreamRefresh<
-            DispatchThreadCtx<Self::Chans, Ctx>,
-            RefreshRetry = Self::RefreshRetry,
-            RefreshError = Self::RefreshError
-        > + StreamReporter<
-            Self::SessionPrin,
-            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
-            Self::AuthNChan,
-            ReportStreamError = Self::ReportStreamError
-        > + Send;
-    type Msgs: Send;
-    type RecvError: Debug + Display + ScopedError;
-    type Recv: AuthNMsgRecv<
-            Self::MsgPrin,
-            Self::InMsg,
-            Self::AuthNMsg,
-            RecvError = Self::RecvError
-        > + Send;
-    type Chan: PullStream<Self::Wrapper, PullError = Self::PullError>;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan> + Send;
-    type ModeConfig: Clone + Send;
-    type ModeCreateError: Debug + Display;
-    type Mode: PushMode<Self::Stream, Self::Msgs, DispatchThreadCtx<Self::Chans, Ctx>>
-        + for<'a> CreateWithParam<
-            &'a Self::Stream,
-            Config = Self::ModeConfig,
-            CreateError = Self::ModeCreateError
-        > + Send;
-    type ChansConfig;
-    type ChansCreateError: Debug + Display;
-    type ChanShutdownRetry: RetryWhen + Send;
-    type ChanShutdownError: Debug + Display;
-    type Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
-            Config = Self::ChansConfig,
-            CreateError = Self::ChansCreateError
-        > + Channels<
-            Ctx,
-            Addr = Self::Addr,
-            Param = Self::ChannelParam,
-            Stream = Self::AuthNChan,
-            ChannelID = Self::ChannelID
-        > + ChannelsListen<Ctx>
-        + ChannelsShutdown<
-            Ctx,
-            ShutdownStreamError = Self::ChanShutdownError,
-            ShutdownStreamRetry = Self::ChanShutdownRetry
-        > + Send;
-}
-
-pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
-    type DispatchError: Debug + Display + ScopedError;
-    type Disp: Dispatch<
-            Self,
-            DispatchThreadCtx<Self::Chans, Ctx>,
-            Msgs = Self::Msgs,
-            Recv = Self::Recv,
-            PushStream = Self::Stream,
-            DispatchError = Self::DispatchError
-        > + Send;
-}
+use crate::threads::types::DispatchEntryTypes;
+use crate::threads::types::DispatchInboundTypes;
+use crate::threads::types::DispatchTypes;
 
 /// Trait for session dispatchers.
 ///

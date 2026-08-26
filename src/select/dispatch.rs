@@ -891,7 +891,7 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     StreamID: Clone + Debug + Display + Eq + Hash,
-    Stream: Clone + PushStream<Ctx>,
+    Stream: Clone + PushStream<Ctx>
 {
     type RefreshError = Infallible;
     type RefreshRetry = Instant;
@@ -931,7 +931,6 @@ where
         self.refresh(ctx)
     }
 }
-
 
 impl<Epochs, StreamID, Stream, Ctx, Error> PushStreamReportError<Error>
     for DispatchSelector<Epochs, StreamID, Stream, Ctx>

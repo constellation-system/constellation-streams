@@ -249,7 +249,6 @@ pub enum PushEntryError<ID, Batch, Add, Finish, Cancel> {
     }
 }
 
-
 impl<Msg, Stream, Ctx> RetryWhen for PushEntry<Msg, Stream, Ctx>
 where
     Stream: PushStreamAdd<Msg, Ctx>

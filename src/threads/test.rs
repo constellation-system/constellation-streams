@@ -55,10 +55,10 @@ use crate::stream::StreamReporter;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
-use crate::threads::dispatch::DispatchEntryTypes;
-use crate::threads::dispatch::DispatchInboundTypes;
-use crate::threads::dispatch::DispatchTypes;
 use crate::threads::dispatch::Dispatched;
+use crate::threads::types::DispatchEntryTypes;
+use crate::threads::types::DispatchInboundTypes;
+use crate::threads::types::DispatchTypes;
 use crate::threads::types::PollThreadTypes;
 
 #[derive(Default)]

@@ -30,6 +30,7 @@ use constellation_common::config::Create;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
@@ -41,10 +42,10 @@ use constellation_common::sched::DenseItemID;
 
 use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
+use crate::channels::ChannelParam;
 use crate::channels::Channels;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
-use crate::config::DispatchConfig;
 use crate::config::PartyConfig;
 use crate::config::PrivateDatagramModeConfig;
 use crate::config::PrivateLargeObjModeConfig;
@@ -70,12 +71,12 @@ use crate::select::SelectorBatchError;
 use crate::select::SelectorBatchSelectError;
 use crate::select::SelectorSelections;
 use crate::select::StreamSelector;
-use crate::select::StreamSelectorCreateError;
 use crate::select::StreamSelectorBatch;
+use crate::select::StreamSelectorCreateError;
 use crate::select::StreamSelectorSelectRefreshError;
 use crate::select::ThreadedStreamSelectorError;
 use crate::select::dispatch::DispatchSelector;
-use crate::select::dispatch::DispatchSelectorCreateError;
+use crate::select::dispatch::DispatchSelectorRefreshError;
 use crate::select::dispatch::DispatchSelectorSelectError;
 use crate::stream::CompoundBatchID;
 use crate::stream::LargeObjOfferStream;
@@ -90,10 +91,12 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::StreamFinishCancel;
+use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
-use crate::stream::StreamID;
 use crate::threads::PushMode;
+use crate::threads::dispatch::Dispatch;
+use crate::threads::dispatch::DispatchThreadCtx;
 use crate::threads::poll::PollThreadCtx;
 use crate::threads::private::PrivateDatagramPushMode;
 use crate::threads::private::PrivateLargeObjPushMode;
@@ -339,6 +342,107 @@ where
         + Send;
 }
 
+pub trait DispatchInboundTypes {
+    type InMsg;
+    type Wrapper;
+    type OutMsg: Send;
+    type SessionPrin: Clone + Display + Eq + Hash + Send;
+    type MsgPrin: Clone + Display + Eq + Hash;
+    type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
+    type MsgAuthError: Debug + Display + ScopedError;
+    type MsgAuth: Clone
+        + MsgAuthN<
+            Self::InMsg,
+            Self::Wrapper,
+            Prin = Self::MsgPrin,
+            SessionPrin = Self::SessionPrin,
+            AuthNMsg = Self::AuthNMsg,
+            Error = Self::MsgAuthError
+        > + Send;
+}
+
+pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
+    type Addr: Clone + Debug + Display + Eq + Hash + Send;
+    type ChannelParam: Clone
+        + Debug
+        + Display
+        + Eq
+        + Hash
+        + ChannelParam<Self::Addr>
+        + Send;
+    type ChannelID: Clone + Debug + Display + Eq + Hash + Send;
+    type PullError: Debug + Display + ScopedError;
+    type RefreshRetry: RetryWhen + Send;
+    type RefreshCompletableError: ScopedError + Send;
+    type RefreshPermanentError: Debug + Display + ScopedError;
+    type RefreshError: Debug
+        + RecoverableError<
+            Completable = Self::RefreshCompletableError,
+            Permanent = Self::RefreshPermanentError
+        >;
+    type ReportStreamError: Debug + Display + ScopedError;
+    type Stream: StreamRefresh<
+            DispatchThreadCtx<Self::Chans, Ctx>,
+            RefreshRetry = Self::RefreshRetry,
+            RefreshError = Self::RefreshError
+        > + StreamReporter<
+            Self::SessionPrin,
+            StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+            Self::AuthNChan,
+            ReportStreamError = Self::ReportStreamError
+        > + Send;
+    type Msgs: Send;
+    type RecvError: Debug + Display + ScopedError;
+    type Recv: AuthNMsgRecv<
+            Self::MsgPrin,
+            Self::InMsg,
+            Self::AuthNMsg,
+            RecvError = Self::RecvError
+        > + Send;
+    type Chan: PullStream<Self::Wrapper, PullError = Self::PullError>;
+    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan> + Send;
+    type ModeConfig: Clone + Send;
+    type ModeCreateError: Debug + Display;
+    type Mode: PushMode<Self::Stream, Self::Msgs, DispatchThreadCtx<Self::Chans, Ctx>>
+        + for<'a> CreateWithParam<
+            &'a Self::Stream,
+            Config = Self::ModeConfig,
+            CreateError = Self::ModeCreateError
+        > + Send;
+    type ChansConfig;
+    type ChansCreateError: Debug + Display;
+    type ChanShutdownRetry: RetryWhen + Send;
+    type ChanShutdownError: Debug + Display;
+    type Chans: for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = Self::ChansConfig,
+            CreateError = Self::ChansCreateError
+        > + Channels<
+            Ctx,
+            Addr = Self::Addr,
+            Param = Self::ChannelParam,
+            Stream = Self::AuthNChan,
+            ChannelID = Self::ChannelID
+        > + ChannelsListen<Ctx>
+        + ChannelsShutdown<
+            Ctx,
+            ShutdownStreamError = Self::ChanShutdownError,
+            ShutdownStreamRetry = Self::ChanShutdownRetry
+        > + Send;
+}
+
+pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
+    type DispatchError: Debug + Display + ScopedError;
+    type Disp: Dispatch<
+            Self,
+            DispatchThreadCtx<Self::Chans, Ctx>,
+            Msgs = Self::Msgs,
+            Recv = Self::Recv,
+            PushStream = Self::Stream,
+            DispatchError = Self::DispatchError
+        > + Send;
+}
+
 pub struct DispatchLargeObjPushModeTypes<Epochs, H, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
@@ -467,11 +571,21 @@ where
     hash: PhantomData<H>
 }
 
-pub struct DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                     Epochs, Chans, ChansConfig,
-                                     ChansCreateError, Chan, Resolve,
-                                     Msgs, Recv, Ctx>
-where
+pub struct DatagramSelectorPollTypes<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
@@ -482,54 +596,76 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
-    Msgs: 'static + PrivateMsgs<OutMsg> + Send
-{
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Msgs: 'static + PrivateMsgs<OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -540,13 +676,21 @@ where
     chans: PhantomData<Chans>,
     msgs: PhantomData<Msgs>,
     recv: PhantomData<Recv>,
-    ctx: PhantomData<Ctx>,
+    ctx: PhantomData<Ctx>
 }
 
-pub struct LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                     ChansCreateError, Chan, Resolve,
-                                     Types, Ctx>
-where
+pub struct LargeObjSelectorPollTypes<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
@@ -555,53 +699,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -616,8 +802,7 @@ where
     Types::MsgAuthN: Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
-{
+    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     chan: PhantomData<Chan>,
@@ -625,7 +810,7 @@ where
     inmsg: PhantomData<InMsg>,
     chans: PhantomData<Chans>,
     types: PhantomData<Types>,
-    ctx: PhantomData<Ctx>,
+    ctx: PhantomData<Ctx>
 }
 
 pub struct DatagramDispatchPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
@@ -638,7 +823,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -650,10 +835,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -661,24 +851,24 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -723,12 +913,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -737,32 +927,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -774,10 +964,10 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
@@ -789,11 +979,21 @@ where
     ctx: PhantomData<Ctx>,
 }
 
-pub struct DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                      Epochs, Chans, ChansConfig,
-                                      ChansCreateError, Chan, Resolve,
-                                      Msgs, Recv, Ctx>
-where
+pub struct DatagramMulticastPollTypes<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
@@ -804,19 +1004,25 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -824,48 +1030,78 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
-    Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
-{
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -876,13 +1112,21 @@ where
     chans: PhantomData<Chans>,
     msgs: PhantomData<Msgs>,
     recv: PhantomData<Recv>,
-    ctx: PhantomData<Ctx>,
+    ctx: PhantomData<Ctx>
 }
 
-pub struct LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                     ChansCreateError, Chan, Resolve,
-                                     Types, Ctx>
-where
+pub struct LargeObjMulticastPollTypes<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
@@ -891,22 +1135,30 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -914,44 +1166,92 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -966,8 +1266,7 @@ where
     Types::MsgAuthN: Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
-{
+    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     chan: PhantomData<Chan>,
@@ -975,18 +1274,8 @@ where
     inmsg: PhantomData<InMsg>,
     chans: PhantomData<Chans>,
     types: PhantomData<Types>,
-    ctx: PhantomData<Ctx>,
+    ctx: PhantomData<Ctx>
 }
-
-
-
-
-
-
-
-
-
-
 
 impl<Epochs, H, Resolve, Ctx> Clone
     for DispatchLargeObjPushModeTypes<Epochs, H, Resolve, Ctx>
@@ -1134,12 +1423,36 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Clone
-    for DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                        Epochs, Chans, ChansConfig,
-                                        ChansCreateError, Chan, Resolve,
-                                        Msgs, Recv, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Clone
+    for DatagramSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1151,52 +1464,75 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
@@ -1217,11 +1553,30 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> Clone
-    for LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Clone
+    for LargeObjSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1231,53 +1586,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -1304,7 +1701,7 @@ where
             inmsg: self.inmsg,
             chans: self.chans,
             types: self.types,
-            ctx: self.ctx,
+            ctx: self.ctx
         }
     }
 }
@@ -1321,7 +1718,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -1333,10 +1730,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -1344,24 +1746,24 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -1412,12 +1814,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -1426,32 +1828,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -1463,10 +1865,10 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -1483,12 +1885,36 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Clone
-    for DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                   Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve,
-                                   Msgs, Recv, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Clone
+    for DatagramMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1500,19 +1926,25 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -1520,46 +1952,77 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
@@ -1580,10 +2043,30 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Clone
-    for LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Clone
+    for LargeObjMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1593,22 +2076,30 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -1616,60 +2107,123 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -1847,12 +2401,36 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Default
-    for DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                        Epochs, Chans, ChansConfig,
-                                        ChansCreateError, Chan, Resolve,
-                                        Msgs, Recv, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Default
+    for DatagramSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1864,52 +2442,75 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
@@ -1930,11 +2531,30 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> Default
-    for LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Default
+    for LargeObjSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -1944,53 +2564,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2017,7 +2679,7 @@ where
             inmsg: PhantomData,
             chans: PhantomData,
             types: PhantomData,
-            ctx: PhantomData,
+            ctx: PhantomData
         }
     }
 }
@@ -2034,7 +2696,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -2046,10 +2708,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -2057,24 +2724,24 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2125,12 +2792,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -2139,32 +2806,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2176,10 +2843,10 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
     #[inline]
     fn default() -> Self {
@@ -2196,12 +2863,36 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Default
-    for DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                   Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve,
-                                   Msgs, Recv, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Default
+    for DatagramMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2213,19 +2904,25 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -2233,46 +2930,77 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
@@ -2293,10 +3021,30 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Default
-    for LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Default
+    for LargeObjMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2306,22 +3054,30 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -2329,60 +3085,123 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2409,7 +3228,7 @@ where
             inmsg: PhantomData,
             chans: PhantomData,
             types: PhantomData,
-            ctx: PhantomData,
+            ctx: PhantomData
         }
     }
 }
@@ -2532,12 +3351,36 @@ where
 {
 }
 
-unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Send
-    for DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                        Epochs, Chans, ChansConfig,
-                                        ChansCreateError, Chan, Resolve,
-                                        Msgs, Recv, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Send
+    for DatagramSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2549,61 +3392,103 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + PrivateMsgs<OutMsg> + Send
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Send
-    for LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Send
+    for LargeObjSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2613,53 +3498,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2690,7 +3617,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -2702,10 +3629,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -2713,24 +3645,24 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2765,12 +3697,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -2779,32 +3711,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -2816,19 +3748,43 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
 }
 
-unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Send
-    for DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                   Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve,
-                                   Msgs, Recv, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Send
+    for DatagramMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2840,19 +3796,25 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -2860,54 +3822,105 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Send
-    for LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve, Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Send
+    for LargeObjMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -2917,22 +3930,30 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -2940,60 +3961,123 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -3130,12 +4214,36 @@ where
 {
 }
 
-unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Sync
-    for DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                        Epochs, Chans, ChansConfig,
-                                        ChansCreateError, Chan, Resolve,
-                                        Msgs, Recv, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Sync
+    for DatagramSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -3147,61 +4255,103 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + PrivateMsgs<OutMsg> + Send
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Sync
-    for LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Sync
+    for LargeObjSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -3211,53 +4361,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -3288,7 +4480,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -3300,10 +4492,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -3311,24 +4508,24 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -3363,12 +4560,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -3377,32 +4574,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -3414,19 +4611,43 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
 }
 
-unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Sync
-    for DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                   Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve,
-                                   Msgs, Recv, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> Sync
+    for DatagramMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -3438,19 +4659,25 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -3458,54 +4685,105 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Sync
-    for LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve, Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> Sync
+    for LargeObjMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -3515,22 +4793,30 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + PushStreamParties
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
@@ -3538,60 +4824,123 @@ where
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -4186,12 +5535,36 @@ where
     >;
 }
 
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> PollThreadTypes<Ctx>
-    for DatagramSelectorPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> PollThreadTypes<Ctx>
+    for DatagramSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -4203,98 +5576,89 @@ where
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
     Msgs: 'static + PrivateMsgs<OutMsg> + Send
 {
     type Addr = Chans::Addr;
-    type ChannelParam = Chans::Param;
-    type ChannelID = Chans::ChannelID;
-    type MsgPrin = MsgAuth::Prin;
-    type SessionPrin = MsgAuth::SessionPrin;
     type AuthNChan = Chans::Stream;
-    type Chan = Chan;
-    type RefreshRetry = Instant;
-    type RefreshCompletableError = Infallible;
-    type RefreshPermanentError =
-        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
-    type RefreshError = ThreadedStreamSelectorError<Resolve::AddrsError,
-                                                    Chans::ParamsError>;
-    type StreamCreateError = StreamSelectorCreateError<Resolve::CreateError,
-                                                       Epochs::CreateError>;
-    type StreamConfig = PartyConfig<
-        Resolve::Config,
-        Epochs::Config,
-        String,
-        Resolve::OriginConfig
-    >;
-    type Stream = StreamSelector<
-        Epochs,
-        Resolve,
-        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-    >;
-    type InMsg = InMsg;
     type AuthNMsg = MsgAuth::AuthNMsg;
-    type Wrapper = Wrapper;
-    type Msgs = Msgs;
+    type Chan = Chan;
+    type ChanShutdownError = Chans::ShutdownStreamError;
+    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
+    type ChannelID = Chans::ChannelID;
+    type ChannelParam = Chans::Param;
+    type Chans = Chans;
     type ChansConfig = ChansConfig;
     type ChansCreateError = ChansCreateError;
-    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
-    type ChanShutdownError = Chans::ShutdownStreamError;
-    type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = MsgAuth::Config;
-    type MsgAuth = MsgAuth;
-    type MsgAuthCreateError = MsgAuth::CreateError;
-    type MsgAuthError = MsgAuth::Error;
-    type Recv = Recv;
-    type RecvError = Recv::RecvError;
-    type ModeConfig = PrivateDatagramModeConfig;
-    type ModeCreateError = Infallible;
+    type InMsg = InMsg;
     type Mode = PrivateDatagramPushMode<
         OutMsg,
         StreamSelector<
@@ -4304,12 +5668,64 @@ where
         >,
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >;
+    type ModeConfig = PrivateDatagramModeConfig;
+    type ModeCreateError = Infallible;
+    type MsgAuth = MsgAuth;
+    type MsgAuthConfig = MsgAuth::Config;
+    type MsgAuthCreateError = MsgAuth::CreateError;
+    type MsgAuthError = MsgAuth::Error;
+    type MsgPrin = MsgAuth::Prin;
+    type Msgs = Msgs;
+    type PullError = Chan::PullError;
+    type Recv = Recv;
+    type RecvError = Recv::RecvError;
+    type RefreshCompletableError = Infallible;
+    type RefreshError =
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
+    type RefreshPermanentError =
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
+    type RefreshRetry = Instant;
+    type SessionPrin = MsgAuth::SessionPrin;
+    type Stream = StreamSelector<
+        Epochs,
+        Resolve,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >;
+    type StreamConfig = PartyConfig<
+        Resolve::Config,
+        Epochs::Config,
+        String,
+        Resolve::OriginConfig
+    >;
+    type StreamCreateError =
+        StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>;
+    type Wrapper = Wrapper;
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> PollThreadTypes<Ctx>
-    for LargeObjSelectorPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> PollThreadTypes<Ctx>
+    for LargeObjSelectorPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -4319,53 +5735,95 @@ where
     OutMsg: 'static + Clone + Send,
     ChansCreateError: Debug + Display,
     Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PullStream<Types::Wrapper>
-    + Send + Sync,
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + Send
+        + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
     Chans::ChannelID: Send + Sync,
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -4383,68 +5841,74 @@ where
     <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
 {
     type Addr = Chans::Addr;
-    type ChannelParam = Chans::Param;
-    type ChannelID = Chans::ChannelID;
-    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
-    type SessionPrin = Types::SessionPrin;
     type AuthNChan = Chans::Stream;
+    type AuthNMsg = Types::AuthNMsg;
     type Chan = Chan;
-    type RefreshRetry = Instant;
+    type ChanShutdownError = Chans::ShutdownStreamError;
+    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
+    type ChannelID = Chans::ChannelID;
+    type ChannelParam = Chans::Param;
+    type Chans = Chans;
+    type ChansConfig = ChansConfig;
+    type ChansCreateError = ChansCreateError;
+    type InMsg = InMsg;
+    type Mode = PrivateLargeObjPushMode<
+        SelectorLargeObjPushModeTypes<
+            Epochs,
+            Types::Hash,
+            Resolve,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        >,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >;
+    type ModeConfig = PrivateLargeObjModeConfig;
+    type ModeCreateError = Infallible;
+    type MsgAuth = Types::MsgAuthN;
+    type MsgAuthConfig = <Types::MsgAuthN as Create>::Config;
+    type MsgAuthCreateError = <Types::MsgAuthN as Create>::CreateError;
+    type MsgAuthError = Types::AuthNError;
+    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
+    type Msgs = LargeObjProto<
+        InMsg,
+        OutMsg,
+        (),
+        <Chans::Stream as LargeObjStream<
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        >>::Frags,
+        Types
+    >;
+    type PullError = Chan::PullError;
+    type Recv = Types::Recv;
+    type RecvError = <Types::Recv as AuthNMsgRecv<
+        Types::Prin,
+        InMsg,
+        Types::AuthNMsg
+    >>::RecvError;
     type RefreshCompletableError = Infallible;
+    type RefreshError =
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
     type RefreshPermanentError =
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
-    type RefreshError = ThreadedStreamSelectorError<Resolve::AddrsError,
-                                                    Chans::ParamsError>;
-    type StreamCreateError = StreamSelectorCreateError<Resolve::CreateError,
-                                                       Epochs::CreateError>;
+    type RefreshRetry = Instant;
+    type SessionPrin = Types::SessionPrin;
+    type Stream = StreamSelector<
+        Epochs,
+        Resolve,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >;
     type StreamConfig = PartyConfig<
         Resolve::Config,
         Epochs::Config,
         String,
         Resolve::OriginConfig
     >;
-    type Stream = StreamSelector<
-        Epochs,
-        Resolve,
-        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-    >;
-    type InMsg = InMsg;
-    type AuthNMsg = Types::AuthNMsg;
+    type StreamCreateError =
+        StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>;
     type Wrapper = Types::Wrapper;
-    type Msgs = LargeObjProto<
-        InMsg,
-        OutMsg,
-        (),
-        <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags,
-        Types
-    >;
-    type ChansConfig = ChansConfig;
-    type ChansCreateError = ChansCreateError;
-    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
-    type ChanShutdownError = Chans::ShutdownStreamError;
-    type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = <Types::MsgAuthN as Create>::Config;
-    type MsgAuth = Types::MsgAuthN;
-    type MsgAuthCreateError = <Types::MsgAuthN as Create>::CreateError;
-    type MsgAuthError = Types::AuthNError;
-    type Recv = Types::Recv;
-    type RecvError =
-        <Types::Recv
-         as AuthNMsgRecv<Types::Prin, InMsg, Types::AuthNMsg>>::RecvError;
-    type ModeConfig = PrivateLargeObjModeConfig;
-    type ModeCreateError = Infallible;
-    type Mode = PrivateLargeObjPushMode<
-        SelectorLargeObjPushModeTypes<
-            Epochs, Types::Hash, Resolve,
-            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-        >,
-        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-    >;
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> PollThreadTypes<Ctx>
+     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> DispatchInboundTypes
     for DatagramDispatchPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
                                   Epochs, Chans, ChansConfig,
                                   ChansCreateError, Chan, Resolve,
@@ -4455,7 +5919,7 @@ where
     Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
     Chan: Clone + PullStream<Wrapper> + Send + Sync,
     OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
     MsgAuth::Prin: Eq + Hash,
     MsgAuth::SessionPrin: 'static + Send + Sync,
     ChansCreateError: Debug + Display,
@@ -4467,10 +5931,15 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
@@ -4478,24 +5947,104 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
+    Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
+    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::Config: Clone + Default,
+    Recv: 'static
+        + AuthNMsgRecv<
+            MsgAuth::Prin,
+            InMsg,
+            MsgAuth::AuthNMsg,
+        >
+        + Send,
+    Msgs: 'static + PrivateMsgs<OutMsg> + Send,
+{
+    type InMsg = InMsg;
+    type Wrapper = Wrapper;
+    type OutMsg = OutMsg;
+    type SessionPrin = MsgAuth::SessionPrin;
+    type MsgPrin = MsgAuth::Prin;
+    type AuthNMsg = MsgAuth::AuthNMsg;
+    type MsgAuthError = MsgAuth::Error;
+    type MsgAuth = MsgAuth;
+}
+
+impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
+     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> DispatchEntryTypes<Ctx>
+    for DatagramDispatchPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
+                                  Epochs, Chans, ChansConfig,
+                                  ChansCreateError, Chan, Resolve,
+                                  Msgs, Recv, Ctx>
+where
+    Epochs: 'static + Create + Iterator + Send + Sync,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Default + Debug + Display + Eq + Send + Sync,
+    Chan: Clone + PullStream<Wrapper> + Send + Sync,
+    OutMsg: 'static + Clone + Send,
+    MsgAuth: 'static + Clone + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth::Prin: Eq + Hash,
+    MsgAuth::SessionPrin: 'static + Send + Sync,
+    ChansCreateError: Debug + Display,
+    Chans: 'static
+        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
+                                  CreateError = ChansCreateError>
+        + Channels<Ctx>
+        + ChannelsListen<Ctx>
+        + ChannelsShutdown<Ctx>
+        + Send + Sync,
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
+    + PullStream<Wrapper>
+    + StreamReporter<
+        MsgAuth::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
+    + Send + Sync,
+    Chans::Addr: Send + Sync,
+    Chans::Param: Clone + Debug + Display + Eq + Hash + Send + Sync,
+    Chans::ChannelID: Send + Sync,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send,
+    Chans::ShutdownStreamRetry: Send,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
+     as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddError
+     as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
+     as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
+     as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    Ctx: 'static + Send + Sync,
+    Resolve: 'static + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -4511,38 +6060,30 @@ where
     type Addr = Chans::Addr;
     type ChannelParam = Chans::Param;
     type ChannelID = Chans::ChannelID;
-    type MsgPrin = MsgAuth::Prin;
-    type SessionPrin = MsgAuth::SessionPrin;
-    type AuthNChan = Chans::Stream;
-    type Chan = Chan;
+    type PullError = Chan::PullError;
     type RefreshRetry = Instant;
     type RefreshCompletableError = Infallible;
     type RefreshPermanentError = Infallible;
     type RefreshError = Infallible;
-    type StreamCreateError = DispatchSelectorCreateError<Epochs::CreateError>;
-    type StreamConfig = DispatchConfig<Epochs::Config>;
+    type ReportStreamError = WithMutexPoison<DispatchSelectorRefreshError<
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>
+    >>;
     type Stream = DispatchSelector<
         Epochs,
         StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
         Chans::Stream,
-        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+        DispatchThreadCtx<Chans, Ctx>
     >;
-    type InMsg = InMsg;
-    type AuthNMsg = MsgAuth::AuthNMsg;
-    type Wrapper = Wrapper;
+    type Chan = Chan;
     type Msgs = Msgs;
+    type Recv = Recv;
+    type RecvError = Recv::RecvError;
+    type AuthNChan = Chans::Stream;
     type ChansConfig = ChansConfig;
     type ChansCreateError = ChansCreateError;
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = MsgAuth::Config;
-    type MsgAuth = MsgAuth;
-    type MsgAuthCreateError = MsgAuth::CreateError;
-    type MsgAuthError = MsgAuth::Error;
-    type Recv = Recv;
-    type RecvError = Recv::RecvError;
     type ModeConfig = PrivateDatagramModeConfig;
     type ModeCreateError = Infallible;
     type Mode = PrivateDatagramPushMode<
@@ -4551,14 +6092,14 @@ where
             Epochs,
             StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
             Chans::Stream,
-            PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+            DispatchThreadCtx<Chans, Ctx>
         >,
-        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+        DispatchThreadCtx<Chans, Ctx>
     >;
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> PollThreadTypes<Ctx>
+     ChansCreateError, Chan, Resolve, Types, Ctx> DispatchInboundTypes
     for LargeObjDispatchPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
                                   ChansCreateError, Chan, Resolve, Types, Ctx>
 where
@@ -4577,12 +6118,12 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
     + PullStream<Types::Wrapper>
     + Send + Sync,
     Chans::Addr: Send + Sync,
@@ -4591,32 +6132,32 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -4628,224 +6169,25 @@ where
     Types::Msgs: Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::MsgAuthN: Create + Send,
+    Types::MsgAuthN: Clone + Create + Send,
     Types::SessionPrin: Send + Sync,
     Types::AuthNError: ScopedError,
-    <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
+    Types::Prin: Eq + Hash
 {
-    type Addr = Chans::Addr;
-    type ChannelParam = Chans::Param;
-    type ChannelID = Chans::ChannelID;
-    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
-    type SessionPrin = Types::SessionPrin;
-    type AuthNChan = Chans::Stream;
-    type Chan = Chan;
-    type RefreshRetry = Instant;
-    type RefreshCompletableError = Infallible;
-    type RefreshPermanentError = Infallible;
-    type RefreshError = Infallible;
-    type StreamCreateError = DispatchSelectorCreateError<Epochs::CreateError>;
-    type StreamConfig = DispatchConfig<Epochs::Config>;
-    type Stream = DispatchSelector<
-        Epochs,
-        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-        Chans::Stream,
-        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-    >;
     type InMsg = InMsg;
-    type AuthNMsg = Types::AuthNMsg;
+    type OutMsg = OutMsg;
     type Wrapper = Types::Wrapper;
-    type Msgs = LargeObjProto<
-        InMsg,
-        OutMsg,
-        (),
-        <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags,
-        Types
-    >;
-    type ChansConfig = ChansConfig;
-    type ChansCreateError = ChansCreateError;
-    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
-    type ChanShutdownError = Chans::ShutdownStreamError;
-    type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = <Types::MsgAuthN as Create>::Config;
+    type SessionPrin = Types::SessionPrin;
+    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
+    type AuthNMsg = Types::AuthNMsg;
     type MsgAuth = Types::MsgAuthN;
-    type MsgAuthCreateError = <Types::MsgAuthN as Create>::CreateError;
     type MsgAuthError = Types::AuthNError;
-    type Recv = Types::Recv;
-    type RecvError =
-        <Types::Recv
-         as AuthNMsgRecv<Types::Prin, InMsg, Types::AuthNMsg>>::RecvError;
-    type ModeConfig = PrivateLargeObjModeConfig;
-    type ModeCreateError = Infallible;
-    type Mode = PrivateLargeObjPushMode<
-        DispatchLargeObjPushModeTypes<
-            Epochs, Types::Hash, Resolve,
-            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-        >,
-        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-    >;
-}
-
-impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> PollThreadTypes<Ctx>
-    for DatagramMulticastPollTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                   Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve,
-                                   Msgs, Recv, Ctx>
-where
-    Epochs: 'static + Create + Iterator + Send + Sync,
-    Epochs::Config: Default,
-    Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
-    Chan: Clone + PullStream<Wrapper> + Send + Sync,
-    OutMsg: 'static + Clone + Send,
-    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
-    MsgAuth::Prin: Eq + Hash,
-    MsgAuth::SessionPrin: 'static + Send + Sync,
-    ChansCreateError: Debug + Display,
-    Chans: 'static
-        + for<'a> CreateWithParam<&'a mut Ctx, Config = ChansConfig,
-                                  CreateError = ChansCreateError>
-        + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>
-        + Send + Sync,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
-    + PullStream<Wrapper>
-    + PushStreamParties
-    + Send + Sync,
-    Chans::Addr: Send + Sync,
-    Chans::Param: Send + Sync,
-    Chans::ChannelID: Send + Sync,
-    Chans::OutNegoParam: Clone + Eq + Hash + Send,
-    Chans::ShutdownStreamRetry: Send,
-    Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    Ctx: 'static + Send + Sync,
-    Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>> + Send,
-    Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
-    Resolve::Config: Clone + Default,
-    Recv: 'static
-        + AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >
-        + Send,
-    Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
-{
-    type Addr = Chans::Addr;
-    type ChannelParam = Chans::Param;
-    type ChannelID = Chans::ChannelID;
-    type MsgPrin = MsgAuth::Prin;
-    type SessionPrin = MsgAuth::SessionPrin;
-    type AuthNChan = Chans::Stream;
-    type Chan = Chan;
-    type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
-    type RefreshCompletableError = ErrorSet<
-        MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
-        Infallible
-    >;
-    type RefreshPermanentError = ErrorSet<
-        MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
-    >;
-    type RefreshError = ErrorSet<
-        MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
-    >;
-    type StreamCreateError = StreamSelectorCreateError<Resolve::CreateError,
-                                                       Epochs::CreateError>;
-    type StreamConfig = StreamMulticasterConfig<
-        MsgAuth::SessionPrin,
-        PartyConfig<
-            Resolve::Config,
-            Epochs::Config,
-            String,
-            Resolve::OriginConfig
-        >
-    >;
-    type Stream = StreamMulticaster<
-        MsgAuth::SessionPrin,
-        StreamSelector<
-            Epochs,
-            Resolve,
-            PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-        >,
-        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-    >;
-    type InMsg = InMsg;
-    type AuthNMsg = MsgAuth::AuthNMsg;
-    type Wrapper = Wrapper;
-    type Msgs = Msgs;
-    type ChansConfig = ChansConfig;
-    type ChansCreateError = ChansCreateError;
-    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
-    type ChanShutdownError = Chans::ShutdownStreamError;
-    type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = MsgAuth::Config;
-    type MsgAuth = MsgAuth;
-    type MsgAuthCreateError = MsgAuth::CreateError;
-    type MsgAuthError = MsgAuth::Error;
-    type Recv = Recv;
-    type RecvError = Recv::RecvError;
-    type ModeConfig = SharedDatagramModeConfig;
-    type ModeCreateError = Infallible;
-    type Mode = SharedDatagramPushMode<
-        OutMsg,
-        StreamMulticaster<
-            MsgAuth::SessionPrin,
-            StreamSelector<
-                Epochs,
-                Resolve,
-                PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-            >,
-            PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-        >,
-        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
-    >;
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> PollThreadTypes<Ctx>
-    for LargeObjMulticastPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                   ChansCreateError, Chan, Resolve, Types, Ctx>
+     ChansCreateError, Chan, Resolve, Types, Ctx> DispatchEntryTypes<Ctx>
+    for LargeObjDispatchPollTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
+                                  ChansCreateError, Chan, Resolve, Types, Ctx>
 where
     Epochs: 'static + Create + Iterator + Send + Sync,
     Epochs::Config: Default,
@@ -4862,14 +6204,18 @@ where
         + ChannelsShutdown<Ctx>
         + Send + Sync,
     Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
-    + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
-    + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+    + PushStream<DispatchThreadCtx<Chans, Ctx>>
+    + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
-                    PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                    DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
-                          PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+                          DispatchThreadCtx<Chans, Ctx>>
+    + StreamReporter<
+        Self::SessionPrin,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+    >
     + PullStream<Types::Wrapper>
-    + PushStreamParties
     + Send + Sync,
     Chans::Addr: Send + Sync,
     Chans::Param: Send + Sync,
@@ -4877,61 +6223,491 @@ where
     Chans::OutNegoParam: Clone + Eq + Hash + Send,
     Chans::ShutdownStreamRetry: Send,
     Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
-    <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::BatchID: Display + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StreamFlags: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Selections: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchStreamBatches: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::StreamFlags: Send,
+    <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::StartBatchRetry: Send,
-    <Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AbortBatchRetry: Send,
-    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddError
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::AddRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchError
+    <Chans::Stream as PushStreamAdd<LargeObjMsg<Types::HashID>, DispatchThreadCtx<Chans, Ctx>>>::AddRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::FinishBatchRetry: Send,
-    <<Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CancelBatchRetry: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
+    <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragRetry: Send,
-    <Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags: Send,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferError
      as RecoverableError>::Completable: ScopedError + Send,
-    <Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferRetry: Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError + Send,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushFragError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as LargeObjOfferStream<Types::HashID, PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::PushOfferError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::SelectError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Completable: ScopedError,
-    <<Chans::Stream as PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::CreateBatchError
-     as RecoverableError>::Permanent: ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <Chans::Stream as LargeObjOfferStream<Types::HashID, DispatchThreadCtx<Chans, Ctx>>>::PushOfferRetry: Send,
     Ctx: 'static + Send + Sync,
     Resolve: 'static + Addrs<Addr = Chans::Addr>
-        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>> + Send,
+        + AddrsCreate<DispatchThreadCtx<Chans, Ctx>> + Send,
+    Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
+    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::Config: Clone + Default,
+    Types: 'static + LargeObjProtoTypes<InMsg, OutMsg>,
+    Types::Hash: 'static + Clone + HashAlgo + Send,
+    Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
+    Types::IDs: Send,
+    Types::Recv: 'static + Send,
+    Types::Msgs: Send,
+    Types::Decoder: Send,
+    Types::Encoder: Send,
+    Types::MsgAuthN: Clone + Create + Send,
+    Types::SessionPrin: Send + Sync,
+    Types::AuthNError: ScopedError,
+    Types::Prin: Eq + Hash
+{
+    type Addr = Chans::Addr;
+    type ChannelParam = Chans::Param;
+    type ChannelID = Chans::ChannelID;
+    type AuthNChan = Chans::Stream;
+    type Chan = Chan;
+    type RefreshRetry = Instant;
+    type RefreshCompletableError = Infallible;
+    type RefreshPermanentError = Infallible;
+    type RefreshError = Infallible;
+    type ReportStreamError = WithMutexPoison<DispatchSelectorRefreshError<
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>
+    >>;
+    type Stream = DispatchSelector<
+        Epochs,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream,
+        DispatchThreadCtx<Chans, Ctx>
+    >;
+    type Msgs = LargeObjProto<
+        InMsg,
+        OutMsg,
+        (),
+        <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags,
+        Types
+    >;
+    type ChansConfig = ChansConfig;
+    type ChansCreateError = ChansCreateError;
+    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
+    type ChanShutdownError = Chans::ShutdownStreamError;
+    type Chans = Chans;
+    type PullError = Chan::PullError;
+    type Recv = Types::Recv;
+    type RecvError =
+        <Types::Recv
+         as AuthNMsgRecv<Types::Prin, InMsg, Types::AuthNMsg>>::RecvError;
+    type ModeConfig = PrivateLargeObjModeConfig;
+    type ModeCreateError = Infallible;
+    type Mode = PrivateLargeObjPushMode<
+        DispatchLargeObjPushModeTypes<
+            Epochs, Types::Hash, Resolve,
+            DispatchThreadCtx<Chans, Ctx>
+        >,
+        DispatchThreadCtx<Chans, Ctx>
+    >;
+}
+
+impl<
+    InMsg,
+    OutMsg,
+    Wrapper,
+    MsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Msgs,
+    Recv,
+    Ctx
+> PollThreadTypes<Ctx>
+    for DatagramMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Wrapper,
+        MsgAuth,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Msgs,
+        Recv,
+        Ctx
+    >
+where
+    Epochs: 'static + Create + Iterator + Send + Sync,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
+    Chan: Clone + PullStream<Wrapper> + Send + Sync,
+    OutMsg: 'static + Clone + Send,
+    MsgAuth: 'static + Create + MsgAuthN<InMsg, Wrapper> + Send,
+    MsgAuth::Prin: Eq + Hash,
+    MsgAuth::SessionPrin: 'static + Send + Sync,
+    ChansCreateError: Debug + Display,
+    Chans: 'static
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
+        + Channels<Ctx>
+        + ChannelsListen<Ctx>
+        + ChannelsShutdown<Ctx>
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + PullStream<Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
+    Chans::Addr: Send + Sync,
+    Chans::Param: Send + Sync,
+    Chans::ChannelID: Send + Sync,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send,
+    Chans::ShutdownStreamRetry: Send,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
+    <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        OutMsg,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    Ctx: 'static + Send + Sync,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
+        + Send,
+    Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
+    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::Config: Clone + Default,
+    Recv:
+        'static + AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Msgs: 'static + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+{
+    type Addr = Chans::Addr;
+    type AuthNChan = Chans::Stream;
+    type AuthNMsg = MsgAuth::AuthNMsg;
+    type Chan = Chan;
+    type ChanShutdownError = Chans::ShutdownStreamError;
+    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
+    type ChannelID = Chans::ChannelID;
+    type ChannelParam = Chans::Param;
+    type Chans = Chans;
+    type ChansConfig = ChansConfig;
+    type ChansCreateError = ChansCreateError;
+    type InMsg = InMsg;
+    type Mode = SharedDatagramPushMode<
+        OutMsg,
+        StreamMulticaster<
+            MsgAuth::SessionPrin,
+            StreamSelector<
+                Epochs,
+                Resolve,
+                PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+            >,
+            PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+        >,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >;
+    type ModeConfig = SharedDatagramModeConfig;
+    type ModeCreateError = Infallible;
+    type MsgAuth = MsgAuth;
+    type MsgAuthConfig = MsgAuth::Config;
+    type MsgAuthCreateError = MsgAuth::CreateError;
+    type MsgAuthError = MsgAuth::Error;
+    type MsgPrin = MsgAuth::Prin;
+    type Msgs = Msgs;
+    type PullError = Chan::PullError;
+    type Recv = Recv;
+    type RecvError = Recv::RecvError;
+    type RefreshCompletableError = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<Option<Instant>, Instant>,
+        Infallible
+    >;
+    type RefreshError = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<Option<Instant>, Instant>,
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
+    >;
+    type RefreshPermanentError = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<Option<Instant>, Instant>,
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
+    >;
+    type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
+    type SessionPrin = MsgAuth::SessionPrin;
+    type Stream = StreamMulticaster<
+        MsgAuth::SessionPrin,
+        StreamSelector<
+            Epochs,
+            Resolve,
+            PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+        >,
+        PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
+    >;
+    type StreamConfig = StreamMulticasterConfig<
+        MsgAuth::SessionPrin,
+        PartyConfig<
+            Resolve::Config,
+            Epochs::Config,
+            String,
+            Resolve::OriginConfig
+        >
+    >;
+    type StreamCreateError =
+        StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>;
+    type Wrapper = Wrapper;
+}
+
+impl<
+    InMsg,
+    OutMsg,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Chan,
+    Resolve,
+    Types,
+    Ctx
+> PollThreadTypes<Ctx>
+    for LargeObjMulticastPollTypes<
+        InMsg,
+        OutMsg,
+        Epochs,
+        Chans,
+        ChansConfig,
+        ChansCreateError,
+        Chan,
+        Resolve,
+        Types,
+        Ctx
+    >
+where
+    Epochs: 'static + Create + Iterator + Send + Sync,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Debug + Display + Default + Eq + Send + Sync,
+    Chan: Clone + PullStream<Types::Wrapper> + Send + Sync,
+    InMsg: 'static + Send,
+    OutMsg: 'static + Clone + Send,
+    ChansCreateError: Debug + Display,
+    Chans: 'static
+        + for<'a> CreateWithParam<
+            &'a mut Ctx,
+            Config = ChansConfig,
+            CreateError = ChansCreateError
+        >
+        + Channels<Ctx>
+        + ChannelsListen<Ctx>
+        + ChannelsShutdown<Ctx>
+        + Send
+        + Sync,
+    Chans::Stream: Clone
+        + AuthNed<Types::SessionPrin, Chan>
+        + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + PushStreamAdd<
+            LargeObjMsg<Types::HashID>,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + LargeObjOfferStream<
+            Types::HashID,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        > + PullStream<Types::Wrapper>
+        + PushStreamParties
+        + Send
+        + Sync,
+    Chans::Addr: Send + Sync,
+    Chans::Param: Send + Sync,
+    Chans::ChannelID: Send + Sync,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send,
+    Chans::ShutdownStreamRetry: Send,
+    Chans::OutNegoParam: Clone + Eq + Hash + Send + Sync,
+    <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::BatchID: Display + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StreamFlags: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Selections: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchStreamBatches: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::StartBatchRetry: Send,
+    <Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AbortBatchRetry: Send,
+    <<Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStreamAdd<
+        LargeObjMsg<Types::HashID>,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::AddRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::FinishBatchRetry: Send,
+    <<Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as PushStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CancelBatchRetry: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragRetry: Send,
+    <Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags: Send,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::Frags as Frags>::Param: Send + Sync,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError + Send,
+    <Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferRetry: Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError + Send,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjStream<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushFragError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as LargeObjOfferStream<
+        Types::HashID,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::PushOfferError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::SelectError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Completable: ScopedError,
+    <<Chans::Stream as PushStreamPrivate<
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >>::CreateBatchError as RecoverableError>::Permanent:
+        ErrorReportInfo<DenseItemID<Epochs::Item>>,
+    Ctx: 'static + Send + Sync,
+    Resolve: 'static
+        + Addrs<Addr = Chans::Addr>
+        + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
+        + Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send + Sync,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
@@ -4949,39 +6725,69 @@ where
     <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash
 {
     type Addr = Chans::Addr;
-    type ChannelParam = Chans::Param;
-    type ChannelID = Chans::ChannelID;
-    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
-    type SessionPrin = Types::SessionPrin;
     type AuthNChan = Chans::Stream;
+    type AuthNMsg = Types::AuthNMsg;
     type Chan = Chan;
-    type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
+    type ChanShutdownError = Chans::ShutdownStreamError;
+    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
+    type ChannelID = Chans::ChannelID;
+    type ChannelParam = Chans::Param;
+    type Chans = Chans;
+    type ChansConfig = ChansConfig;
+    type ChansCreateError = ChansCreateError;
+    type InMsg = InMsg;
+    type Mode = SharedLargeObjPushMode<
+        MulticastLargeObjPushModeTypes<
+            Types::SessionPrin,
+            Epochs,
+            Types::Hash,
+            Resolve,
+            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+        >,
+        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+    >;
+    type ModeConfig = SharedLargeObjModeConfig;
+    type ModeCreateError = Infallible;
+    type MsgAuth = Types::MsgAuthN;
+    type MsgAuthConfig = <Types::MsgAuthN as Create>::Config;
+    type MsgAuthCreateError = <Types::MsgAuthN as Create>::CreateError;
+    type MsgAuthError = Types::AuthNError;
+    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
+    type Msgs = LargeObjProto<
+        InMsg,
+        OutMsg,
+        MulticastStreamIdx,
+        StreamMulticasterFrags<
+            <Chans::Stream as LargeObjStream<
+                PollThreadCtx<Types::SessionPrin, Chans, Ctx>
+            >>::Frags
+        >,
+        Types
+    >;
+    type PullError = Chan::PullError;
+    type Recv = Types::Recv;
+    type RecvError = <Types::Recv as AuthNMsgRecv<
+        Types::Prin,
+        InMsg,
+        Types::AuthNMsg
+    >>::RecvError;
     type RefreshCompletableError = ErrorSet<
         MulticastStreamIdx,
         RetryResult<Option<Instant>, Instant>,
         Infallible
-    >;
-    type RefreshPermanentError = ErrorSet<
-        MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
-        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
     type RefreshError = ErrorSet<
         MulticastStreamIdx,
         RetryResult<Option<Instant>, Instant>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
-    type StreamCreateError = StreamSelectorCreateError<Resolve::CreateError,
-                                                       Epochs::CreateError>;
-    type StreamConfig = StreamMulticasterConfig<
-        Types::SessionPrin,
-        PartyConfig<
-            Resolve::Config,
-            Epochs::Config,
-            String,
-            Resolve::OriginConfig
-        >
+    type RefreshPermanentError = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<Option<Instant>, Instant>,
+        ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
+    type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
+    type SessionPrin = Types::SessionPrin;
     type Stream = StreamMulticaster<
         Types::SessionPrin,
         StreamSelector<
@@ -4991,37 +6797,16 @@ where
         >,
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >;
-    type InMsg = InMsg;
-    type AuthNMsg = Types::AuthNMsg;
+    type StreamConfig = StreamMulticasterConfig<
+        Types::SessionPrin,
+        PartyConfig<
+            Resolve::Config,
+            Epochs::Config,
+            String,
+            Resolve::OriginConfig
+        >
+    >;
+    type StreamCreateError =
+        StreamSelectorCreateError<Resolve::CreateError, Epochs::CreateError>;
     type Wrapper = Types::Wrapper;
-    type Msgs = LargeObjProto<
-        InMsg,
-        OutMsg,
-        MulticastStreamIdx,
-        StreamMulticasterFrags<<Chans::Stream as LargeObjStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>>::Frags>,
-        Types
-    >;
-    type ChansConfig = ChansConfig;
-    type ChansCreateError = ChansCreateError;
-    type ChanShutdownRetry = Chans::ShutdownStreamRetry;
-    type ChanShutdownError = Chans::ShutdownStreamError;
-    type Chans = Chans;
-    type PullError = Chan::PullError;
-    type MsgAuthConfig = <Types::MsgAuthN as Create>::Config;
-    type MsgAuth = Types::MsgAuthN;
-    type MsgAuthCreateError = <Types::MsgAuthN as Create>::CreateError;
-    type MsgAuthError = Types::AuthNError;
-    type Recv = Types::Recv;
-    type RecvError =
-        <Types::Recv
-         as AuthNMsgRecv<Types::Prin, InMsg, Types::AuthNMsg>>::RecvError;
-    type ModeConfig = SharedLargeObjModeConfig;
-    type ModeCreateError = Infallible;
-    type Mode = SharedLargeObjPushMode<
-        MulticastLargeObjPushModeTypes<
-            Types::SessionPrin, Epochs, Types::Hash, Resolve,
-            PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-        >,
-        PollThreadCtx<Types::SessionPrin, Chans, Ctx>
-    >;
 }
