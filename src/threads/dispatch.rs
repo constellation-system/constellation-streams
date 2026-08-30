@@ -57,6 +57,7 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
+use crate::channels::ChannelsID;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::config::DispatchThreadConfig;
@@ -438,12 +439,26 @@ where
     }
 }
 
+impl<Chans, Ctx> ChannelsID for DispatchThreadCtx<Chans, Ctx>
+where
+    Chans: Channels<Ctx>
+{
+    type ChannelID = Chans::ChannelID;
+
+    #[inline]
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        self.channels.channel_id(name)
+    }
+}
+
 impl<Chans, Ctx> Channels<()> for DispatchThreadCtx<Chans, Ctx>
 where
     Chans: Channels<Ctx>
 {
     type Addr = Chans::Addr;
-    type ChannelID = Chans::ChannelID;
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
     type ParamsError = Chans::ParamsError;
@@ -488,14 +503,6 @@ where
     where
         I: Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
-    }
-
-    #[inline]
-    fn channel_id(
-        &self,
-        name: &str
-    ) -> Option<Self::ChannelID> {
-        self.channels.channel_id(name)
     }
 }
 
@@ -1228,6 +1235,21 @@ where
             nevents: nevents,
             notify: notify
         })
+    }
+
+    pub fn start(
+        config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
+        dispatcher: Types::Disp,
+        ctx: Ctx
+    ) -> Result<JoinHandle<()>, Error> {
+        Builder::new()
+            .name(String::from("dispatch-thread"))
+            .spawn(move || match Self::create(config, dispatcher, ctx) {
+                Ok(dispatch) => dispatch.run(),
+                Err(err) => error!(target: "poll-thread",
+                                       "error creating dispatch thread: {}",
+                                       err)
+            })
     }
 
     #[inline]
@@ -2245,12 +2267,6 @@ where
 
         info!(target: "dispatch-thread",
               "mio dispatch thread exiting");
-    }
-
-    pub fn start(self) -> Result<JoinHandle<()>, Error> {
-        Builder::new()
-            .name(String::from("poll-thread"))
-            .spawn(move || self.run())
     }
 }
 

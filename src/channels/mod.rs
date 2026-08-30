@@ -84,6 +84,25 @@ pub trait ChannelParam<Addr>: Clone + Debug + Display + Eq + Hash {
     ) -> bool;
 }
 
+pub trait ChannelsID {
+    /// Type of channel IDs.
+    type ChannelID: Clone + Debug + Display + Eq + Hash;
+
+    /// Get a channel's ID from its name.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: The channel's text name.
+    ///
+    /// # Return Value
+    ///
+    /// The channel's ID, or `None` if no such channel exists.
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID>;
+}
+
 /// Trait for sets of channels that can produce private streams.
 ///
 /// Typically, this trait will be implemented by a structure that acts
@@ -109,9 +128,7 @@ pub trait ChannelParam<Addr>: Clone + Debug + Display + Eq + Hash {
 ///  4. An individual stream is returned, providing a connection over the given
 ///     channel to the counterparty.  The exact nature of this stream and its
 ///     API depend on the details of the underlying channels.
-pub trait Channels<Ctx> {
-    /// Type of channel IDs.
-    type ChannelID: Clone + Debug + Display + Eq + Hash;
+pub trait Channels<Ctx>: ChannelsID {
     /// Type of parameters for obtaining streams.
     ///
     /// Channel parameters are used to obtain individual streams from
@@ -215,20 +232,6 @@ pub trait Channels<Ctx> {
     ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
         I: Iterator<Item = Self::ChannelID>;
-
-    /// Get a channel's ID from its name.
-    ///
-    /// # Parameters
-    ///
-    /// - `name`: The channel's text name.
-    ///
-    /// # Return Value
-    ///
-    /// The channel's ID, or `None` if no such channel exists.
-    fn channel_id(
-        &self,
-        name: &str
-    ) -> Option<Self::ChannelID>;
 }
 
 pub trait ChannelsListen<Ctx>: Channels<Ctx> {
@@ -702,9 +705,20 @@ impl ChannelParam<String> for String {
     }
 }
 
+impl ChannelsID for NullChannels {
+    type ChannelID = NullChannelsID;
+
+    #[inline]
+    fn channel_id(
+        &self,
+        _name: &str
+    ) -> Option<Self::ChannelID> {
+        None
+    }
+}
+
 impl<Ctx> Channels<Ctx> for NullChannels {
     type Addr = NullChannelsAddr;
-    type ChannelID = NullChannelsID;
     type OutNegoParam = ();
     type Param = NullChannelsParam;
     type ParamsError = Infallible;
@@ -746,14 +760,6 @@ impl<Ctx> Channels<Ctx> for NullChannels {
         Self::ReqStreamError
     > {
         Ok(RetryResult::Success((Some(()), None, None)))
-    }
-
-    #[inline]
-    fn channel_id(
-        &self,
-        _name: &str
-    ) -> Option<Self::ChannelID> {
-        None
     }
 }
 
@@ -847,6 +853,35 @@ impl<Private, Shared> SharedPrivateChannels<Private, Shared> {
     }
 }
 
+impl<Private, Shared> ChannelsID for SharedPrivateChannels<Private, Shared>
+where
+    Private: ChannelsID,
+    Shared: ChannelsID
+{
+    type ChannelID = SharedPrivateValue<Private::ChannelID, Shared::ChannelID>;
+
+    #[inline]
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        self.private
+            .as_ref()
+            .and_then(|private| {
+                private
+                    .channel_id(name)
+                    .map(|id| SharedPrivateValue::Private { private: id })
+            })
+            .or_else(|| {
+                self.shared.as_ref().and_then(|private| {
+                    private
+                        .channel_id(name)
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
+                })
+            })
+    }
+}
+
 impl<Private, Shared, Ctx> Channels<Ctx>
     for SharedPrivateChannels<Private, Shared>
 where
@@ -854,7 +889,6 @@ where
     Shared: Channels<Ctx>
 {
     type Addr = SharedPrivateValue<Private::Addr, Shared::Addr>;
-    type ChannelID = SharedPrivateValue<Private::ChannelID, Shared::ChannelID>;
     type OutNegoParam =
         SharedPrivateValue<Private::OutNegoParam, Shared::OutNegoParam>;
     type Param = SharedPrivateValue<Private::Param, Shared::Param>;
@@ -1035,27 +1069,6 @@ where
                 })),
             _ => Err(SharedPrivateMatchError::Mismatch)
         }
-    }
-
-    #[inline]
-    fn channel_id(
-        &self,
-        name: &str
-    ) -> Option<Self::ChannelID> {
-        self.private
-            .as_ref()
-            .and_then(|private| {
-                private
-                    .channel_id(name)
-                    .map(|id| SharedPrivateValue::Private { private: id })
-            })
-            .or_else(|| {
-                self.shared.as_ref().and_then(|private| {
-                    private
-                        .channel_id(name)
-                        .map(|id| SharedPrivateValue::Shared { shared: id })
-                })
-            })
     }
 }
 

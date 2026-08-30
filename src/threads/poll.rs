@@ -53,6 +53,7 @@ use mio::Token;
 use mio::Waker;
 
 use crate::channels::Channels;
+use crate::channels::ChannelsID;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::config::PollThreadConfig;
@@ -111,12 +112,26 @@ where
     nevents: usize
 }
 
+impl<Party, Chans, Ctx> ChannelsID for PollThreadCtx<Party, Chans, Ctx>
+where
+    Chans: ChannelsID + Channels<Ctx>
+{
+    type ChannelID = Chans::ChannelID;
+
+    #[inline]
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        self.channels.channel_id(name)
+    }
+}
+
 impl<Party, Chans, Ctx> Channels<()> for PollThreadCtx<Party, Chans, Ctx>
 where
     Chans: Channels<Ctx>
 {
     type Addr = Chans::Addr;
-    type ChannelID = Chans::ChannelID;
     type OutNegoParam = Chans::OutNegoParam;
     type Param = Chans::Param;
     type ParamsError = Chans::ParamsError;
@@ -161,14 +176,6 @@ where
     where
         I: Iterator<Item = Self::ChannelID> {
         self.channels.params(&mut self.ctx, channels)
-    }
-
-    #[inline]
-    fn channel_id(
-        &self,
-        name: &str
-    ) -> Option<Self::ChannelID> {
-        self.channels.channel_id(name)
     }
 }
 
@@ -330,6 +337,30 @@ where
     Types: 'static + PollThreadTypes<Ctx>,
     Ctx: 'static + Send
 {
+    pub fn start(
+        config: PollThreadConfig<
+            Types::ChansConfig,
+            Types::ModeConfig,
+            Types::StreamConfig,
+            Types::MsgAuthConfig
+        >,
+        self_party: Option<Types::SessionPrin>,
+        ctx: Ctx,
+        recv: Types::Recv,
+        msgs: Types::Msgs
+    ) -> Result<JoinHandle<()>, Error> {
+        Builder::new()
+            .name(String::from("poll-thread"))
+            .spawn(move || {
+                match Self::create(config, self_party, ctx, recv, msgs) {
+                    Ok(poll) => poll.run(),
+                    Err(err) => error!(target: "poll-thread",
+                                       "error creating poll thread: {}",
+                                       err)
+                }
+            })
+    }
+
     #[inline]
     pub fn stream(&self) -> &Types::Stream {
         &self.stream
@@ -1338,12 +1369,6 @@ where
 
         info!(target: "poll-thread",
               "mio polling thread exiting");
-    }
-
-    pub fn start(self) -> Result<JoinHandle<()>, Error> {
-        Builder::new()
-            .name(String::from("poll-thread"))
-            .spawn(move || self.run())
     }
 }
 

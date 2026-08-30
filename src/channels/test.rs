@@ -43,6 +43,7 @@ use mio::Token;
 use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
+use crate::channels::ChannelsID;
 use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::large_obj::LargeObjID;
@@ -869,12 +870,25 @@ where
     }
 }
 
+impl<Stream> ChannelsID for TestChannels<Stream>
+where
+    Stream: Clone
+{
+    type ChannelID = String;
+
+    fn channel_id(
+        &self,
+        name: &str
+    ) -> Option<Self::ChannelID> {
+        Some(name.to_string())
+    }
+}
+
 impl<Ctx, Stream> Channels<Ctx> for TestChannels<Stream>
 where
     Stream: Clone
 {
     type Addr = TestEndpoint;
-    type ChannelID = String;
     type OutNegoParam = ();
     type Param = TestChannelParam;
     type ParamsError = Infallible;
@@ -939,13 +953,6 @@ where
         }
 
         Ok(params.into_iter())
-    }
-
-    fn channel_id(
-        &self,
-        name: &str
-    ) -> Option<Self::ChannelID> {
-        Some(name.to_string())
     }
 }
 
