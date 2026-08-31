@@ -71,22 +71,22 @@ use crate::stream::PushStreamPrivateSingle;
 /// will ignore all batching-related API calls.  It will immediately
 /// encode and send messages when its implementation of
 /// [add](PushStreamAdd::add) is called.
-pub struct DatagramCodecStream<Msg, IO, Codec>
-where
-    Codec: Send {
+pub struct DatagramCodecStream<Msg, IO, Enc, Dec> {
     msg: PhantomData<Msg>,
-    /// Codec to use.
-    codec: Codec,
+    /// Encoder to use.
+    encoder: Enc,
+    /// Decoder to use.
+    decoder: Dec,
     /// Low-level IO stream.
     io: IO
 }
 
-pub struct BytestreamCodecStream<Msg, IO, Codec>
-where
-    Codec: Send {
+pub struct BytestreamCodecStream<Msg, IO, Enc, Dec> {
     msg: PhantomData<Msg>,
-    /// Codec to use.
-    codec: Codec,
+    /// Encoder to use.
+    encoder: Enc,
+    /// Decoder to use.
+    decoder: Dec,
     /// Low-level IO stream.
     io: IO
 }
@@ -133,37 +133,39 @@ where
     }
 }
 
-impl<Msg, IO, Codec> BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: Send,
     IO: Write
 {
     #[inline]
     pub fn create(
-        codec: Codec,
+        encoder: Enc,
+        decoder: Dec,
         io: IO
     ) -> Self {
         BytestreamCodecStream {
             msg: PhantomData,
-            codec: codec,
+            encoder: encoder,
+            decoder: decoder,
             io: io
         }
     }
 }
 
-impl<Msg, IO, Codec> DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Send,
     IO: Write
 {
     #[inline]
     pub fn create(
-        codec: Codec,
+        encoder: Enc,
+        decoder: Dec,
         io: IO
     ) -> Self {
         DatagramCodecStream {
             msg: PhantomData,
-            codec: codec,
+            encoder: encoder,
+            decoder: decoder,
             io: io
         }
     }
@@ -196,9 +198,9 @@ where
     }
 }
 
-impl<Msg, IO, Codec> Credentials for BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> Credentials
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: Send,
     IO: Credentials
 {
     type Cred = IO::Cred;
@@ -210,9 +212,9 @@ where
     }
 }
 
-impl<Msg, IO, Codec> Credentials for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> Credentials
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: Send,
     IO: Credentials
 {
     type Cred = IO::Cred;
@@ -224,10 +226,9 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStream<Ctx>
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamEncoder<Msg> + Send,
     IO: Write
 {
     type BatchID = ();
@@ -335,10 +336,10 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStream<Ctx>
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStream<Ctx>
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    Enc: DatagramCodec<Msg> + Encoder<Msg>,
     IO: Write
 {
     type BatchID = ();
@@ -446,30 +447,30 @@ where
     }
 }
 
-impl<Msg, IO, Codec> PushStreamPartyID for BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> PushStreamPartyID
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: Send,
     IO: Write
 {
     type PartyID = ();
 }
 
-impl<Msg, IO, Codec> PushStreamPartyID for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> PushStreamPartyID
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: Send,
     IO: Write
 {
     type PartyID = ();
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamAdd<Msg, Ctx>
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamEncoder<Msg> + Send,
-    Codec::StreamEncodeError: RecoverableError,
+    Enc: BytestreamEncoder<Msg>,
+    Enc::StreamEncodeError: RecoverableError,
     IO: Write
 {
-    type AddError = Codec::StreamEncodeError;
+    type AddError = Enc::StreamEncodeError;
     type AddRetry = Infallible;
 
     #[inline]
@@ -511,13 +512,13 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamAdd<Msg, Ctx>
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamAdd<Msg, Ctx>
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    Enc: DatagramCodec<Msg> + Encoder<Msg>,
     IO: Write
 {
-    type AddError = CodecStreamError<Codec::EncodeError, Error>;
+    type AddError = CodecStreamError<Enc::EncodeError, Error>;
     type AddRetry = Infallible;
 
     #[inline]
@@ -559,10 +560,10 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamPrivate<Ctx>
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamEncoder<Msg> + Send,
+    Enc: BytestreamEncoder<Msg>,
     IO: Write
 {
     type AbortBatchRetry = Infallible;
@@ -740,10 +741,10 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamPrivate<Ctx>
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamPrivate<Ctx>
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    Enc: DatagramCodec<Msg> + Encoder<Msg>,
     IO: Write
 {
     type AbortBatchRetry = Infallible;
@@ -921,53 +922,55 @@ where
     }
 }
 
-impl<Msg, IO, Codec> PullStream<Msg> for BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> PullStream<Msg>
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamDecoder<Msg> + Send,
+    Dec: BytestreamDecoder<Msg>,
     IO: Read
 {
-    type PullError = Codec::StreamDecodeError;
+    type PullError = Dec::StreamDecodeError;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
-        self.codec
+        self.decoder
             .decode_from_stream(&mut self.io)
             .map(|(msg, _)| msg)
     }
 }
 
-impl<Msg, IO, Codec> PullStream<Msg> for DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> PullStream<Msg>
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Decoder<Msg> + Send,
+    Dec: DatagramCodec<Msg> + Decoder<Msg>,
     IO: Read
 {
-    type PullError = CodecStreamError<Codec::DecodeError, Error>;
+    type PullError = CodecStreamError<Dec::DecodeError, Error>;
 
     fn pull(&mut self) -> Result<Msg, Self::PullError> {
         // ISSUE #4: avoid creating arrays like this
-        let mut buf = vec![0; Codec::MAX_BYTES];
+        let mut buf = vec![0; Dec::MAX_BYTES];
 
         let readlen = self
             .io
             .read(&mut buf)
             .map_err(|err| CodecStreamError::IO { err: err })?;
 
-        self.codec
+        self.decoder
             .decode(&buf[..readlen])
             .map(|(msg, _)| msg)
             .map_err(|err| CodecStreamError::Codec { err: err })
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
-    for BytestreamCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamPrivateSingle<Msg, Ctx>
+    for BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamEncoder<Msg> + Send,
-    Codec::StreamEncodeError: RecoverableError,
+    Enc: BytestreamEncoder<Msg>,
+    Enc::StreamEncodeError: RecoverableError,
     IO: Write
 {
     type CancelPushError = Infallible;
     type CancelPushRetry = Infallible;
-    type PushError = Codec::StreamEncodeError;
+    type PushError = Enc::StreamEncodeError;
     type PushRetry = Infallible;
 
     #[inline]
@@ -1039,15 +1042,15 @@ where
     }
 }
 
-impl<Ctx, Msg, IO, Codec> PushStreamPrivateSingle<Msg, Ctx>
-    for DatagramCodecStream<Msg, IO, Codec>
+impl<Ctx, Msg, IO, Enc, Dec> PushStreamPrivateSingle<Msg, Ctx>
+    for DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    Enc: DatagramCodec<Msg> + Encoder<Msg>,
     IO: Write
 {
     type CancelPushError = Infallible;
     type CancelPushRetry = Infallible;
-    type PushError = CodecStreamError<Codec::EncodeError, Error>;
+    type PushError = CodecStreamError<Enc::EncodeError, Error>;
     type PushRetry = Infallible;
 
     #[inline]
@@ -1120,9 +1123,11 @@ where
 }
 
 impl<Ctx, H, Stream> LargeObjStream<Ctx>
-    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
+    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream,
+                            LargeObjMsgCodec<H>,
+                            LargeObjMsgCodec<H>>
 where
-    H: Default + HashAlgo + Send,
+    H: Default + HashAlgo,
     Stream: Write
 {
     type Frags = OutboundFrags;
@@ -1195,9 +1200,11 @@ where
 }
 
 impl<Ctx, H, Stream> LargeObjOfferStream<H::HashID, Ctx>
-    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream, LargeObjMsgCodec<H>>
+    for DatagramCodecStream<LargeObjMsg<H::HashID>, Stream,
+                            LargeObjMsgCodec<H>,
+                            LargeObjMsgCodec<H>>
 where
-    H: Default + HashAlgo + Send,
+    H: Default + HashAlgo,
     Stream: Write
 {
     type PushOfferError =
@@ -1264,9 +1271,9 @@ where
     }
 }
 
-impl<Msg, IO, Codec> DatagramCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> DatagramCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: DatagramCodec<Msg> + Encoder<Msg> + Send,
+    Enc: DatagramCodec<Msg> + Encoder<Msg>,
     IO: Write
 {
     #[inline]
@@ -1275,12 +1282,12 @@ where
         msg: &Msg
     ) -> Result<
         RetryResult<(), Infallible>,
-        CodecStreamError<Codec::EncodeError, Error>
+        CodecStreamError<Enc::EncodeError, Error>
     > {
         // ISSUE #5: Find a way to avoid repeatedly encoding messages
         // like this
         let buf = self
-            .codec
+            .encoder
             .encode_to_vec(msg)
             .map_err(|err| CodecStreamError::Codec { err: err })?;
 
@@ -1291,18 +1298,18 @@ where
     }
 }
 
-impl<Msg, IO, Codec> BytestreamCodecStream<Msg, IO, Codec>
+impl<Msg, IO, Enc, Dec> BytestreamCodecStream<Msg, IO, Enc, Dec>
 where
-    Codec: BytestreamEncoder<Msg> + Send,
-    Codec::StreamEncodeError: RecoverableError,
+    Enc: BytestreamEncoder<Msg>,
+    Enc::StreamEncodeError: RecoverableError,
     IO: Write
 {
     #[inline]
     fn push_stream(
         &mut self,
         msg: &Msg
-    ) -> Result<RetryResult<(), Infallible>, Codec::StreamEncodeError> {
-        self.codec
+    ) -> Result<RetryResult<(), Infallible>, Enc::StreamEncodeError> {
+        self.encoder
             .encode_to_stream(&mut self.io, msg)
             .map(|_| RetryResult::Success(()))
     }
