@@ -257,6 +257,16 @@ where
             poll: poll
         }
     }
+
+    #[inline]
+    pub fn inner(&self) -> &Ctx {
+        &self.ctx
+    }
+
+    #[inline]
+    pub fn inner_mut(&mut self) -> &mut Ctx {
+        &mut self.ctx
+    }
 }
 
 impl<Ctx, Types> PollThread<Ctx, Types>
@@ -449,7 +459,7 @@ where
                        "listening for message on {}",
                        id);
 
-                match stream.get_mut().pull() {
+                match stream.pull() {
                     Ok(msg) => Self::handle_msg(
                         &mut self.stream,
                         &mut self.authn,
@@ -1415,6 +1425,8 @@ where
 #[cfg(test)]
 use std::time::Duration;
 
+#[cfg(test)]
+use constellation_auth::authn::AuthNedDestruct;
 #[cfg(test)]
 use constellation_auth::cred::NullCred;
 

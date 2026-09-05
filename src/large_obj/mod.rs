@@ -39,7 +39,7 @@ use std::time::Instant;
 
 use constellation_auth::authn::AuthNMsgRecv;
 use constellation_auth::authn::AuthNResult;
-use constellation_auth::authn::AuthNed;
+use constellation_auth::authn::AuthNedDestruct;
 use constellation_auth::authn::MsgAuthN;
 use constellation_auth::authn::MsgAuthNTypes;
 use constellation_common::codec::DatagramCodec;
@@ -132,8 +132,8 @@ pub trait LargeObjProtoTypes<InMsg, OutMsg> {
     /// Type of message source.
     type Msgs: LargeObjMsgs<Self::Hash, OutMsg>;
     /// Type of message receiver.
-    type Recv: AuthNMsgRecv<Self::Prin, InMsg, Self::AuthNMsg> + Clone;
-    type AuthNMsg: AuthNed<Self::Prin, InMsg>;
+    type Recv: AuthNMsgRecv<Self::Prin, Self::AuthNMsg> + Clone;
+    type AuthNMsg: AuthNedDestruct<Self::Prin, InMsg>;
     type AuthNError: Debug + Display;
     type MsgAuthN: MsgAuthN<
             InMsg,
@@ -1945,12 +1945,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         let data = match msg {
             // Inbound messages.
             LargeObjMsg::Offer { hash, size, frag } => {
@@ -2036,12 +2035,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received offer for {}",
                hash);
@@ -2234,12 +2232,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received fragments for ID {}",
                id);
@@ -2354,12 +2351,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received accept for ID {} ({})",
                id, hash);
@@ -2403,12 +2399,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received object request for {} (ID {})",
                hash, id);
@@ -2474,12 +2469,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received fragments for ID {}",
                id);
@@ -2543,12 +2537,11 @@ where
             <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
             <Types::Recv as AuthNMsgRecv<
                 Types::Prin,
-                InMsg,
                 Types::AuthNMsg
             >>::RecvError,
             F::RecvReqError
         >
-    > {
+    >{
         trace!(target: "large-obj-proto",
                "received finish for ID {} ({})",
                id, hash);
@@ -2578,26 +2571,21 @@ where
 }
 
 impl<InMsg, OutMsg, PartyID, F, AuthNMsg, Types>
-    AuthNMsgRecv<Types::SessionPrin, LargeObjMsg<Types::HashID>, AuthNMsg>
+    AuthNMsgRecv<Types::SessionPrin, AuthNMsg>
     for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
-    AuthNMsg: AuthNed<Types::SessionPrin, LargeObjMsg<Types::HashID>>,
+    AuthNMsg: AuthNedDestruct<Types::SessionPrin, LargeObjMsg<Types::HashID>>,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     PartyID: Clone,
     F: Frags
 {
-    type RecvError =
-        LargeObjRecvError<
-            Types::HashID,
-            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
-            <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
-            <Types::Recv as AuthNMsgRecv<
-                Types::Prin,
-                InMsg,
-                Types::AuthNMsg
-            >>::RecvError,
-            F::RecvReqError
-        >;
+    type RecvError = LargeObjRecvError<
+        Types::HashID,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError,
+        F::RecvReqError
+    >;
 
     fn recv_auth_msg(
         &mut self,

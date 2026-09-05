@@ -239,8 +239,9 @@ where
     type ChannelID: Clone + Debug + Display + Eq + Hash;
     type MsgPrin: Clone + Display + Eq + Hash;
     type SessionPrin: Display + Send;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
-    type Chan: Clone + PullStream<Self::Wrapper, PullError = Self::PullError>;
+    type AuthNChan: Clone
+        + AuthNed<Self::SessionPrin>
+        + PullStream<Self::Wrapper, PullError = Self::PullError>;
     type PullError: Debug + Display + ScopedError;
     type RefreshRetry: RetryWhen;
     type RefreshCompletableError: ScopedError;
@@ -266,7 +267,7 @@ where
             CreateError = Self::StreamCreateError
         >;
     type InMsg;
-    type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
+    type AuthNMsg: AuthNed<Self::MsgPrin>;
     type Wrapper;
     type Msgs: Send;
     type ChansConfig: Send;
@@ -304,12 +305,8 @@ where
     type MsgAuthCreateError: Debug + Display;
     type MsgAuthError: Debug + Display + ScopedError;
     type RecvError: Debug + Display + ScopedError;
-    type Recv: AuthNMsgRecv<
-            Self::MsgPrin,
-            Self::InMsg,
-            Self::AuthNMsg,
-            RecvError = Self::RecvError
-        > + Send;
+    type Recv: AuthNMsgRecv<Self::MsgPrin, Self::AuthNMsg, RecvError = Self::RecvError>
+        + Send;
     type ModeConfig: Send;
     type ModeCreateError: Debug + Display;
     type Mode: PushMode<
@@ -329,7 +326,7 @@ pub trait DispatchInboundTypes {
     type OutMsg;
     type SessionPrin: Clone + Display + Eq + Hash;
     type MsgPrin: Clone + Display + Eq + Hash;
-    type AuthNMsg: AuthNed<Self::MsgPrin, Self::InMsg>;
+    type AuthNMsg: AuthNed<Self::MsgPrin>;
     type MsgAuthError: Debug + Display + ScopedError;
     type MsgAuth: Clone
         + MsgAuthN<
@@ -373,14 +370,10 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
         >;
     type Msgs: Send;
     type RecvError: Debug + Display + ScopedError;
-    type Recv: AuthNMsgRecv<
-            Self::MsgPrin,
-            Self::InMsg,
-            Self::AuthNMsg,
-            RecvError = Self::RecvError
-        >;
-    type Chan: PullStream<Self::Wrapper, PullError = Self::PullError>;
-    type AuthNChan: Clone + AuthNed<Self::SessionPrin, Self::Chan>;
+    type Recv: AuthNMsgRecv<Self::MsgPrin, Self::AuthNMsg, RecvError = Self::RecvError>;
+    type AuthNChan: Clone
+        + AuthNed<Self::SessionPrin>
+        + PullStream<Self::Wrapper, PullError = Self::PullError>;
     type ModeConfig: Clone + Send;
     type ModeCreateError: Debug + Display;
     type Mode: PushMode<Self::Stream, Self::Msgs, DispatchThreadCtx<Self::Chans, Ctx>>
@@ -564,7 +557,6 @@ pub struct DatagramSelectorPollTypes<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -574,7 +566,6 @@ pub struct DatagramSelectorPollTypes<
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -590,7 +581,7 @@ pub struct DatagramSelectorPollTypes<
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -618,12 +609,11 @@ pub struct DatagramSelectorPollTypes<
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
-    chan: PhantomData<Chan>,
     wrapper: PhantomData<Wrapper>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
@@ -641,7 +631,6 @@ pub struct LargeObjSelectorPollTypes<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -650,7 +639,6 @@ pub struct LargeObjSelectorPollTypes<
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -663,7 +651,7 @@ pub struct LargeObjSelectorPollTypes<
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -724,7 +712,6 @@ pub struct LargeObjSelectorPollTypes<
     <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
-    chan: PhantomData<Chan>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
     chans: PhantomData<Chans>,
@@ -734,14 +721,13 @@ pub struct LargeObjSelectorPollTypes<
 
 #[derive(Debug)]
 pub struct DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                     Epochs, Chans, ChansConfig,
-                                     ChansCreateError, Chan, Resolve,
-                                     Msgs, Recv, Ctx>
+                                 Epochs, Chans, ChansConfig,
+                                 ChansCreateError, Resolve,
+                                 Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -752,7 +738,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -763,7 +749,6 @@ where
         Chans::Stream,
     >,
     Chans::Param: Clone + Debug + Display + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display,
     <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
@@ -779,17 +764,12 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
-    chan: PhantomData<Chan>,
     wrapper: PhantomData<Wrapper>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
@@ -801,13 +781,11 @@ where
 
 #[derive(Debug)]
 pub struct LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                 ChansCreateError, Chan, Resolve,
-                                 Types, Ctx>
+                                 ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -817,7 +795,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -861,7 +839,6 @@ where
 {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
-    chan: PhantomData<Chan>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
     chans: PhantomData<Chans>,
@@ -879,7 +856,6 @@ pub struct DatagramMulticastPollTypes<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -889,7 +865,6 @@ pub struct DatagramMulticastPollTypes<
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -905,13 +880,12 @@ pub struct DatagramMulticastPollTypes<
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
@@ -947,12 +921,11 @@ pub struct DatagramMulticastPollTypes<
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
-    chan: PhantomData<Chan>,
     wrapper: PhantomData<Wrapper>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
@@ -970,7 +943,6 @@ pub struct LargeObjMulticastPollTypes<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -979,7 +951,6 @@ pub struct LargeObjMulticastPollTypes<
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -992,7 +963,7 @@ pub struct LargeObjMulticastPollTypes<
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -1003,7 +974,6 @@ pub struct LargeObjMulticastPollTypes<
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
@@ -1080,7 +1050,6 @@ pub struct LargeObjMulticastPollTypes<
     <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin: Eq + Hash {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
-    chan: PhantomData<Chan>,
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
     chans: PhantomData<Chans>,
@@ -1243,7 +1212,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -1258,7 +1226,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -1269,7 +1236,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -1285,7 +1251,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -1313,7 +1279,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
 {
     #[inline]
@@ -1326,7 +1292,6 @@ where
             epochs: self.epochs,
             inmsg: self.inmsg,
             chans: self.chans,
-            chan: self.chan,
             msgs: self.msgs,
             recv: self.recv,
             ctx: self.ctx
@@ -1341,7 +1306,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -1353,7 +1317,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -1363,7 +1326,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -1376,7 +1338,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -1441,7 +1403,6 @@ where
         LargeObjSelectorPollTypes {
             resolve: self.resolve,
             epochs: self.epochs,
-            chan: self.chan,
             outmsg: self.outmsg,
             inmsg: self.inmsg,
             chans: self.chans,
@@ -1452,16 +1413,14 @@ where
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Clone
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> Clone
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -1472,7 +1431,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -1499,11 +1458,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
     #[inline]
@@ -1516,7 +1471,6 @@ where
             epochs: self.epochs,
             inmsg: self.inmsg,
             chans: self.chans,
-            chan: self.chan,
             msgs: self.msgs,
             recv: self.recv,
             ctx: self.ctx
@@ -1525,14 +1479,13 @@ where
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> Clone
+     ChansCreateError, Resolve, Types, Ctx> Clone
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -1542,7 +1495,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -1589,7 +1542,6 @@ where
         LargeObjDispatchTypes {
             resolve: self.resolve,
             epochs: self.epochs,
-            chan: self.chan,
             outmsg: self.outmsg,
             inmsg: self.inmsg,
             chans: self.chans,
@@ -1608,7 +1560,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -1623,7 +1574,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -1634,7 +1584,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -1650,7 +1599,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -1692,7 +1641,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
@@ -1705,7 +1654,6 @@ where
             epochs: self.epochs,
             inmsg: self.inmsg,
             chans: self.chans,
-            chan: self.chan,
             msgs: self.msgs,
             recv: self.recv,
             ctx: self.ctx
@@ -1720,7 +1668,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -1732,7 +1679,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -1742,7 +1688,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -1755,7 +1700,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -1847,7 +1792,6 @@ where
         LargeObjMulticastPollTypes {
             resolve: self.resolve,
             epochs: self.epochs,
-            chan: self.chan,
             outmsg: self.outmsg,
             inmsg: self.inmsg,
             chans: self.chans,
@@ -2012,7 +1956,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -2027,7 +1970,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -2038,7 +1980,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -2054,7 +1995,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2082,7 +2023,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
 {
     #[inline]
@@ -2095,7 +2036,6 @@ where
             epochs: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
-            chan: PhantomData,
             msgs: PhantomData,
             recv: PhantomData,
             ctx: PhantomData
@@ -2110,7 +2050,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -2122,7 +2061,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -2132,7 +2070,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -2145,7 +2082,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -2210,7 +2147,6 @@ where
         LargeObjSelectorPollTypes {
             resolve: PhantomData,
             epochs: PhantomData,
-            chan: PhantomData,
             outmsg: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
@@ -2221,16 +2157,14 @@ where
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Default
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> Default
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -2241,7 +2175,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -2268,11 +2202,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
     #[inline]
@@ -2285,7 +2215,6 @@ where
             epochs: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
-            chan: PhantomData,
             msgs: PhantomData,
             recv: PhantomData,
             ctx: PhantomData
@@ -2294,14 +2223,13 @@ where
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> Default
+     ChansCreateError, Resolve, Types, Ctx> Default
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -2311,7 +2239,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -2358,7 +2286,6 @@ where
         LargeObjDispatchTypes {
             resolve: PhantomData,
             epochs: PhantomData,
-            chan: PhantomData,
             outmsg: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
@@ -2377,7 +2304,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -2392,7 +2318,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -2403,7 +2328,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -2419,7 +2343,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2461,7 +2385,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
@@ -2474,7 +2398,6 @@ where
             epochs: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
-            chan: PhantomData,
             msgs: PhantomData,
             recv: PhantomData,
             ctx: PhantomData
@@ -2489,7 +2412,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -2501,7 +2423,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -2511,7 +2432,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -2524,7 +2444,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -2616,7 +2536,6 @@ where
         LargeObjMulticastPollTypes {
             resolve: PhantomData,
             epochs: PhantomData,
-            chan: PhantomData,
             outmsg: PhantomData,
             inmsg: PhantomData,
             chans: PhantomData,
@@ -2753,7 +2672,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -2768,7 +2686,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -2779,7 +2696,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -2795,7 +2711,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2823,7 +2739,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
 {
 }
@@ -2835,7 +2751,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -2847,7 +2762,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -2857,7 +2771,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -2870,7 +2783,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -2933,16 +2846,14 @@ where
 }
 
 unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Send
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> Send
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -2953,7 +2864,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -2980,24 +2891,19 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv< MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
 }
 
 unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Send
+            ChansCreateError, Resolve, Types, Ctx> Send
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -3007,7 +2913,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -3060,7 +2966,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -3075,7 +2980,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -3086,7 +2990,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -3102,7 +3005,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3144,7 +3047,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
@@ -3156,7 +3059,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -3168,7 +3070,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -3178,7 +3079,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -3191,7 +3091,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -3407,7 +3307,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -3422,7 +3321,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -3433,7 +3331,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -3449,7 +3346,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3477,7 +3374,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
 {
 }
@@ -3489,7 +3386,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -3501,7 +3397,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -3511,7 +3406,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -3524,7 +3418,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -3587,16 +3481,14 @@ where
 }
 
 unsafe impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> Sync
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> Sync
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -3607,7 +3499,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -3634,24 +3526,19 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg >,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
 }
 
 unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Chan, Resolve, Types, Ctx> Sync
+            ChansCreateError, Resolve, Types, Ctx> Sync
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -3661,7 +3548,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -3714,7 +3601,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -3729,7 +3615,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -3740,7 +3625,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -3756,7 +3640,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3798,7 +3682,7 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
@@ -3810,7 +3694,6 @@ unsafe impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -3822,7 +3705,6 @@ unsafe impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -3832,7 +3714,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -3845,7 +3726,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -4519,7 +4400,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -4534,7 +4414,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -4545,7 +4424,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -4561,7 +4439,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -4589,13 +4467,12 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
     type AuthNMsg = MsgAuth::AuthNMsg;
-    type Chan = Chan;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChannelID = Chans::ChannelID;
@@ -4621,7 +4498,7 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type Recv = Recv;
     type RecvError = Recv::RecvError;
     type RefreshCompletableError = Infallible;
@@ -4654,7 +4531,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -4666,7 +4542,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -4676,7 +4551,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -4689,7 +4563,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -4752,7 +4626,6 @@ where
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
     type AuthNMsg = Types::AuthNMsg;
-    type Chan = Chan;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChannelID = Chans::ChannelID;
@@ -4786,13 +4659,10 @@ where
         >>::Frags,
         Types
     >;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
     type Recv = Types::Recv;
-    type RecvError = <Types::Recv as AuthNMsgRecv<
-        Types::Prin,
-        InMsg,
-        Types::AuthNMsg
-    >>::RecvError;
+    type RecvError =
+        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError;
     type RefreshCompletableError = Infallible;
     type RefreshError =
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>;
@@ -4817,16 +4687,14 @@ where
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> DispatchInboundTypes
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> DispatchInboundTypes
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -4837,7 +4705,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -4864,11 +4732,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
     type InMsg = InMsg;
@@ -4882,16 +4746,14 @@ where
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Msgs, Recv, Ctx> DispatchEntryTypes<Ctx>
-    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth,
-                                  Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve,
-                                  Msgs, Recv, Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> DispatchEntryTypes<Ctx>
+    for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
+                              ChansConfig, ChansCreateError, Resolve,
+                              Msgs, Recv, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Clone + Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Prin: Eq + Hash,
@@ -4902,7 +4764,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<MsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<OutMsg, DispatchThreadCtx<Chans, Ctx>>
@@ -4929,17 +4791,13 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
     Resolve::Config: Clone + Default,
-    Recv: AuthNMsgRecv<
-            MsgAuth::Prin,
-            InMsg,
-            MsgAuth::AuthNMsg,
-        >,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
 {
     type Addr = Chans::Addr;
     type ChannelParam = Chans::Param;
     type ChannelID = Chans::ChannelID;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type RefreshRetry = Instant;
     type RefreshCompletableError = Infallible;
     type RefreshPermanentError = Infallible;
@@ -4953,7 +4811,6 @@ where
         Chans::Stream,
         DispatchThreadCtx<Chans, Ctx>
     >;
-    type Chan = Chan;
     type Msgs = Msgs;
     type Recv = Recv;
     type RecvError = Recv::RecvError;
@@ -4978,14 +4835,13 @@ where
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> DispatchInboundTypes
+     ChansCreateError, Resolve, Types, Ctx> DispatchInboundTypes
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -4995,7 +4851,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -5048,14 +4904,13 @@ where
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Chan, Resolve, Types, Ctx> DispatchEntryTypes<Ctx>
+     ChansCreateError, Resolve, Types, Ctx> DispatchEntryTypes<Ctx>
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                  ChansCreateError, Chan, Resolve, Types, Ctx>
+                              ChansCreateError, Resolve, Types, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -5065,7 +4920,7 @@ where
         + Channels<Ctx>
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin, Chan>
+    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
@@ -5111,7 +4966,6 @@ where
     type ChannelParam = Chans::Param;
     type ChannelID = Chans::ChannelID;
     type AuthNChan = Chans::Stream;
-    type Chan = Chan;
     type RefreshRetry = Instant;
     type RefreshCompletableError = Infallible;
     type RefreshPermanentError = Infallible;
@@ -5137,11 +4991,10 @@ where
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type Chans = Chans;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
     type Recv = Types::Recv;
     type RecvError =
-        <Types::Recv
-         as AuthNMsgRecv<Types::Prin, InMsg, Types::AuthNMsg>>::RecvError;
+        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError;
     type ModeConfig = PrivateLargeObjModeConfig;
     type ModeCreateError = Infallible;
     type Mode = PrivateLargeObjPushMode<
@@ -5162,7 +5015,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Msgs,
     Recv,
@@ -5177,7 +5029,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Msgs,
         Recv,
@@ -5188,7 +5039,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Wrapper>,
     OutMsg: Clone,
     MsgAuth: Create + MsgAuthN<InMsg, Wrapper>,
     MsgAuth::Config: Send,
@@ -5204,7 +5054,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<MsgAuth::SessionPrin, Chan>
+        + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -5246,13 +5096,12 @@ where
     Resolve::OriginConfig:
         Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
     Resolve::Config: Clone + Default + Send,
-    Recv: AuthNMsgRecv<MsgAuth::Prin, InMsg, MsgAuth::AuthNMsg> + Send,
+    Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
     type AuthNMsg = MsgAuth::AuthNMsg;
-    type Chan = Chan;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChannelID = Chans::ChannelID;
@@ -5282,7 +5131,7 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type Recv = Recv;
     type RecvError = Recv::RecvError;
     type RefreshCompletableError = ErrorSet<
@@ -5332,7 +5181,6 @@ impl<
     Chans,
     ChansConfig,
     ChansCreateError,
-    Chan,
     Resolve,
     Types,
     Ctx
@@ -5344,7 +5192,6 @@ impl<
         Chans,
         ChansConfig,
         ChansCreateError,
-        Chan,
         Resolve,
         Types,
         Ctx
@@ -5354,7 +5201,6 @@ where
     Epochs: Create + Iterator,
     Epochs::Config: Default + Send,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
-    Chan: Clone + PullStream<Types::Wrapper>,
     InMsg: Send,
     OutMsg: Clone + Send,
     ChansConfig: Send,
@@ -5367,7 +5213,7 @@ where
         + ChannelsListen<Ctx>
         + ChannelsShutdown<Ctx>,
     Chans::Stream: Clone
-        + AuthNed<Types::SessionPrin, Chan>
+        + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamPrivate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<
@@ -5457,7 +5303,6 @@ where
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
     type AuthNMsg = Types::AuthNMsg;
-    type Chan = Chan;
     type ChanShutdownError = Chans::ShutdownStreamError;
     type ChanShutdownRetry = Chans::ShutdownStreamRetry;
     type ChannelID = Chans::ChannelID;
@@ -5494,13 +5339,10 @@ where
         >,
         Types
     >;
-    type PullError = Chan::PullError;
+    type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
     type Recv = Types::Recv;
-    type RecvError = <Types::Recv as AuthNMsgRecv<
-        Types::Prin,
-        InMsg,
-        Types::AuthNMsg
-    >>::RecvError;
+    type RecvError =
+        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError;
     type RefreshCompletableError = ErrorSet<
         MulticastStreamIdx,
         RetryResult<Option<Instant>, Instant>,

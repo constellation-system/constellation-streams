@@ -471,6 +471,9 @@ use std::io::Error;
 use std::io::ErrorKind;
 
 #[cfg(test)]
+use constellation_common::error::CompletableIOError;
+
+#[cfg(test)]
 enum TestState {
     WriteZeroSplitOneTwo,
     WriteOneExpectThree,
@@ -511,7 +514,7 @@ impl ScopedError for TestError {
 
 #[cfg(test)]
 impl RecoverableError for TestError {
-    type Completable = ();
+    type Completable = CompletableIOError;
     type Permanent = TestError;
 
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {

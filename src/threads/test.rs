@@ -308,9 +308,7 @@ impl PullStream<String> for TestChannelCore {
     }
 }
 
-impl AuthNMsgRecv<NullCred, String, BasicAuthNed<NullCred, String>>
-    for TestRecv
-{
+impl AuthNMsgRecv<NullCred, BasicAuthNed<NullCred, String>> for TestRecv {
     type RecvError = Infallible;
 
     #[inline]
@@ -557,7 +555,6 @@ where
     type Addr = TestEndpoint;
     type AuthNChan = TestChannel<TestChannelCore>;
     type AuthNMsg = BasicAuthNed<NullCred, String>;
-    type Chan = TestChannel<TestChannelCore>;
     type ChanShutdownError = TestChannelsError;
     type ChanShutdownRetry = WithRetryWhen<TestChannel<TestChannelCore>>;
     type ChannelID = String;
@@ -611,7 +608,6 @@ where
 {
     type Addr = TestEndpoint;
     type AuthNChan = TestChannel<TestChannelCore>;
-    type Chan = TestChannel<TestChannelCore>;
     type ChanShutdownError = TestChannelsError;
     type ChanShutdownRetry = WithRetryWhen<TestChannel<TestChannelCore>>;
     type ChannelID = String;

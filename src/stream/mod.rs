@@ -20,8 +20,6 @@
 pub mod test;
 
 use std::cell::RefCell;
-use std::cell::Ref;
-use std::cell::RefMut;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -34,7 +32,6 @@ use std::time::Instant;
 
 use bitvec::bitvec;
 use bitvec::vec::BitVec;
-use constellation_auth::authn::AuthNed;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -1546,8 +1543,7 @@ where
         id: ID,
         stream: Stream
     ) -> Result<Option<Stream>, Self::ReportStreamError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .report_stream(party, id, stream)
@@ -1579,8 +1575,7 @@ where
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .finish_batch(ctx, flags, batch)
@@ -1595,8 +1590,7 @@ where
         retry: Self::FinishBatchRetry
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_finish_batch(ctx, flags, batch, retry)
@@ -1611,8 +1605,7 @@ where
         err: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_finish_batch(ctx, flags, batch, err)
@@ -1626,8 +1619,7 @@ where
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .cancel_batch(ctx, flags, batch)
@@ -1642,8 +1634,7 @@ where
         retry: Self::CancelBatchRetry
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_cancel_batch(ctx, flags, batch, retry)
@@ -1658,8 +1649,7 @@ where
         err: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_cancel_batch(ctx, flags, batch, err)
@@ -1680,8 +1670,7 @@ where
         &mut self,
         batch: &Self::BatchID
     ) -> Result<(), Self::ReportError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .report_failure(batch)
@@ -1753,8 +1742,7 @@ where
         &mut self,
         error: &Error
     ) -> Result<(), Self::ReportError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .report_error(error)
@@ -1776,8 +1764,7 @@ where
         batch: &Batch,
         error: &Error
     ) -> Result<(), Self::ReportBatchError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .report_error_with_batch(batch, error)
@@ -1799,8 +1786,7 @@ where
         msg: &T,
         batch: &Self::BatchID
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .add(ctx, flags, msg, batch)
@@ -1815,8 +1801,7 @@ where
         batch: &Self::BatchID,
         retry: Self::AddRetry
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_add(ctx, flags, msg, batch, retry)
@@ -1831,8 +1816,7 @@ where
         batch: &Self::BatchID,
         err: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_add(ctx, flags, msg, batch, err)
@@ -1856,8 +1840,7 @@ where
     type PartyInfo = Inner::PartyInfo;
 
     fn parties(&self) -> Result<Inner::PartiesIter, Self::PartiesError> {
-        self
-            .inner
+        self.inner
             .try_borrow()
             .map_err(|_| RefCellStreamError::Borrow)?
             .parties()
@@ -1897,8 +1880,7 @@ where
         selections: &mut Self::Selections
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .select(ctx, selections)
@@ -1912,8 +1894,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_select(ctx, selections, retry)
@@ -1927,8 +1908,7 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_select(ctx, selections, err)
@@ -1944,8 +1924,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .create_batch(ctx, batches, selections)
@@ -1962,8 +1941,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_create_batch(ctx, batches, selections, retry)
@@ -1980,8 +1958,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_create_batch(ctx, batches, selections, err)
@@ -1995,8 +1972,7 @@ where
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .start_batch(ctx)
@@ -2011,8 +1987,7 @@ where
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_start_batch(ctx, retry)
@@ -2027,8 +2002,7 @@ where
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_start_batch(ctx, err)
@@ -2042,16 +2016,17 @@ where
         err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         match err {
-            RefCellStreamError::Inner { error } => match self.inner
-                .try_borrow_mut() {
-                Ok(mut guard) => guard.abort_start_batch(ctx, flags, error),
-                Err(_) => {
-                    error!(target: "ref-cell-stream",
+            RefCellStreamError::Inner { error } => {
+                match self.inner.try_borrow_mut() {
+                    Ok(mut guard) => guard.abort_start_batch(ctx, flags, error),
+                    Err(_) => {
+                        error!(target: "ref-cell-stream",
                            "try_borrow_mut failed");
 
-                    RetryResult::Success(())
+                        RetryResult::Success(())
+                    }
                 }
-            },
+            }
             RefCellStreamError::Borrow => {
                 warn!(target: "threaded-stream",
                       "could not cancel batch with error: mutex poisoned");
@@ -2113,8 +2088,7 @@ where
         &self,
         batch_id: &Self::BatchID
     ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
-        self
-            .inner
+        self.inner
             .try_borrow()
             .map_err(|_| RefCellStreamError::Borrow)?
             .batch_parties(batch_id)
@@ -2137,8 +2111,7 @@ where
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .select(ctx, selections, parties)
@@ -2158,8 +2131,7 @@ where
         >,
         Self::SelectError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_select(ctx, selections, retry)
@@ -2179,8 +2151,7 @@ where
         >,
         Self::SelectError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_select(ctx, selections, err)
@@ -2196,8 +2167,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .create_batch(ctx, batches, selections)
@@ -2214,8 +2184,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_create_batch(ctx, batches, selections, retry)
@@ -2232,8 +2201,7 @@ where
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_create_batch(ctx, batches, selections, err)
@@ -2255,8 +2223,7 @@ where
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .start_batch(ctx, parties)
@@ -2275,8 +2242,7 @@ where
         >,
         Self::StartBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_start_batch(ctx, retry)
@@ -2295,8 +2261,7 @@ where
         >,
         Self::StartBatchError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_start_batch(ctx, err)
@@ -2310,16 +2275,17 @@ where
         err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         match err {
-            RefCellStreamError::Inner { error } => match self.inner
-                .try_borrow_mut() {
-                Ok(mut guard) => guard.abort_start_batch(ctx, flags, error),
-                Err(_) => {
-                    error!(target: "ref-cell-stream",
+            RefCellStreamError::Inner { error } => {
+                match self.inner.try_borrow_mut() {
+                    Ok(mut guard) => guard.abort_start_batch(ctx, flags, error),
+                    Err(_) => {
+                        error!(target: "ref-cell-stream",
                            "try_borrow_mut failed");
 
-                    RetryResult::Success(())
+                        RetryResult::Success(())
+                    }
                 }
-            },
+            }
             RefCellStreamError::Borrow => {
                 warn!(target: "threaded-stream",
                       "could not cancel batch with error: mutex poisoned");
@@ -2372,8 +2338,7 @@ where
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .push(ctx, parties, msg)
@@ -2393,8 +2358,7 @@ where
         >,
         Self::PushError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_push(ctx, msg, retry)
@@ -2414,8 +2378,7 @@ where
         >,
         Self::PushError
     > {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_push(ctx, msg, err)
@@ -2435,7 +2398,7 @@ where
                 .map_err(|_| RefCellStreamError::Borrow)?
                 .cancel_push(ctx, error)
                 .map_err(|err| RefCellStreamError::Inner { error: err }),
-            RefCellStreamError::Borrow => Ok(RetryResult::Success(())),
+            RefCellStreamError::Borrow => Ok(RetryResult::Success(()))
         }
     }
 
@@ -2445,8 +2408,7 @@ where
         retry: Self::CancelPushRetry
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_cancel_push(ctx, retry)
@@ -2459,8 +2421,7 @@ where
         err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_cancel_push(ctx, err)
@@ -2483,8 +2444,7 @@ where
         msg: &T
     ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .push(ctx, msg)
@@ -2498,8 +2458,7 @@ where
         retry: Self::PushRetry
     ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_push(ctx, msg, retry)
@@ -2513,8 +2472,7 @@ where
         err: <Self::PushError as RecoverableError>::Completable
     ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_push(ctx, msg, err)
@@ -2534,7 +2492,7 @@ where
                 .map_err(|_| RefCellStreamError::Borrow)?
                 .cancel_push(ctx, error)
                 .map_err(|err| RefCellStreamError::Inner { error: err }),
-            RefCellStreamError::Borrow => Ok(RetryResult::Success(())),
+            RefCellStreamError::Borrow => Ok(RetryResult::Success(()))
         }
     }
 
@@ -2544,8 +2502,7 @@ where
         retry: Self::CancelPushRetry
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .retry_cancel_push(ctx, retry)
@@ -2558,8 +2515,7 @@ where
         err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_cancel_push(ctx, err)
@@ -2574,8 +2530,7 @@ where
     type PullError = RefCellStreamError<Inner::PullError>;
 
     fn pull(&mut self) -> Result<T, Self::PullError> {
-        self
-            .inner
+        self.inner
             .try_borrow_mut()
             .map_err(|_| RefCellStreamError::Borrow)?
             .pull()
@@ -2738,42 +2693,10 @@ impl<Inner> Clone for RefCellStream<Inner> {
 impl<Inner> RefCellStream<Inner> {
     /// Create a new `RefCellStream` from its inner stream.
     #[inline]
-    pub fn new(
-        inner: Inner
-    ) -> Self {
+    pub fn new(inner: Inner) -> Self {
         RefCellStream {
             inner: Rc::new(RefCell::new(inner))
         }
-    }
-
-    #[inline]
-    pub fn prin<Prin, Chan>(
-        &self
-    ) -> Result<Ref<'_, Prin>, RefCellStreamBorrowError>
-    where Inner: AuthNed<Prin, Chan> {
-        Ok(Ref::map(self.inner.try_borrow()
-                    .map_err(|_| RefCellStreamBorrowError)?,
-                    |r| r.prin()))
-    }
-
-    #[inline]
-    pub fn get<Prin, Chan>(
-        &self
-    ) -> Result<Ref<'_, Chan>, RefCellStreamBorrowError>
-    where Inner: AuthNed<Prin, Chan> {
-        Ok(Ref::map(self.inner.try_borrow()
-                    .map_err(|_| RefCellStreamBorrowError)?,
-                    |r| r.get()))
-    }
-
-    #[inline]
-    pub fn get_mut<Prin, Chan>(
-        &mut self
-    ) -> Result<RefMut<'_, Chan>, RefCellStreamBorrowError>
-    where Inner: AuthNed<Prin, Chan> {
-        Ok(RefMut::map(self.inner.try_borrow_mut()
-                       .map_err(|_| RefCellStreamBorrowError)?,
-                       |r| r.get_mut()))
     }
 
     #[inline]
@@ -2781,7 +2704,6 @@ impl<Inner> RefCellStream<Inner> {
         Rc::into_inner(self.inner).map(|val| val.into_inner())
     }
 }
-
 
 impl<Batch> CompoundBatches<Batch>
 where

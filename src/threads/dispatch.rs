@@ -103,7 +103,7 @@ where
     /// Type of authenticated message receivers.
     ///
     /// This will be used to deliver incoming messages.
-    type Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg>;
+    type Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg>;
     /// Type of errors that can occur during dispatch.
     type DispatchError: Debug + Display + ScopedError;
 
@@ -159,7 +159,7 @@ where
 pub struct Dispatched<Types, Stream, Msgs, Recv>
 where
     Types: DispatchInboundTypes,
-    Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg> {
+    Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg> {
     /// Flag used to signal shutdown to the connected thread.
     shutdown: ShutdownFlag,
     /// Message authenticator to use for inbound messages.
@@ -294,7 +294,7 @@ pub enum DispatchThreadRecvError<ID, Pull, AuthN, Recv> {
 impl<Types, Stream, Msgs, Recv> Dispatched<Types, Stream, Msgs, Recv>
 where
     Types: DispatchInboundTypes,
-    Recv: AuthNMsgRecv<Types::MsgPrin, Types::InMsg, Types::AuthNMsg>
+    Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg>
 {
     /// Create a new `Dispatched` from its components.
     ///
@@ -678,7 +678,7 @@ where
                        "listening for message on {}",
                        id);
 
-                match stream.get_mut().pull() {
+                match stream.pull() {
                     Ok(msg) => self
                         .dispatched
                         .handle_msg(&id, stream.prin(), msg)
@@ -1129,7 +1129,7 @@ where
 
         // Shut down all streams.
         for (id, stream) in self.pull_streams.into_iter() {
-            debug!(target: "poll-thread",
+            debug!(target: "dispatch-thread",
                    "shutting down stream {} with {}",
                    id, stream.prin());
 
@@ -2388,6 +2388,8 @@ use std::sync::Mutex;
 #[cfg(test)]
 use std::time::Duration;
 
+#[cfg(test)]
+use constellation_auth::authn::AuthNedDestruct;
 #[cfg(test)]
 use constellation_auth::cred::NullCred;
 #[cfg(test)]

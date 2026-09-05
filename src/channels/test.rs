@@ -29,6 +29,7 @@ use std::time::Instant;
 use std::vec::IntoIter;
 
 use constellation_auth::authn::AuthNed;
+use constellation_auth::authn::AuthNedDestruct;
 use constellation_auth::cred::NullCred;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
@@ -139,22 +140,16 @@ pub struct TestChannelsScript<Stream> {
         Vec<Result<Option<Option<Instant>>, TestChannelsError>>
 }
 
-impl<Stream> AuthNed<NullCred, TestChannel<Stream>> for TestChannel<Stream> {
+impl<Stream> AuthNed<NullCred> for TestChannel<Stream> {
     #[inline]
     fn prin(&self) -> &NullCred {
         &NullCred
     }
+}
 
-    #[inline]
-    fn get(&self) -> &Self {
-        self
-    }
-
-    #[inline]
-    fn get_mut(&mut self) -> &mut Self {
-        self
-    }
-
+impl<Stream> AuthNedDestruct<NullCred, TestChannel<Stream>>
+    for TestChannel<Stream>
+{
     #[inline]
     fn take(self) -> (NullCred, Self) {
         (NullCred, self)
