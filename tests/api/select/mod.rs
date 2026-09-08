@@ -42,6 +42,7 @@ use constellation_streams::channels::test::TestChannels;
 use constellation_streams::channels::test::TestChannelsError;
 use constellation_streams::channels::test::TestChannelsScript;
 use constellation_streams::config::ConnectionConfig;
+use constellation_streams::config::ConnectionEndpoint;
 use constellation_streams::config::FarSchedulerConfig;
 use constellation_streams::config::PartyConfig;
 use constellation_streams::frags::OutboundFrags;
@@ -88,7 +89,7 @@ where
     let test_endpoint = TestEndpoint::from(TEST_ENDPOINT);
     let connections = ConnectionConfig::new(
         vec![TEST_CHANNEL_ID.to_string()],
-        vec![test_endpoint]
+        vec![ConnectionEndpoint::new(test_endpoint, ())]
     );
     let mut channels =
         TestChannels::create(channels, &mut ()).expect("Expected success");

@@ -30,7 +30,6 @@ use constellation_common::retry::RetryResult;
 
 use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
-use crate::select::OutboundEndpointConfig;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct TestEndpoint(String);
@@ -87,11 +86,6 @@ impl AsRef<str> for TestEndpoint {
     fn as_ref(&self) -> &str {
         self.0.as_ref()
     }
-}
-
-impl OutboundEndpointConfig<()> for TestEndpoint {
-    #[inline]
-    fn outbound_nego_param(&self) {}
 }
 
 impl<Ctx> AddrsCreate<Ctx> for TestAddrs {

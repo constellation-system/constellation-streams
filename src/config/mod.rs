@@ -106,12 +106,23 @@ pub struct BatchSlotsConfig {
 ///   addresses).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[serde(rename = "connections-config")]
-pub struct ConnectionConfig<Channel, Endpoint> {
+#[serde(rename = "connection")]
+pub struct ConnectionConfig<Channel, Verify, Endpoint>
+where
+    Verify: Default {
     /// Names of channels over which to connect.
     channel_names: Vec<Channel>,
     /// Endpoints to which to connect.
-    endpoints: Vec<Endpoint>
+    endpoints: Vec<ConnectionEndpoint<Verify, Endpoint>>
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "connection-endpoint")]
+pub struct ConnectionEndpoint<Verify, Endpoint> {
+    addr: Endpoint,
+    #[serde(default)]
+    verify: Verify
 }
 
 /// Parameters for the far-channel multiplexing scheme.
@@ -265,9 +276,10 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct PartyConfig<Resolver, Epochs, Channel, Endpoint>
+pub struct PartyConfig<Resolver, Epochs, Channel, Verify, Endpoint>
 where
     Resolver: Default,
+    Verify: Default,
     Epochs: Default {
     /// Scheduler configuration.
     #[serde(default)]
@@ -282,7 +294,7 @@ where
     #[serde(default)]
     retry: Retry,
     /// Possible ways to form connections to the party.
-    connections: Vec<ConnectionConfig<Channel, Endpoint>>,
+    connections: Vec<ConnectionConfig<Channel, Verify, Endpoint>>,
     #[serde(default)]
     size_hint: Option<usize>
 }
@@ -865,7 +877,10 @@ impl Default for FarSchedulerConfig {
     }
 }
 
-impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint> {
+impl<Channel, Verify, Endpoint> ConnectionConfig<Channel, Verify, Endpoint>
+where
+    Verify: Default
+{
     /// Create a new `ConnectionConfig` from its components.
     ///
     /// The arguments of this function correspond to similarly-named
@@ -873,7 +888,7 @@ impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint> {
     #[inline]
     pub fn new(
         channel_names: Vec<Channel>,
-        endpoints: Vec<Endpoint>
+        endpoints: Vec<ConnectionEndpoint<Verify, Endpoint>>
     ) -> Self {
         ConnectionConfig {
             channel_names: channel_names,
@@ -889,15 +904,45 @@ impl<Channel, Endpoint> ConnectionConfig<Channel, Endpoint> {
 
     /// Get the array of endpoints.
     #[inline]
-    pub fn endpoints(&self) -> &[Endpoint] {
+    pub fn endpoints(&self) -> &[ConnectionEndpoint<Verify, Endpoint>] {
         &self.endpoints
     }
 
     /// Deconstruct this into the channel configuration, channel
     /// names, and endpoints.
     #[inline]
-    pub fn take(self) -> (Vec<Channel>, Vec<Endpoint>) {
+    pub fn take(
+        self
+    ) -> (Vec<Channel>, Vec<ConnectionEndpoint<Verify, Endpoint>>) {
         (self.channel_names, self.endpoints)
+    }
+}
+
+impl<Verify, Endpoint> ConnectionEndpoint<Verify, Endpoint> {
+    #[inline]
+    pub fn new(
+        addr: Endpoint,
+        verify: Verify
+    ) -> Self {
+        ConnectionEndpoint {
+            addr: addr,
+            verify: verify
+        }
+    }
+
+    #[inline]
+    pub fn addr(&self) -> &Endpoint {
+        &self.addr
+    }
+
+    #[inline]
+    pub fn verify(&self) -> &Verify {
+        &self.verify
+    }
+
+    #[inline]
+    pub fn take(self) -> (Endpoint, Verify) {
+        (self.addr, self.verify)
     }
 }
 
@@ -1017,10 +1062,11 @@ where
     }
 }
 
-impl<Resolver, Epochs, Channel, Endpoint>
-    PartyConfig<Resolver, Epochs, Channel, Endpoint>
+impl<Resolver, Epochs, Channel, Verify, Endpoint>
+    PartyConfig<Resolver, Epochs, Channel, Verify, Endpoint>
 where
     Resolver: Default,
+    Verify: Default,
     Epochs: Default
 {
     #[inline]
@@ -1029,7 +1075,7 @@ where
         resolve: Resolver,
         epochs: Epochs,
         retry: Retry,
-        connections: Vec<ConnectionConfig<Channel, Endpoint>>,
+        connections: Vec<ConnectionConfig<Channel, Verify, Endpoint>>,
         size_hint: Option<usize>
     ) -> Self {
         PartyConfig {
@@ -1068,7 +1114,9 @@ where
 
     /// Get the set of possible connections.
     #[inline]
-    pub fn connections(&self) -> &[ConnectionConfig<Channel, Endpoint>] {
+    pub fn connections(
+        &self
+    ) -> &[ConnectionConfig<Channel, Verify, Endpoint>] {
         &self.connections
     }
 
@@ -1090,7 +1138,7 @@ where
         Epochs,
         Retry,
         Option<usize>,
-        Vec<ConnectionConfig<Channel, Endpoint>>
+        Vec<ConnectionConfig<Channel, Verify, Endpoint>>
     ) {
         (
             self.scheduler,
@@ -1208,11 +1256,15 @@ fn test_connection_config() {
         "  - \"chan-1\"\n",
         "  - \"chan-2\"\n",
         "endpoints:\n",
-        "  - 10.10.10.10:10000\n",
+        "  - addr: 10.10.10.10:10000\n",
     );
     let addr: SocketAddr = "10.10.10.10:10000".parse().unwrap();
+    let endpoint = ConnectionEndpoint {
+        addr: addr,
+        verify: ()
+    };
     let channames = vec!["chan-1", "chan-2"];
-    let endpoints = vec![addr];
+    let endpoints = vec![endpoint];
     let expected = ConnectionConfig::new(channames, endpoints);
     let actual = serde_yaml::from_str(yaml).unwrap();
 

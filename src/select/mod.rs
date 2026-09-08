@@ -65,6 +65,8 @@ use log::debug;
 use log::error;
 use log::trace;
 use log::warn;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
@@ -97,10 +99,6 @@ use crate::stream::StreamReporter;
 
 pub mod dispatch;
 mod sched;
-
-pub trait OutboundEndpointConfig<OutboundNego> {
-    fn outbound_nego_param(&self) -> OutboundNego;
-}
 
 /// Newtype for the index for a set of connections.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -209,7 +207,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Default,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr> {
     /// The set of connection options.
@@ -227,7 +226,8 @@ struct StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx> {
     /// Scheduler to use for selecting a raw stream.
     sched: Scheduler<
@@ -478,7 +478,8 @@ where
 impl<Resolve, Ctx> ThreadedStreamSelectorConnections<Resolve, Ctx>
 where
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
 {
@@ -486,31 +487,38 @@ where
     fn create(
         ctx: &mut Ctx,
         addrs_config: &Resolve::Config,
-        config: ConnectionConfig<String, Resolve::OriginConfig>
+        config: ConnectionConfig<
+            String,
+            Ctx::OutNegoParam,
+            Resolve::OriginConfig
+        >
     ) -> Result<Self, StreamSelectorConnectionCreateError<Resolve::CreateError>>
     where
-        Resolve::OriginConfig:
-            Clone + OutboundEndpointConfig<Ctx::OutNegoParam>,
+        Resolve::OriginConfig: Clone,
         Resolve: AddrsCreate<Ctx>,
         Resolve::Config: Clone {
         debug!(target: "stream-selector-connections",
                "creating threaded stream selector connections");
 
         let (srcs, endpoints) = config.take();
+        let mut origins = Vec::with_capacity(endpoints.len());
         let params: HashMap<Resolve::Origin, Ctx::OutNegoParam> = endpoints
-            .iter()
-            .map(|endpoint| {
-                let param = endpoint.outbound_nego_param();
-                let endpoint: Resolve::Origin = endpoint.clone().into();
+            .into_iter()
+            .map(|config| {
+                let (endpoint, param) = config.take();
+
+                origins.push(endpoint.clone());
+
+                let endpoint: Resolve::Origin = endpoint.into();
 
                 (endpoint, param)
             })
             .collect();
         let addrs =
-            Resolve::create(ctx, addrs_config.clone(), endpoints.into_iter())
+            Resolve::create(ctx, addrs_config.clone(), origins.into_iter())
                 .map_err(|err| StreamSelectorConnectionCreateError::Addrs {
-                err: err
-            })?;
+                    err: err
+                })?;
         let mut channels = Vec::with_capacity(srcs.len());
 
         for src in srcs {
@@ -629,7 +637,8 @@ where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>
 {
     fn create(
@@ -1043,7 +1052,8 @@ where
     Epochs: Iterator,
     Epochs::Item: Clone + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>
 {
     type ReportStreamError = StreamSelectorReportError<Infallible>;
@@ -1093,7 +1103,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -1120,7 +1131,8 @@ where
     Epochs::Item: Default,
     Ctx: Channels<()>,
     Resolve: Addrs<Addr = Ctx::Addr>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>
 {
     fn clone(&self) -> Self {
@@ -1139,11 +1151,12 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Ctx::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve: AddrsCreate<Ctx>,
     Resolve::Config: Clone + Default
 {
@@ -1151,6 +1164,7 @@ where
         Resolve::Config,
         Epochs::Config,
         String,
+        Ctx::OutNegoParam,
         Resolve::OriginConfig
     >;
     type CreateError =
@@ -1161,6 +1175,7 @@ where
             Resolve::Config,
             Epochs::Config,
             String,
+            Ctx::OutNegoParam,
             Resolve::OriginConfig
         >,
         ctx: &mut Ctx
@@ -1210,7 +1225,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -1915,7 +1931,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2060,7 +2077,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2090,7 +2108,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash,
@@ -2127,7 +2146,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2157,7 +2177,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2233,7 +2254,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2293,7 +2315,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPartyID,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -2308,7 +2331,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx> + PushStreamShared<Ctx>,
     <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
     Resolve: Addrs<Addr = Ctx::Addr>,
@@ -2912,7 +2936,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStream<Ctx> + PushStreamPrivate<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -3446,7 +3471,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + LargeObjStream<Ctx> + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -3608,7 +3634,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + LargeObjOfferStream<H, Ctx> + PushStream<Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -3767,7 +3794,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStreamPrivateSingle<Msg, Ctx>,
     Resolve: Addrs<Addr = Ctx::Addr>,
     Resolve::Origin: Clone + Display + Eq + Hash
@@ -4072,7 +4100,8 @@ where
     Epochs::Config: Default,
     Epochs::Item: Clone + Default + Debug + Display + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
     Ctx::Stream: Clone + PushStreamSharedSingle<Msg, Ctx> + PushStreamPartyID,
     <Ctx::Stream as PushStreamPartyID>::PartyID: Debug,
     Resolve: Addrs<Addr = Ctx::Addr>,

@@ -39,6 +39,8 @@ use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::sched::DenseItemID;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
@@ -66,7 +68,6 @@ use crate::multicast::StreamMulticasterFrags;
 use crate::multicast::StreamMulticasterSelections;
 use crate::multicast::StreamMulticasterStartError;
 use crate::select::ConnChannelID;
-use crate::select::OutboundEndpointConfig;
 use crate::select::SelectorBatchError;
 use crate::select::SelectorBatchSelectError;
 use crate::select::SelectorSelections;
@@ -463,7 +464,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -502,7 +504,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -586,7 +589,13 @@ pub struct DatagramSelectorPollTypes<
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -606,8 +615,7 @@ pub struct DatagramSelectorPollTypes<
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send {
@@ -661,7 +669,13 @@ pub struct LargeObjSelectorPollTypes<
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -694,8 +708,7 @@ pub struct LargeObjSelectorPollTypes<
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -762,7 +775,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -822,7 +835,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -886,7 +899,13 @@ pub struct DatagramMulticastPollTypes<
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -918,8 +937,7 @@ pub struct DatagramMulticastPollTypes<
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
@@ -974,7 +992,13 @@ pub struct LargeObjMulticastPollTypes<
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -1032,8 +1056,7 @@ pub struct LargeObjMulticastPollTypes<
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -1109,7 +1132,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -1153,7 +1177,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -1256,7 +1281,13 @@ where
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -1276,8 +1307,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
@@ -1348,7 +1378,13 @@ where
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -1381,8 +1417,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -1443,7 +1478,6 @@ where
     >,
     Chans::Param: Clone + Debug + Display + Eq + Hash,
     Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as PushStream<DispatchThreadCtx<Chans, Ctx>>>::BatchID: Display,
     <<Chans::Stream as PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>>::StartBatchError
      as RecoverableError>::Completable: ScopedError,
@@ -1456,7 +1490,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -1522,7 +1556,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -1605,8 +1639,13 @@ where
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -1638,8 +1677,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
@@ -1711,8 +1749,13 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -1770,8 +1813,7 @@ where
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -1853,7 +1895,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -1897,7 +1940,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -2000,7 +2044,13 @@ where
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -2020,8 +2070,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
@@ -2092,7 +2141,13 @@ where
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -2125,8 +2180,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -2200,7 +2254,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -2266,7 +2320,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -2349,8 +2403,13 @@ where
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -2382,8 +2441,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
@@ -2455,8 +2513,13 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -2514,8 +2577,7 @@ where
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -2588,7 +2650,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -2623,7 +2686,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -2716,7 +2780,13 @@ where
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -2736,8 +2806,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
@@ -2793,7 +2862,13 @@ where
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -2826,8 +2901,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -2889,7 +2963,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv< MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -2940,7 +3014,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -3011,8 +3085,13 @@ where
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -3044,8 +3123,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
@@ -3102,8 +3180,13 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -3161,8 +3244,7 @@ where
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -3223,7 +3305,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -3258,7 +3341,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -3351,7 +3435,13 @@ where
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -3371,8 +3461,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
@@ -3428,7 +3517,13 @@ where
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -3461,8 +3556,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -3524,7 +3618,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg >,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -3575,7 +3669,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -3646,8 +3740,13 @@ where
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -3679,8 +3778,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
@@ -3737,8 +3835,13 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -3796,8 +3899,7 @@ where
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -3948,7 +4050,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -4074,7 +4177,8 @@ where
     H: Clone + HashAlgo,
     H::HashID: Clone + Debug + Display + Hash + HashID + Eq,
     Ctx: Channels<()>,
-    Ctx::OutNegoParam: Clone + Eq + Hash,
+    Ctx::OutNegoParam: Clone + Default + for<'a> Deserialize<'a>
+        + Eq + Hash + Serialize + Send,
     Ctx::Stream: Clone + LargeObjStream<Ctx>
         + LargeObjOfferStream<H::HashID, Ctx>
         + LargeObjStream<Ctx>
@@ -4444,7 +4548,13 @@ where
         + PushStreamPrivate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStream<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
     >>::BatchID: Display,
@@ -4464,8 +4574,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: PrivateMsgs<OutMsg> + Send
@@ -4517,6 +4626,7 @@ where
         Resolve::Config,
         Epochs::Config,
         String,
+        Chans::OutNegoParam,
         Resolve::OriginConfig
     >;
     type StreamCreateError =
@@ -4573,7 +4683,13 @@ where
             Types::HashID,
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as LargeObjStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
     >>::Frags: Send,
@@ -4606,8 +4722,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -4679,6 +4794,7 @@ where
         Resolve::Config,
         Epochs::Config,
         String,
+        Chans::OutNegoParam,
         Resolve::OriginConfig
     >;
     type StreamCreateError =
@@ -4730,7 +4846,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -4789,7 +4905,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg>,
     Msgs: PrivateMsgs<OutMsg> + Send,
@@ -4878,7 +4994,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -4947,7 +5063,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<DispatchThreadCtx<Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig: Clone + OutboundEndpointConfig<Chans::OutNegoParam>,
+    Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
@@ -5060,8 +5176,13 @@ where
         + PushStreamAdd<OutMsg, PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
         + PullStream<Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <<Chans::Stream as PushStreamPrivate<
         PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>
@@ -5093,8 +5214,7 @@ where
     Resolve: Addrs<Addr = Chans::Addr>
         + AddrsCreate<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
     Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
@@ -5166,6 +5286,7 @@ where
             Resolve::Config,
             Epochs::Config,
             String,
+            Chans::OutNegoParam,
             Resolve::OriginConfig
         >
     >;
@@ -5224,8 +5345,13 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         > + PullStream<Types::Wrapper>
         + PushStreamParties,
-    Chans::OutNegoParam: Clone + Eq + Hash,
-    Chans::OutNegoParam: Clone + Eq + Hash,
+    Chans::OutNegoParam: Clone
+        + Default
+        + for<'a> Deserialize<'a>
+        + Eq
+        + Hash
+        + Serialize
+        + Send,
     <Chans::Stream as PushStreamPartyID>::PartyID: Debug + Display,
     <Chans::Stream as PushStream<
         PollThreadCtx<Types::SessionPrin, Chans, Ctx>
@@ -5283,8 +5409,7 @@ where
         + AddrsCreate<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>,
     Resolve::Config: Send,
     Resolve::Origin: Clone + Debug + Display + Eq + Hash + Send,
-    Resolve::OriginConfig:
-        Clone + OutboundEndpointConfig<Chans::OutNegoParam> + Send,
+    Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default,
     Types: LargeObjProtoTypes<InMsg, OutMsg> + Send,
     Types::Hash: Clone + HashAlgo + Send,
@@ -5375,6 +5500,7 @@ where
             Resolve::Config,
             Epochs::Config,
             String,
+            Chans::OutNegoParam,
             Resolve::OriginConfig
         >
     >;
