@@ -32,6 +32,7 @@ use std::time::Instant;
 
 use bitvec::bitvec;
 use bitvec::vec::BitVec;
+use constellation_auth::authn::BasicAuthNed;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
@@ -1537,6 +1538,7 @@ where
 {
     type ReportStreamError = RefCellStreamError<Inner::ReportStreamError>;
 
+    #[inline]
     fn report_stream(
         &mut self,
         party: &Party,
@@ -1568,6 +1570,7 @@ where
         Inner::empty_flags_with_capacity(size)
     }
 
+    #[inline]
     fn finish_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1582,6 +1585,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_finish_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1597,6 +1601,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_finish_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1612,6 +1617,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn cancel_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1626,6 +1632,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_cancel_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1641,6 +1648,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_cancel_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1656,6 +1664,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn cancel_batches(&mut self) {
         match self.inner.try_borrow_mut() {
             Ok(mut guard) => guard.cancel_batches(),
@@ -1666,6 +1675,7 @@ where
         }
     }
 
+    #[inline]
     fn report_failure(
         &mut self,
         batch: &Self::BatchID
@@ -1685,6 +1695,7 @@ where
     type RefreshError = RefCellStreamError<Inner::RefreshError>;
     type RefreshRetry = Inner::RefreshRetry;
 
+    #[inline]
     fn refresh(
         &mut self,
         ctx: &mut Ctx
@@ -1699,6 +1710,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_refresh(
         &mut self,
         ctx: &mut Ctx,
@@ -1714,6 +1726,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_refresh(
         &mut self,
         ctx: &mut Ctx,
@@ -1738,6 +1751,7 @@ where
         <Inner as PushStreamReportError<Error>>::ReportError
     >;
 
+    #[inline]
     fn report_error(
         &mut self,
         error: &Error
@@ -1759,6 +1773,7 @@ where
         <Inner as PushStreamReportBatchError<Error, Batch>>::ReportBatchError
     >;
 
+    #[inline]
     fn report_error_with_batch(
         &mut self,
         batch: &Batch,
@@ -1779,6 +1794,7 @@ where
     type AddError = RefCellStreamError<Inner::AddError>;
     type AddRetry = Inner::AddRetry;
 
+    #[inline]
     fn add(
         &mut self,
         ctx: &mut Ctx,
@@ -1793,6 +1809,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_add(
         &mut self,
         ctx: &mut Ctx,
@@ -1808,6 +1825,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_add(
         &mut self,
         ctx: &mut Ctx,
@@ -1839,6 +1857,7 @@ where
     type PartiesIter = Inner::PartiesIter;
     type PartyInfo = Inner::PartyInfo;
 
+    #[inline]
     fn parties(&self) -> Result<Inner::PartiesIter, Self::PartiesError> {
         self.inner
             .try_borrow()
@@ -1874,6 +1893,7 @@ where
         Inner::empty_batches_with_capacity(size)
     }
 
+    #[inline]
     fn select(
         &mut self,
         ctx: &mut Ctx,
@@ -1887,6 +1907,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_select(
         &mut self,
         ctx: &mut Ctx,
@@ -1901,6 +1922,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_select(
         &mut self,
         ctx: &mut Ctx,
@@ -1915,6 +1937,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1931,6 +1954,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1948,6 +1972,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1965,6 +1990,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
@@ -1979,6 +2005,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -1994,6 +2021,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2009,6 +2037,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn abort_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2036,6 +2065,7 @@ where
         }
     }
 
+    #[inline]
     fn retry_abort_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2095,6 +2125,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
@@ -2118,6 +2149,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_select(
         &mut self,
         ctx: &mut Ctx,
@@ -2138,6 +2170,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_select(
         &mut self,
         ctx: &mut Ctx,
@@ -2158,6 +2191,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2174,6 +2208,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2191,6 +2226,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_create_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2208,6 +2244,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn start_batch<'a, I>(
         &mut self,
         ctx: &mut Ctx,
@@ -2230,6 +2267,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2249,6 +2287,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2268,6 +2307,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn abort_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2295,6 +2335,7 @@ where
         }
     }
 
+    #[inline]
     fn retry_abort_start_batch(
         &mut self,
         ctx: &mut Ctx,
@@ -2322,6 +2363,7 @@ where
     type PushError = RefCellStreamError<Inner::PushError>;
     type PushRetry = Inner::PushRetry;
 
+    #[inline]
     fn push<'a, I>(
         &mut self,
         ctx: &mut Ctx,
@@ -2345,6 +2387,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2365,6 +2408,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2385,6 +2429,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2402,6 +2447,7 @@ where
         }
     }
 
+    #[inline]
     fn retry_cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2415,6 +2461,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2438,6 +2485,7 @@ where
     type PushError = RefCellStreamError<Inner::PushError>;
     type PushRetry = Inner::PushRetry;
 
+    #[inline]
     fn push(
         &mut self,
         ctx: &mut Ctx,
@@ -2451,6 +2499,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2465,6 +2514,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2479,6 +2529,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2496,6 +2547,7 @@ where
         }
     }
 
+    #[inline]
     fn retry_cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2509,6 +2561,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
@@ -2529,6 +2582,7 @@ where
 {
     type PullError = RefCellStreamError<Inner::PullError>;
 
+    #[inline]
     fn pull(&mut self) -> Result<T, Self::PullError> {
         self.inner
             .try_borrow_mut()
@@ -2547,6 +2601,7 @@ where
     type PushFragError = RefCellStreamError<Inner::PushFragError>;
     type PushFragRetry = Inner::PushFragRetry;
 
+    #[inline]
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
@@ -2567,6 +2622,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_push_frags(
         &mut self,
         ctx: &mut Ctx,
@@ -2588,6 +2644,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_push_frags(
         &mut self,
         ctx: &mut Ctx,
@@ -2618,6 +2675,7 @@ where
     type PushOfferError = RefCellStreamError<Inner::PushOfferError>;
     type PushOfferRetry = Inner::PushOfferRetry;
 
+    #[inline]
     fn push_offer(
         &mut self,
         ctx: &mut Ctx,
@@ -2638,6 +2696,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn retry_push_offer(
         &mut self,
         ctx: &mut Ctx,
@@ -2659,6 +2718,7 @@ where
             .map_err(|err| RefCellStreamError::Inner { error: err })
     }
 
+    #[inline]
     fn complete_push_offer(
         &mut self,
         ctx: &mut Ctx,
@@ -2678,6 +2738,936 @@ where
             .map_err(|_| RefCellStreamError::Borrow)?
             .complete_push_offer(ctx, hash, frags, err)
             .map_err(|err| RefCellStreamError::Inner { error: err })
+    }
+}
+
+impl<Prin, Party, ID, Stream, Inner> StreamReporter<Party, ID, Stream>
+    for BasicAuthNed<Prin, Inner>
+where
+    ID: Clone + Debug + Display + Eq + Hash,
+    Inner: StreamReporter<Party, ID, Stream>
+{
+    type ReportStreamError = Inner::ReportStreamError;
+
+    #[inline]
+    fn report_stream(
+        &mut self,
+        party: &Party,
+        id: ID,
+        stream: Stream
+    ) -> Result<Option<Stream>, Self::ReportStreamError> {
+        self.get_mut().report_stream(party, id, stream)
+    }
+}
+
+impl<Prin, Ctx, Inner> PushStream<Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStream<Ctx>
+{
+    type BatchID = Inner::BatchID;
+    type CancelBatchError = Inner::CancelBatchError;
+    type CancelBatchRetry = Inner::CancelBatchRetry;
+    type FinishBatchError = Inner::FinishBatchError;
+    type FinishBatchRetry = Inner::FinishBatchRetry;
+    type ReportError = Inner::ReportError;
+    type StreamFlags = Inner::StreamFlags;
+
+    #[inline]
+    fn empty_flags_with_capacity(size: usize) -> Self::StreamFlags {
+        Inner::empty_flags_with_capacity(size)
+    }
+
+    #[inline]
+    fn finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        self.get_mut().finish_batch(ctx, flags, batch)
+    }
+
+    #[inline]
+    fn retry_finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        retry: Self::FinishBatchRetry
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        self.get_mut().retry_finish_batch(ctx, flags, batch, retry)
+    }
+
+    #[inline]
+    fn complete_finish_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        err: <Self::FinishBatchError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
+    {
+        self.get_mut().complete_finish_batch(ctx, flags, batch, err)
+    }
+
+    #[inline]
+    fn cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        self.get_mut().cancel_batch(ctx, flags, batch)
+    }
+
+    #[inline]
+    fn retry_cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        retry: Self::CancelBatchRetry
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        self.get_mut().retry_cancel_batch(ctx, flags, batch, retry)
+    }
+
+    #[inline]
+    fn complete_cancel_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        batch: &Self::BatchID,
+        err: <Self::CancelBatchError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
+    {
+        self.get_mut().complete_cancel_batch(ctx, flags, batch, err)
+    }
+
+    #[inline]
+    fn cancel_batches(&mut self) {
+        self.get_mut().cancel_batches()
+    }
+
+    #[inline]
+    fn report_failure(
+        &mut self,
+        batch: &Self::BatchID
+    ) -> Result<(), Self::ReportError> {
+        self.get_mut().report_failure(batch)
+    }
+}
+
+impl<Prin, Ctx, Inner> StreamRefresh<Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: StreamRefresh<Ctx>
+{
+    type RefreshError = Inner::RefreshError;
+    type RefreshRetry = Inner::RefreshRetry;
+
+    #[inline]
+    fn refresh(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        self.get_mut().refresh(ctx)
+    }
+
+    #[inline]
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::RefreshRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        self.get_mut().retry_refresh(ctx, retry)
+    }
+
+    #[inline]
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        self.get_mut().complete_refresh(ctx, errs)
+    }
+}
+
+impl<Prin, Inner, Error> PushStreamReportError<Error>
+    for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamReportError<Error>
+{
+    type ReportError = <Inner as PushStreamReportError<Error>>::ReportError;
+
+    #[inline]
+    fn report_error(
+        &mut self,
+        error: &Error
+    ) -> Result<(), Self::ReportError> {
+        self.get_mut().report_error(error)
+    }
+}
+
+impl<Prin, Inner, Error, Batch> PushStreamReportBatchError<Error, Batch>
+    for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamReportBatchError<Error, Batch>
+{
+    type ReportBatchError =
+        <Inner as PushStreamReportBatchError<Error, Batch>>::ReportBatchError;
+
+    #[inline]
+    fn report_error_with_batch(
+        &mut self,
+        batch: &Batch,
+        error: &Error
+    ) -> Result<(), Self::ReportBatchError> {
+        self.get_mut().report_error_with_batch(batch, error)
+    }
+}
+
+impl<Prin, T, Ctx, Inner> PushStreamAdd<T, Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamAdd<T, Ctx>
+{
+    type AddError = Inner::AddError;
+    type AddRetry = Inner::AddRetry;
+
+    #[inline]
+    fn add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.get_mut().add(ctx, flags, msg, batch)
+    }
+
+    #[inline]
+    fn retry_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID,
+        retry: Self::AddRetry
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.get_mut().retry_add(ctx, flags, msg, batch, retry)
+    }
+
+    #[inline]
+    fn complete_add(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        msg: &T,
+        batch: &Self::BatchID,
+        err: <Self::AddError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
+        self.get_mut().complete_add(ctx, flags, msg, batch, err)
+    }
+}
+
+impl<Prin, Inner> PushStreamPartyID for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamPartyID
+{
+    type PartyID = Inner::PartyID;
+}
+
+impl<Prin, Inner> PushStreamParties for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamParties
+{
+    type PartiesError = Inner::PartiesError;
+    type PartiesIter = Inner::PartiesIter;
+    type PartyInfo = Inner::PartyInfo;
+
+    #[inline]
+    fn parties(&self) -> Result<Inner::PartiesIter, Self::PartiesError> {
+        self.get().parties()
+    }
+}
+
+impl<Prin, Ctx, Inner> PushStreamPrivate<Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamPrivate<Ctx>
+{
+    type AbortBatchRetry = Inner::AbortBatchRetry;
+    type CreateBatchError = Inner::CreateBatchError;
+    type CreateBatchRetry = Inner::CreateBatchRetry;
+    type SelectError = Inner::SelectError;
+    type SelectRetry = Inner::SelectRetry;
+    type Selections = Inner::Selections;
+    type StartBatchError = Inner::StartBatchError;
+    type StartBatchRetry = Inner::StartBatchRetry;
+    type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
+
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        Inner::empty_selections_with_capacity(size)
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Inner::empty_batches_with_capacity(size)
+    }
+
+    #[inline]
+    fn select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
+        self.get_mut().select(ctx, selections)
+    }
+
+    #[inline]
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
+        self.get_mut().retry_select(ctx, selections, retry)
+    }
+
+    #[inline]
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as RecoverableError>::Completable
+    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    {
+        self.get_mut().complete_select(ctx, selections, err)
+    }
+
+    #[inline]
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut().create_batch(ctx, batches, selections)
+    }
+
+    #[inline]
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut()
+            .retry_create_batch(ctx, batches, selections, retry)
+    }
+
+    #[inline]
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut()
+            .complete_create_batch(ctx, batches, selections, err)
+    }
+
+    #[inline]
+    fn start_batch(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.get_mut().start_batch(ctx)
+    }
+
+    #[inline]
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.get_mut().retry_start_batch(ctx, retry)
+    }
+
+    #[inline]
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        Self::StartBatchError
+    > {
+        self.get_mut().complete_start_batch(ctx, err)
+    }
+
+    #[inline]
+    fn abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.get_mut().abort_start_batch(ctx, flags, err)
+    }
+
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.get_mut().retry_abort_start_batch(ctx, flags, retry)
+    }
+}
+
+impl<Prin, Ctx, Inner> PushStreamShared<Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamShared<Ctx>
+{
+    type AbortBatchRetry = Inner::AbortBatchRetry;
+    type BatchPartiesError = Inner::BatchPartiesError;
+    type BatchPartiesIter = Inner::BatchPartiesIter;
+    type CreateBatchError = Inner::CreateBatchError;
+    type CreateBatchRetry = Inner::CreateBatchRetry;
+    type IndefParties = Inner::IndefParties;
+    type SelectError = Inner::SelectError;
+    type SelectRetry = Inner::SelectRetry;
+    type Selections = Inner::Selections;
+    type StartBatchError = Inner::StartBatchError;
+    type StartBatchRetry = Inner::StartBatchRetry;
+    type StartBatchStreamBatches = Inner::StartBatchStreamBatches;
+
+    #[inline]
+    fn empty_selections_with_capacity(size: usize) -> Self::Selections {
+        Inner::empty_selections_with_capacity(size)
+    }
+
+    #[inline]
+    fn empty_batches_with_capacity(
+        size: usize
+    ) -> Self::StartBatchStreamBatches {
+        Inner::empty_batches_with_capacity(size)
+    }
+
+    #[inline]
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        self.get().batch_parties(batch_id)
+    }
+
+    #[inline]
+    fn select<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        parties: I
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        self.get_mut().select(ctx, selections, parties)
+    }
+
+    #[inline]
+    fn retry_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        retry: Self::SelectRetry
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    > {
+        self.get_mut().retry_select(ctx, selections, retry)
+    }
+
+    #[inline]
+    fn complete_select(
+        &mut self,
+        ctx: &mut Ctx,
+        selections: &mut Self::Selections,
+        err: <Self::SelectError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            Vec<Self::PartyID>,
+            Self::SelectRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::SelectError
+    > {
+        self.get_mut().complete_select(ctx, selections, err)
+    }
+
+    #[inline]
+    fn create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut().create_batch(ctx, batches, selections)
+    }
+
+    #[inline]
+    fn retry_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        retry: Self::CreateBatchRetry
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut()
+            .retry_create_batch(ctx, batches, selections, retry)
+    }
+
+    #[inline]
+    fn complete_create_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        batches: &mut Self::StartBatchStreamBatches,
+        selections: &Self::Selections,
+        err: <Self::CreateBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Self::BatchID, Self::CreateBatchRetry>,
+        Self::CreateBatchError
+    > {
+        self.get_mut()
+            .complete_create_batch(ctx, batches, selections, err)
+    }
+
+    #[inline]
+    fn start_batch<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        parties: I
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        self.get_mut().start_batch(ctx, parties)
+    }
+
+    #[inline]
+    fn retry_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::StartBatchRetry
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    > {
+        self.get_mut().retry_start_batch(ctx, retry)
+    }
+
+    #[inline]
+    fn complete_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::StartBatchError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::StartBatchRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::StartBatchError
+    > {
+        self.get_mut().complete_start_batch(ctx, err)
+    }
+
+    #[inline]
+    fn abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        err: <Self::StartBatchError as RecoverableError>::Permanent
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.get_mut().abort_start_batch(ctx, flags, err)
+    }
+
+    #[inline]
+    fn retry_abort_start_batch(
+        &mut self,
+        ctx: &mut Ctx,
+        flags: &mut Self::StreamFlags,
+        retry: Self::AbortBatchRetry
+    ) -> RetryResult<(), Self::AbortBatchRetry> {
+        self.get_mut().retry_abort_start_batch(ctx, flags, retry)
+    }
+}
+
+impl<Prin, T, Ctx, Inner> PushStreamSharedSingle<T, Ctx>
+    for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamSharedSingle<T, Ctx>
+{
+    type CancelPushError = Inner::CancelPushError;
+    type CancelPushRetry = Inner::CancelPushRetry;
+    type PushError = Inner::PushError;
+    type PushRetry = Inner::PushRetry;
+
+    #[inline]
+    fn push<'a, I>(
+        &mut self,
+        ctx: &mut Ctx,
+        parties: I,
+        msg: &T
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::PushRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::PushError
+    >
+    where
+        I: Iterator<Item = &'a Self::PartyID>,
+        Self::PartyID: 'a {
+        self.get_mut().push(ctx, parties, msg)
+    }
+
+    #[inline]
+    fn retry_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &T,
+        retry: Self::PushRetry
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::PushRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::PushError
+    > {
+        self.get_mut().retry_push(ctx, msg, retry)
+    }
+
+    #[inline]
+    fn complete_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &T,
+        err: <Self::PushError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            Self::BatchID,
+            Self::PushRetry,
+            Parties<Self::IndefParties>
+        >,
+        Self::PushError
+    > {
+        self.get_mut().complete_push(ctx, msg, err)
+    }
+
+    #[inline]
+    fn cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::PushError as RecoverableError>::Permanent
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().cancel_push(ctx, err)
+    }
+
+    #[inline]
+    fn retry_cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::CancelPushRetry
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().retry_cancel_push(ctx, retry)
+    }
+
+    #[inline]
+    fn complete_cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::CancelPushError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().complete_cancel_push(ctx, err)
+    }
+}
+
+impl<Prin, T, Ctx, Inner> PushStreamPrivateSingle<T, Ctx>
+    for BasicAuthNed<Prin, Inner>
+where
+    Inner: PushStreamPrivateSingle<T, Ctx>
+{
+    type CancelPushError = Inner::CancelPushError;
+    type CancelPushRetry = Inner::CancelPushRetry;
+    type PushError = Inner::PushError;
+    type PushRetry = Inner::PushRetry;
+
+    #[inline]
+    fn push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &T
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        self.get_mut().push(ctx, msg)
+    }
+
+    #[inline]
+    fn retry_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &T,
+        retry: Self::PushRetry
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        self.get_mut().retry_push(ctx, msg, retry)
+    }
+
+    #[inline]
+    fn complete_push(
+        &mut self,
+        ctx: &mut Ctx,
+        msg: &T,
+        err: <Self::PushError as RecoverableError>::Completable
+    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    {
+        self.get_mut().complete_push(ctx, msg, err)
+    }
+
+    #[inline]
+    fn cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::PushError as RecoverableError>::Permanent
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().cancel_push(ctx, err)
+    }
+
+    #[inline]
+    fn retry_cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        retry: Self::CancelPushRetry
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().retry_cancel_push(ctx, retry)
+    }
+
+    #[inline]
+    fn complete_cancel_push(
+        &mut self,
+        ctx: &mut Ctx,
+        err: <Self::CancelPushError as RecoverableError>::Completable
+    ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
+    {
+        self.get_mut().complete_cancel_push(ctx, err)
+    }
+}
+
+impl<Prin, T, Inner> PullStream<T> for BasicAuthNed<Prin, Inner>
+where
+    Inner: PullStream<T>
+{
+    type PullError = Inner::PullError;
+
+    #[inline]
+    fn pull(&mut self) -> Result<T, Self::PullError> {
+        self.get_mut().pull()
+    }
+}
+
+impl<Prin, Ctx, Inner> LargeObjStream<Ctx> for BasicAuthNed<Prin, Inner>
+where
+    Inner: LargeObjStream<Ctx>
+{
+    type Frags = Inner::Frags;
+    type Parties = Inner::Parties;
+    type PushFragError = Inner::PushFragError;
+    type PushFragRetry = Inner::PushFragRetry;
+
+    #[inline]
+    fn push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.get_mut().push_frags(ctx, id, frags)
+    }
+
+    #[inline]
+    fn retry_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        retry: Self::PushFragRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.get_mut().retry_push_frags(ctx, id, frags, retry)
+    }
+
+    #[inline]
+    fn complete_push_frags(
+        &mut self,
+        ctx: &mut Ctx,
+        id: LargeObjID,
+        frags: &mut Self::Frags,
+        err: <Self::PushFragError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushFragRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushFragError
+    > {
+        self.get_mut().complete_push_frags(ctx, id, frags, err)
+    }
+}
+
+impl<Prin, Ctx, H, Inner> LargeObjOfferStream<H, Ctx>
+    for BasicAuthNed<Prin, Inner>
+where
+    Inner: LargeObjOfferStream<H, Ctx>,
+    H: HashID
+{
+    type PushOfferError = Inner::PushOfferError;
+    type PushOfferRetry = Inner::PushOfferRetry;
+
+    #[inline]
+    fn push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.get_mut().push_offer(ctx, hash, frags)
+    }
+
+    #[inline]
+    fn retry_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        retry: Self::PushOfferRetry
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.get_mut().retry_push_offer(ctx, hash, frags, retry)
+    }
+
+    #[inline]
+    fn complete_push_offer(
+        &mut self,
+        ctx: &mut Ctx,
+        hash: H,
+        frags: &mut Self::Frags,
+        err: <Self::PushOfferError as RecoverableError>::Completable
+    ) -> Result<
+        RetryIndefResult<
+            (Option<Instant>, Self::Parties),
+            Self::PushOfferRetry,
+            Parties<Self::Parties>
+        >,
+        Self::PushOfferError
+    > {
+        self.get_mut().complete_push_offer(ctx, hash, frags, err)
     }
 }
 
