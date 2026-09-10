@@ -311,16 +311,17 @@ pub struct MulticastPartyConfig<PartyID, Stream> {
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "poll-config")]
-pub struct PollThreadConfig<Channels, Mode, Stream, AuthN> {
+pub struct PollThreadConfig<Channels, Mode, Stream, MsgAuthN> {
+    #[serde(flatten)]
     channels: Channels,
-    authn: AuthN,
+    msg_authn: MsgAuthN,
     #[serde(flatten)]
     stream: Stream,
     #[serde(flatten)]
     #[serde(default)]
     mode: Mode,
     #[serde(
-        default = "PollThreadConfig::<Channels, Mode, Stream, AuthN>::default_nevents"
+        default = "PollThreadConfig::<Channels, Mode, Stream, MsgAuthN>::default_nevents"
     )]
     num_events: usize,
     #[serde(default)]
@@ -502,15 +503,15 @@ impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
     }
 }
 
-impl<Channels, Mode, Stream, AuthN>
-    PollThreadConfig<Channels, Mode, Stream, AuthN>
+impl<Channels, Mode, Stream, MsgAuthN>
+    PollThreadConfig<Channels, Mode, Stream, MsgAuthN>
 {
     #[inline]
     pub fn new(
         channels: Channels,
         mode: Mode,
         stream: Stream,
-        authn: AuthN,
+        msg_authn: MsgAuthN,
         nevents: usize,
         nsessions: Option<usize>
     ) -> Self {
@@ -518,7 +519,7 @@ impl<Channels, Mode, Stream, AuthN>
             channels: channels,
             mode: mode,
             stream: stream,
-            authn: authn,
+            msg_authn: msg_authn,
             num_events: nevents,
             num_sessions: nsessions
         }
@@ -540,8 +541,8 @@ impl<Channels, Mode, Stream, AuthN>
     }
 
     #[inline]
-    pub fn authn(&self) -> &AuthN {
-        &self.authn
+    pub fn msg_authn(&self) -> &MsgAuthN {
+        &self.msg_authn
     }
 
     #[inline]
@@ -555,12 +556,14 @@ impl<Channels, Mode, Stream, AuthN>
     }
 
     #[inline]
-    pub fn take(self) -> (Channels, Mode, Stream, AuthN, usize, Option<usize>) {
+    pub fn take(
+        self
+    ) -> (Channels, Mode, Stream, MsgAuthN, usize, Option<usize>) {
         (
             self.channels,
             self.mode,
             self.stream,
-            self.authn,
+            self.msg_authn,
             self.num_events,
             self.num_sessions
         )
