@@ -65,10 +65,10 @@ use crate::stream::PullStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
-use crate::threads::RetryHeapEntry;
 use crate::threads::Tokens;
 use crate::threads::TokensCtx;
 use crate::threads::types::DispatchEntryTypes;
@@ -185,7 +185,7 @@ where
     mode: Types::Mode,
     shutdown_retries: Option<
         BinaryHeap<
-            RetryHeapEntry<
+            StreamRetry<
                 StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
                 Types::ChanShutdownRetry
             >
@@ -225,7 +225,7 @@ where
     >,
     orphan_shutdown_retries: Option<
         BinaryHeap<
-            RetryHeapEntry<
+            StreamRetry<
                 StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
                 Types::ChanShutdownRetry
             >
@@ -613,7 +613,7 @@ where
                                id);
 
                         let id = id.clone();
-                        let ent = RetryHeapEntry::new(id, retry);
+                        let ent = StreamRetry::new(id, retry);
 
                         match &mut self.shutdown_retries {
                             Some(shutdown_retries) => {
@@ -967,7 +967,7 @@ where
                     ) {
                         Ok(res) => {
                             if let RetryResult::Retry(retry) = res {
-                                let ent = RetryHeapEntry::new(id, retry);
+                                let ent = StreamRetry::new(id, retry);
 
                                 match &mut newents {
                                     Some(newents) => {
@@ -1114,7 +1114,7 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         shutdown_retries: &mut Option<
             BinaryHeap<
-                RetryHeapEntry<
+                StreamRetry<
                     StreamID<
                         Types::Addr,
                         Types::ChannelID,
@@ -1142,7 +1142,7 @@ where
                 Ok(res) => {
                     if let RetryResult::Retry(retry) = res {
                         let id = id.clone();
-                        let ent = RetryHeapEntry::new(id, retry);
+                        let ent = StreamRetry::new(id, retry);
 
                         match &mut self.shutdown_retries {
                             Some(shutdown_retries) => {
@@ -1387,7 +1387,7 @@ where
                                        id);
 
                                 let id = id.clone();
-                                let ent = RetryHeapEntry::new(id, retry);
+                                let ent = StreamRetry::new(id, retry);
 
                                 match &mut self.orphan_shutdown_retries {
                                     Some(shutdown_retries) => {
@@ -1491,7 +1491,7 @@ where
                                        id);
 
                                 let id = id.clone();
-                                let ent = RetryHeapEntry::new(id, retry);
+                                let ent = StreamRetry::new(id, retry);
 
                                 match &mut self.orphan_shutdown_retries {
                                     Some(shutdown_retries) => {
@@ -1629,7 +1629,7 @@ where
                         ) {
                             Ok(res) => {
                                 if let RetryResult::Retry(retry) = res {
-                                    let ent = RetryHeapEntry::new(id, retry);
+                                    let ent = StreamRetry::new(id, retry);
 
                                     match &mut newents {
                                         Some(newents) => {
@@ -2203,8 +2203,7 @@ where
                             ) {
                                 Ok(res) => {
                                     if let RetryResult::Retry(retry) = res {
-                                        let ent =
-                                            RetryHeapEntry::new(id, retry);
+                                        let ent = StreamRetry::new(id, retry);
 
                                         match &mut newents {
                                             Some(newents) => {

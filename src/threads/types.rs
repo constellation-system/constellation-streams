@@ -91,13 +91,16 @@ use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
+use crate::stream::ShutdownStream;
 use crate::stream::StreamFinishCancel;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::threads::PushMode;
+use crate::threads::ThreadInnerCtx;
 use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::DispatchThreadCtx;
+use crate::threads::poll::MsgsWaker;
 use crate::threads::poll::PollThreadCtx;
 use crate::threads::private::PrivateDatagramPushMode;
 use crate::threads::private::PrivateLargeObjPushMode;
@@ -262,7 +265,8 @@ where
             Self::SessionPrin,
             StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
             Self::AuthNChan
-        > + for<'a> CreateWithParam<
+        > + ShutdownStream<Self::Chans, ThreadInnerCtx<Ctx>>
+        + for<'a> CreateWithParam<
             &'a mut PollThreadCtx<Self::SessionPrin, Self::Chans, Ctx>,
             Config = Self::StreamConfig,
             CreateError = Self::StreamCreateError
@@ -270,24 +274,24 @@ where
     type InMsg;
     type AuthNMsg: AuthNed<Self::MsgPrin>;
     type Wrapper;
-    type Msgs: Send;
+    type Msgs: MsgsWaker + Send;
     type ChansConfig: Send;
     type ChansCreateError: Debug + Display;
     type ChanShutdownRetry: RetryWhen;
     type ChanShutdownError: Debug + Display;
     type Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = Self::ChansConfig,
             CreateError = Self::ChansCreateError
         > + Channels<
-            Ctx,
+            ThreadInnerCtx<Ctx>,
             Addr = Self::Addr,
             Param = Self::ChannelParam,
             Stream = Self::AuthNChan,
             ChannelID = Self::ChannelID
-        > + ChannelsListen<Ctx>
+        > + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<
-            Ctx,
+            ThreadInnerCtx<Ctx>,
             ShutdownStreamError = Self::ChanShutdownError,
             ShutdownStreamRetry = Self::ChanShutdownRetry
         >;
@@ -577,12 +581,12 @@ pub struct DatagramSelectorPollTypes<
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -618,7 +622,7 @@ pub struct DatagramSelectorPollTypes<
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send {
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -652,12 +656,12 @@ pub struct LargeObjSelectorPollTypes<
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -715,7 +719,7 @@ pub struct LargeObjSelectorPollTypes<
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -886,12 +890,12 @@ pub struct DatagramMulticastPollTypes<
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -940,7 +944,7 @@ pub struct DatagramMulticastPollTypes<
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -974,12 +978,12 @@ pub struct LargeObjMulticastPollTypes<
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -1063,7 +1067,7 @@ pub struct LargeObjMulticastPollTypes<
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -1269,12 +1273,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -1310,7 +1314,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -1361,12 +1365,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -1424,7 +1428,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -1626,12 +1630,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -1680,7 +1684,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -1731,12 +1735,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -1820,7 +1824,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -2032,12 +2036,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2073,7 +2077,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
     fn default() -> Self {
@@ -2124,12 +2128,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -2187,7 +2191,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -2390,12 +2394,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2444,7 +2448,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
     fn default() -> Self {
@@ -2495,12 +2499,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -2584,7 +2588,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -2768,12 +2772,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -2809,7 +2813,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
 {
 }
 
@@ -2845,12 +2849,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -2908,7 +2912,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -3072,12 +3076,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3126,7 +3130,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
@@ -3162,12 +3166,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -3251,7 +3255,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -3423,12 +3427,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3464,7 +3468,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
 {
 }
 
@@ -3500,12 +3504,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -3563,7 +3567,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -3727,12 +3731,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -3781,7 +3785,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
@@ -3817,12 +3821,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -3906,7 +3910,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -4536,12 +4540,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -4577,7 +4581,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
@@ -4666,12 +4670,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -4729,7 +4733,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -5163,12 +5167,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<MsgAuth::SessionPrin>
         + PushStream<PollThreadCtx<MsgAuth::SessionPrin, Chans, Ctx>>
@@ -5217,7 +5221,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
@@ -5327,12 +5331,12 @@ where
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<
-            &'a mut Ctx,
+            &'a mut ThreadInnerCtx<Ctx>,
             Config = ChansConfig,
             CreateError = ChansCreateError
-        > + Channels<Ctx>
-        + ChannelsListen<Ctx>
-        + ChannelsShutdown<Ctx>,
+        > + Channels<ThreadInnerCtx<Ctx>>
+        + ChannelsListen<ThreadInnerCtx<Ctx>>
+        + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
     Chans::Stream: Clone
         + AuthNed<Types::SessionPrin>
         + PushStream<PollThreadCtx<Types::SessionPrin, Chans, Ctx>>
@@ -5416,7 +5420,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: Send,
+    Types::Msgs: MsgsWaker + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,

@@ -18,11 +18,11 @@
 
 //! Manager threads for various kinds of push and pull streams.
 
-use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::io::Error;
 use std::time::Instant;
 
 use constellation_common::error::RecoverableError;
@@ -33,6 +33,7 @@ use constellation_common::retry::RetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
 use log::error;
+use mio::Poll;
 use mio::Registry;
 use mio::Token;
 
@@ -128,11 +129,10 @@ pub trait TokensCtx {
     );
 }
 
-pub(crate) struct RetryHeapEntry<I, T>
-where
-    T: RetryWhen {
-    when: T,
-    id: I
+pub struct ThreadInnerCtx<Ctx> {
+    tokens: Tokens,
+    poll: Poll,
+    ctx: Ctx
 }
 
 /// Result from [PushMode] operations.
@@ -172,72 +172,52 @@ where
     }
 }
 
-impl<I, T> PartialEq for RetryHeapEntry<I, T>
-where
-    T: RetryWhen
-{
+impl<Ctx> TokensCtx for ThreadInnerCtx<Ctx> {
     #[inline]
-    fn eq(
-        &self,
-        other: &Self
-    ) -> bool {
-        self.when().eq(&other.when())
+    fn token(&mut self) -> Token {
+        self.tokens.token()
+    }
+
+    #[inline]
+    fn free_token(
+        &mut self,
+        token: Token
+    ) {
+        self.tokens.free_token(token)
     }
 }
 
-impl<I, T> Eq for RetryHeapEntry<I, T> where T: RetryWhen {}
-
-impl<I, T> Ord for RetryHeapEntry<I, T>
-where
-    T: RetryWhen
-{
+impl<Ctx> RegistryCtx for ThreadInnerCtx<Ctx> {
     #[inline]
-    fn cmp(
-        &self,
-        other: &Self
-    ) -> Ordering {
-        self.when().cmp(&other.when())
+    fn registry(&self) -> &Registry {
+        self.poll.registry()
     }
 }
 
-impl<I, T> PartialOrd for RetryHeapEntry<I, T>
-where
-    T: RetryWhen
-{
-    #[inline]
-    fn partial_cmp(
-        &self,
-        other: &Self
-    ) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
+impl<Ctx> ThreadInnerCtx<Ctx> {
+    pub(crate) fn new(ctx: Ctx) -> Result<Self, Error> {
+        let poll = Poll::new()?;
 
-impl<I, T> RetryWhen for RetryHeapEntry<I, T>
-where
-    T: RetryWhen
-{
-    #[inline]
-    fn when(&self) -> Instant {
-        self.when.when()
-    }
-}
-
-impl<I, T> RetryHeapEntry<I, T>
-where
-    T: RetryWhen
-{
-    #[inline]
-    pub(crate) fn new(
-        id: I,
-        when: T
-    ) -> Self {
-        RetryHeapEntry { when: when, id: id }
+        Ok(ThreadInnerCtx {
+            tokens: Tokens::new(),
+            poll: poll,
+            ctx: ctx
+        })
     }
 
     #[inline]
-    pub(crate) fn take(self) -> (I, T) {
-        (self.id, self.when)
+    pub(crate) fn poll(&mut self) -> &mut Poll {
+        &mut self.poll
+    }
+
+    #[inline]
+    pub fn inner(&self) -> &Ctx {
+        &self.ctx
+    }
+
+    #[inline]
+    pub fn inner_mut(&mut self) -> &mut Ctx {
+        &mut self.ctx
     }
 }
 

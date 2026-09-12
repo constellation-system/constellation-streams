@@ -41,8 +41,10 @@ use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::sync::Notify;
 use mio::Token;
+use mio::Waker;
 
 use crate::addrs::test::TestEndpoint;
+use crate::channels::ChannelsShutdown;
 use crate::channels::test::TestChannel;
 use crate::channels::test::TestChannelParam;
 use crate::channels::test::TestChannels;
@@ -50,12 +52,16 @@ use crate::channels::test::TestChannelsError;
 use crate::channels::test::TestChannelsScript;
 use crate::channels::test::TestStreamID;
 use crate::stream::PullStream;
+use crate::stream::ShutdownStream;
+use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::Dispatched;
+use crate::threads::poll::MsgsWaker;
 use crate::threads::types::DispatchEntryTypes;
 use crate::threads::types::DispatchInboundTypes;
 use crate::threads::types::DispatchTypes;
@@ -192,6 +198,15 @@ impl Create for TestDispatch {
     }
 }
 
+impl MsgsWaker for TestRecv {
+    #[inline]
+    fn set_waker(
+        &mut self,
+        _waker: Arc<Waker>
+    ) {
+    }
+}
+
 impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
     type DispatchError = Infallible;
     type Msgs = ();
@@ -259,6 +274,30 @@ impl Create for TestChannelCore {
         script.reverse();
 
         Ok(TestChannelCore { script: script })
+    }
+}
+
+impl<Chans, Ctx> ShutdownStream<Chans, Ctx> for TestStream
+where
+    Chans: ChannelsShutdown<Ctx>
+{
+    fn shutdown_stream(
+        self,
+        _ctx: &mut Ctx,
+        _chans: &mut Chans
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Chans::Param>>, Option<Instant>),
+            Vec<
+                StreamRetry<
+                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+                    Chans::ShutdownStreamRetry
+                >
+            >
+        >,
+        Chans::ShutdownStreamError
+    > {
+        Ok(RetryResult::Success((None, None)))
     }
 }
 

@@ -65,6 +65,7 @@ use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::trace;
+use mio::Waker;
 
 use crate::config::LargeObjProtoConfig;
 use crate::error::ErrorReportInfo;
@@ -86,6 +87,7 @@ use crate::generated::large_obj::LargeObjReqObj;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
+use crate::threads::poll::MsgsWaker;
 
 pub mod test;
 
@@ -723,6 +725,23 @@ where
         id: LargeObjID
     ) -> Self {
         LargeObjMsg::Finish { hash: hash, id: id }
+    }
+}
+
+impl<InMsg, OutMsg, PartyID, F, Types> MsgsWaker
+    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
+where
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
+    Types::Msgs: MsgsWaker,
+    PartyID: Clone + Eq + Hash,
+    F: Frags
+{
+    #[inline]
+    fn set_waker(
+        &mut self,
+        waker: Arc<Waker>
+    ) {
+        self.msgs.set_waker(waker)
     }
 }
 
@@ -3398,8 +3417,6 @@ use constellation_common::codec::test::TestBytesCodec;
 use mio::Poll;
 #[cfg(test)]
 use mio::Token;
-#[cfg(test)]
-use mio::Waker;
 
 #[cfg(test)]
 use crate::init;

@@ -47,7 +47,6 @@ use log::info;
 use log::trace;
 use log::warn;
 use mio::Events;
-use mio::Poll;
 use mio::Registry;
 use mio::Token;
 use mio::Waker;
@@ -58,26 +57,25 @@ use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::config::PollThreadConfig;
 use crate::stream::PullStream;
+use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
-use crate::threads::RetryHeapEntry;
 use crate::threads::SelfPartyCtx;
-use crate::threads::Tokens;
+use crate::threads::ThreadInnerCtx;
 use crate::threads::TokensCtx;
 use crate::threads::types::PollThreadTypes;
 
 pub struct PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx> {
+    Chans: Channels<ThreadInnerCtx<Ctx>> {
     self_party: Option<Party>,
-    channels: Chans,
-    tokens: Tokens,
-    ctx: Ctx,
-    poll: Poll
+    inner: ThreadInnerCtx<Ctx>,
+    channels: Chans
 }
 
 pub struct PollThread<Ctx, Types>
@@ -92,7 +90,7 @@ where
     refresh_complete: Option<Types::RefreshCompletableError>,
     shutdown_retries: Option<
         BinaryHeap<
-            RetryHeapEntry<
+            StreamRetry<
                 StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
                 Types::ChanShutdownRetry
             >
@@ -112,9 +110,25 @@ where
     nevents: usize
 }
 
+pub trait MsgsWaker {
+    fn set_waker(
+        &mut self,
+        waker: Arc<Waker>
+    );
+}
+
+impl MsgsWaker for () {
+    #[inline]
+    fn set_waker(
+        &mut self,
+        _waker: Arc<Waker>
+    ) {
+    }
+}
+
 impl<Party, Chans, Ctx> ChannelsID for PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: ChannelsID + Channels<Ctx>
+    Chans: ChannelsID + Channels<ThreadInnerCtx<Ctx>>
 {
     type ChannelID = Chans::ChannelID;
 
@@ -129,7 +143,7 @@ where
 
 impl<Party, Chans, Ctx> Channels<()> for PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     type Addr = Chans::Addr;
     type OutNegoParam = Chans::OutNegoParam;
@@ -159,7 +173,7 @@ where
         Self::ReqStreamError
     > {
         self.channels.req_stream(
-            &mut self.ctx,
+            &mut self.inner,
             channel,
             param,
             endpoint,
@@ -175,13 +189,13 @@ where
     ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
         I: Iterator<Item = Self::ChannelID> {
-        self.channels.params(&mut self.ctx, channels)
+        self.channels.params(&mut self.inner, channels)
     }
 }
 
 impl<Party, Chans, Ctx> SelfPartyCtx<Party> for PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     #[inline]
     fn self_party(&self) -> Option<&Party> {
@@ -191,11 +205,11 @@ where
 
 impl<Party, Chans, Ctx> TokensCtx for PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     #[inline]
     fn token(&mut self) -> Token {
-        self.tokens.token()
+        self.inner.token()
     }
 
     #[inline]
@@ -203,17 +217,17 @@ where
         &mut self,
         token: Token
     ) {
-        self.tokens.free_token(token)
+        self.inner.free_token(token)
     }
 }
 
 impl<Party, Chans, Ctx> RegistryCtx for PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     #[inline]
     fn registry(&self) -> &Registry {
-        self.poll.registry()
+        self.inner.registry()
     }
 }
 
@@ -235,37 +249,28 @@ pub enum PollThreadRecvError<Pull, AuthN, Recv> {
 
 impl<Party, Chans, Ctx> PollThreadCtx<Party, Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     fn new(
-        ctx: Ctx,
+        inner: ThreadInnerCtx<Ctx>,
         channels: Chans,
-        poll: Poll,
-        self_party: Option<Party>,
-        tokens_hint: Option<usize>
+        self_party: Option<Party>
     ) -> Self {
-        let tokens = match tokens_hint {
-            Some(hint) => Tokens::with_capacity(hint),
-            None => Tokens::new()
-        };
-
         PollThreadCtx {
             self_party: self_party,
             channels: channels,
-            tokens: tokens,
-            ctx: ctx,
-            poll: poll
+            inner: inner
         }
     }
 
     #[inline]
     pub fn inner(&self) -> &Ctx {
-        &self.ctx
+        self.inner.inner()
     }
 
     #[inline]
     pub fn inner_mut(&mut self) -> &mut Ctx {
-        &mut self.ctx
+        self.inner.inner_mut()
     }
 }
 
@@ -282,9 +287,9 @@ where
             Types::MsgAuthConfig
         >,
         self_party: Option<Types::SessionPrin>,
-        mut ctx: Ctx,
+        ctx: Ctx,
         recv: Types::Recv,
-        msgs: Types::Msgs
+        mut msgs: Types::Msgs
     ) -> Result<
         Self,
         PollThreadCreateError<
@@ -302,27 +307,28 @@ where
             nevents,
             nsessions
         ) = config.take();
-        let channels = Types::Chans::create(chans_config, &mut ctx)
-            .map_err(|err| PollThreadCreateError::Channels { err: err })?;
         let authn = Types::MsgAuth::create(authn_config)
             .map_err(|err| PollThreadCreateError::AuthN { err: err })?;
         let pull_streams = match nsessions {
             Some(nsessions) => HashMap::with_capacity(nsessions),
             None => HashMap::new()
         };
-        let poll = Poll::new()
+        let mut ctx = ThreadInnerCtx::new(ctx)
             .map_err(|err| PollThreadCreateError::IO { err: err })?;
-        let mut ctx =
-            PollThreadCtx::new(ctx, channels, poll, self_party, nsessions);
+        let channels = Types::Chans::create(chans_config, &mut ctx)
+            .map_err(|err| PollThreadCreateError::Channels { err: err })?;
+        let mut ctx = PollThreadCtx::new(ctx, channels, self_party);
         let stream = Types::Stream::create(stream_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Stream { err: err })?;
         let mode = Types::Mode::create(mode_config, &stream)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
         let notify_token = ctx.token();
-        let notify = Waker::new(ctx.poll.registry(), notify_token)
+        let notify = Waker::new(ctx.inner.registry(), notify_token)
             .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let notify = Arc::new(notify);
         let shutdown = ShutdownFlag::new(notify.clone());
+
+        msgs.set_waker(notify.clone());
 
         Ok(PollThread {
             pull_streams: pull_streams,
@@ -455,7 +461,7 @@ where
             let mut valid = true;
 
             while self.shutdown.is_live() && valid {
-                trace!(target: "pull-streams-recv-thread",
+                trace!(target: "poll-thread",
                        "listening for message on {}",
                        id);
 
@@ -531,7 +537,7 @@ where
                       id, stream.prin());
 
                 match self.ctx.channels.shutdown_stream(
-                    &mut self.ctx.ctx,
+                    &mut self.ctx.inner,
                     id.channel(),
                     id.param(),
                     stream
@@ -543,7 +549,7 @@ where
                                id);
 
                             let id = id.clone();
-                            let ent = RetryHeapEntry::new(id, retry);
+                            let ent = StreamRetry::new(id, retry);
 
                             match &mut self.shutdown_retries {
                                 Some(shutdown_retries) => {
@@ -591,7 +597,7 @@ where
 
                 // Shut down the incoming stream.
                 if let Err(err) = self.ctx.channels.shutdown_stream(
-                    &mut self.ctx.ctx,
+                    &mut self.ctx.inner,
                     id.channel(),
                     id.param(),
                     stream
@@ -786,14 +792,14 @@ where
                            id);
 
                     match self.ctx.channels.retry_shutdown_stream(
-                        &mut self.ctx.ctx,
+                        &mut self.ctx.inner,
                         id.channel(),
                         id.param(),
                         retry
                     ) {
                         Ok(res) => {
                             if let RetryResult::Retry(retry) = res {
-                                let ent = RetryHeapEntry::new(id, retry);
+                                let ent = StreamRetry::new(id, retry);
 
                                 match &mut newents {
                                     Some(newents) => {
@@ -873,11 +879,13 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refresh = if next_listen.is_some_and(|when| when <= now) {
+        let need_refresh = if !live.is_empty() ||
+            next_listen.is_some_and(|when| when <= now)
+        {
             trace!(target: "poll-thread",
                    "listening");
 
-            match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
+            match self.ctx.channels.listen(&mut self.ctx.inner, &live) {
                 Ok(RetryResult::Success((
                     streams,
                     endpoints,
@@ -885,6 +893,9 @@ where
                     when
                 ))) => {
                     *next_listen = when;
+
+                    trace!(target: "poll-thread",
+                           "reporting new streams");
 
                     // Report new streams.
                     for (addr, channel_id, param, stream) in streams {
@@ -896,6 +907,9 @@ where
                                    id, err);
                         }
                     }
+
+                    trace!(target: "poll-thread",
+                           "listening for message");
 
                     // Pull in messages from all active streams.
                     for (addr, channel_id, param) in endpoints {
@@ -1150,6 +1164,21 @@ where
         info!(target: "poll-thread",
               "mio polling thread starting");
 
+        debug!(target: "poll-thread",
+              "initial stream refresh");
+
+        match self.refresh_stream() {
+            RetryResult::Success((when, _, _)) => {
+                next_refresh = when;
+            }
+            RetryResult::Retry(retry) => {
+                retry_refresh = Some(retry);
+            }
+        }
+
+        debug!(target: "poll-thread",
+              "entering polling loop");
+
         // Loop until told to shut down.
         while {
             let next = self
@@ -1166,6 +1195,7 @@ where
             self.shutdown.is_live() &&
             // Skip polling if the time has already elapsed.
                 (next.is_some_and(|next: Instant| next < now) ||
+                 self.refresh_complete.is_some() ||
                  {
                      let duration = next.map(|next| next - now);
 
@@ -1179,7 +1209,8 @@ where
                      }
 
                      self.ctx
-                         .poll
+                         .inner
+                         .poll()
                          .poll(&mut events, duration)
                          .inspect_err(|err| {
                              error!(target: "poll-thread",
@@ -1187,8 +1218,7 @@ where
                                     err)
                          })
                          .is_ok()
-                 } ||
-                 self.refresh_complete.is_some()) &&
+                 }) &&
                 self.handle_events(&mut events, &mut retry_refresh,
                                    &mut next_refresh, &mut next_listen,
                                    &mut pending, now)
@@ -1203,24 +1233,27 @@ where
     ) {
         let PollThread {
             mut shutdown_retries,
+            stream,
             pull_streams,
             ctx,
             ..
         } = self;
         let PollThreadCtx {
-            mut ctx,
-            mut poll,
+            inner: mut ctx,
             mut channels,
             ..
         } = ctx;
         let nsessions = pull_streams.len();
 
-        info!(target: "poll-thread",
+        info!(target: "poll-thread-shutdown",
               "mio polling thread shutting down");
+
+        debug!(target: "poll-thread-shutdown",
+               "shutting down pull streams");
 
         // Shut down all streams.
         for (id, stream) in pull_streams.into_iter() {
-            debug!(target: "poll-thread",
+            debug!(target: "poll-thread-shutdown",
                    "shutting down stream {} with {}",
                    id, stream.prin());
 
@@ -1233,7 +1266,7 @@ where
                 Ok(res) => {
                     if let RetryResult::Retry(retry) = res {
                         let id = id.clone();
-                        let ent = RetryHeapEntry::new(id, retry);
+                        let ent = StreamRetry::new(id, retry);
 
                         match &mut shutdown_retries {
                             Some(shutdown_retries) => {
@@ -1250,15 +1283,45 @@ where
                     }
                 }
                 Err(err) => {
-                    error!(target: "poll-thread",
+                    error!(target: "poll-thread-shutdown",
                            "error shutting down stream {}: {}",
                            id, err);
                 }
             }
         }
 
+        debug!(target: "poll-thread-shutdown",
+               "shutting down push streams");
+
+        // Shut down the push stream.
+        match stream.shutdown_stream(&mut ctx, &mut channels) {
+            Ok(res) => {
+                if let RetryResult::Retry(retries) = res {
+                    match &mut shutdown_retries {
+                        Some(shutdown_retries) => {
+                            shutdown_retries.extend(retries);
+                        }
+                        None => {
+                            let mut heap = BinaryHeap::with_capacity(nsessions);
+
+                            heap.extend(retries);
+                            shutdown_retries = Some(heap);
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                error!(target: "poll-thread-shutdown",
+                       "error shutting down push stream: {}",
+                       err);
+            }
+        }
+
+        debug!(target: "poll-thread-shutdown",
+               "finishing all shutdown negotiations");
+
         let mut channels = Some(channels);
-        let mut next = None;
+        let mut next = Some(Instant::now());
 
         while {
             next = next_retry(
@@ -1274,17 +1337,18 @@ where
                     let duration = next.map(|next| next - now);
 
                     if let Some(duration) = &duration {
-                        trace!(target: "poll-thread",
+                        trace!(target: "poll-thread-shutdown",
                            "waiting for poll for {}.{:03}",
                            duration.as_secs(), duration.subsec_millis());
                     } else {
-                        trace!(target: "poll-thread",
+                        trace!(target: "poll-thread-shutdown",
                            "waiting for poll indefinitely");
                     }
 
-                    poll.poll(&mut events, duration)
+                    ctx.poll()
+                        .poll(&mut events, duration)
                         .inspect_err(|err| {
-                            error!(target: "poll-thread",
+                            error!(target: "poll-thread-shutdown",
                                "error polling: {}",
                                err)
                         })
@@ -1315,8 +1379,7 @@ where
                             ) {
                                 Ok(res) => {
                                     if let RetryResult::Retry(retry) = res {
-                                        let ent =
-                                            RetryHeapEntry::new(id, retry);
+                                        let ent = StreamRetry::new(id, retry);
 
                                         match &mut newents {
                                             Some(newents) => {
@@ -1335,13 +1398,13 @@ where
                                     }
                                 }
                                 Err(err) => {
-                                    error!(target: "poll-thread",
+                                    error!(target: "poll-thread-shutdown",
                                            "error shutting down stream {}: {}",
                                            id, err);
                                 }
                             }
                         } else {
-                            error!(target: "poll-thread",
+                            error!(target: "poll-thread-shutdown",
                                    "shutdown_retries.pop() should not be None")
                         }
                     }
@@ -1362,7 +1425,7 @@ where
                         channels
                     }),
                     Err(err) => {
-                        error!(target: "poll-thread",
+                        error!(target: "poll-thread-shutdown",
                                "error listening during shutdown: {}",
                                err);
 
@@ -1370,14 +1433,14 @@ where
                     }
                 }
             } else {
-                error!(target: "poll-thread",
+                error!(target: "poll-thread-shutdown",
                        "channels should not be empty here");
 
                 None
             };
         }
 
-        info!(target: "poll-thread",
+        info!(target: "poll-thread-shutdown",
               "mio polling thread exiting");
     }
 }

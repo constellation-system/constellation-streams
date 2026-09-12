@@ -49,6 +49,7 @@ use log::debug;
 use log::error;
 use log::trace;
 
+use crate::channels::ChannelsShutdown;
 use crate::config::StreamMulticasterConfig;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
@@ -70,9 +71,12 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
+use crate::stream::ShutdownStream;
 use crate::stream::StreamFinishCancel;
+use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
 use crate::threads::SelfPartyCtx;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1703,6 +1707,76 @@ where
         }
 
         self.decide_refresh_outcome(results, errs)
+    }
+}
+
+impl<Party, Stream, Ctx, Chans, InnerCtx> ShutdownStream<Chans, InnerCtx>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + ShutdownStream<Chans, InnerCtx>,
+    Stream::BatchID: Clone,
+    Chans: ChannelsShutdown<InnerCtx>
+{
+    fn shutdown_stream(
+        self,
+        ctx: &mut InnerCtx,
+        chans: &mut Chans
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Chans::Param>>, Option<Instant>),
+            Vec<
+                StreamRetry<
+                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+                    Chans::ShutdownStreamRetry
+                >
+            >
+        >,
+        Chans::ShutdownStreamError
+    > {
+        let mut res = None;
+        let mut when = None;
+        let mut retries: Option<
+            Vec<
+                StreamRetry<
+                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+                    Chans::ShutdownStreamRetry
+                >
+            >
+        > = None;
+        let nstreams = self.rev_map.len();
+
+        debug!(target: "stream-multicaster",
+               "shutting down stream multicaster");
+
+        for party in self.rev_map.into_iter() {
+            trace!(target: "stream-multicaster",
+                   "shutting down party {}", party.party);
+
+            match party.stream.shutdown_stream(ctx, chans)? {
+                RetryResult::Success((params, retry)) => {
+                    res = params.or(res);
+                    when = next_retry(&retry, &when);
+                }
+                RetryResult::Retry(mut retry) => match &mut retries {
+                    Some(retries) => {
+                        retries.append(&mut retry);
+                    }
+                    None => {
+                        let mut vec = Vec::with_capacity(nstreams);
+
+                        vec.append(&mut retry);
+                        retries = Some(vec)
+                    }
+                }
+            }
+        }
+
+        if let Some(retries) = retries {
+            Ok(RetryResult::Retry(retries))
+        } else {
+            Ok(RetryResult::Success((res, when)))
+        }
     }
 }
 

@@ -72,6 +72,7 @@ use crate::addrs::Addrs;
 use crate::addrs::AddrsCreate;
 use crate::channels::ChannelParam;
 use crate::channels::Channels;
+use crate::channels::ChannelsShutdown;
 use crate::config::ConnectionConfig;
 use crate::config::FarSchedulerConfig;
 use crate::config::PartyConfig;
@@ -93,9 +94,11 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
+use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
 
 pub mod dispatch;
 mod sched;
@@ -1921,6 +1924,128 @@ where
 
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         (None, Some(self))
+    }
+}
+
+impl<Epochs, Resolve, Ctx, Chans, InnerCtx> ShutdownStream<Chans, InnerCtx>
+    for StreamSelector<Epochs, Resolve, Ctx>
+where
+    Epochs: Create + Iterator,
+    Epochs::Config: Default,
+    Epochs::Item: Clone + Default + Debug + Display + Eq,
+    Ctx: Channels<()>,
+    Ctx::OutNegoParam:
+        Clone + Default + for<'a> Deserialize<'a> + Eq + Hash + Serialize,
+    Ctx::Stream: Clone + PushStream<Ctx>,
+    Resolve: Addrs<Addr = Ctx::Addr>,
+    Resolve::Origin: Clone + Display + Eq + Hash,
+    Chans: ChannelsShutdown<
+            InnerCtx,
+            Addr = Ctx::Addr,
+            Param = Ctx::Param,
+            ChannelID = Ctx::ChannelID,
+            Stream = Ctx::Stream
+        >
+{
+    fn shutdown_stream(
+        self,
+        ctx: &mut InnerCtx,
+        chans: &mut Chans
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Chans::Param>>, Option<Instant>),
+            Vec<
+                StreamRetry<
+                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+                    Chans::ShutdownStreamRetry
+                >
+            >
+        >,
+        Chans::ShutdownStreamError
+    > {
+        debug!(target: "stream-selector",
+               "shutting down stream selector");
+
+        if let Some(state) = Arc::into_inner(self.state) {
+            match state.into_inner() {
+                Ok(state) => {
+                    let mut res = None;
+                    let mut when = None;
+                    let mut retries: Option<
+                        Vec<
+                            StreamRetry<
+                                StreamID<
+                                    Chans::Addr,
+                                    Chans::ChannelID,
+                                    Chans::Param
+                                >,
+                                Chans::ShutdownStreamRetry
+                            >
+                        >
+                    > = None;
+                    let nstreams = state.streams.len();
+
+                    for party in state.streams.into_iter() {
+                        if let Some(stream) = party.stream {
+                            trace!(target: "stream-selector",
+                                   "shutting down stream {}",
+                                   party.id);
+
+                            match chans.shutdown_stream(
+                                ctx,
+                                party.id.channel(),
+                                party.id.param(),
+                                stream
+                            )? {
+                                RetryResult::Success((params, retry)) => {
+                                    res = params.or(res);
+                                    when = next_retry(&retry, &when);
+                                }
+                                RetryResult::Retry(retry) => {
+                                    let retry =
+                                        StreamRetry::new(party.id, retry);
+
+                                    match &mut retries {
+                                        Some(retries) => {
+                                            retries.push(retry);
+                                        }
+                                        None => {
+                                            let mut vec =
+                                                Vec::with_capacity(nstreams);
+
+                                            vec.push(retry);
+                                            retries = Some(vec)
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            trace!(target: "stream-selector",
+                                   "stream {} is already shut down",
+                                   party.id);
+                        }
+                    }
+
+                    if let Some(retries) = retries {
+                        Ok(RetryResult::Retry(retries))
+                    } else {
+                        Ok(RetryResult::Success((res, when)))
+                    }
+                }
+                Err(err) => {
+                    error!(target: "stream-selector",
+                           "could not unbox RwLock: {}",
+                           err);
+
+                    Ok(RetryResult::Success((None, None)))
+                }
+            }
+        } else {
+            error!(target: "stream-selector",
+                   "could not unbox Arc");
+
+            Ok(RetryResult::Success((None, None)))
+        }
     }
 }
 

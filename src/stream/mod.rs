@@ -20,6 +20,7 @@
 pub mod test;
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -45,6 +46,7 @@ use log::error;
 use log::trace;
 use log::warn;
 
+use crate::channels::ChannelsShutdown;
 use crate::config::BatchSlotsConfig;
 use crate::error::ErrorReportInfo;
 use crate::frags::Frags;
@@ -116,6 +118,27 @@ pub trait StreamRefresh<Ctx> {
     ) -> Result<
         RetryResult<Option<Instant>, Self::RefreshRetry>,
         Self::RefreshError
+    >;
+}
+
+pub trait ShutdownStream<Chans, Ctx>
+where
+    Chans: ChannelsShutdown<Ctx> {
+    fn shutdown_stream(
+        self,
+        ctx: &mut Ctx,
+        chans: &mut Chans
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Chans::Param>>, Option<Instant>),
+            Vec<
+                StreamRetry<
+                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+                    Chans::ShutdownStreamRetry
+                >
+            >
+        >,
+        Chans::ShutdownStreamError
     >;
 }
 
@@ -1297,6 +1320,13 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>;
 }
 
+pub struct StreamRetry<I, T>
+where
+    T: RetryWhen {
+    when: T,
+    id: I
+}
+
 /// Indicator for some or all parties.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Parties<P> {
@@ -1375,6 +1405,75 @@ pub struct PassthruReporter<Addr, Prin, Stream> {
     stream: PhantomData<Stream>,
     prin: PhantomData<Prin>,
     addr: PhantomData<Addr>
+}
+
+impl<I, T> PartialEq for StreamRetry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn eq(
+        &self,
+        other: &Self
+    ) -> bool {
+        self.when().eq(&other.when())
+    }
+}
+
+impl<I, T> Eq for StreamRetry<I, T> where T: RetryWhen {}
+
+impl<I, T> Ord for StreamRetry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn cmp(
+        &self,
+        other: &Self
+    ) -> Ordering {
+        self.when().cmp(&other.when())
+    }
+}
+
+impl<I, T> PartialOrd for StreamRetry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn partial_cmp(
+        &self,
+        other: &Self
+    ) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<I, T> RetryWhen for StreamRetry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    fn when(&self) -> Instant {
+        self.when.when()
+    }
+}
+
+impl<I, T> StreamRetry<I, T>
+where
+    T: RetryWhen
+{
+    #[inline]
+    pub(crate) fn new(
+        id: I,
+        when: T
+    ) -> Self {
+        StreamRetry { when: when, id: id }
+    }
+
+    #[inline]
+    pub(crate) fn take(self) -> (I, T) {
+        (self.id, self.when)
+    }
 }
 
 impl<P> Parties<P> {
