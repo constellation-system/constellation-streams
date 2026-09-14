@@ -20,7 +20,6 @@
 
 use std::collections::BinaryHeap;
 use std::collections::HashSet;
-use std::fmt::Debug;
 use std::fmt::Display;
 use std::io::Error;
 use std::time::Instant;
@@ -44,6 +43,7 @@ use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjPushRetry;
 use crate::stream::LargeObjOfferStream;
+use crate::stream::PullStreamsOutput;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
@@ -54,10 +54,11 @@ pub mod shared;
 pub mod test;
 pub mod types;
 
-pub trait PushMode<Stream, Msgs, Ctx>: Sized {
-    type SendError: Debug + Display + ScopedError;
-    type RetryError: Debug + Display + ScopedError;
-    type RetryIndefError: Debug + Display + ScopedError;
+pub trait PushMode<Stream, Msgs, Ctx>: Sized
+where Stream: PullStreamsOutput {
+    type SendError: Display + ScopedError;
+    type RetryError: Display + ScopedError;
+    type RetryIndefError: Display + ScopedError;
 
     fn send_from_outbound(
         &mut self,
@@ -65,7 +66,8 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         msgs: &mut Msgs,
         stream: &mut Stream,
         live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::SendError>;
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError>;
 
     fn retry_pending(
         &mut self,
@@ -74,7 +76,8 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         stream: &mut Stream,
         live: &HashSet<Token>,
         now: Instant
-    ) -> Result<PushModeResult, Self::RetryError>;
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError>;
 
     fn complete_pending(
         &mut self,
@@ -82,7 +85,8 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         msgs: &mut Msgs,
         stream: &mut Stream,
         live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::RetryError>;
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError>;
 
     /// Retry all stored indefinite retries.
     ///
@@ -103,7 +107,8 @@ pub trait PushMode<Stream, Msgs, Ctx>: Sized {
         ctx: &mut Ctx,
         msgs: &mut Msgs,
         stream: &mut Stream
-    ) -> Result<PushModeResult, Self::RetryIndefError>;
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError>;
 }
 
 pub trait SelfPartyCtx<Party> {
@@ -227,7 +232,7 @@ impl Default for PushModeResult {
         PushModeResult {
             next_outbound: None,
             next_retry: None,
-            has_completes: false
+            has_completes: false,
         }
     }
 }
@@ -242,7 +247,7 @@ impl PushModeResult {
         PushModeResult {
             next_outbound: next_outbound,
             next_retry: next_retry,
-            has_completes: has_completes
+            has_completes: has_completes,
         }
     }
 
@@ -251,7 +256,7 @@ impl PushModeResult {
         PushModeResult {
             next_outbound: None,
             next_retry: Some(next_retry),
-            has_completes: false
+            has_completes: false,
         }
     }
 
@@ -351,7 +356,7 @@ impl PushModeResult {
     #[inline]
     pub fn merge(
         &mut self,
-        other: &Self
+        other: Self
     ) {
         self.merge_next_outbound(&other.next_outbound);
         self.merge_next_retry(&other.next_retry);
@@ -506,7 +511,7 @@ where
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             Self,
             Parties<Stream::Parties>
         >,
@@ -550,7 +555,8 @@ where
         >
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Option<Stream::Parties>),
+            (Option<Instant>, Option<Stream::Parties>,
+             Option<Stream::PullStreams>),
             Self,
             Parties<Stream::Parties>
         >,
@@ -566,14 +572,14 @@ where
         match err {
             FragsOrOffer::Frags { err, id } => Ok(proto
                 .complete_push_frags(ctx, stream, id.clone(), err)?
-                .map(|(when, parties)| (when, Some(parties)))
+                .map(|(when, parties, streams)| (when, Some(parties), streams))
                 .map_retry(|retry| LargeObjEntry::PushFrags {
                     retry: retry,
                     id: id
                 })),
             FragsOrOffer::Offer { err, hash } => Ok(proto
                 .complete_push_offer(ctx, stream, hash.clone(), err)?
-                .map(|(when, parties)| (when, Some(parties)))
+                .map(|(when, parties, streams)| (when, Some(parties), streams))
                 .map_retry(|retry| LargeObjEntry::PushOffer {
                     retry: retry,
                     hash: hash
@@ -587,7 +593,8 @@ where
         proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Option<Stream::Parties>),
+            (Option<Instant>, Option<Stream::Parties>,
+             Option<Stream::PullStreams>),
             Self,
             Parties<Stream::Parties>
         >,
@@ -602,7 +609,7 @@ where
         PartyID: Clone {
         Ok(proto
             .try_push(ctx, stream, Instant::now())?
-            .map(|(when, parties)| (when, Some(parties)))
+            .map(|(when, parties, streams)| (when, Some(parties), streams))
             .flat_map_retry(|retry| match retry {
                 LargeObjPushRetry::Frags { retry, id } => {
                     RetryIndefResult::Retry(LargeObjEntry::PushFrags {
@@ -617,7 +624,7 @@ where
                     })
                 }
                 LargeObjPushRetry::Retry { when } => {
-                    RetryIndefResult::Success((Some(when), None))
+                    RetryIndefResult::Success((Some(when), None, None))
                 }
             }))
     }

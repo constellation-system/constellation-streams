@@ -63,6 +63,7 @@ use crate::large_obj::LargeObjMsg;
 use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
 use crate::multicast::MulticastStreamIdx;
+use crate::multicast::StreamMulticastPullStreams;
 use crate::multicast::StreamMulticaster;
 use crate::multicast::StreamMulticasterFrags;
 use crate::multicast::StreamMulticasterSelections;
@@ -70,6 +71,7 @@ use crate::multicast::StreamMulticasterStartError;
 use crate::select::ConnChannelID;
 use crate::select::SelectorBatchError;
 use crate::select::SelectorBatchSelectError;
+use crate::select::SelectedPullStreams;
 use crate::select::SelectorSelections;
 use crate::select::StreamSelector;
 use crate::select::StreamSelectorBatch;
@@ -82,7 +84,9 @@ use crate::select::dispatch::DispatchSelectorSelectError;
 use crate::stream::CompoundBatchID;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::NullPullStreams;
 use crate::stream::PullStream;
+use crate::stream::PullStreamsOutput;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -134,6 +138,7 @@ pub trait PrivateLargeObjPushModeTypes<Ctx> {
     type PushOfferError: RecoverableError<
         Completable = Self::PushOfferErrorCompletable
     >;
+    type PullStreams;
     type StreamFlags: Default;
     type Stream: PushStreamReportBatchError<
             <Self::FinishBatchError as RecoverableError>::Permanent,
@@ -149,6 +154,7 @@ pub trait PrivateLargeObjPushModeTypes<Ctx> {
             Self::BatchID
         > + PushStreamPrivate<Ctx, StartBatchError = Self::StartBatchError>
         + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx, AddError = Self::AddError>
+        + PullStreamsOutput<PullStreams = Self::PullStreams>
         + PushStream<
             Ctx,
             BatchID = Self::BatchID,
@@ -197,6 +203,7 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
     >;
     type IndefParties: IntoIterator<Item = Self::PartyID>;
     type PartiesError: Debug + Display + ScopedError;
+    type PullStreams;
     type StreamFlags: Default;
     type Stream: PushStreamReportBatchError<
             <Self::FinishBatchError as RecoverableError>::Permanent,
@@ -226,6 +233,7 @@ pub trait SharedLargeObjPushModeTypes<Ctx> {
         > + PushStreamPartyID<PartyID = Self::PartyID>
         + PushStreamParties<PartiesError = Self::PartiesError>
         + PushStreamAdd<LargeObjMsg<Self::HashID>, Ctx, AddError = Self::AddError>
+        + PullStreamsOutput<PullStreams = Self::PullStreams>
         + PushStream<
             Ctx,
             BatchID = Self::BatchID,
@@ -246,12 +254,15 @@ where
     type AuthNChan: Clone
         + AuthNed<Self::SessionPrin>
         + PullStream<Self::Wrapper, PullError = Self::PullError>;
+    type PullStreams: IntoIterator<
+        Item = (StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
+                Self::AuthNChan)
+    >;
     type PullError: Debug + Display + ScopedError;
     type RefreshRetry: RetryWhen;
     type RefreshCompletableError: ScopedError;
     type RefreshPermanentError: Debug + Display + ScopedError;
-    type RefreshError: Debug
-        + RecoverableError<
+    type RefreshError: RecoverableError<
             Completable = Self::RefreshCompletableError,
             Permanent = Self::RefreshPermanentError
         >;
@@ -266,6 +277,7 @@ where
             StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
             Self::AuthNChan
         > + ShutdownStream<Self::Chans, ThreadInnerCtx<Ctx>>
+        + PullStreamsOutput<PullStreams = Self::PullStreams>
         + for<'a> CreateWithParam<
             &'a mut PollThreadCtx<Self::SessionPrin, Self::Chans, Ctx>,
             Config = Self::StreamConfig,
@@ -3987,6 +3999,7 @@ where
         (),
         <<Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError
          as RecoverableError>::Completable,
+        Option<NullPullStreams>,
         Epochs::Item
     >;
     type StartBatchError = SelectorBatchError<
@@ -3997,6 +4010,7 @@ where
             >,
             (),
             <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
+            Option<NullPullStreams>,
             Epochs::Item
         >
     >;
@@ -4005,6 +4019,7 @@ where
         (),
         <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
          as RecoverableError>::Completable,
+        Option<NullPullStreams>,
         Epochs::Item
     >;
     type PushFragError = SelectorBatchError<
@@ -4015,6 +4030,7 @@ where
             >,
             (),
             <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
+            Option<NullPullStreams>,
             Epochs::Item
         >
     >;
@@ -4023,6 +4039,7 @@ where
         (),
         <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
          as RecoverableError>::Completable,
+        Option<NullPullStreams>,
         Epochs::Item
     >;
     type PushOfferError = SelectorBatchError<
@@ -4033,6 +4050,7 @@ where
             >,
             (),
             <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError,
+            Option<NullPullStreams>,
             Epochs::Item
         >
     >;
@@ -4112,6 +4130,10 @@ where
         (),
         <<Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError
          as RecoverableError>::Completable,
+        Option<SelectedPullStreams<
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::Stream
+        >>,
         Epochs::Item
     >;
     type StartBatchError = SelectorBatchError<
@@ -4124,6 +4146,10 @@ where
             >,
             (),
             <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchError,
+            Option<SelectedPullStreams<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                Ctx::Stream
+            >>,
             Epochs::Item
         >
     >;
@@ -4132,6 +4158,10 @@ where
         (),
         <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
          as RecoverableError>::Completable,
+        Option<SelectedPullStreams<
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::Stream
+        >>,
         Epochs::Item
     >;
     type PushFragError = SelectorBatchError<
@@ -4144,6 +4174,10 @@ where
             >,
             (),
             <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
+            Option<SelectedPullStreams<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                Ctx::Stream
+            >>,
             Epochs::Item
         >
     >;
@@ -4152,6 +4186,10 @@ where
         (),
         <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
          as RecoverableError>::Completable,
+        Option<SelectedPullStreams<
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::Stream
+        >>,
         Epochs::Item
     >;
     type PushOfferError = SelectorBatchError<
@@ -4164,6 +4202,10 @@ where
             >,
             (),
             <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError,
+            Option<SelectedPullStreams<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                Ctx::Stream
+            >>,
             Epochs::Item
         >
     >;
@@ -4311,6 +4353,10 @@ where
                     Instant,
                     (),
                     <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+                    Option<SelectedPullStreams<
+                        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                        Ctx::Stream
+                    >>,
                     Epochs::Item
                 >
             >,
@@ -4319,6 +4365,10 @@ where
                 (),
                 <<Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError
                  as RecoverableError>::Completable,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >,
@@ -4340,7 +4390,11 @@ where
                 <Ctx::Stream as PushStreamPrivate<Ctx>>::Selections
             >
         >,
-        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches,
+        Option<StreamMulticastPullStreams<SelectedPullStreams<
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::Stream
+        >>>
     >;
     type StartBatchError = StreamMulticasterStartError<
         SelectionsError<
@@ -4352,6 +4406,10 @@ where
                         Instant,
                         (),
                         <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectRetry,
+                        Option<SelectedPullStreams<
+                            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                            Ctx::Stream
+                        >>,
                         Epochs::Item
                     >
                 >,
@@ -4366,6 +4424,10 @@ where
                         >,
                         (),
                         <Ctx::Stream as PushStreamPrivate<Ctx>>::SelectError,
+                        Option<SelectedPullStreams<
+                            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                            Ctx::Stream
+                        >>,
                         Epochs::Item
                     >
                 >
@@ -4398,7 +4460,11 @@ where
                 <Ctx::Stream as PushStreamPrivate<Ctx>>::Selections
             >
         >,
-        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches
+        <Ctx::Stream as PushStreamPrivate<Ctx>>::StartBatchStreamBatches,
+        Option<StreamMulticastPullStreams<SelectedPullStreams<
+            StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+            Ctx::Stream
+        >>>
     >;
     type PushFragErrorCompletable = ErrorSet<
         MulticastStreamIdx,
@@ -4408,6 +4474,10 @@ where
                 Instant,
                 (),
                 <Ctx::Stream as LargeObjStream<Ctx>>::PushFragRetry,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >,
@@ -4416,6 +4486,10 @@ where
             (),
             <<Ctx::Stream as LargeObjStream<Ctx>>::PushFragError
              as RecoverableError>::Completable,
+            Option<SelectedPullStreams<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                Ctx::Stream
+            >>,
             Epochs::Item
         >
     >;
@@ -4427,6 +4501,10 @@ where
                 Instant,
                 (),
                 <Ctx::Stream as LargeObjStream<Ctx>>::PushFragRetry,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >,
@@ -4441,6 +4519,10 @@ where
                 >,
                 (),
                 <Ctx::Stream as LargeObjStream<Ctx>>::PushFragError,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >
@@ -4453,6 +4535,10 @@ where
                 Instant,
                 (),
                 <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferRetry,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >,
@@ -4461,6 +4547,10 @@ where
             (),
             <<Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError
              as RecoverableError>::Completable,
+            Option<SelectedPullStreams<
+                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                Ctx::Stream
+            >>,
             Epochs::Item
         >
     >;
@@ -4472,6 +4562,10 @@ where
                 Instant,
                 (),
                 <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferRetry,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >,
@@ -4485,6 +4579,10 @@ where
                 >,
                 (),
                 <Ctx::Stream as LargeObjOfferStream<H::HashID, Ctx>>::PushOfferError,
+                Option<SelectedPullStreams<
+                    StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                    Ctx::Stream
+                >>,
                 Epochs::Item
             >
         >
@@ -5270,7 +5368,7 @@ where
     >;
     type RefreshPermanentError = ErrorSet<
         MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
+        (),
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
     type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
@@ -5484,7 +5582,7 @@ where
     >;
     type RefreshPermanentError = ErrorSet<
         MulticastStreamIdx,
-        RetryResult<Option<Instant>, Instant>,
+        (),
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
     type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;

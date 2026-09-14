@@ -48,6 +48,7 @@ use crate::large_obj::LargeObjProto;
 use crate::large_obj::LargeObjProtoTypes;
 use crate::large_obj::LargeObjPushError;
 use crate::large_obj::LargeObjSendError;
+use crate::stream::PullStreamsOutput;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
@@ -71,7 +72,8 @@ where
             <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamAdd<Msg, Ctx>
-        + PushStreamPrivate<Ctx>,
+          + PullStreamsOutput
+          + PushStreamPrivate<Ctx>,
     Msg: Clone {
     Batch {
         msgs: Vec<Msg>,
@@ -117,6 +119,7 @@ where
             <Stream::AddError as RecoverableError>::Permanent,
             Stream::BatchID
         > + PushStreamAdd<Msg, Ctx>
+        + PullStreamsOutput
         + PushStreamPrivate<Ctx>,
     Msg: Clone {
     /// Buffer for sends in progress.
@@ -676,7 +679,7 @@ where
         stream: &mut Stream,
         msgs: Vec<Msg>,
         err: <Stream::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<(), Self, Vec<Msg>>,
         PushEntryRecoverableError<
             Vec<Msg>,
@@ -688,37 +691,37 @@ where
             Stream::FinishBatchError,
             Stream::CancelBatchError
         >
-    > {
+    >, Option<Stream::PullStreams>) {
         trace!(target: "push-entry",
                "attempting to recover from error while creating batch");
 
         match stream.complete_start_batch(ctx, err) {
             // It succeeded.
-            Ok(RetryIndefResult::Success(batch_id)) => {
+            Ok(RetryIndefResult::Success((batch_id, chans))) => {
                 trace!(target: "push-entry",
                        "successfully created batch {}",
                        batch_id);
 
-                Self::try_add(ctx, stream, msgs, batch_id)
-                    .map(RetryIndefResult::from)
+                (Self::try_add(ctx, stream, msgs, batch_id)
+                    .map(RetryIndefResult::from), chans)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
                 trace!(target: "push-entry",
                        "delaying creating batch");
 
-                Ok(RetryIndefResult::Retry(PushEntry::Batch {
+                (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
-                }))
+                })), None)
             }
             Ok(RetryIndefResult::Indef(())) => {
-                Ok(RetryIndefResult::Indef(msgs))
+                (Ok(RetryIndefResult::Indef(msgs)), None)
             }
-            Err(err) => Err(PushEntryRecoverableError::Batch {
+            Err(err) => (Err(PushEntryRecoverableError::Batch {
                 msgs: msgs,
                 err: err
-            })
+            }), None)
         }
     }
 
@@ -726,7 +729,7 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         msgs: Vec<Msg>
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<(), Self, Vec<Msg>>,
         PushEntryRecoverableError<
             Vec<Msg>,
@@ -738,37 +741,38 @@ where
             Stream::FinishBatchError,
             Stream::CancelBatchError
         >
-    > {
+    >, Option<Stream::PullStreams>) {
         trace!(target: "push-entry",
                "creating batch");
 
         match stream.start_batch(ctx) {
             // It succeeded.
-            Ok(RetryIndefResult::Success(batch_id)) => {
+            Ok(RetryIndefResult::Success((batch_id, chans))) => {
                 trace!(target: "push-entry",
                        "created batch {}",
                        batch_id);
 
-                Self::try_add(ctx, stream, msgs, batch_id)
-                    .map(RetryIndefResult::from)
+                (Self::try_add(ctx, stream, msgs, batch_id)
+                 .map(RetryIndefResult::from),
+                 chans)
             }
             // We got a retry.
             Ok(RetryIndefResult::Retry(retry)) => {
                 trace!(target: "push-entry",
                        "delaying creating batch");
 
-                Ok(RetryIndefResult::Retry(PushEntry::Batch {
+                (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
-                }))
+                })), None)
             }
             Ok(RetryIndefResult::Indef(())) => {
-                Ok(RetryIndefResult::Indef(msgs))
+                (Ok(RetryIndefResult::Indef(msgs)), None)
             }
-            Err(err) => Err(PushEntryRecoverableError::Batch {
+            Err(err) => (Err(PushEntryRecoverableError::Batch {
                 msgs: msgs,
                 err: err
-            })
+            }), None)
         }
     }
 
@@ -785,7 +789,7 @@ where
             <Stream::FinishBatchError as RecoverableError>::Completable,
             <Stream::CancelBatchError as RecoverableError>::Completable
         >
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<(), Self, Vec<Msg>>,
         PushEntryRecoverableError<
             Vec<Msg>,
@@ -797,7 +801,7 @@ where
             Stream::FinishBatchError,
             Stream::CancelBatchError
         >
-    > {
+    >, Option<Stream::PullStreams>) {
         match err {
             PushEntryRecoverableError::Batch { msgs, err } => {
                 Self::complete_start_batch(ctx, stream, msgs, err)
@@ -809,21 +813,22 @@ where
                 msg,
                 err
             } => {
-                Self::complete_add(ctx, stream, flags, msgs, msg, batch_id, err)
-                    .map(RetryIndefResult::from)
+                (Self::complete_add(ctx, stream, flags,
+                                    msgs, msg, batch_id, err)
+                    .map(RetryIndefResult::from), None)
             }
             PushEntryRecoverableError::Finish {
                 batch_id,
                 err,
                 flags
-            } => Self::complete_finish(ctx, stream, flags, batch_id, err)
-                .map(RetryIndefResult::from),
+            } => (Self::complete_finish(ctx, stream, flags, batch_id, err)
+                .map(RetryIndefResult::from), None),
             PushEntryRecoverableError::Cancel {
                 batch_id,
                 err,
                 flags
-            } => Self::complete_cancel(ctx, stream, flags, batch_id, err)
-                .map(RetryIndefResult::from)
+            } => (Self::complete_cancel(ctx, stream, flags, batch_id, err)
+                .map(RetryIndefResult::from), None)
         }
     }
 
@@ -831,7 +836,7 @@ where
         self,
         ctx: &mut Ctx,
         stream: &mut Stream
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<(), Self, Vec<Msg>>,
         PushEntryRecoverableError<
             Vec<Msg>,
@@ -843,40 +848,40 @@ where
             Stream::FinishBatchError,
             Stream::CancelBatchError
         >
-    > {
+    >, Option<Stream::PullStreams>) {
         match self {
             PushEntry::Batch { msgs, retry } => {
                 match stream.retry_start_batch(ctx, retry) {
                     // It succeeded.
-                    Ok(RetryIndefResult::Success(batch_id)) => {
-                        Self::try_add(ctx, stream, msgs, batch_id)
-                            .map(RetryIndefResult::from)
+                    Ok(RetryIndefResult::Success((batch_id, chans))) => {
+                        (Self::try_add(ctx, stream, msgs, batch_id)
+                            .map(RetryIndefResult::from), chans)
                     }
                     // We got a retry.
                     Ok(RetryIndefResult::Retry(retry)) => {
-                        Ok(RetryIndefResult::Retry(PushEntry::Batch {
+                        (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                             msgs: msgs,
                             retry: retry
-                        }))
+                        })), None)
                     }
                     Ok(RetryIndefResult::Indef(())) => {
-                        Ok(RetryIndefResult::Indef(msgs))
+                        (Ok(RetryIndefResult::Indef(msgs)), None)
                     }
-                    Err(err) => Err(PushEntryRecoverableError::Batch {
+                    Err(err) => (Err(PushEntryRecoverableError::Batch {
                         msgs: msgs,
                         err: err
-                    })
+                    }), None)
                 }
             }
             PushEntry::Abort { mut flags, retry } => {
-                Ok(RetryIndefResult::from(
+                (Ok(RetryIndefResult::from(
                     stream
                         .retry_abort_start_batch(ctx, &mut flags, retry)
                         .map_retry(|retry| PushEntry::Abort {
                             flags: flags,
                             retry: retry
                         })
-                ))
+                )), None)
             }
             PushEntry::Add {
                 msgs,
@@ -887,26 +892,26 @@ where
             } => match stream.retry_add(ctx, &mut flags, &msg, &batch, retry) {
                 // It succeeded.
                 Ok(RetryResult::Success(_)) => {
-                    Self::try_add(ctx, stream, msgs, batch)
-                        .map(RetryIndefResult::from)
+                    (Self::try_add(ctx, stream, msgs, batch)
+                        .map(RetryIndefResult::from), None)
                 }
                 // We got a retry.
                 Ok(RetryResult::Retry(retry)) => {
-                    Ok(RetryIndefResult::Retry(PushEntry::Add {
+                    (Ok(RetryIndefResult::Retry(PushEntry::Add {
                         msgs: msgs,
                         msg: msg,
                         flags: flags,
                         batch: batch,
                         retry: retry
-                    }))
+                    })), None)
                 }
-                Err(err) => Err(PushEntryRecoverableError::Add {
+                Err(err) => (Err(PushEntryRecoverableError::Add {
                     batch_id: batch,
                     flags: flags,
                     msgs: msgs,
                     msg: msg,
                     err: err
-                })
+                }), None)
             },
             PushEntry::Finish { batch, retry } => {
                 let mut flags = stream.empty_flags();
@@ -915,20 +920,20 @@ where
                 {
                     // It succeeded.
                     Ok(RetryResult::Success(_)) => {
-                        Ok(RetryIndefResult::Success(()))
+                        (Ok(RetryIndefResult::Success(())), None)
                     }
                     // We got a retry.
                     Ok(RetryResult::Retry(retry)) => {
-                        Ok(RetryIndefResult::Retry(PushEntry::Finish {
+                        (Ok(RetryIndefResult::Retry(PushEntry::Finish {
                             batch: batch,
                             retry: retry
-                        }))
+                        })), None)
                     }
-                    Err(err) => Err(PushEntryRecoverableError::Finish {
+                    Err(err) => (Err(PushEntryRecoverableError::Finish {
                         batch_id: batch,
                         flags: flags,
                         err: err
-                    })
+                    }), None)
                 }
             }
             PushEntry::Cancel {
@@ -940,21 +945,21 @@ where
                 {
                     // It succeeded.
                     Ok(RetryResult::Success(_)) => {
-                        Ok(RetryIndefResult::Success(()))
+                        (Ok(RetryIndefResult::Success(())), None)
                     }
                     // We got a retry.
                     Ok(RetryResult::Retry(retry)) => {
-                        Ok(RetryIndefResult::Retry(PushEntry::Cancel {
+                        (Ok(RetryIndefResult::Retry(PushEntry::Cancel {
                             batch: batch,
                             retry: retry,
                             flags: flags
-                        }))
+                        })), None)
                     }
-                    Err(err) => Err(PushEntryRecoverableError::Cancel {
+                    Err(err) => (Err(PushEntryRecoverableError::Cancel {
                         batch_id: batch,
                         flags: flags,
                         err: err
-                    })
+                    }), None)
                 }
             }
         }
@@ -965,7 +970,7 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         msgs: Vec<Msg>
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<(), Self, Vec<Msg>>,
         PushEntryRecoverableError<
             Vec<Msg>,
@@ -977,7 +982,7 @@ where
             Stream::FinishBatchError,
             Stream::CancelBatchError
         >
-    > {
+    >, Option<Stream::PullStreams>) {
         Self::try_start_batch(ctx, stream, msgs)
     }
 }
@@ -1122,7 +1127,9 @@ where
 
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans);
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-datagram-push-mode",
@@ -1160,7 +1167,7 @@ where
                     Err(err) => {
                         let res = self.handle_error(ctx, stream, err);
 
-                        next.merge(&res);
+                        next.merge(res);
                     }
                 }
             }
@@ -1285,7 +1292,8 @@ where
         msgs: &mut Msgs,
         stream: &mut Stream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::SendError> {
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError> {
         if self.indefs.is_none() {
             debug!(target: "private-datagram-push-mode",
                    "fetching new outbound messages");
@@ -1296,7 +1304,9 @@ where
             if let Some(msgs) = msgs {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans)
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-datagram-push-mode",
@@ -1337,7 +1347,7 @@ where
                     Err(err) => {
                         let res = self.handle_error(ctx, stream, err);
 
-                        next.merge(&res)
+                        next.merge(res)
                     }
                 }
             }
@@ -1355,7 +1365,8 @@ where
         stream: &mut Stream,
         _live: &HashSet<Token>,
         now: Instant
-    ) -> Result<PushModeResult, Self::RetryError> {
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError> {
         debug!(target: "private-datagram-push-mode",
                "retrying pending operations");
 
@@ -1396,7 +1407,9 @@ where
         for ent in curr.into_iter() {
             match ent.exec(ctx, stream) {
                 // Send succeeded; nothing to do.
-                Ok(RetryIndefResult::Success(())) => {}
+                Ok(RetryIndefResult::Success(chans)) => {
+                    out.extend_chans(chans)
+                }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
                     trace!(target: "private-datagram-push-mode",
@@ -1434,7 +1447,7 @@ where
                 Err(err) => {
                     let res = self.handle_error(ctx, stream, err);
 
-                    out.merge(&res)
+                    out.merge(res)
                 }
             }
         }
@@ -1448,7 +1461,8 @@ where
         _msgs: &mut Msgs,
         stream: &mut Stream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::RetryError> {
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError> {
         let mut next = PushModeResult::default();
 
         if let Some(completes) = self.completes.take() {
@@ -1459,7 +1473,9 @@ where
             for complete in completes.into_iter() {
                 match PushEntry::complete(ctx, stream, complete) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans);
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-datagram-push-mode",
@@ -1497,7 +1513,7 @@ where
                     Err(err) => {
                         let res = self.handle_error(ctx, stream, err);
 
-                        next.merge(&res)
+                        next.merge(res)
                     }
                 }
             }
@@ -1511,7 +1527,8 @@ where
         ctx: &mut Ctx,
         _msgs: &mut Msgs,
         stream: &mut Stream
-    ) -> Result<PushModeResult, Self::RetryIndefError> {
+    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
+                Self::SendError> {
         let mut next = PushModeResult::default();
 
         if let Some(indefs) = self.indefs.take() {
@@ -1521,7 +1538,9 @@ where
             for IndefEntry { msgs, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans)
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-datagram-push-mode",
@@ -1562,7 +1581,7 @@ where
                     Err(err) => {
                         let res = self.handle_error(ctx, stream, err);
 
-                        next.merge(&res);
+                        next.merge(res);
                     }
                 }
             }
@@ -1647,7 +1666,7 @@ where
                                     ctx, stream, err
                                 );
 
-                            next.merge(&res);
+                            next.merge(res);
                         }
                     }
                 }
@@ -1674,7 +1693,7 @@ where
                                     ctx, stream, err
                                 );
 
-                            next.merge(&res);
+                            next.merge(res);
                         }
                     }
                 }
@@ -1708,7 +1727,9 @@ where
 
                 match PushEntry::complete(ctx, stream, completable) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans);
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-large-obj-push-mode",
@@ -1748,7 +1769,7 @@ where
                             ctx, stream, err
                         );
 
-                        next.merge(&res);
+                        next.merge(res);
                     }
                 }
             }
@@ -1821,8 +1842,9 @@ where
                     completable
                 ) {
                     // Succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success((when, _))) => {
+                    Ok(RetryIndefResult::Success((when, _, streams))) => {
                         next.merge_next_outbound(&when);
+                        next.extend_chans(streams);
                     }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
@@ -1848,7 +1870,7 @@ where
                                 ctx, stream, proto, err
                             );
 
-                        next.merge(&res)
+                        next.merge(res)
                     }
                 }
             }
@@ -1967,7 +1989,7 @@ where
         >,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::SendError> {
+    ) -> Result<PushModeResult<Types::PullStreams>, Self::SendError> {
         if self.msgs_indefs.is_none() {
             debug!(target: "private-large-obj-push-mode",
                    "fetching new outbound protocol messages");
@@ -1976,12 +1998,14 @@ where
             let (msgs, next) = proto.msgs(Instant::now()).map_err(|err| {
                 PrivateLargeObjPushModeSendError::Msgs { err: err }
             })?;
-            let mut next = PushModeResult::new(next, None, false);
+            let mut next = PushModeResult::new(next, None, false, None);
 
             if let Some(msgs) = msgs {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans)
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-large-obj-push-mode",
@@ -2024,7 +2048,7 @@ where
                             ctx, stream, err
                         );
 
-                        next.merge(&res)
+                        next.merge(res)
                     }
                 }
             }
@@ -2034,8 +2058,9 @@ where
 
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _))) => {
+                Ok(RetryIndefResult::Success((when, _, chans))) => {
                     next.merge_next_outbound(&when);
+                    next.extend_chans(chans);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -2060,7 +2085,7 @@ where
                         ctx, stream, proto, err
                     );
 
-                    next.merge(&res)
+                    next.merge(res)
                 }
             }
 
@@ -2083,7 +2108,7 @@ where
         stream: &mut Types::Stream,
         _live: &HashSet<Token>,
         now: Instant
-    ) -> Result<PushModeResult, Self::RetryError> {
+    ) -> Result<PushModeResult<Types::PullStreams>, Self::RetryError> {
         debug!(target: "private-large-obj-push-mode",
                "retrying pending operations");
 
@@ -2122,13 +2147,15 @@ where
 
         // The last entry should now be the first time past the present.
         let out = self.msgs_pending.last().map(|ent| ent.when());
-        let mut out = PushModeResult::new(out, None, false);
+        let mut out = PushModeResult::new(out, None, false, None);
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
             match ent.exec(ctx, stream) {
                 // Send succeeded; nothing to do.
-                Ok(RetryIndefResult::Success(())) => {}
+                Ok(RetryIndefResult::Success(chans)) => {
+                    out.extend_chans(chans);
+                }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
                     trace!(target: "private-large-obj-push-mode",
@@ -2168,7 +2195,7 @@ where
                         ctx, stream, err
                     );
 
-                    out.merge(&res);
+                    out.merge(res);
                 }
             }
         }
@@ -2213,8 +2240,9 @@ where
         for ent in curr.into_iter() {
             match ent.exec(ctx, stream, proto) {
                 // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _))) => {
+                Ok(RetryIndefResult::Success((when, _, chans))) => {
                     out.merge_next_outbound(&when);
+                    out.extend_chans(chans);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -2239,7 +2267,7 @@ where
                         ctx, stream, proto, err
                     );
 
-                    out.merge(&res);
+                    out.merge(res);
                 }
             }
         }
@@ -2259,7 +2287,7 @@ where
         >,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::RetryError> {
+    ) -> Result<PushModeResult<Types::PullStreams>, Self::RetryError> {
         let mut next = PushModeResult::default();
 
         if let Some(completes) = self.msgs_completes.take() {
@@ -2270,7 +2298,9 @@ where
             for complete in completes.into_iter() {
                 match PushEntry::complete(ctx, stream, complete) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        next.extend_chans(chans)
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-large-obj-push-mode",
@@ -2311,7 +2341,7 @@ where
                             ctx, stream, err
                         );
 
-                        next.merge(&res);
+                        next.merge(res);
                     }
                 }
             }
@@ -2323,8 +2353,9 @@ where
                 match LargeObjEntry::complete_send(ctx, stream, proto, complete)
                 {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success((when, _))) => {
+                    Ok(RetryIndefResult::Success((when, _, chans))) => {
                         next.merge_next_outbound(&when);
+                        next.extend_chans(chans)
                     }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
@@ -2351,7 +2382,7 @@ where
                                 ctx, stream, proto, err
                             );
 
-                        next.merge(&res);
+                        next.merge(res);
                     }
                 };
             }
@@ -2371,7 +2402,8 @@ where
             LargeObjTypes
         >,
         stream: &mut Types::Stream
-    ) -> Result<PushModeResult, Self::RetryIndefError> {
+    ) -> Result<PushModeResult<Types::PullStreams>, Self::RetryIndefError> {
+        // XXX do a size hint by the number of indefs.
         let mut out = PushModeResult::default();
 
         if let Some(indefs) = self.msgs_indefs.take() {
@@ -2381,7 +2413,9 @@ where
             for IndefEntry { msgs, origin } in indefs.into_iter() {
                 match PushEntry::try_send(ctx, stream, msgs) {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {}
+                    Ok(RetryIndefResult::Success(chans)) => {
+                        out.extend_chans(chans);
+                    }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
                         trace!(target: "private-large-obj-push-mode",
@@ -2425,7 +2459,7 @@ where
                             ctx, stream, err
                         );
 
-                        out.merge(&res);
+                        out.merge(res);
                     }
                 }
             }
@@ -2436,8 +2470,9 @@ where
 
             match LargeObjEntry::try_send(ctx, stream, proto) {
                 // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _))) => {
+                Ok(RetryIndefResult::Success((when, _, chans))) => {
                     out.merge_next_outbound(&when);
+                    out.extend_chans(chans);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -2462,7 +2497,7 @@ where
                         ctx, stream, proto, err
                     );
 
-                    out.merge(&res);
+                    out.merge(res);
                 }
             }
         }
@@ -2551,6 +2586,7 @@ where
                 batch_id,
                 msgs,
                 msg,
+                chans,
                 flags,
                 err
             } => {
@@ -2560,6 +2596,7 @@ where
                     completable.map(|err| PushEntryRecoverableError::Add {
                         batch_id: batch_id.clone(),
                         flags: flags,
+                        chans: chans,
                         msgs: msgs,
                         msg: msg,
                         err: err
@@ -2572,6 +2609,7 @@ where
             }
             PushEntryRecoverableError::Finish {
                 batch_id,
+                chans,
                 flags,
                 err
             } => {
@@ -2581,6 +2619,7 @@ where
                     completable.map(|err| PushEntryRecoverableError::Finish {
                         batch_id: batch_id.clone(),
                         flags: flags,
+                        chans: chans,
                         err: err
                     }),
                     permanent.map(|err| PushEntryError::Finish {

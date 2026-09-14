@@ -44,7 +44,9 @@ use crate::large_obj::LargeObjMsg;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
 use crate::stream::Parties;
+use crate::stream::NullPullStreams;
 use crate::stream::PullStream;
+use crate::stream::PullStreamsOutput;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -1281,6 +1283,13 @@ where
     }
 }
 
+impl<In, Out, H> PullStreamsOutput for TestPrivateStream<In, Out, H>
+where
+    Out: Clone,
+    H: HashID {
+    type PullStreams = NullPullStreams;
+}
+
 impl<Ctx, In, Out, H> PushStreamPrivate<Ctx> for TestPrivateStream<In, Out, H>
 where
     Out: Clone,
@@ -1305,14 +1314,15 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
-    {
+    ) -> Result<RetryIndefResult<Option<NullPullStreams>, Self::SelectRetry>,
+                Self::SelectError> {
         self.script
             .try_borrow_mut()
             .expect("try_borrow failed")
             .select
             .pop()
             .expect("Expected scripted action")
+            .map(|res| res.map(|_| None))
     }
 
     #[inline]
@@ -1321,8 +1331,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
-    {
+    ) -> Result<RetryIndefResult<Option<NullPullStreams>, Self::SelectRetry>,
+                Self::SelectError> {
         self.select(ctx, selections)
     }
 
@@ -1331,11 +1341,11 @@ where
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
-    {
+    ) -> Result<RetryIndefResult<Option<NullPullStreams>, Self::SelectRetry>,
+                Self::SelectError> {
         match err.action {
             TestIndefAction::Success { .. } => {
-                Ok(RetryIndefResult::Success(()))
+                Ok(RetryIndefResult::Success(None))
             }
             TestIndefAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))
@@ -1419,7 +1429,8 @@ where
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<NullPullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.select(ctx, &mut ())
@@ -1434,6 +1445,7 @@ where
             .flat_map_ok(|_| {
                 Ok(self
                     .create_batch(ctx, &mut (), &())
+                    .map(|res| res.map(|batch| (batch, None)))
                     .map(RetryIndefResult::from)
                     .map_err(|err| match err {
                         TestError::Permanent { err } => {
@@ -1475,7 +1487,8 @@ where
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<NullPullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match retry {
@@ -1492,6 +1505,7 @@ where
                 .flat_map_ok(|_| {
                     Ok(self
                         .create_batch(ctx, &mut (), &())
+                        .map(|res| res.map(|batch| (batch, None)))
                         .map(RetryIndefResult::from)
                         .map_err(|err| match err {
                             TestError::Permanent { err } => {
@@ -1529,6 +1543,7 @@ where
                 }),
             TestStartBatchRetry::Create { retry, .. } => Ok(self
                 .retry_create_batch(ctx, &mut (), &(), retry)
+                .map(|res| res.map(|batch| (batch, None)))
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
@@ -1570,7 +1585,8 @@ where
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<NullPullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         match err {
@@ -1587,6 +1603,7 @@ where
                 .flat_map_ok(|_| {
                     Ok(self
                         .create_batch(ctx, &mut (), &())
+                        .map(|res| res.map(|batch| (batch, None)))
                         .map(RetryIndefResult::from)
                         .map_err(|err| match err {
                             TestError::Permanent { err } => {
@@ -1624,6 +1641,7 @@ where
                 }),
             TestStartBatchError::Create { err, .. } => Ok(self
                 .complete_create_batch(ctx, &mut (), &(), err)
+                .map(|res| res.map(|batch| (batch, None)))
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
@@ -1788,6 +1806,13 @@ fn filter_select_error(
     }
 }
 
+impl<In, Out, H> PullStreamsOutput for TestSharedStream<In, Out, H>
+where
+    Out: Clone,
+    H: HashID {
+    type PullStreams = NullPullStreams;
+}
+
 impl<Ctx, In, Out, H> PushStreamShared<Ctx> for TestSharedStream<In, Out, H>
 where
     Out: Clone,
@@ -1835,7 +1860,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<NullPullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -1865,7 +1890,7 @@ where
                     selections.push(*party)
                 }
 
-                Ok(RetryIndefResult::Success(parties))
+                Ok(RetryIndefResult::Success((parties, None)))
             }
             Ok(RetryIndefResult::Retry(retry)) => {
                 let parties = parties.cloned().collect();
@@ -1906,7 +1931,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<NullPullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -1922,7 +1947,7 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<NullPullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -1932,7 +1957,7 @@ where
             TestIndefPartiesAction::Success { parties } => {
                 *selections = parties.clone();
 
-                Ok(RetryIndefResult::Success(parties))
+                Ok(RetryIndefResult::Success((parties, None)))
             }
             TestIndefPartiesAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))
@@ -2025,7 +2050,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<NullPullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2048,6 +2073,7 @@ where
             .flat_map_ok(|_| {
                 Ok(self
                     .create_batch(ctx, &mut (), &selections)
+                    .map(|res| res.map(|batch| (batch, None)))
                     .map(RetryIndefResult::from)
                     .map_err(|err| match err {
                         TestError::Permanent { err } => {
@@ -2090,7 +2116,7 @@ where
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<NullPullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2113,6 +2139,7 @@ where
                 .flat_map_ok(|_| {
                     Ok(self
                         .create_batch(ctx, &mut (), &selections)
+                        .map(|res| res.map(|batch| (batch, None)))
                         .map(RetryIndefResult::from)
                         .map_err(|err| match err {
                             TestError::Permanent { err } => {
@@ -2150,6 +2177,7 @@ where
                 }),
             TestStartBatchRetry::Create { retry, selections } => Ok(self
                 .retry_create_batch(ctx, &mut (), &selections, retry)
+                .map(|res| res.map(|batch| (batch, None)))
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
@@ -2192,7 +2220,7 @@ where
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<NullPullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2215,6 +2243,7 @@ where
                 .flat_map_ok(|_| {
                     Ok(self
                         .create_batch(ctx, &mut (), &selections)
+                        .map(|res| res.map(|batch| (batch, None)))
                         .map(RetryIndefResult::from)
                         .map_err(|err| match err {
                             TestError::Permanent { err } => {
@@ -2252,6 +2281,7 @@ where
                 }),
             TestStartBatchError::Create { err, selections } => Ok(self
                 .complete_create_batch(ctx, &mut (), &selections, err)
+                .map(|res| res.map(|batch| (batch, None)))
                 .map(RetryIndefResult::from)
                 .map_err(|err| match err {
                     TestError::Permanent { err } => {
@@ -2359,7 +2389,7 @@ where
         _frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2371,7 +2401,8 @@ where
             .expect("try_borrow failed")
             .push_frags
             .pop()
-            .expect("Expected scripted action");
+            .expect("Expected scripted action")
+            .map(|res| res.map(|(when, parties)| (when, parties, None)));
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
             self.frags
@@ -2392,7 +2423,7 @@ where
         _retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2409,7 +2440,7 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2422,7 +2453,7 @@ where
                     .expect("try_borrow failed")
                     .push(id);
 
-                Ok(RetryIndefResult::Success((val, ())))
+                Ok(RetryIndefResult::Success((val, (), None)))
             }
             TestIndefAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))
@@ -2450,7 +2481,7 @@ where
         _frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2480,7 +2511,7 @@ where
                     .map(|(party, ())| party)
                     .collect();
 
-                (out, parties)
+                (out, parties, None)
             })
         })
     }
@@ -2494,7 +2525,7 @@ where
         _retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2511,7 +2542,7 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2531,7 +2562,7 @@ where
                     .map(|(party, ())| party)
                     .collect();
 
-                Ok(RetryIndefResult::Success((val, parties)))
+                Ok(RetryIndefResult::Success((val, parties, None)))
             }
             TestIndefAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))
@@ -2645,7 +2676,7 @@ where
         _frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2657,7 +2688,8 @@ where
             .expect("try_borrow failed")
             .push_offers
             .pop()
-            .expect("Expected scripted action");
+            .expect("Expected scripted action")
+            .map(|res| res.map(|(when, parties)| (when, parties, None)));
 
         if matches!(out, Ok(RetryIndefResult::Success(_))) {
             self.offers
@@ -2678,7 +2710,7 @@ where
         _retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2695,7 +2727,7 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2708,7 +2740,7 @@ where
                     .expect("try_borrow failed")
                     .push(hash);
 
-                Ok(RetryIndefResult::Success((val, ())))
+                Ok(RetryIndefResult::Success((val, (), None)))
             }
             TestIndefAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))
@@ -2735,7 +2767,7 @@ where
         _frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2765,7 +2797,7 @@ where
                     .map(|(party, ())| party)
                     .collect();
 
-                (out, parties)
+                (out, parties, None)
             })
         })
     }
@@ -2779,7 +2811,7 @@ where
         _retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2796,7 +2828,7 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2816,7 +2848,7 @@ where
                     .map(|(party, ())| party)
                     .collect();
 
-                Ok(RetryIndefResult::Success((val, parties)))
+                Ok(RetryIndefResult::Success((val, parties, None)))
             }
             TestIndefAction::Retry { retry } => {
                 Ok(RetryIndefResult::Retry(retry))

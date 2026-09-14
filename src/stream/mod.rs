@@ -26,6 +26,8 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::iter::empty;
+use std::iter::Empty;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -550,21 +552,27 @@ pub trait PushStreamParties: PushStreamPartyID {
     fn parties(&self) -> Result<Self::PartiesIter, Self::PartiesError>;
 }
 
-pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
+pub trait PullStreamsOutput {
+    type PullStreams: IntoIterator;
+}
+
+pub trait PushStreamShared<Ctx>: PushStream<Ctx>
+    + PushStreamPartyID
+    + PullStreamsOutput {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: RecoverableError + Debug;
+    type SelectError: RecoverableError;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Clone + Debug;
+    type SelectRetry: RetryWhen;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type StartBatchError: RecoverableError + Debug;
+    type StartBatchError: RecoverableError;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type StartBatchRetry: RetryWhen + Clone + Debug;
+    type StartBatchRetry: RetryWhen;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone + Debug;
@@ -625,7 +633,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -648,7 +656,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         retry: Self::SelectRetry
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -667,7 +675,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -740,7 +748,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -762,7 +770,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -781,7 +789,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -817,21 +825,21 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx> + PushStreamPartyID {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
-pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
+pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: RecoverableError + Debug;
+    type SelectError: RecoverableError;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Clone + Debug;
+    type SelectRetry: RetryWhen;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when starting a new batch.
-    type StartBatchError: RecoverableError + Debug;
+    type StartBatchError: RecoverableError;
     /// Type of information given by a [RetryResult] for starting a new batch.
-    type StartBatchRetry: RetryWhen + Clone + Debug;
+    type StartBatchRetry: RetryWhen;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone + Debug;
@@ -880,7 +888,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>;
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>;
 
     /// Retry a previous call to
     /// [start_batch](PushStreamPrivate::start_batch).
@@ -893,7 +902,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>;
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>;
 
     /// Retry a previously-failed call to
     /// [select](PushStreamPrivate::select).
@@ -905,7 +915,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>;
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>;
 
     /// Create a new batch.
     ///
@@ -971,7 +982,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     >;
 
@@ -986,7 +998,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     >;
 
@@ -1001,7 +1014,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     >;
 
@@ -1034,12 +1048,12 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> {
     ) -> RetryResult<(), Self::AbortBatchRetry>;
 }
 
-pub trait LargeObjStream<Ctx> {
+pub trait LargeObjStream<Ctx>: PullStreamsOutput {
     /// Type of errors that can occur when sending a fragment.
     type PushFragError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushFragRetry: RetryWhen + Clone + Debug;
+    type PushFragRetry: RetryWhen;
     /// Type of outbound fragment structures.
     type Frags: Frags;
     type Parties;
@@ -1051,7 +1065,7 @@ pub trait LargeObjStream<Ctx> {
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -1066,7 +1080,7 @@ pub trait LargeObjStream<Ctx> {
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -1081,7 +1095,7 @@ pub trait LargeObjStream<Ctx> {
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -1093,10 +1107,10 @@ pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
 where
     H: HashID {
     /// Type of errors that can occur when sending an offer.
-    type PushOfferError: RecoverableError + Debug;
+    type PushOfferError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending an
     /// offer.
-    type PushOfferRetry: RetryWhen + Clone + Debug;
+    type PushOfferRetry: RetryWhen;
 
     fn push_offer(
         &mut self,
@@ -1105,7 +1119,7 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -1120,7 +1134,7 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -1135,7 +1149,7 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -1154,16 +1168,16 @@ where
 pub trait PushStreamSharedSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamShared<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: RecoverableError + Debug;
+    type PushError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen + Clone + Debug;
+    type PushRetry: RetryWhen;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: RecoverableError + Debug;
+    type CancelPushError: RecoverableError;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen + Clone + Debug;
+    type CancelPushRetry: RetryWhen;
 
     /// Push a single message into the stream.
     ///
@@ -1254,16 +1268,16 @@ pub trait PushStreamSharedSingle<T, Ctx>:
 pub trait PushStreamPrivateSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamPrivate<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: RecoverableError + Debug;
+    type PushError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen + Clone + Debug;
+    type PushRetry: RetryWhen;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: RecoverableError + Debug;
+    type CancelPushError: RecoverableError;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen + Clone + Debug;
+    type CancelPushRetry: RetryWhen;
 
     /// Push a single message into the stream.
     ///
@@ -1405,6 +1419,18 @@ pub struct PassthruReporter<Addr, Prin, Stream> {
     stream: PhantomData<Stream>,
     prin: PhantomData<Prin>,
     addr: PhantomData<Addr>
+}
+
+pub struct NullPullStreams;
+
+impl IntoIterator for NullPullStreams {
+    type Item = ();
+    type IntoIter = Empty<()>;
+
+    #[inline]
+    fn into_iter(self) -> Empty<()> {
+        empty()
+    }
 }
 
 impl<I, T> PartialEq for StreamRetry<I, T>
@@ -1966,6 +1992,11 @@ where
     }
 }
 
+impl<Inner> PullStreamsOutput for RefCellStream<Inner>
+where Inner: PullStreamsOutput {
+    type PullStreams = Inner::PullStreams;
+}
+
 impl<Ctx, Inner> PushStreamPrivate<Ctx> for RefCellStream<Inner>
 where
     Inner: PushStreamPrivate<Ctx>
@@ -1997,7 +2028,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.inner
             .try_borrow_mut()
@@ -2012,7 +2044,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.inner
             .try_borrow_mut()
@@ -2027,7 +2060,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.inner
             .try_borrow_mut()
@@ -2094,7 +2128,8 @@ where
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.inner
@@ -2110,7 +2145,8 @@ where
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.inner
@@ -2126,7 +2162,8 @@ where
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.inner
@@ -2232,7 +2269,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -2256,7 +2293,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -2277,7 +2314,7 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -2350,7 +2387,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2373,7 +2410,7 @@ where
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2393,7 +2430,7 @@ where
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -2708,7 +2745,7 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2730,7 +2767,7 @@ where
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2752,7 +2789,7 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -2782,7 +2819,7 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2804,7 +2841,7 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -2826,7 +2863,7 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -3101,6 +3138,11 @@ where
     }
 }
 
+impl<Prin, Inner> PullStreamsOutput for BasicAuthNed<Prin, Inner>
+where Inner: PullStreamsOutput {
+    type PullStreams = Inner::PullStreams;
+}
+
 impl<Prin, Ctx, Inner> PushStreamPrivate<Ctx> for BasicAuthNed<Prin, Inner>
 where
     Inner: PushStreamPrivate<Ctx>
@@ -3132,7 +3174,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.get_mut().select(ctx, selections)
     }
@@ -3143,7 +3186,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.get_mut().retry_select(ctx, selections, retry)
     }
@@ -3154,7 +3198,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
+                Self::SelectError>
     {
         self.get_mut().complete_select(ctx, selections, err)
     }
@@ -3207,7 +3252,8 @@ where
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.get_mut().start_batch(ctx)
@@ -3219,7 +3265,8 @@ where
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.get_mut().retry_start_batch(ctx, retry)
@@ -3231,7 +3278,8 @@ where
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
+                         Self::StartBatchRetry>,
         Self::StartBatchError
     > {
         self.get_mut().complete_start_batch(ctx, err)
@@ -3303,7 +3351,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -3323,7 +3371,7 @@ where
         retry: Self::SelectRetry
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -3340,7 +3388,7 @@ where
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Vec<Self::PartyID>,
+            (Vec<Self::PartyID>, Option<Self::PullStreams>),
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
@@ -3399,7 +3447,7 @@ where
         parties: I
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -3418,7 +3466,7 @@ where
         retry: Self::StartBatchRetry
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -3434,7 +3482,7 @@ where
         err: <Self::StartBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            Self::BatchID,
+            (Self::BatchID, Option<Self::PullStreams>),
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
@@ -3661,7 +3709,7 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3679,7 +3727,7 @@ where
         retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3697,7 +3745,7 @@ where
         err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3724,7 +3772,7 @@ where
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -3742,7 +3790,7 @@ where
         retry: Self::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
@@ -3760,7 +3808,7 @@ where
         err: <Self::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,

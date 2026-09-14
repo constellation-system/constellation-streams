@@ -1632,7 +1632,7 @@ where
         now: Instant
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             LargeObjPushRetry<
                 Types::HashID,
                 Stream::PushFragRetry,
@@ -1696,18 +1696,18 @@ where
                                     }
                                 })
                                 .map(
-                                    |(retry, parties)| {
+                                    |(retry, parties, streams)| {
                                         ents[0].1.when = retry;
 
                                         if ents_len < 2 {
-                                            (retry, parties)
+                                            (retry, parties, streams)
                                         } else {
                                             let when = next_retry(
                                                 &ents[1].1.when,
                                                 &retry
                                             );
 
-                                            (when, parties)
+                                            (when, parties, streams)
                                         }
                                     }
                                 )
@@ -1731,18 +1731,18 @@ where
                                     }
                                 })
                                 .map(
-                                    |(retry, parties)| {
+                                    |(retry, parties, streams)| {
                                         ents[0].1.when = retry;
 
                                         if ents_len < 2 {
-                                            (retry, parties)
+                                            (retry, parties, streams)
                                         } else {
                                             let when = next_retry(
                                                 &ents[1].1.when,
                                                 &retry
                                             );
 
-                                            (when, parties)
+                                            (when, parties, streams)
                                         }
                                     }
                                 )
@@ -1772,7 +1772,7 @@ where
         retry: Stream::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             Stream::PushFragRetry,
             Parties<Stream::Parties>
         >,
@@ -1822,7 +1822,7 @@ where
         retry: Stream::PushOfferRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             Stream::PushOfferRetry,
             Parties<Stream::Parties>
         >,
@@ -1866,7 +1866,7 @@ where
         err: <Stream::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             Stream::PushFragRetry,
             Parties<Stream::Parties>
         >,
@@ -1916,7 +1916,7 @@ where
         err: <Stream::PushOfferError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
+            (Option<Instant>, Stream::Parties, Option<Stream::PullStreams>),
             Stream::PushOfferRetry,
             Parties<Stream::Parties>
         >,
@@ -3425,6 +3425,10 @@ use crate::large_obj::test::TestLargeObjMsgs;
 #[cfg(test)]
 use crate::large_obj::test::TestLargeObjProtoTypes;
 #[cfg(test)]
+use crate::stream::NullPullStreams;
+#[cfg(test)]
+use crate::stream::PullStreamsOutput;
+#[cfg(test)]
 use crate::stream::LargeObjStream;
 
 #[cfg(test)]
@@ -3445,6 +3449,11 @@ impl PushStreamReportError<Infallible> for TestStream {
 }
 
 #[cfg(test)]
+impl PullStreamsOutput for TestStream {
+    type PullStreams = NullPullStreams;
+}
+
+#[cfg(test)]
 impl LargeObjStream<()> for TestStream {
     type Frags = OutboundFrags;
     type Parties = ();
@@ -3458,7 +3467,7 @@ impl LargeObjStream<()> for TestStream {
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3470,9 +3479,9 @@ impl LargeObjStream<()> for TestStream {
                 Some((msg, when)) => {
                     self.msgs.push(msg);
 
-                    Ok((Some(when), ()))
+                    Ok((Some(when), (), None))
                 }
-                None => Ok((None, ()))
+                None => Ok((None, (), None))
             })
             .map(RetryIndefResult::from)
     }
@@ -3485,7 +3494,7 @@ impl LargeObjStream<()> for TestStream {
         _retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3502,7 +3511,7 @@ impl LargeObjStream<()> for TestStream {
         _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3524,7 +3533,7 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         frags: &mut Self::Frags
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3535,7 +3544,7 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
             .map_ok(|(msg, when)| {
                 self.msgs.push(msg);
 
-                Ok((Some(when), ()))
+                Ok((Some(when), (), None))
             })
             .map(RetryIndefResult::from)
     }
@@ -3548,7 +3557,7 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         _retry: Self::PushFragRetry
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3565,7 +3574,7 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         _err: <Self::PushFragError as RecoverableError>::Completable
     ) -> Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties),
+            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
@@ -3638,7 +3647,7 @@ fn test_offer_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -3741,7 +3750,7 @@ fn test_offer_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         when.expect("Expected some")
     } else {
@@ -3760,7 +3769,7 @@ fn test_offer_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, when)
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -3864,7 +3873,7 @@ fn test_offer_complete_repeat_multi_finish() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         when.expect("Expected some")
     } else {
@@ -3878,7 +3887,7 @@ fn test_offer_complete_repeat_multi_finish() {
         .try_push(&mut (), &mut sender_stream, when)
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -3999,7 +4008,7 @@ fn test_long_offer_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         when.expect("Expected some")
     } else {
@@ -4018,7 +4027,7 @@ fn test_long_offer_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, when)
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4122,7 +4131,7 @@ fn test_offer_req_obj_frag_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4162,7 +4171,7 @@ fn test_offer_req_obj_frag_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4266,7 +4275,7 @@ fn test_offer_req_obj_offer_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         when.expect("Expected some")
     } else {
@@ -4285,7 +4294,7 @@ fn test_offer_req_obj_offer_complete() {
         .try_push(&mut (), &mut sender_stream, when)
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4402,7 +4411,7 @@ fn test_offer_req_frag_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4442,7 +4451,7 @@ fn test_offer_req_frag_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         when.expect("Expected some")
     } else {
@@ -4458,7 +4467,7 @@ fn test_offer_req_frag_complete_repeat() {
         .try_push(&mut (), &mut sender_stream, when)
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some())
     } else {
@@ -4590,7 +4599,7 @@ fn test_offer_req_obj_frag_req_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {
@@ -4630,7 +4639,7 @@ fn test_offer_req_obj_frag_req_complete() {
         .try_push(&mut (), &mut sender_stream, Instant::now())
         .expect("Expected success")
     {
-        let (when, ()) = res;
+        let (when, (), _) = res;
 
         assert!(when.is_some());
     } else {

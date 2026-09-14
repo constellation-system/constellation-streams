@@ -509,6 +509,59 @@ where
         Ok(())
     }
 
+    fn register_stream(
+        &mut self,
+        id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
+        stream: Types::AuthNChan
+    ) -> Result<
+        (),
+        PollThreadRecvError<
+            Types::PullError,
+            Types::MsgAuthError,
+            Types::RecvError
+        >
+    > {
+        debug!(target: "poll-thread",
+               "registering stream from {} for {}",
+               id, stream.prin());
+
+        if self
+            .pull_streams
+            .insert(id.clone(), stream.clone())
+            .is_some()
+        {
+            error!(target: "poll-thread",
+               "stream {} was already present for {}",
+               id, stream.prin());
+
+            Ok(())
+        } else {
+            self.pull_msgs(id)
+        }
+    }
+
+    fn register_streams(
+        &mut self,
+        streams: Option<Vec<Types::PullStreams>>
+    ) -> Result<
+        (),
+        PollThreadRecvError<
+            Types::PullError,
+            Types::MsgAuthError,
+            Types::RecvError
+        >
+    > {
+        if let Some(streams) = streams {
+            for streams in streams.into_iter() {
+                for (id, stream) in streams {
+                    self.register_stream(&id, stream)?
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn recv_stream(
         &mut self,
         id: &StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
@@ -575,21 +628,7 @@ where
 
                 Ok(())
             }
-            Ok(None) => {
-                if self
-                    .pull_streams
-                    .insert(id.clone(), stream.clone())
-                    .is_some()
-                {
-                    error!(target: "poll-thread",
-                       "stream {} was already present for {}",
-                       id, stream.prin());
-
-                    Ok(())
-                } else {
-                    self.pull_msgs(id)
-                }
-            }
+            Ok(None) => self.register_stream(id, stream),
             Err(err) => {
                 error!(target: "poll-thread",
                        "error reporting stream {} with {}: {}",
@@ -748,8 +787,9 @@ where
                 &mut self.stream,
                 &live
             ) {
-                Ok(res) => {
-                    pending.merge(&res);
+                Ok((res, streams)) => {
+                    pending.merge(res);
+                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -850,8 +890,9 @@ where
                 &live,
                 now
             ) {
-                Ok(res) => {
-                    pending.merge(&res);
+                Ok((res, streams)) => {
+                    pending.merge(res);
+                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -962,8 +1003,9 @@ where
                             &mut self.msgs,
                             &mut self.stream
                         ) {
-                            Ok(res) => {
-                                pending.merge(&res);
+                            Ok((res, streams)) => {
+                                pending.merge(res);
+                                self.register_streams(streams);
                             }
                             Err(err) => match err.scope() {
                                 ErrorScope::Unrecoverable |
@@ -1012,8 +1054,9 @@ where
                                 &mut self.msgs,
                                 &mut self.stream
                             ) {
-                                Ok(res) => {
-                                    pending.merge(&res);
+                                Ok((res, streams)) => {
+                                    pending.merge(res);
+                                    self.register_streams(streams);
                                 }
                                 Err(err) => match err.scope() {
                                     ErrorScope::Unrecoverable |
@@ -1070,8 +1113,9 @@ where
                             &mut self.msgs,
                             &mut self.stream
                         ) {
-                            Ok(res) => {
-                                pending.merge(&res);
+                            Ok((res, streams)) => {
+                                pending.merge(res);
+                                self.register_streams(streams);
                             }
                             Err(err) => match err.scope() {
                                 ErrorScope::Unrecoverable |
@@ -1114,8 +1158,9 @@ where
                 &mut self.stream,
                 &live
             ) {
-                Ok(res) => {
-                    pending.merge(&res);
+                Ok((res, streams)) => {
+                    pending.merge(res);
+                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -1154,7 +1199,7 @@ where
 
     fn run(mut self) {
         let mut events = Events::with_capacity(self.nevents);
-        let mut next_listen = None;
+        let mut next_listen = Some(Instant::now());
         let mut next_refresh = None;
         let mut retry_refresh: Option<Types::RefreshRetry> = None;
         let mut pending =
