@@ -51,7 +51,9 @@ use crate::channels::test::TestChannels;
 use crate::channels::test::TestChannelsError;
 use crate::channels::test::TestChannelsScript;
 use crate::channels::test::TestStreamID;
+use crate::stream::NullPullStreams;
 use crate::stream::PullStream;
+use crate::stream::PullStreamsOutput;
 use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
@@ -275,6 +277,10 @@ impl Create for TestChannelCore {
 
         Ok(TestChannelCore { script: script })
     }
+}
+
+impl PullStreamsOutput for TestStream {
+    type PullStreams = NullPullStreams;
 }
 
 impl<Chans, Ctx> ShutdownStream<Chans, Ctx> for TestStream

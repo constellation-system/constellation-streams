@@ -384,7 +384,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
             Self::AuthNChan,
             ReportStreamError = Self::ReportStreamError
-        >;
+        > + PullStreamsOutput<PullStreams = NullPullStreams>;
     type Msgs: Send;
     type RecvError: Debug + Display + ScopedError;
     type Recv: AuthNMsgRecv<Self::MsgPrin, Self::AuthNMsg, RecvError = Self::RecvError>;

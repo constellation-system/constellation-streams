@@ -448,23 +448,6 @@ where
     }
 }
 
-impl<State> Debug for RawStateMachineError<State>
-where
-    State: RawMachineState
-{
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), std::fmt::Error> {
-        match self {
-            RawStateMachineError::Completable { .. } => {
-                write!(f, "Completable {{ .. }}")
-            }
-            RawStateMachineError::Permanent { err } => write!(f, "{:?}", err)
-        }
-    }
-}
-
 #[cfg(test)]
 use std::io::Error;
 #[cfg(test)]

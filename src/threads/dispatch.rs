@@ -762,8 +762,13 @@ where
                     &mut self.dispatched.msgs,
                     &mut self.dispatched.stream
                 ) {
-                    Ok(res) => {
-                        self.pending.merge(&res);
+                    Ok((res, chans)) => {
+                        self.pending.merge(res);
+
+                        if chans.is_some() {
+                            error!(target: "dispatched-entry",
+                                   "new channels should not be reported here");
+                        }
 
                         true
                     }
@@ -917,7 +922,14 @@ where
                 &mut self.dispatched.stream,
                 live
             ) {
-                Ok(res) => self.pending.merge(&res),
+                Ok((res, chans)) => {
+                    self.pending.merge(res);
+
+                    if chans.is_some() {
+                        error!(target: "dispatched-entry",
+                               "new channels should not be reported here");
+                    }
+                }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
                         error!(target: "dispatched-entry",
@@ -1028,8 +1040,13 @@ where
                 live,
                 now
             ) {
-                Ok(res) => {
-                    self.pending.merge(&res);
+                Ok((res, chans)) => {
+                    self.pending.merge(res);
+
+                    if chans.is_some() {
+                        error!(target: "dispatched-entry",
+                               "new channels should not be reported here");
+                    }
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -1080,8 +1097,13 @@ where
                 &mut self.dispatched.stream,
                 live
             ) {
-                Ok(res) => {
-                    self.pending.merge(&res);
+                Ok((res, chans)) => {
+                    self.pending.merge(res);
+
+                    if chans.is_some() {
+                        error!(target: "dispatched-entry",
+                               "new channels should not be reported here");
+                    }
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {

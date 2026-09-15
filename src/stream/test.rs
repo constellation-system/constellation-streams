@@ -311,6 +311,7 @@ where
     type PushOfferError = TestError<TestIndefAction<Option<Instant>>>;
     type PushOfferErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
+    type PullStreams = NullPullStreams;
     type StartBatchError = TestStartBatchError<
         TestError<TestIndefAction<()>>,
         TestBatchError<TestAction<()>>,
@@ -346,6 +347,7 @@ where
     type Parties = Vec<usize>;
     type PartiesError = Infallible;
     type PartyID = usize;
+    type PullStreams = NullPullStreams;
     type PushFragError = TestError<TestIndefAction<Option<Instant>>>;
     type PushFragErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
