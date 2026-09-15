@@ -46,6 +46,7 @@ use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
+use constellation_common::util::LazyInitVec;
 use log::debug;
 use log::error;
 use log::trace;
@@ -660,9 +661,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::ReportError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each error, get the batch ID, and
                 // report the error up.
@@ -673,20 +672,11 @@ where
                         let Err(err) =
                             self.rev_map[i].stream.report_failure(batch_id)
                     {
-                        match &mut errs {
-                            Some(errs) => errs.push((idx.clone(), err)),
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((idx.clone(), err));
-
-                                errs = Some(vec)
-                            }
-                        }
+                        errs.push((idx.clone(), err))
                     }
                 }
 
-                match errs {
+                match errs.take() {
                     // There were errors
                     Some(errs) => Err(CompoundBatchError::Batch {
                         errs: ErrorSet::create(results, errs)
@@ -1366,7 +1356,7 @@ where
 
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
-                let mut streambuf: Option<Vec<Stream::PullStreams>> = None;
+                let mut streambuf = LazyInitVec::new(len);
                 let mut results = Vec::with_capacity(len);
                 let mut indefs = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
@@ -1381,17 +1371,7 @@ where
                             ids.push(id);
 
                             if let Some(streams) = streams {
-                                match &mut streambuf {
-                                    Some(streambuf) => {
-                                        streambuf.push(streams)
-                                    }
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push(streams);
-                                        streambuf = Some(vec)
-                                    }
-                                }
+                                streambuf.push(streams)
                             }
                         }
                         RetryIndefResult::Retry(when) => {
@@ -1414,6 +1394,7 @@ where
                     Ok(RetryIndefResult::Retry(out))
                 } else {
                     let streams = streambuf
+                        .take()
                         .map(|streambuf| StreamMulticastPullStreams {
                             inners: streambuf
                         });
@@ -1461,7 +1442,7 @@ where
 
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
-                let mut streambuf: Option<Vec<Stream::PullStreams>> = None;
+                let mut streambuf = LazyInitVec::new(len);
                 let mut results = Vec::with_capacity(len);
                 let mut ids = Vec::with_capacity(len);
                 let mut has_retry = false;
@@ -1475,17 +1456,7 @@ where
                             ids.push(id);
 
                             if let Some(streams) = streams {
-                                match &mut streambuf {
-                                    Some(streambuf) => {
-                                        streambuf.push(streams)
-                                    }
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push(streams);
-                                        streambuf = Some(vec)
-                                    }
-                                }
+                                streambuf.push(streams)
                             }
                         }
                         RetryIndefResult::Retry(when) => {
@@ -1508,6 +1479,7 @@ where
                     Ok(RetryIndefResult::Retry(out))
                 } else {
                     let streams = streambuf
+                        .take()
                         .map(|streambuf| StreamMulticastPullStreams {
                             inners: streambuf
                         });
@@ -1695,8 +1667,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::RefreshError)>> =
-            None;
+        let mut errs = LazyInitVec::new(len);
 
         // Run through each party and try to add the message.
         for (i, party) in self.rev_map.iter_mut().enumerate() {
@@ -1704,20 +1675,11 @@ where
 
             match party.stream.refresh(ctx) {
                 Ok(res) => results.push((idx, res)),
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((idx.clone(), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((idx.clone(), err)),
             }
         }
 
-        self.decide_refresh_outcome(results, errs)
+        self.decide_refresh_outcome(results, errs.take())
     }
 
     fn retry_refresh(
@@ -1730,8 +1692,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::RefreshError)>> =
-            None;
+        let mut errs = LazyInitVec::new(len);
 
         for (i, retry) in retries.into_iter().enumerate() {
             let idx = MulticastStreamIdx::from(i);
@@ -1743,22 +1704,13 @@ where
                 RetryResult::Retry(retry) => {
                     match self.rev_map[i].stream.retry_refresh(ctx, retry) {
                         Ok(res) => results.push((idx, res)),
-                        Err(err) => match &mut errs {
-                            Some(errs) => errs.push((idx.clone(), err)),
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((idx.clone(), err));
-
-                                errs = Some(vec)
-                            }
-                        }
+                        Err(err) => errs.push((idx.clone(), err))
                     }
                 }
             }
         }
 
-        self.decide_refresh_outcome(results, errs)
+        self.decide_refresh_outcome(results, errs.take())
     }
 
     fn complete_refresh(
@@ -1771,28 +1723,18 @@ where
     > {
         let len = self.rev_map.len();
         let (mut results, retries) = errs.take();
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::RefreshError)>> =
-            None;
+        let mut errs = LazyInitVec::new(len);
 
         for (idx, err) in retries {
             let i: usize = idx.clone().into();
 
             match self.rev_map[i].stream.complete_refresh(ctx, err) {
                 Ok(res) => results.push((idx, res)),
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((idx.clone(), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((idx.clone(), err))
             }
         }
 
-        self.decide_refresh_outcome(results, errs)
+        self.decide_refresh_outcome(results, errs.take())
     }
 }
 
@@ -1822,15 +1764,8 @@ where
     > {
         let mut res = None;
         let mut when = None;
-        let mut retries: Option<
-            Vec<
-                StreamRetry<
-                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                    Chans::ShutdownStreamRetry
-                >
-            >
-        > = None;
         let nstreams = self.rev_map.len();
+        let mut retries = LazyInitVec::new(nstreams);
 
         debug!(target: "stream-multicaster",
                "shutting down stream multicaster");
@@ -1844,21 +1779,11 @@ where
                     res = params.or(res);
                     when = next_retry(&retry, &when);
                 }
-                RetryResult::Retry(mut retry) => match &mut retries {
-                    Some(retries) => {
-                        retries.append(&mut retry);
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(nstreams);
-
-                        vec.append(&mut retry);
-                        retries = Some(vec)
-                    }
-                }
+                RetryResult::Retry(mut retry) => retries.append(&mut retry),
             }
         }
 
-        if let Some(retries) = retries {
+        if let Some(retries) = retries.take() {
             Ok(RetryResult::Retry(retries))
         } else {
             Ok(RetryResult::Success((res, when)))
@@ -1925,15 +1850,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(
-                        MulticastStreamIdx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to finish the batch.
                 for (i, batch_id) in batch_ids.iter().enumerate() {
@@ -1957,23 +1874,14 @@ where
                                     StreamFinishCancel::Finish { finish: err };
 
                                 // An error occurred; add this to the error set.
-                                match &mut errs {
-                                    Some(errs) => errs.push((idx, err)),
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push((idx, err));
-
-                                        errs = Some(vec)
-                                    }
-                                }
+                                errs.push((idx, err));
                             }
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1997,15 +1905,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(
-                        MulticastStreamIdx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
                     let idx = MulticastStreamIdx::from(i);
@@ -2037,17 +1937,7 @@ where
 
                                         // An error occurred; add this to
                                         // the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -2073,17 +1963,7 @@ where
 
                                         // An error occurred; add this to
                                         // the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -2092,7 +1972,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -2116,15 +1996,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<
-                    Vec<(
-                        MulticastStreamIdx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -2153,17 +2025,7 @@ where
 
                                         // An error occurred; add this
                                         // to the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -2189,17 +2051,7 @@ where
 
                                         // An error occurred; add this
                                         // to the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -2208,7 +2060,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -2239,9 +2091,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::CancelBatchError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to cancel the batch.
                 for (i, party) in self.rev_map.iter_mut().enumerate() {
@@ -2250,22 +2100,13 @@ where
                     if let Some(batch_id) = &batch_ids[i] {
                         match party.stream.cancel_batch(ctx, flags, batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -2289,9 +2130,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::CancelBatchError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
                     let idx = MulticastStreamIdx::from(i);
@@ -2306,19 +2145,7 @@ where
                                     ctx, flags, batch_id, retry
                                 ) {
                                     Ok(res) => results.push((idx, res)),
-                                    Err(err) => match &mut errs {
-                                        Some(errs) => {
-                                            errs.push((idx.clone(), err))
-                                        }
-                                        None => {
-                                            let mut vec =
-                                                Vec::with_capacity(len);
-
-                                            vec.push((idx.clone(), err));
-
-                                            errs = Some(vec)
-                                        }
-                                    }
+                                    Err(err) => errs.push((idx.clone(), err))
                                 }
                             }
                         }
@@ -2326,7 +2153,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -2350,9 +2177,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::CancelBatchError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -2363,22 +2188,13 @@ where
                             .complete_cancel_batch(ctx, flags, batch_id, err)
                         {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -2398,9 +2214,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::ReportError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to finish the batch.
                 for (i, batch_id) in batch_ids.iter().enumerate() {
@@ -2410,21 +2224,12 @@ where
                         // If this party is active, finish the batch.
                         match self.rev_map[i].stream.report_failure(batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx, err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx, err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx, err))
                         }
                     }
                 }
 
-                match errs {
+                match errs.take() {
                     // There were errors
                     Some(errs) => Err(CompoundBatchError::Batch {
                         errs: ErrorSet::create(results, errs)
@@ -2463,9 +2268,7 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::AddError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to add the message.
                 for (i, party) in self.rev_map.iter_mut().enumerate() {
@@ -2474,21 +2277,12 @@ where
                     if let Some(batch_id) = &batch_ids[i] {
                         match party.stream.add(ctx, flags, msg, batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
@@ -2506,9 +2300,7 @@ where
             Some(StreamMulticasterBatch { batch_ids, .. }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::AddError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
                     let idx = MulticastStreamIdx::from(i);
@@ -2523,22 +2315,13 @@ where
                                 .retry_add(ctx, flags, msg, batch_id, retry)
                             {
                                 Ok(res) => results.push((idx, res)),
-                                Err(err) => match &mut errs {
-                                    Some(errs) => errs.push((idx.clone(), err)),
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push((idx.clone(), err));
-
-                                        errs = Some(vec)
-                                    }
-                                }
+                                Err(err) => errs.push((idx.clone(), err))
                             }
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
@@ -2556,9 +2339,7 @@ where
             Some(StreamMulticasterBatch { batch_ids, .. }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<
-                    Vec<(MulticastStreamIdx, Stream::AddError)>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -2569,21 +2350,12 @@ where
                             .complete_add(ctx, flags, msg, batch_id, err)
                         {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
@@ -2747,8 +2519,7 @@ where
         I: Iterator<Item = &'a MulticastStreamIdx> {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::SelectError)>> =
-            None;
+        let mut errs = LazyInitVec::new(len);
 
         for _ in 0..len {
             selections.inner.push(None);
@@ -2773,23 +2544,12 @@ where
                     }
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => {
-                            errs.push((MulticastStreamIdx::from(i), err))
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((MulticastStreamIdx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 }
             }
         }
 
-        self.decide_select_result(results, errs)
+        self.decide_select_result(results, errs.take())
             .map(|res| res.map_indef(Parties::Some))
     }
 
@@ -2809,10 +2569,9 @@ where
     > {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::SelectError)>> =
-            None;
         let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
         let mut skip = bitvec![0; self.rev_map.len()];
         let mut offset = 0;
 
@@ -2851,18 +2610,7 @@ where
                     }
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => {
-                            errs.push((MulticastStreamIdx::from(i), err))
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((MulticastStreamIdx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 },
                 // Retain prior successes.
                 RetryResult::Success(val) => {
@@ -2871,7 +2619,7 @@ where
             }
         }
 
-        self.decide_select_retry_result(results, indefs, errs)
+        self.decide_select_retry_result(results, indefs, errs.take())
             .map(|res| res.map_indef(Parties::Some))
     }
 
@@ -2890,9 +2638,8 @@ where
         Self::SelectError
     > {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::SelectError)>> =
-            None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
@@ -2913,20 +2660,11 @@ where
                 }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_select_result(results, errs)
+        self.decide_select_result(results, errs.take())
             .map(|res| res.map_indef(Parties::Some))
     }
 
@@ -2941,9 +2679,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut ids = Vec::with_capacity(len);
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::CreateBatchError)>
-        > = None;
+        let mut errs = LazyInitVec::new(len);
 
         // Have each party create a new batch.
         for (i, selections) in selections.inner.iter().enumerate() {
@@ -2956,23 +2692,12 @@ where
                     Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => {
-                            errs.push((MulticastStreamIdx::from(i), err))
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((MulticastStreamIdx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err)),
                 }
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn retry_create_batch(
@@ -2987,10 +2712,8 @@ where
     > {
         // Decompose the error set into successes and retries.
         let mut ids = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::CreateBatchError)>
-        > = None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
@@ -3010,25 +2733,14 @@ where
                     Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => {
-                            errs.push((MulticastStreamIdx::from(i), err))
-                        }
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((MulticastStreamIdx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 },
                 // Retain prior successes.
                 res => ids.push((idx, res))
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn complete_create_batch(
@@ -3042,10 +2754,8 @@ where
         Self::CreateBatchError
     > {
         let (mut ids, retries) = retries.take();
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::CreateBatchError)>
-        > = None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
@@ -3063,20 +2773,11 @@ where
                 Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn start_batch<'a, I>(
@@ -3565,8 +3266,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::PushFragError)>> =
-            None;
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to push the fragment.
         for (i, frag) in frags.frags.iter_mut().enumerate() {
@@ -3579,20 +3279,11 @@ where
                 }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        self.decide_push_frag_result(results, errs.take())
     }
 
     fn retry_push_frags(
@@ -3612,10 +3303,9 @@ where
     > {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::PushFragError)>> =
-            None;
         let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
         let mut skip = bitvec![0; self.rev_map.len()];
         let mut offset = 0;
 
@@ -3649,18 +3339,8 @@ where
                         }
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
-                        Err(err) => match &mut errs {
-                            Some(errs) => {
-                                errs.push((MulticastStreamIdx::from(i), err))
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((MulticastStreamIdx::from(i), err));
-
-                                errs = Some(vec)
-                            }
-                        }
+                        Err(err) =>
+                            errs.push((MulticastStreamIdx::from(i), err))
                     }
                 }
                 // Retain prior successes.
@@ -3672,7 +3352,7 @@ where
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        self.decide_push_frag_result(results, errs.take())
     }
 
     fn complete_push_frags(
@@ -3691,9 +3371,8 @@ where
         Self::PushFragError
     > {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<Vec<(MulticastStreamIdx, Stream::PushFragError)>> =
-            None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
@@ -3713,20 +3392,11 @@ where
                 }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        self.decide_push_frag_result(results, errs.take())
     }
 }
 
@@ -3762,9 +3432,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::PushOfferError)>
-        > = None;
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to push the fragment.
         for (i, frag) in frags.frags.iter_mut().enumerate() {
@@ -3777,20 +3445,11 @@ where
                 }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        self.decide_push_offer_result(results, errs.take())
     }
 
     fn retry_push_offer(
@@ -3810,11 +3469,9 @@ where
     > {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::PushOfferError)>
-        > = None;
         let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
         let mut skip = bitvec![0; self.rev_map.len()];
         let mut offset = 0;
 
@@ -3849,18 +3506,8 @@ where
                         }
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
-                        Err(err) => match &mut errs {
-                            Some(errs) => {
-                                errs.push((MulticastStreamIdx::from(i), err))
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((MulticastStreamIdx::from(i), err));
-
-                                errs = Some(vec)
-                            }
-                        }
+                        Err(err) =>
+                            errs.push((MulticastStreamIdx::from(i), err))
                     }
                 }
                 // Retain prior successes.
@@ -3872,7 +3519,7 @@ where
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        self.decide_push_offer_result(results, errs.take())
     }
 
     fn complete_push_offer(
@@ -3891,10 +3538,8 @@ where
         Self::PushOfferError
     > {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<
-            Vec<(MulticastStreamIdx, Stream::PushOfferError)>
-        > = None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
@@ -3914,20 +3559,11 @@ where
                 }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        self.decide_push_offer_result(results, errs.take())
     }
 }
 

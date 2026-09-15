@@ -26,6 +26,7 @@ use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::util::LazyInitVec;
 
 use crate::stream::CompoundBatchID;
 
@@ -287,48 +288,26 @@ where
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         let ErrorSet { successes, errors } = self;
         let len = errors.len();
-        let mut permanents: Option<Vec<(Idx, Err::Permanent)>> = None;
-        let mut completables: Option<Vec<(Idx, Err::Completable)>> = None;
+        let mut permanents = LazyInitVec::new(len);
+        let mut completables = LazyInitVec::new(len);
 
         for (idx, err) in errors {
             let (completable, permanent) = err.split();
 
             if let Some(completable) = completable {
-                match &mut completables {
-                    Some(completables) => {
-                        completables.push((idx.clone(), completable))
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), completable));
-
-                        completables = Some(vec)
-                    }
-                }
+                completables.push((idx.clone(), completable))
             }
 
             if let Some(permanent) = permanent {
-                match &mut permanents {
-                    Some(permanents) => {
-                        permanents.push((idx.clone(), permanent))
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), permanent));
-
-                        permanents = Some(vec)
-                    }
-                }
+                permanents.push((idx.clone(), permanent))
             }
         }
 
-        let completable = completables.map(|completables| ErrorSet {
+        let completable = completables.take().map(|completables| ErrorSet {
             successes: successes,
             errors: completables
         });
-        let permanent = permanents.map(|permanents| ErrorSet {
+        let permanent = permanents.take().map(|permanents| ErrorSet {
             successes: vec![],
             errors: permanents
         });

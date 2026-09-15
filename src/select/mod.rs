@@ -63,6 +63,7 @@ use constellation_common::sched::RefreshError;
 use constellation_common::sched::ReportError;
 use constellation_common::sched::Scheduler;
 use constellation_common::sched::SelectError;
+use constellation_common::util::LazyInitVec;
 use log::debug;
 use log::error;
 use log::trace;
@@ -2026,19 +2027,8 @@ where
                 Ok(state) => {
                     let mut res = None;
                     let mut when = None;
-                    let mut retries: Option<
-                        Vec<
-                            StreamRetry<
-                                StreamID<
-                                    Chans::Addr,
-                                    Chans::ChannelID,
-                                    Chans::Param
-                                >,
-                                Chans::ShutdownStreamRetry
-                            >
-                        >
-                    > = None;
                     let nstreams = state.streams.len();
+                    let mut retries = LazyInitVec::new(nstreams);
 
                     for party in state.streams.into_iter() {
                         if let Some(stream) = party.stream {
@@ -2060,18 +2050,7 @@ where
                                     let retry =
                                         StreamRetry::new(party.id, retry);
 
-                                    match &mut retries {
-                                        Some(retries) => {
-                                            retries.push(retry);
-                                        }
-                                        None => {
-                                            let mut vec =
-                                                Vec::with_capacity(nstreams);
-
-                                            vec.push(retry);
-                                            retries = Some(vec)
-                                        }
-                                    }
+                                    retries.push(retry);
                                 }
                             }
                         } else {
@@ -2081,7 +2060,7 @@ where
                         }
                     }
 
-                    if let Some(retries) = retries {
+                    if let Some(retries) = retries.take() {
                         Ok(RetryResult::Retry(retries))
                     } else {
                         Ok(RetryResult::Success((res, when)))
