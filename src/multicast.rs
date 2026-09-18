@@ -3205,26 +3205,17 @@ where
     ) -> Result<(), Self::RecvReqError> {
         let len = self.frags.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(MulticastStreamIdx, F::RecvReqError)>> = None;
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to receive.
         for (i, frags) in self.frags.iter_mut().enumerate() {
             match frags.recv_req(req) {
                 Ok(()) => results.push((MulticastStreamIdx::from(i), ())),
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((MulticastStreamIdx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((MulticastStreamIdx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        match errs {
+        match errs.take() {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(results, errs)),
             // No errors, check for retries.

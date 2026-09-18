@@ -564,15 +564,15 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
     type SelectError: RecoverableError;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen;
+    type SelectRetry: RetryWhen + Debug;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
-    type StartBatchError: RecoverableError;
+    type StartBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type StartBatchRetry: RetryWhen;
+    type StartBatchRetry: RetryWhen + Debug;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone + Debug;
@@ -631,14 +631,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
@@ -654,14 +654,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [select](PushStreamShared::select).
@@ -673,14 +673,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Create a new batch.
     ///
@@ -746,14 +746,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
@@ -768,14 +768,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [start_batch](PushStreamShared::start_batch).
@@ -787,14 +787,14 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Abort a previously-failed call to
     /// [start_batch](PushStreamShared::start_batch).
@@ -828,18 +828,18 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
 pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: RecoverableError;
+    type SelectError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen;
+    type SelectRetry: RetryWhen + Debug;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
     type CreateBatchRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when starting a new batch.
-    type StartBatchError: RecoverableError;
+    type StartBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for starting a new batch.
-    type StartBatchRetry: RetryWhen;
+    type StartBatchRetry: RetryWhen + Debug;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone + Debug;
@@ -888,8 +888,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>;
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>);
 
     /// Retry a previous call to
     /// [start_batch](PushStreamPrivate::start_batch).
@@ -902,8 +902,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>;
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [select](PushStreamPrivate::select).
@@ -915,8 +915,8 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>;
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>);
 
     /// Create a new batch.
     ///
@@ -981,11 +981,10 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Retry a previous call to
     /// [start_batch](PushStreamPrivate::start_batch).
@@ -997,11 +996,10 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [start_batch](PushStreamPrivate::start_batch).
@@ -1013,11 +1011,10 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Abort a previously-failed call to
     /// [start_batch](PushStreamPrivate::start_batch).
@@ -1063,14 +1060,14 @@ pub trait LargeObjStream<Ctx>: PullStreamsOutput {
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >;
+    >, Option<Self::PullStreams>);
 
     fn retry_push_frags(
         &mut self,
@@ -1078,14 +1075,14 @@ pub trait LargeObjStream<Ctx>: PullStreamsOutput {
         id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >;
+    >, Option<Self::PullStreams>);
 
     fn complete_push_frags(
         &mut self,
@@ -1093,38 +1090,38 @@ pub trait LargeObjStream<Ctx>: PullStreamsOutput {
         id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >;
+    >, Option<Self::PullStreams>);
 }
 
 pub trait LargeObjOfferStream<H, Ctx>: LargeObjStream<Ctx>
 where
     H: HashID {
     /// Type of errors that can occur when sending an offer.
-    type PushOfferError: RecoverableError;
+    type PushOfferError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending an
     /// offer.
-    type PushOfferRetry: RetryWhen;
+    type PushOfferRetry: RetryWhen + Debug;
 
     fn push_offer(
         &mut self,
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >;
+    >, Option<Self::PullStreams>);
 
     fn retry_push_offer(
         &mut self,
@@ -1132,14 +1129,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >;
+    >, Option<Self::PullStreams>);
 
     fn complete_push_offer(
         &mut self,
@@ -1147,14 +1144,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >;
+    >, Option<Self::PullStreams>);
 }
 
 /// Helper trait for sending single messages on shared streams.
@@ -1168,16 +1165,16 @@ where
 pub trait PushStreamSharedSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamShared<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: RecoverableError;
+    type PushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen;
+    type PushRetry: RetryWhen + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: RecoverableError;
+    type CancelPushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen;
+    type CancelPushRetry: RetryWhen + Debug;
 
     /// Push a single message into the stream.
     ///
@@ -1190,14 +1187,14 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         ctx: &mut Ctx,
         parties: I,
         msg: &T
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a;
@@ -1212,14 +1209,14 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >;
+    >, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [push](PushStreamSharedSingle::push).
@@ -1231,14 +1228,14 @@ pub trait PushStreamSharedSingle<T, Ctx>:
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >;
+    >, Option<Self::PullStreams>);
 
     fn cancel_push(
         &mut self,
@@ -1268,16 +1265,16 @@ pub trait PushStreamSharedSingle<T, Ctx>:
 pub trait PushStreamPrivateSingle<T, Ctx>:
     PushStreamAdd<T, Ctx> + PushStreamPrivate<Ctx> {
     /// Type of errors that can occur when sending a single message.
-    type PushError: RecoverableError;
+    type PushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushRetry: RetryWhen;
+    type PushRetry: RetryWhen + Debug;
     /// Type of errors that can occur when canceling a failed single
     /// message.
-    type CancelPushError: RecoverableError;
+    type CancelPushError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for canceling a
     /// single message.
-    type CancelPushRetry: RetryWhen;
+    type CancelPushRetry: RetryWhen + Debug;
 
     /// Push a single message into the stream.
     ///
@@ -1289,7 +1286,9 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
         &mut self,
         ctx: &mut Ctx,
         msg: &T
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>;
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>);
 
     /// Retry a previous call to [push](PushStreamSharedSingle::push).
     ///
@@ -1301,7 +1300,9 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>;
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>);
 
     /// Retry a previously-failed call to
     /// [push](PushStreamSharedSingle::push).
@@ -1313,7 +1314,9 @@ pub trait PushStreamPrivateSingle<T, Ctx>:
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>;
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>);
 
     fn cancel_push(
         &mut self,
@@ -2028,14 +2031,19 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .select(ctx, selections)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.select(ctx, selections);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2044,14 +2052,19 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_select(ctx, selections, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_select(ctx, selections, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2060,14 +2073,19 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_select(ctx, selections, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_select(ctx, selections, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2127,16 +2145,20 @@ where
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .start_batch(ctx)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.start_batch(ctx);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2144,16 +2166,20 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_start_batch(ctx, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_start_batch(ctx, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2161,16 +2187,20 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_start_batch(ctx, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_start_batch(ctx, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2267,22 +2297,27 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .select(ctx, selections, parties)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.select(ctx, selections, parties);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2291,19 +2326,24 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_select(ctx, selections, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_select(ctx, selections, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2312,19 +2352,24 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_select(ctx, selections, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_select(ctx, selections, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2385,22 +2430,27 @@ where
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .start_batch(ctx, parties)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.start_batch(ctx, parties);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2408,19 +2458,24 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_start_batch(ctx, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_start_batch(ctx, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2428,19 +2483,24 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_start_batch(ctx, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_start_batch(ctx, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2505,22 +2565,27 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &T
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .push(ctx, parties, msg)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.push(ctx, parties, msg);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2529,19 +2594,24 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_push(ctx, msg, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_push(ctx, msg, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2550,19 +2620,24 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_push(ctx, msg, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_push(ctx, msg, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2626,13 +2701,19 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .push(ctx, msg)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.push(ctx, msg);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2641,13 +2722,19 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_push(ctx, msg, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.retry_push(ctx, msg, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2656,13 +2743,19 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_push(ctx, msg, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.complete_push(ctx, msg, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2743,19 +2836,24 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .push_frags(ctx, id, frags)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.push_frags(ctx, id, frags);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2765,19 +2863,25 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_push_frags(ctx, id, frags, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner
+                    .retry_push_frags(ctx, id, frags, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2787,19 +2891,25 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_push_frags(ctx, id, frags, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner
+                    .complete_push_frags(ctx, id, frags, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 }
 
@@ -2817,19 +2927,24 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .push_offer(ctx, hash, frags)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner.push_offer(ctx, hash, frags);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2839,19 +2954,25 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .retry_push_offer(ctx, hash, frags, retry)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner
+                    .retry_push_offer(ctx, hash, frags, retry);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 
     #[inline]
@@ -2861,19 +2982,25 @@ where
         hash: H,
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
-        self.inner
-            .try_borrow_mut()
-            .map_err(|_| RefCellStreamError::Borrow)?
-            .complete_push_offer(ctx, hash, frags, err)
-            .map_err(|err| RefCellStreamError::Inner { error: err })
+    >, Option<Self::PullStreams>) {
+        match self.inner.try_borrow_mut() {
+            Ok(mut inner) => {
+                let (res, chans) = inner
+                    .complete_push_offer(ctx, hash, frags, err);
+                let res = res
+                    .map_err(|err| RefCellStreamError::Inner { error: err });
+
+                (res, chans)
+            }
+            Err(_) => (Err(RefCellStreamError::Borrow), None)
+        }
     }
 }
 
@@ -3174,8 +3301,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
         self.get_mut().select(ctx, selections)
     }
@@ -3186,8 +3313,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
         self.get_mut().retry_select(ctx, selections, retry)
     }
@@ -3198,8 +3325,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>, Self::SelectRetry>,
-                Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
+                Self::SelectError>, Option<Self::PullStreams>)
     {
         self.get_mut().complete_select(ctx, selections, err)
     }
@@ -3251,11 +3378,10 @@ where
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().start_batch(ctx)
     }
 
@@ -3264,11 +3390,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_start_batch(ctx, retry)
     }
 
@@ -3277,11 +3402,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_start_batch(ctx, err)
     }
 
@@ -3349,14 +3473,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -3369,14 +3493,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_select(ctx, selections, retry)
     }
 
@@ -3386,14 +3510,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Self::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_select(ctx, selections, err)
     }
 
@@ -3445,14 +3569,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -3464,14 +3588,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_start_batch(ctx, retry)
     }
 
@@ -3480,14 +3604,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_start_batch(ctx, err)
     }
 
@@ -3528,14 +3652,14 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &T
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -3548,14 +3672,14 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_push(ctx, msg, retry)
     }
 
@@ -3565,14 +3689,14 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
             Self::BatchID,
             Self::PushRetry,
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_push(ctx, msg, err)
     }
 
@@ -3622,8 +3746,9 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
         self.get_mut().push(ctx, msg)
     }
 
@@ -3633,8 +3758,9 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_push(ctx, msg, retry)
     }
 
@@ -3644,8 +3770,9 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
+                 Self::PushError
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_push(ctx, msg, err)
     }
 
@@ -3707,14 +3834,14 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().push_frags(ctx, id, frags)
     }
 
@@ -3725,14 +3852,14 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_push_frags(ctx, id, frags, retry)
     }
 
@@ -3743,14 +3870,14 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_push_frags(ctx, id, frags, err)
     }
 }
@@ -3770,14 +3897,14 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().push_offer(ctx, hash, frags)
     }
 
@@ -3788,14 +3915,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().retry_push_offer(ctx, hash, frags, retry)
     }
 
@@ -3806,14 +3933,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.get_mut().complete_push_offer(ctx, hash, frags, err)
     }
 }

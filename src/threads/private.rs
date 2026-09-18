@@ -696,9 +696,11 @@ where
         trace!(target: "push-entry",
                "attempting to recover from error while creating batch");
 
-        match stream.complete_start_batch(ctx, err) {
+        let (res, chans) = stream.complete_start_batch(ctx, err);
+
+        match res {
             // It succeeded.
-            Ok(RetryIndefResult::Success((batch_id, chans))) => {
+            Ok(RetryIndefResult::Success(batch_id)) => {
                 trace!(target: "push-entry",
                        "successfully created batch {}",
                        batch_id);
@@ -714,15 +716,15 @@ where
                 (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
-                })), None)
+                })), chans)
             }
             Ok(RetryIndefResult::Indef(())) => {
-                (Ok(RetryIndefResult::Indef(msgs)), None)
+                (Ok(RetryIndefResult::Indef(msgs)), chans)
             }
             Err(err) => (Err(PushEntryRecoverableError::Batch {
                 msgs: msgs,
                 err: err
-            }), None)
+            }), chans)
         }
     }
 
@@ -746,9 +748,11 @@ where
         trace!(target: "push-entry",
                "creating batch");
 
-        match stream.start_batch(ctx) {
+        let (res, chans) = stream.start_batch(ctx);
+
+        match res {
             // It succeeded.
-            Ok(RetryIndefResult::Success((batch_id, chans))) => {
+            Ok(RetryIndefResult::Success(batch_id)) => {
                 trace!(target: "push-entry",
                        "created batch {}",
                        batch_id);
@@ -765,15 +769,15 @@ where
                 (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                     msgs: msgs,
                     retry: retry
-                })), None)
+                })), chans)
             }
             Ok(RetryIndefResult::Indef(())) => {
-                (Ok(RetryIndefResult::Indef(msgs)), None)
+                (Ok(RetryIndefResult::Indef(msgs)), chans)
             }
             Err(err) => (Err(PushEntryRecoverableError::Batch {
                 msgs: msgs,
                 err: err
-            }), None)
+            }), chans)
         }
     }
 
@@ -852,9 +856,11 @@ where
     >, Option<Stream::PullStreams>) {
         match self {
             PushEntry::Batch { msgs, retry } => {
-                match stream.retry_start_batch(ctx, retry) {
+                let (res, chans) = stream.retry_start_batch(ctx, retry);
+
+                match res {
                     // It succeeded.
-                    Ok(RetryIndefResult::Success((batch_id, chans))) => {
+                    Ok(RetryIndefResult::Success(batch_id)) => {
                         (Self::try_add(ctx, stream, msgs, batch_id)
                             .map(RetryIndefResult::from), chans)
                     }
@@ -863,15 +869,15 @@ where
                         (Ok(RetryIndefResult::Retry(PushEntry::Batch {
                             msgs: msgs,
                             retry: retry
-                        })), None)
+                        })), chans)
                     }
                     Ok(RetryIndefResult::Indef(())) => {
-                        (Ok(RetryIndefResult::Indef(msgs)), None)
+                        (Ok(RetryIndefResult::Indef(msgs)), chans)
                     }
                     Err(err) => (Err(PushEntryRecoverableError::Batch {
                         msgs: msgs,
                         err: err
-                    }), None)
+                    }), chans)
                 }
             }
             PushEntry::Abort { mut flags, retry } => {
