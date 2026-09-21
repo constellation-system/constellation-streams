@@ -756,19 +756,21 @@ where
                 trace!(target: "dispatched-entry",
                        "refresh succeeded, retrying indefinites");
 
-                // We succeeded; retry indefinites.
-                match self.mode.retry_indefs(
+                let (res, chans) = self.mode.retry_indefs(
                     ctx,
                     &mut self.dispatched.msgs,
                     &mut self.dispatched.stream
-                ) {
-                    Ok((res, chans)) => {
-                        self.pending.merge(res);
+                );
 
-                        if chans.is_some() {
-                            error!(target: "dispatched-entry",
-                                   "new channels should not be reported here");
-                        }
+                if chans.is_some() {
+                    error!(target: "dispatched-entry",
+                           "new channels should not be reported here");
+                }
+
+                // We succeeded; retry indefinites.
+                match res {
+                    Ok(res) => {
+                        self.pending.merge(res);
 
                         true
                     }
@@ -916,19 +918,21 @@ where
         let mut valid = true;
 
         if self.pending.take_has_completes() {
-            match self.mode.complete_pending(
+            let (res, chans) = self.mode.complete_pending(
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
                 live
-            ) {
-                Ok((res, chans)) => {
-                    self.pending.merge(res);
+            );
 
-                    if chans.is_some() {
-                        error!(target: "dispatched-entry",
-                               "new channels should not be reported here");
-                    }
+            if chans.is_some() {
+                error!(target: "dispatched-entry",
+                       "new channels should not be reported here");
+            }
+
+            match res {
+                Ok(res) => {
+                    self.pending.merge(res);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -1033,20 +1037,22 @@ where
             trace!(target: "dispatch-entry",
                    "retrying pending messages");
 
-            match self.mode.retry_pending(
+            let (res, chans) = self.mode.retry_pending(
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
                 live,
                 now
-            ) {
-                Ok((res, chans)) => {
-                    self.pending.merge(res);
+            );
 
-                    if chans.is_some() {
-                        error!(target: "dispatched-entry",
-                               "new channels should not be reported here");
-                    }
+            if chans.is_some() {
+                error!(target: "dispatched-entry",
+                       "new channels should not be reported here");
+            }
+
+            match res {
+                Ok(res) => {
+                    self.pending.merge(res);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -1090,20 +1096,21 @@ where
                    "pushing messages");
 
             let _ = self.pending.take_next_outbound();
-
-            match self.mode.send_from_outbound(
+            let (res, chans) = self.mode.send_from_outbound(
                 ctx,
                 &mut self.dispatched.msgs,
                 &mut self.dispatched.stream,
                 live
-            ) {
-                Ok((res, chans)) => {
-                    self.pending.merge(res);
+            );
 
-                    if chans.is_some() {
-                        error!(target: "dispatched-entry",
-                               "new channels should not be reported here");
-                    }
+            if chans.is_some() {
+                error!(target: "dispatched-entry",
+                       "new channels should not be reported here");
+            }
+
+            match res {
+                Ok(res) => {
+                    self.pending.merge(res);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {

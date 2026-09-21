@@ -1305,75 +1305,80 @@ where
         msgs: &mut Msgs,
         stream: &mut Stream,
         _live: &HashSet<Token>
-    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Stream::PullStreams>>) {
         if self.indefs.is_none() {
             debug!(target: "private-datagram-push-mode",
                    "fetching new outbound messages");
 
-            let (msgs, next) = msgs.msgs(Instant::now())?;
-            let mut next = PushModeResult::new(next, None, false);
-            let mut chans = LazyInitVec::new(1);
+            match msgs.msgs(Instant::now()) {
+                Ok((msgs, next)) => {
+                    let mut next = PushModeResult::new(next, None, false);
+                    let mut chans = LazyInitVec::new(1);
 
-            if let Some(msgs) = msgs {
-                let (res, newchans) = PushEntry::try_send(ctx, stream, msgs);
+                    if let Some(msgs) = msgs {
+                        let (res, newchans) =
+                            PushEntry::try_send(ctx, stream, msgs);
 
-                if let Some(newchans) = newchans {
-                    chans.push(newchans)
-                }
+                        if let Some(newchans) = newchans {
+                            chans.push(newchans)
+                        }
 
-                match res {
-                    // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success(())) => {},
-                    // Retry delay; store to pending.
-                    Ok(RetryIndefResult::Retry(retry)) => {
-                        trace!(target: "private-datagram-push-mode",
-                               "delaying send");
+                        match res {
+                            // Send succeeded; nothing to do.
+                            Ok(RetryIndefResult::Success(())) => {},
+                            // Retry delay; store to pending.
+                            Ok(RetryIndefResult::Retry(retry)) => {
+                                trace!(target: "private-datagram-push-mode",
+                                       "delaying send");
 
-                        let when = retry.when();
+                                let when = retry.when();
 
-                        self.pending.push(retry);
-                        next.merge_next_retry_definite(&when);
-                    }
-                    // Indefinite delay; store to indefs.
-                    Ok(RetryIndefResult::Indef(msgs)) => {
-                        trace!(target: "private-datagram-push-mode",
-                               "delaying send indefinitely");
+                                self.pending.push(retry);
+                                next.merge_next_retry_definite(&when);
+                            }
+                            // Indefinite delay; store to indefs.
+                            Ok(RetryIndefResult::Indef(msgs)) => {
+                                trace!(target: "private-datagram-push-mode",
+                                       "delaying send indefinitely");
 
-                        let ent = IndefEntry {
-                            origin: Instant::now(),
-                            msgs: msgs
-                        };
+                                let ent = IndefEntry {
+                                    origin: Instant::now(),
+                                    msgs: msgs
+                                };
 
-                        if let Some(indefs) = &mut self.indefs {
-                            error!(target: "private-datagram-push-mode",
-                                   "indefs should be empty");
+                                if let Some(indefs) = &mut self.indefs {
+                                    error!(target: "private-datagram-push-mode",
+                                           "indefs should be empty");
 
-                            indefs.push(ent)
-                        } else {
-                            let mut vec = match self.retries_hint {
-                                Some(hint) => Vec::with_capacity(hint),
-                                None => Vec::new()
-                            };
+                                    indefs.push(ent)
+                                } else {
+                                    let mut vec = match self.retries_hint {
+                                        Some(hint) => Vec::with_capacity(hint),
+                                        None => Vec::new()
+                                    };
 
-                            vec.push(ent);
+                                    vec.push(ent);
 
-                            self.indefs = Some(vec)
+                                    self.indefs = Some(vec)
+                                }
+                            }
+                            // Error occurred.
+                            Err(err) => {
+                                let res = self
+                                    .handle_error(ctx, stream, &mut chans, err);
+
+                                next.merge(res)
+                            }
                         }
                     }
-                    // Error occurred.
-                    Err(err) => {
-                        let res = self
-                            .handle_error(ctx, stream, &mut chans, err);
 
-                        next.merge(res)
-                    }
+                    (Ok(next), chans.take())
                 }
+                Err(err) => (Err(err), None)
             }
-
-            Ok((next, chans.take()))
         } else {
-            Ok((PushModeResult::default(), None))
+            (Ok(PushModeResult::default()), None)
         }
     }
 
@@ -1384,8 +1389,8 @@ where
         stream: &mut Stream,
         _live: &HashSet<Token>,
         now: Instant
-    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Stream::PullStreams>>) {
         debug!(target: "private-datagram-push-mode",
                "retrying pending operations");
 
@@ -1476,7 +1481,7 @@ where
             }
         }
 
-        Ok((out, chans.take()))
+        (Ok(out), chans.take())
     }
 
     fn complete_pending(
@@ -1485,8 +1490,8 @@ where
         _msgs: &mut Msgs,
         stream: &mut Stream,
         _live: &HashSet<Token>
-    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Stream::PullStreams>>) {
         let mut next = PushModeResult::default();
 
         if let Some(completes) = self.completes.take() {
@@ -1550,9 +1555,9 @@ where
                 }
             }
 
-            Ok((next, chans.take()))
+            (Ok(next), chans.take())
         } else {
-            Ok((next, None))
+            (Ok(next), None)
         }
     }
 
@@ -1561,8 +1566,8 @@ where
         ctx: &mut Ctx,
         _msgs: &mut Msgs,
         stream: &mut Stream
-    ) -> Result<(PushModeResult, Option<Vec<Stream::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Stream::PullStreams>>) {
         let mut next = PushModeResult::default();
 
         if let Some(indefs) = self.indefs.take() {
@@ -1627,9 +1632,9 @@ where
                 }
             }
 
-            Ok((next, chans.take()))
+            (Ok(next), chans.take())
         } else {
-            Ok((next, None))
+            (Ok(next), None)
         }
     }
 }
@@ -1885,19 +1890,22 @@ where
                 trace!(target: "private-large-obj-push-mode",
                        "completing error immediately");
 
-                match LargeObjEntry::complete_send(
+                let (res, newchans) = LargeObjEntry::complete_send(
                     ctx,
                     stream,
                     proto,
                     completable
-                ) {
+                );
+
+                if let Some(newchans) = newchans {
+                    chans.push(newchans)
+                }
+
+                match res {
                     // Succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success((when, _, newchans))) => {
+                    Ok(RetryIndefResult::Success((when, _))) => {
                         next.merge_next_outbound(&when);
 
-                        if let Some(newchans) = newchans {
-                            chans.push(newchans)
-                        }
                     }
                     // Retry delay; store to pending.
                     Ok(RetryIndefResult::Retry(retry)) => {
@@ -2042,16 +2050,19 @@ where
         >,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
-    ) -> Result<(PushModeResult, Option<Vec<Types::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Types::PullStreams>>) {
         if self.msgs_indefs.is_none() {
             debug!(target: "private-large-obj-push-mode",
                    "fetching new outbound protocol messages");
 
             // Send the low-level protocol messages.
-            let (msgs, next) = proto.msgs(Instant::now()).map_err(|err| {
+            let (msgs, next) = match proto.msgs(Instant::now()).map_err(|err| {
                 PrivateLargeObjPushModeSendError::Msgs { err: err }
-            })?;
+            }) {
+                Ok(res) => res,
+                Err(err) => return (Err(err), None)
+            };
             let mut next = PushModeResult::new(next, None, false);
             let mut chans = LazyInitVec::new(1);
 
@@ -2115,15 +2126,16 @@ where
             debug!(target: "private-large-obj-push-mode",
                    "sending data fragments");
 
+            let (res, newchans) = LargeObjEntry::try_send(ctx, stream, proto);
 
-            match LargeObjEntry::try_send(ctx, stream, proto) {
+            if let Some(newchans) = newchans {
+                chans.push(newchans)
+            }
+
+            match res {
                 // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _, newchans))) => {
+                Ok(RetryIndefResult::Success((when, _))) => {
                     next.merge_next_outbound(&when);
-
-                    if let Some(newchans) = newchans {
-                        chans.push(newchans)
-                    }
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -2152,9 +2164,9 @@ where
                 }
             }
 
-            Ok((next, chans.take()))
+            (Ok(next), chans.take())
         } else {
-            Ok((PushModeResult::default(), None))
+            (Ok(PushModeResult::default()), None)
         }
     }
 
@@ -2171,8 +2183,8 @@ where
         stream: &mut Types::Stream,
         _live: &HashSet<Token>,
         now: Instant
-    ) -> Result<(PushModeResult, Option<Vec<Types::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Types::PullStreams>>) {
         debug!(target: "private-large-obj-push-mode",
                "retrying pending operations");
 
@@ -2307,14 +2319,16 @@ where
 
         // Try running all the entries we collected.
         for ent in curr.into_iter() {
-            match ent.exec(ctx, stream, proto) {
-                // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _, newchans))) => {
-                    out.merge_next_outbound(&when);
+            let (res, newchans) = ent.exec(ctx, stream, proto);
 
-                    if let Some(newchans) = newchans {
-                        chans.push(newchans)
-                    }
+            if let Some(newchans) = newchans {
+                chans.push(newchans)
+            }
+
+            match res {
+                // Succeeded; nothing to do.
+                Ok(RetryIndefResult::Success((when, _))) => {
+                    out.merge_next_outbound(&when);
                 }
                 // Retry delay; store to pending.
                 Ok(RetryIndefResult::Retry(retry)) => {
@@ -2344,7 +2358,7 @@ where
             }
         }
 
-        Ok((out, chans.take()))
+        (Ok(out), chans.take())
     }
 
     fn complete_pending(
@@ -2359,8 +2373,8 @@ where
         >,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
-    ) -> Result<(PushModeResult, Option<Vec<Types::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Types::PullStreams>>) {
         let mut next = PushModeResult::default();
         let mut chans = match (&self.msgs_completes, &self.frags_completes) {
             (Some(msgs), Some(frags)) =>
@@ -2435,10 +2449,13 @@ where
         if let Some(completes) = self.frags_completes.take() {
             // First complete any pending messages.
             for complete in completes.into_iter() {
-                match LargeObjEntry::complete_send(ctx, stream, proto, complete)
-                {
+                let (res, newchans) = LargeObjEntry::complete_send(
+                    ctx, stream, proto, complete
+                );
+
+                match res {
                     // Send succeeded; nothing to do.
-                    Ok(RetryIndefResult::Success((when, _, newchans))) => {
+                    Ok(RetryIndefResult::Success((when, _))) => {
                         next.merge_next_outbound(&when);
 
                         if let Some(newchans) = newchans {
@@ -2476,7 +2493,7 @@ where
             }
         }
 
-        Ok((next, chans.take()))
+        (Ok(next), chans.take())
     }
 
     fn retry_indefs(
@@ -2490,8 +2507,8 @@ where
             LargeObjTypes
         >,
         stream: &mut Types::Stream
-    ) -> Result<(PushModeResult, Option<Vec<Types::PullStreams>>),
-                Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<Types::PullStreams>>) {
         // XXX do a size hint by the number of indefs.
         let mut out = PushModeResult::default();
         let mut chans = if let Some(msgs) = &self.msgs_indefs {
@@ -2570,9 +2587,11 @@ where
         if self.frags_indef {
             self.frags_indef = false;
 
-            match LargeObjEntry::try_send(ctx, stream, proto) {
+            let (res, newchans) = LargeObjEntry::try_send(ctx, stream, proto);
+
+            match res {
                 // Succeeded; nothing to do.
-                Ok(RetryIndefResult::Success((when, _, newchans))) => {
+                Ok(RetryIndefResult::Success((when, _))) => {
                     out.merge_next_outbound(&when);
 
                     if let Some(newchans) = newchans {
@@ -2607,7 +2626,7 @@ where
             }
         }
 
-        Ok((out, chans.take()))
+        (Ok(out), chans.take())
     }
 }
 

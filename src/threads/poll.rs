@@ -781,15 +781,18 @@ where
             trace!(target: "poll-thread",
                    "processing stalled sends");
 
-            match self.mode.complete_pending(
+            let (res, streams) = self.mode.complete_pending(
                 &mut self.ctx,
                 &mut self.msgs,
                 &mut self.stream,
                 &live
-            ) {
-                Ok((res, streams)) => {
+            );
+
+            self.register_streams(streams);
+
+            match res {
+                Ok(res) => {
                     pending.merge(res);
-                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -882,17 +885,19 @@ where
                    "retrying pending messages");
 
             let _ = pending.take_retry_pending();
-
-            match self.mode.retry_pending(
+            let (res, streams) = self.mode.retry_pending(
                 &mut self.ctx,
                 &mut self.msgs,
                 &mut self.stream,
                 &live,
                 now
-            ) {
-                Ok((res, streams)) => {
+            );
+
+            self.register_streams(streams);
+
+            match res {
+                Ok(res) => {
                     pending.merge(res);
-                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {
@@ -998,14 +1003,17 @@ where
                         trace!(target: "poll-thread",
                                "retrying indefinitely-delayed sends");
 
-                        match self.mode.retry_indefs(
+                        let (res, streams) = self.mode.retry_indefs(
                             &mut self.ctx,
                             &mut self.msgs,
                             &mut self.stream
-                        ) {
-                            Ok((res, streams)) => {
+                        );
+
+                        self.register_streams(streams);
+
+                        match res {
+                            Ok(res) => {
                                 pending.merge(res);
-                                self.register_streams(streams);
                             }
                             Err(err) => match err.scope() {
                                 ErrorScope::Unrecoverable |
@@ -1049,14 +1057,17 @@ where
                             trace!(target: "poll-thread",
                                    "retrying indefinitely-delayed sends");
 
-                            match self.mode.retry_indefs(
+                            let (res, streams) = self.mode.retry_indefs(
                                 &mut self.ctx,
                                 &mut self.msgs,
                                 &mut self.stream
-                            ) {
-                                Ok((res, streams)) => {
+                            );
+
+                            self.register_streams(streams);
+
+                            match res {
+                                Ok(res) => {
                                     pending.merge(res);
-                                    self.register_streams(streams);
                                 }
                                 Err(err) => match err.scope() {
                                     ErrorScope::Unrecoverable |
@@ -1108,14 +1119,17 @@ where
                         trace!(target: "poll-thread",
                                "retrying indefinitely-delayed sends");
 
-                        match self.mode.retry_indefs(
+                        let (res, streams) = self.mode.retry_indefs(
                             &mut self.ctx,
                             &mut self.msgs,
                             &mut self.stream
-                        ) {
-                            Ok((res, streams)) => {
+                        );
+
+                        self.register_streams(streams);
+
+                        match res {
+                            Ok(res) => {
                                 pending.merge(res);
-                                self.register_streams(streams);
                             }
                             Err(err) => match err.scope() {
                                 ErrorScope::Unrecoverable |
@@ -1152,15 +1166,18 @@ where
             trace!(target: "poll-thread",
                    "pushing messages");
 
-            match self.mode.send_from_outbound(
+            let (res, streams) = self.mode.send_from_outbound(
                 &mut self.ctx,
                 &mut self.msgs,
                 &mut self.stream,
                 &live
-            ) {
-                Ok((res, streams)) => {
+            );
+
+            self.register_streams(streams);
+
+            match res {
+                Ok(res) => {
                     pending.merge(res);
-                    self.register_streams(streams);
                 }
                 Err(err) => match err.scope() {
                     ErrorScope::Unrecoverable | ErrorScope::System => {

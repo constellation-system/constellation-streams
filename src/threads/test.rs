@@ -448,16 +448,20 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         _msgs: &mut (),
         stream: &mut TestStream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::SendError> {
-        let elem = self.script.pop().expect("Expected script element")?;
-        let next_outbound = self.process_script_elem(stream, elem);
-        let next_retry = self.retries.iter().map(|(when, _)| *when).min();
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<NullPullStreams>>) {
+        (self.script.pop().expect("Expected script element")
+            .map(|elem| {
+                let next_outbound = self.process_script_elem(stream, elem);
+                let next_retry = self.retries.iter().map(|(when, _)| *when)
+                    .min();
 
-        Ok(PushModeResult {
-            next_outbound: next_outbound,
-            next_retry: next_retry,
-            has_completes: !self.completes.is_empty()
-        })
+                PushModeResult {
+                    next_outbound: next_outbound,
+                    next_retry: next_retry,
+                    has_completes: !self.completes.is_empty()
+                }
+            }), None)
     }
 
     fn retry_pending(
@@ -467,7 +471,8 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         stream: &mut TestStream,
         _live: &HashSet<Token>,
         now: Instant
-    ) -> Result<PushModeResult, Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<NullPullStreams>>) {
         let mut curr = None;
         let retries: Vec<_> = self.retries.drain(..).collect();
         let mut errs = Vec::new();
@@ -491,15 +496,15 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         }
 
         if let Some(err) = errs.pop() {
-            Err(err)
+            (Err(err), None)
         } else {
             let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
-            Ok(PushModeResult {
+            (Ok(PushModeResult {
                 next_outbound: curr,
                 next_retry: next_retry,
                 has_completes: !self.completes.is_empty()
-            })
+            }), None)
         }
     }
 
@@ -509,7 +514,8 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         _msgs: &mut (),
         stream: &mut TestStream,
         _live: &HashSet<Token>
-    ) -> Result<PushModeResult, Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<NullPullStreams>>) {
         let mut curr = None;
         let completes: Vec<_> = self.completes.drain(..).collect();
         let mut errs = Vec::new();
@@ -528,15 +534,15 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         }
 
         if let Some(err) = errs.pop() {
-            Err(err)
+            (Err(err), None)
         } else {
             let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
-            Ok(PushModeResult {
+            (Ok(PushModeResult {
                 next_outbound: curr,
                 next_retry: next_retry,
                 has_completes: !self.completes.is_empty()
-            })
+            }), None)
         }
     }
 
@@ -545,7 +551,8 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         _ctx: &mut Ctx,
         _msgs: &mut (),
         stream: &mut TestStream
-    ) -> Result<PushModeResult, Self::SendError> {
+    ) -> (Result<PushModeResult, Self::SendError>,
+          Option<Vec<NullPullStreams>>) {
         let mut curr = None;
         let indefs: Vec<_> = self.indefs.drain(..).collect();
         let mut errs = Vec::new();
@@ -564,15 +571,15 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         }
 
         if let Some(err) = errs.pop() {
-            Err(err)
+            (Err(err), None)
         } else {
             let next_retry = self.retries.iter().map(|(when, _)| *when).min();
 
-            Ok(PushModeResult {
+            (Ok(PushModeResult {
                 next_outbound: curr,
                 next_retry: next_retry,
                 has_completes: !self.completes.is_empty()
-            })
+            }), None)
         }
     }
 }
@@ -617,6 +624,7 @@ where
     type MsgAuthError = Infallible;
     type MsgPrin = NullCred;
     type Msgs = ();
+    type PullStreams = NullPullStreams;
     type PullError = TestError;
     type Recv = TestRecv;
     type RecvError = Infallible;

@@ -369,8 +369,8 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>,
-                                 Self::SelectRetry>, Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+          Option<Self::PullStreams>)
     {
         self.stream.select(ctx, selections)
     }
@@ -380,8 +380,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>,
-                                 Self::SelectRetry>, Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+          Option<Self::PullStreams>)
     {
         self.stream.retry_select(ctx, selections, retry)
     }
@@ -391,8 +391,8 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<RetryIndefResult<Option<Self::PullStreams>,
-                                 Self::SelectRetry>, Self::SelectError>
+    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+          Option<Self::PullStreams>)
     {
         self.stream.complete_select(ctx, selections, err)
     }
@@ -440,11 +440,10 @@ where
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.start_batch(ctx)
     }
 
@@ -452,11 +451,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.retry_start_batch(ctx, retry)
     }
 
@@ -464,11 +462,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<(Self::BatchID, Option<Self::PullStreams>),
-                         Self::StartBatchRetry>,
+    ) -> (Result<
+        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.complete_start_batch(ctx, err)
     }
 
@@ -527,14 +524,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Stream::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >
+    >, Option<Stream::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -546,14 +543,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Stream::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
+    >, Option<Stream::PullStreams>) {
         self.stream.retry_select(ctx, selections, retry)
     }
 
@@ -562,14 +559,14 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Vec<Self::PartyID>, Option<Stream::PullStreams>),
+            Vec<Self::PartyID>,
             Self::SelectRetry,
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    > {
+    >, Option<Stream::PullStreams>) {
         self.stream.complete_select(ctx, selections, err)
     }
 
@@ -617,14 +614,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >
+    >, Option<Self::PullStreams>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -635,14 +632,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.retry_start_batch(ctx, retry)
     }
 
@@ -650,14 +647,14 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Self::BatchID, Option<Self::PullStreams>),
+            Self::BatchID,
             Self::StartBatchRetry,
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.complete_start_batch(ctx, err)
     }
 
@@ -694,14 +691,14 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.push_frags(ctx, id, frags)
     }
 
@@ -711,14 +708,14 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.retry_push_frags(ctx, id, frags, retry)
     }
 
@@ -728,14 +725,14 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushFragRetry,
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.complete_push_frags(ctx, id, frags, err)
     }
 }
@@ -753,14 +750,14 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.push_offer(ctx, hash, frags)
     }
 
@@ -770,14 +767,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.retry_push_offer(ctx, hash, frags, retry)
     }
 
@@ -787,14 +784,14 @@ where
         hash: H,
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> Result<
+    ) -> (Result<
         RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<Self::PullStreams>),
+            (Option<Instant>, Self::Parties),
             Self::PushOfferRetry,
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    > {
+    >, Option<Self::PullStreams>) {
         self.stream.complete_push_offer(ctx, hash, frags, err)
     }
 }
