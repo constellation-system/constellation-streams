@@ -561,10 +561,10 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
     + PullStreamsOutput {
     /// Type of errors that can occur when selecting streams for a new
     /// batch.
-    type SelectError: RecoverableError;
+    type SelectError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Debug;
+    type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
@@ -572,7 +572,7 @@ pub trait PushStreamShared<Ctx>: PushStream<Ctx>
     /// Type of errors that can occur when creating a new batch.
     type StartBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
-    type StartBatchRetry: RetryWhen + Debug;
+    type StartBatchRetry: RetryWhen + Clone + Debug;
     /// Type of information given by a [RetryResult] for aborting a
     /// batch creation.
     type AbortBatchRetry: RetryWhen + Clone + Debug;
@@ -831,7 +831,7 @@ pub trait PushStreamPrivate<Ctx>: PushStream<Ctx> + PullStreamsOutput {
     type SelectError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for selecting
     /// streams for a new batch.
-    type SelectRetry: RetryWhen + Debug;
+    type SelectRetry: RetryWhen + Clone + Debug;
     /// Type of errors that can occur when creating a new batch.
     type CreateBatchError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for creating a new batch.
@@ -1050,7 +1050,7 @@ pub trait LargeObjStream<Ctx>: PullStreamsOutput {
     type PushFragError: RecoverableError;
     /// Type of information given by a [RetryResult] for sending a
     /// single message.
-    type PushFragRetry: RetryWhen;
+    type PushFragRetry: RetryWhen + Clone + Debug;
     /// Type of outbound fragment structures.
     type Frags: Frags;
     type Parties;
@@ -1107,7 +1107,7 @@ where
     type PushOfferError: RecoverableError + Debug;
     /// Type of information given by a [RetryResult] for sending an
     /// offer.
-    type PushOfferRetry: RetryWhen + Debug;
+    type PushOfferRetry: RetryWhen + Clone + Debug;
 
     fn push_offer(
         &mut self,
@@ -1424,14 +1424,21 @@ pub struct PassthruReporter<Addr, Prin, Stream> {
     addr: PhantomData<Addr>
 }
 
-pub struct NullPullStreams;
+pub struct NullPullStreams<T>(PhantomData<T>);
 
-impl IntoIterator for NullPullStreams {
-    type Item = ();
-    type IntoIter = Empty<()>;
+impl<T> Default for NullPullStreams<T> {
+    #[inline]
+    fn default() -> Self {
+        NullPullStreams(PhantomData)
+    }
+}
+
+impl<T> IntoIterator for NullPullStreams<T> {
+    type Item = T;
+    type IntoIter = Empty<T>;
 
     #[inline]
-    fn into_iter(self) -> Empty<()> {
+    fn into_iter(self) -> Empty<T> {
         empty()
     }
 }

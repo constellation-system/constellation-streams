@@ -17,7 +17,6 @@
 // <https://www.gnu.org/licenses/>.
 
 //! Raw protocol state machines.
-use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io::Read;

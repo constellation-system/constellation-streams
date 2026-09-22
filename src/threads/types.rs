@@ -384,7 +384,7 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             StreamID<Self::Addr, Self::ChannelID, Self::ChannelParam>,
             Self::AuthNChan,
             ReportStreamError = Self::ReportStreamError
-        > + PullStreamsOutput<PullStreams = NullPullStreams>;
+        > + PullStreamsOutput;
     type Msgs: Send;
     type RecvError: Debug + Display + ScopedError;
     type Recv: AuthNMsgRecv<Self::MsgPrin, Self::AuthNMsg, RecvError = Self::RecvError>;
@@ -4055,6 +4055,7 @@ where
         Ctx::Stream,
         Ctx
     >;
+    type PullStreams = NullPullStreams<()>;
 }
 
 impl<Epochs, H, Resolve, Ctx> PrivateLargeObjPushModeTypes<Ctx>
@@ -4181,6 +4182,10 @@ where
     >;
     type StreamFlags = <Ctx::Stream as PushStream<Ctx>>::StreamFlags;
     type Stream = StreamSelector<Epochs, Resolve, Ctx>;
+    type PullStreams = SelectedPullStreams<
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+        Ctx::Stream
+    >;
 }
 
 impl<Party, Epochs, H, Resolve, Ctx> SharedLargeObjPushModeTypes<Ctx>
@@ -4509,6 +4514,12 @@ where
         StreamSelector<Epochs, Resolve, Ctx>,
         Ctx
     >;
+    type PullStreams = StreamMulticastPullStreams<
+        SelectedPullStreams<
+            StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+            Ctx::Stream
+        >
+    >;
 }
 
 impl<
@@ -4623,6 +4634,10 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
+    type PullStreams = SelectedPullStreams<
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream
+    >;
     type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type Recv = Recv;
     type RecvError = Recv::RecvError;
@@ -4789,6 +4804,10 @@ where
             PollThreadCtx<Types::SessionPrin, Chans, Ctx>
         >>::Frags,
         Types
+    >;
+    type PullStreams = SelectedPullStreams<
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Chans::Stream
     >;
     type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
     type Recv = Types::Recv;
@@ -5267,6 +5286,12 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
+    type PullStreams = StreamMulticastPullStreams<
+        SelectedPullStreams<
+            StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+            Chans::Stream
+        >
+    >;
     type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type Recv = Recv;
     type RecvError = Recv::RecvError;
@@ -5282,7 +5307,7 @@ where
     >;
     type RefreshPermanentError = ErrorSet<
         MulticastStreamIdx,
-        (),
+        RetryResult<Option<Instant>, Instant>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
     type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;
@@ -5480,6 +5505,12 @@ where
         >,
         Types
     >;
+    type PullStreams = StreamMulticastPullStreams<
+        SelectedPullStreams<
+            StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+            Chans::Stream
+        >
+    >;
     type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
     type Recv = Types::Recv;
     type RecvError =
@@ -5496,7 +5527,7 @@ where
     >;
     type RefreshPermanentError = ErrorSet<
         MulticastStreamIdx,
-        (),
+        RetryResult<Option<Instant>, Instant>,
         ThreadedStreamSelectorError<Resolve::AddrsError, Chans::ParamsError>
     >;
     type RefreshRetry = Vec<RetryResult<Option<Instant>, Instant>>;

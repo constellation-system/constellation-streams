@@ -152,7 +152,7 @@ where
 }
 
 /// Errors that can occur while canceling a push operation.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum StreamMulticasterCancelPushError<Cancel, Flags, BatchID> {
     /// Error while canceling the push.
     Cancel {
@@ -167,7 +167,7 @@ pub enum StreamMulticasterCancelPushError<Cancel, Flags, BatchID> {
 
 /// Errors that can occur in a complete
 /// [start_batch](PushStreamShared::start_batch) implementation.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum StreamMulticasterStartError<Select, Create, Selections, Batches> {
     /// Error occurred while selecting streams for the batch.
     Select {
@@ -1040,14 +1040,10 @@ where
         &mut self,
         ctx: &mut Ctx,
         flags: &mut <Self as PushStream<Ctx>>::StreamFlags,
-        retries: &mut Option<
-            Vec<
-                StreamMulticasterAbortRetry<
-                    Stream::BatchID,
-                    Stream::CancelBatchRetry
-                >
-            >
-        >,
+        retries: &mut LazyInitVec<StreamMulticasterAbortRetry<
+            Stream::BatchID,
+            Stream::CancelBatchRetry
+        >>,
         idx: MulticastStreamIdx,
         len: usize,
         batch_id: Stream::BatchID,
@@ -1065,25 +1061,12 @@ where
                 .stream
                 .complete_cancel_batch(ctx, flags, &batch_id, complete)
             {
-                Ok(val) => val.app_retry(|retry| match retries {
-                    Some(retries) => {
-                        retries.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        });
-
-                        *retries = Some(vec)
-                    }
+                Ok(val) => val.app_retry(|retry| {
+                    retries.push(StreamMulticasterAbortRetry {
+                        idx: idx,
+                        batch: batch_id,
+                        retry: retry
+                    })
                 }),
                 Err(err) => self.complete_abort(
                     ctx, flags, retries, idx, len, batch_id, err
@@ -1337,7 +1320,7 @@ where
 
                 for (id, res) in elems.into_iter() {
                     match res {
-                        RetryIndefResult::Success(streams) => {
+                        RetryIndefResult::Success(()) => {
                             all_indef = false;
                             results.push(RetryResult::Success(()));
                             ids.push(id);
@@ -2383,7 +2366,7 @@ where
     type SelectError = SelectionsError<
         ErrorSet<
             MulticastStreamIdx,
-            RetryIndefResult<Option<Stream::PullStreams>, Stream::SelectRetry>,
+            RetryIndefResult<(), Stream::SelectRetry>,
             Stream::SelectError
         >,
         usize
@@ -2394,13 +2377,13 @@ where
         Self::SelectError,
         Self::CreateBatchError,
         Self::Selections,
-        Self::StartBatchStreamBatches,
+        Self::StartBatchStreamBatches
     >;
     type StartBatchRetry = StreamMulticasterStartError<
         Self::SelectRetry,
         Self::CreateBatchRetry,
         Self::Selections,
-        Self::StartBatchStreamBatches,
+        Self::StartBatchStreamBatches
     >;
     type StartBatchStreamBatches = Stream::StartBatchStreamBatches;
 
@@ -3028,15 +3011,8 @@ where
         } = err
         {
             let (results, _) = err.take();
-            let mut retries: Option<
-                Vec<
-                    StreamMulticasterAbortRetry<
-                        Stream::BatchID,
-                        Stream::CancelBatchRetry
-                    >
-                >
-            > = None;
             let len = results.len();
+            let mut retries = LazyInitVec::new(len);
 
             for (idx, result) in results {
                 let i: usize = idx.clone().into();
@@ -3046,25 +3022,12 @@ where
                         .stream
                         .cancel_batch(ctx, flags, &batch_id)
                     {
-                        Ok(val) => val.app_retry(|retry| match &mut retries {
-                            Some(retries) => {
-                                retries.push(StreamMulticasterAbortRetry {
-                                    idx: idx,
-                                    batch: batch_id,
-                                    retry: retry
-                                })
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push(StreamMulticasterAbortRetry {
-                                    idx: idx,
-                                    batch: batch_id,
-                                    retry: retry
-                                });
-
-                                retries = Some(vec)
-                            }
+                        Ok(val) => val.app_retry(|retry| {
+                            retries.push(StreamMulticasterAbortRetry {
+                                idx: idx,
+                                batch: batch_id,
+                                retry: retry
+                            })
                         }),
                         Err(err) => self.complete_abort(
                             ctx,
@@ -3079,7 +3042,7 @@ where
                 });
             }
 
-            match retries {
+            match retries.take() {
                 Some(retries) => RetryResult::Retry(retries),
                 None => RetryResult::Success(())
             }
@@ -3094,15 +3057,8 @@ where
         flags: &mut Self::StreamFlags,
         retry: Self::AbortBatchRetry
     ) -> RetryResult<(), Self::AbortBatchRetry> {
-        let mut retries: Option<
-            Vec<
-                StreamMulticasterAbortRetry<
-                    Stream::BatchID,
-                    Stream::CancelBatchRetry
-                >
-            >
-        > = None;
         let len = retry.len();
+        let mut retries = LazyInitVec::new(len);
 
         for ent in retry {
             let StreamMulticasterAbortRetry {
@@ -3116,25 +3072,12 @@ where
                 .stream
                 .retry_cancel_batch(ctx, flags, &batch_id, retry)
             {
-                Ok(val) => val.app_retry(|retry| match &mut retries {
-                    Some(retries) => {
-                        retries.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        });
-
-                        retries = Some(vec)
-                    }
+                Ok(val) => val.app_retry(|retry| {
+                    retries.push(StreamMulticasterAbortRetry {
+                        idx: idx,
+                        batch: batch_id,
+                        retry: retry
+                    })
                 }),
                 Err(err) => self.complete_abort(
                     ctx,
@@ -3148,7 +3091,7 @@ where
             }
         }
 
-        match retries {
+        match retries.take() {
             Some(retries) => RetryResult::Retry(retries),
             None => RetryResult::Success(())
         }
@@ -4205,9 +4148,8 @@ where
     }
 }
 
-impl<Select, Create, Selections, Batches, Streams> Debug
-    for StreamMulticasterStartError<Select, Create, Selections,
-                                    Batches, Streams>
+impl<Select, Create, Selections, Batches> Debug
+    for StreamMulticasterStartError<Select, Create, Selections, Batches>
 where
     Select: Debug,
     Create: Debug
@@ -4223,9 +4165,8 @@ where
     }
 }
 
-impl<Select, Create, Selections, Batches, Streams> Display
-    for StreamMulticasterStartError<Select, Create, Selections,
-                                    Batches, Streams>
+impl<Select, Create, Selections, Batches> Display
+    for StreamMulticasterStartError<Select, Create, Selections, Batches>
 where
     Select: Display,
     Create: Display

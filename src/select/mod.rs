@@ -922,7 +922,7 @@ where
             DenseItemID<Epochs::Item>,
             Option<Vec<Ctx::Param>>,
             Option<SelectedStream<
-                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
                 Ctx::Stream
             >>
         )>,
@@ -962,6 +962,9 @@ where
                     Ok(val.flat_map(move |(newstream, refresh, when)| {
                         *stream = newstream.clone();
 
+                        let (addr, channel_id, param) = stream_id.take();
+                        let channel_id = channel_id.channel;
+                        let stream_id = StreamID::new(addr, channel_id, param);
                         let newstream = newstream
                             .map(|stream| SelectedStream::New {
                                 stream: stream.clone(),
@@ -1008,7 +1011,7 @@ where
             DenseItemID<Epochs::Item>,
             Option<Vec<Ctx::Param>>,
             Option<SelectedStream<
-                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
                 Ctx::Stream
             >>
         )>,
@@ -1555,13 +1558,13 @@ where
     /// [refresh](StreamSelector::refresh).  Then, the scheduler
     /// will be used to select from among the possible streams.  Both
     /// the stream and its dense index will be returned.
-    pub fn select_stream(
+    fn select_stream(
         &mut self,
         ctx: &mut Ctx
     ) -> Result<
         RetryIndefResult<(
             SelectedStream<
-                StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+                StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
                 Ctx::Stream
             >,
             DenseItemID<Epochs::Item>
@@ -2490,7 +2493,7 @@ where
     Resolve::Origin: Clone + Display + Eq + Hash
 {
     type PullStreams = SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >;
 }
@@ -2613,7 +2616,7 @@ where
         Self::SelectError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>)
     where
@@ -2697,7 +2700,7 @@ where
         >,
         Self::SelectError
     >, Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         trace!(target: "stream-selector",
@@ -2762,7 +2765,7 @@ where
         Self::SelectError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>)  {
         trace!(target: "stream-selector",
@@ -2919,7 +2922,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>)
     where
@@ -3000,7 +3003,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -3060,7 +3063,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {
@@ -3280,7 +3283,7 @@ where
         >,
         Self::SelectError
     >, Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         trace!(target: "stream-selector",
@@ -3359,7 +3362,7 @@ where
         >,
         Self::SelectError
     >, Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         trace!(target: "stream-selector",
@@ -3422,7 +3425,7 @@ where
         >,
         Self::SelectError
     >, Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         trace!(target: "stream-selector",
@@ -3577,7 +3580,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         // Try to select a stream.
@@ -3654,7 +3657,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -3711,7 +3714,7 @@ where
         Self::StartBatchError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {
@@ -3882,7 +3885,7 @@ where
         Self::PushFragError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match self.select_stream(ctx)
@@ -3954,7 +3957,7 @@ where
         Self::PushFragError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -4009,7 +4012,7 @@ where
         Self::PushFragError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {
@@ -4100,7 +4103,7 @@ where
         Self::PushOfferError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match self.select_stream(ctx)
@@ -4173,7 +4176,7 @@ where
         Self::PushOfferError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -4229,7 +4232,7 @@ where
         Self::PushOfferError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {
@@ -4331,7 +4334,7 @@ where
                  Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match self.select_stream(ctx) {
@@ -4399,7 +4402,7 @@ where
                  Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -4448,7 +4451,7 @@ where
                  Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {
@@ -4686,7 +4689,7 @@ where
         Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>)
     where
@@ -4768,7 +4771,7 @@ where
         Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match retry {
@@ -4825,7 +4828,7 @@ where
         Self::PushError
     >,
     Option<SelectedPullStreams<
-        StreamID<Ctx::Addr, ConnChannelID<Ctx::ChannelID>, Ctx::Param>,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
         Ctx::Stream
     >>) {
         match err {

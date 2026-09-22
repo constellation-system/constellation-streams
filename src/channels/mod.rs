@@ -3958,7 +3958,7 @@ where
     ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
                  Self::PushError>, Option<Self::PullStreams>)
     {
-        match (self, retry) {
+        match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateMatchError::Private { err }

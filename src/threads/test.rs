@@ -280,7 +280,10 @@ impl Create for TestChannelCore {
 }
 
 impl PullStreamsOutput for TestStream {
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<
+        (StreamID<TestEndpoint, String, TestChannelParam>,
+         TestChannel<TestChannelCore>)
+    >;
 }
 
 impl<Chans, Ctx> ShutdownStream<Chans, Ctx> for TestStream
@@ -449,7 +452,10 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         stream: &mut TestStream,
         _live: &HashSet<Token>
     ) -> (Result<PushModeResult, Self::SendError>,
-          Option<Vec<NullPullStreams>>) {
+          Option<Vec<NullPullStreams<
+              (StreamID<TestEndpoint, String, TestChannelParam>,
+             TestChannel<TestChannelCore>)
+          >>>) {
         (self.script.pop().expect("Expected script element")
             .map(|elem| {
                 let next_outbound = self.process_script_elem(stream, elem);
@@ -472,7 +478,10 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         _live: &HashSet<Token>,
         now: Instant
     ) -> (Result<PushModeResult, Self::SendError>,
-          Option<Vec<NullPullStreams>>) {
+          Option<Vec<NullPullStreams<
+              (StreamID<TestEndpoint, String, TestChannelParam>,
+             TestChannel<TestChannelCore>)
+          >>>) {
         let mut curr = None;
         let retries: Vec<_> = self.retries.drain(..).collect();
         let mut errs = Vec::new();
@@ -515,7 +524,10 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         stream: &mut TestStream,
         _live: &HashSet<Token>
     ) -> (Result<PushModeResult, Self::SendError>,
-          Option<Vec<NullPullStreams>>) {
+          Option<Vec<NullPullStreams<
+              (StreamID<TestEndpoint, String, TestChannelParam>,
+             TestChannel<TestChannelCore>)
+          >>>) {
         let mut curr = None;
         let completes: Vec<_> = self.completes.drain(..).collect();
         let mut errs = Vec::new();
@@ -552,7 +564,10 @@ impl<Ctx> PushMode<TestStream, (), Ctx> for TestPushMode {
         _msgs: &mut (),
         stream: &mut TestStream
     ) -> (Result<PushModeResult, Self::SendError>,
-          Option<Vec<NullPullStreams>>) {
+          Option<Vec<NullPullStreams<
+              (StreamID<TestEndpoint, String, TestChannelParam>,
+             TestChannel<TestChannelCore>)
+          >>>) {
         let mut curr = None;
         let indefs: Vec<_> = self.indefs.drain(..).collect();
         let mut errs = Vec::new();
@@ -624,7 +639,10 @@ where
     type MsgAuthError = Infallible;
     type MsgPrin = NullCred;
     type Msgs = ();
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<
+        (StreamID<TestEndpoint, String, TestChannelParam>,
+         TestChannel<TestChannelCore>)
+    >;
     type PullError = TestError;
     type Recv = TestRecv;
     type RecvError = Infallible;

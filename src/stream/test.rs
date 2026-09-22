@@ -311,7 +311,7 @@ where
     type PushOfferError = TestError<TestIndefAction<Option<Instant>>>;
     type PushOfferErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
     type StartBatchError = TestStartBatchError<
         TestError<TestIndefAction<()>>,
         TestBatchError<TestAction<()>>,
@@ -347,7 +347,7 @@ where
     type Parties = Vec<usize>;
     type PartiesError = Infallible;
     type PartyID = usize;
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
     type PushFragError = TestError<TestIndefAction<Option<Instant>>>;
     type PushFragErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
@@ -1289,7 +1289,7 @@ impl<In, Out, H> PullStreamsOutput for TestPrivateStream<In, Out, H>
 where
     Out: Clone,
     H: HashID {
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
 }
 
 impl<Ctx, In, Out, H> PushStreamPrivate<Ctx> for TestPrivateStream<In, Out, H>
@@ -1317,7 +1317,7 @@ where
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
     ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>) {
+                 Self::SelectError>, Option<NullPullStreams<()>>) {
         (self.script
             .try_borrow_mut()
             .expect("try_borrow failed")
@@ -1334,7 +1334,7 @@ where
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
     ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>) {
+                 Self::SelectError>, Option<NullPullStreams<()>>) {
         self.select(ctx, selections)
     }
 
@@ -1344,7 +1344,7 @@ where
         _selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>) {
+                 Self::SelectError>, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefAction::Success { .. } => {
                 (Ok(RetryIndefResult::Success(())), None)
@@ -1433,7 +1433,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         let (res, chans) = self.select(ctx, &mut ());
         let res = res
             .map_err(|err| TestStartBatchError::Select {
@@ -1499,7 +1499,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             TestStartBatchRetry::Select { retry, .. } => {
                 let (res, chans) = self.retry_select(ctx, &mut (), retry);
@@ -1603,7 +1603,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             TestStartBatchError::Select { err, .. } => {
                 let (res, chans) = self.complete_select(ctx, &mut (), err);
@@ -1832,7 +1832,7 @@ impl<In, Out, H> PullStreamsOutput for TestSharedStream<In, Out, H>
 where
     Out: Clone,
     H: HashID {
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
 }
 
 impl<Ctx, In, Out, H> PushStreamShared<Ctx> for TestSharedStream<In, Out, H>
@@ -1887,7 +1887,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>)
+    >, Option<NullPullStreams<()>>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -1960,7 +1960,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         self.select(ctx, selections, retry.parties.iter())
     }
 
@@ -1976,7 +1976,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefPartiesAction::Success { parties } => {
                 *selections = parties.clone();
@@ -2079,7 +2079,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>)
+    >, Option<NullPullStreams<()>>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -2153,7 +2153,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             TestStartBatchRetry::Select {
                 retry,
@@ -2265,7 +2265,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             TestStartBatchError::Select {
                 err,
@@ -2442,7 +2442,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2476,7 +2476,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         self.push_frags(ctx, id, frags)
     }
 
@@ -2493,7 +2493,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.frags
@@ -2535,7 +2535,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2579,7 +2579,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         self.push_frags(ctx, id, frags)
     }
 
@@ -2596,7 +2596,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.frags
@@ -2731,7 +2731,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2765,7 +2765,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         self.push_offer(ctx, hash, frags)
     }
 
@@ -2782,7 +2782,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.offers
@@ -2823,7 +2823,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2867,7 +2867,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         self.push_offer(ctx, hash, frags)
     }
 
@@ -2884,7 +2884,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.offers

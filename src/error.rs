@@ -126,6 +126,7 @@ where
 impl<Inner, Info> RecoverableError for SelectionsError<Inner, Info>
 where
     Inner: RecoverableError,
+    Info: Debug
 {
     type Completable = Inner::Completable;
     type Permanent = SelectionsError<Inner::Permanent, Info>;
@@ -223,6 +224,7 @@ where
 impl<Idx, Success, Err> ScopedError for CompoundBatchError<Idx, Success, Err>
 where
     Err: ScopedError,
+    Success: Clone,
     Idx: Clone + Display
 {
     fn scope(&self) -> ErrorScope {
@@ -237,10 +239,11 @@ impl<Idx, Success, Err> RecoverableError
     for CompoundBatchError<Idx, Success, Err>
 where
     Err: RecoverableError,
+    Success: Clone + Debug,
     Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
-    type Permanent = CompoundBatchError<Idx, (), Err::Permanent>;
+    type Permanent = CompoundBatchError<Idx, Success, Err::Permanent>;
 
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         match self {
@@ -263,6 +266,7 @@ where
 impl<Idx, Success, Err> ScopedError for ErrorSet<Idx, Success, Err>
 where
     Err: ScopedError,
+    Success: Clone,
     Idx: Clone + Display
 {
     fn scope(&self) -> ErrorScope {
@@ -279,10 +283,11 @@ where
 impl<Idx, Success, Err> RecoverableError for ErrorSet<Idx, Success, Err>
 where
     Err: RecoverableError,
+    Success: Clone + Debug,
     Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
-    type Permanent = ErrorSet<Idx, (), Err::Permanent>;
+    type Permanent = ErrorSet<Idx, Success, Err::Permanent>;
 
     #[inline]
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
@@ -304,11 +309,11 @@ where
         }
 
         let completable = completables.take().map(|completables| ErrorSet {
-            successes: successes,
+            successes: successes.clone(),
             errors: completables
         });
         let permanent = permanents.take().map(|permanents| ErrorSet {
-            successes: vec![],
+            successes: successes,
             errors: permanents
         });
 

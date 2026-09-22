@@ -1062,7 +1062,7 @@ where
     StreamID: Clone + Debug + Display + Eq + Hash,
     Stream: Clone + PushStream<Ctx> + PullStreamsOutput,
 {
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
 }
 
 impl<Epochs, StreamID, Stream, Ctx> PushStreamShared<Ctx>
@@ -1163,7 +1163,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>)
+    >, Option<NullPullStreams<()>>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -1242,7 +1242,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         trace!(target: "dispatch-selector",
                "retrying shared stream selection");
 
@@ -1300,7 +1300,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::SelectError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         trace!(target: "dispatch-selector",
                "completing shared stream selection");
 
@@ -1450,7 +1450,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>)
+    >, Option<NullPullStreams<()>>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -1510,7 +1510,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { parties, .. } => {
@@ -1569,7 +1569,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             SelectorBatchSelectError::Stream {
                 selected,
@@ -1757,7 +1757,7 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections
     ) -> (Result<RetryIndefResult<(),Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>)
+                 Self::SelectError>, Option<NullPullStreams<()>>)
     {
         trace!(target: "dispatch-selector",
                "selecting private stream");
@@ -1828,7 +1828,7 @@ where
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
     ) -> (Result<RetryIndefResult<(),Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>)
+                 Self::SelectError>, Option<NullPullStreams<()>>)
     {
         trace!(target: "dispatch-selector",
                "retrying private stream selection");
@@ -1881,7 +1881,7 @@ where
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
     ) -> (Result<RetryIndefResult<(),Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams>)
+                 Self::SelectError>, Option<NullPullStreams<()>>)
     {
         trace!(target: "dispatch-selector",
                "completing private stream selection");
@@ -2021,7 +2021,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         // Try to select a stream.
         match self.select_stream() {
             // We succeeded, now create a batch on that stream.
@@ -2074,7 +2074,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -2129,7 +2129,7 @@ where
     ) -> (Result<
         RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
         Self::StartBatchError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             SelectorBatchSelectError::Stream {
                 selected,
@@ -2279,7 +2279,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match self
             .select_stream()
             .map_err(|err| SelectorBatchError::Batch {
@@ -2352,7 +2352,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -2408,7 +2408,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushFragError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             SelectorBatchSelectError::Stream {
                 selected,
@@ -2485,7 +2485,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match self
             .select_stream()
             .map_err(|err| SelectorBatchError::Batch {
@@ -2558,7 +2558,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select { .. } => {
@@ -2614,7 +2614,7 @@ where
             Parties<Self::Parties>
         >,
         Self::PushOfferError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             SelectorBatchSelectError::Stream {
                 selected,
@@ -2698,7 +2698,7 @@ where
         ctx: &mut Ctx,
         msg: &Msg
     ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                Self::PushError>, Option<NullPullStreams>)
+                Self::PushError>, Option<NullPullStreams<()>>)
     {
         match self
             .select_stream()
@@ -2768,7 +2768,7 @@ where
         msg: &Msg,
         retry: Self::PushRetry
     ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                 Self::PushError>, Option<NullPullStreams>)
+                 Self::PushError>, Option<NullPullStreams<()>>)
     {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
@@ -2828,7 +2828,7 @@ where
         msg: &Msg,
         err: <Self::PushError as RecoverableError>::Completable
     ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                 Self::PushError>, Option<NullPullStreams>)
+                 Self::PushError>, Option<NullPullStreams<()>>)
     {
         match err {
             SelectorBatchSelectError::Stream {
@@ -3058,7 +3058,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >, Option<NullPullStreams>)
+    >, Option<NullPullStreams<()>>)
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -3141,7 +3141,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match retry {
             // We got a retry in the select phase; just restart the whole thing.
             SelectorBatchSelectError::Select {
@@ -3209,7 +3209,7 @@ where
             Parties<Self::IndefParties>
         >,
         Self::PushError
-    >, Option<NullPullStreams>) {
+    >, Option<NullPullStreams<()>>) {
         match err {
             SelectorBatchSelectError::Select { select, .. } => {
                 error!(target: "dispatch-selector",

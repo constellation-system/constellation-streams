@@ -788,7 +788,11 @@ where
                 &live
             );
 
-            self.register_streams(streams);
+            if let Err(err) = self.register_streams(streams) {
+                error!(target: "poll-thread",
+                       "error registering streams: {}",
+                       err);
+            }
 
             match res {
                 Ok(res) => {
@@ -893,7 +897,11 @@ where
                 now
             );
 
-            self.register_streams(streams);
+            if let Err(err) = self.register_streams(streams) {
+                error!(target: "poll-thread",
+                       "error registering streams: {}",
+                       err);
+            }
 
             match res {
                 Ok(res) => {
@@ -1009,7 +1017,11 @@ where
                             &mut self.stream
                         );
 
-                        self.register_streams(streams);
+                        if let Err(err) = self.register_streams(streams) {
+                            error!(target: "poll-thread",
+                                   "error registering streams: {}",
+                                   err);
+                        }
 
                         match res {
                             Ok(res) => {
@@ -1063,7 +1075,11 @@ where
                                 &mut self.stream
                             );
 
-                            self.register_streams(streams);
+                            if let Err(err) = self.register_streams(streams) {
+                                error!(target: "poll-thread",
+                                       "error registering streams: {}",
+                                       err);
+                            }
 
                             match res {
                                 Ok(res) => {
@@ -1125,7 +1141,11 @@ where
                             &mut self.stream
                         );
 
-                        self.register_streams(streams);
+                        if let Err(err) = self.register_streams(streams) {
+                            error!(target: "poll-thread",
+                                   "error registering streams: {}",
+                                   err);
+                        }
 
                         match res {
                             Ok(res) => {
@@ -1173,7 +1193,11 @@ where
                 &live
             );
 
-            self.register_streams(streams);
+            if let Err(err) = self.register_streams(streams) {
+                error!(target: "poll-thread",
+                       "error registering streams: {}",
+                       err);
+            }
 
             match res {
                 Ok(res) => {
