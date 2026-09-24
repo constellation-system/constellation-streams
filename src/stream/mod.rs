@@ -4224,7 +4224,7 @@ where
     ) -> Result<(), Error> {
         write!(
             f,
-            "to {} over {} ({})",
+            "{} over {} ({})",
             self.party_addr, self.channel, self.param
         )
     }

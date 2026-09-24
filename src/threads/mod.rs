@@ -22,10 +22,13 @@ use std::collections::BinaryHeap;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::io::Error;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
 
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryWhen;
@@ -508,40 +511,50 @@ where
         self,
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
+        proto: &mut Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>>>
     ) -> (Result<
         RetryIndefResult<
             (Option<Instant>, Stream::Parties),
             Self,
             Parties<Stream::Parties>
         >,
-        LargeObjPushError<
+        WithMutexPoison<LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
             Stream::PushOfferError
-        >
+        >>
     >, Option<Stream::PullStreams>)
     where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         match self {
-            LargeObjEntry::PushFrags { id, retry } => match proto
-                .retry_push_frags(ctx, stream, id.clone(), retry) {
-                (Ok(res), chans) => (Ok(res
-                    .map_retry(|retry| LargeObjEntry::PushFrags {
-                        retry: retry,
-                        id: id
-                    })), chans),
-                (Err(res), chans) => (Err(res), chans)
+            LargeObjEntry::PushFrags { id, retry } => match proto.lock() {
+                Ok(mut guard) => match guard
+                    .retry_push_frags(ctx, stream, id.clone(), retry) {
+                    (Ok(res), chans) => (Ok(res
+                        .map_retry(|retry| LargeObjEntry::PushFrags {
+                            retry: retry,
+                            id: id
+                        })), chans),
+                    (Err(err), chans) => (Err(WithMutexPoison::Inner {
+                        err: err
+                    }), chans)
+                }
+                Err(_) => (Err(WithMutexPoison::MutexPoison), None)
             }
-            LargeObjEntry::PushOffer { hash, retry } => match proto
-                .retry_push_offer(ctx, stream, hash.clone(), retry) {
-                (Ok(res), chans) => (Ok(res
-                    .map_retry(|retry| LargeObjEntry::PushOffer {
-                        retry: retry,
-                        hash: hash
-                    })), chans),
-                (Err(res), chans) => (Err(res), chans)
+            LargeObjEntry::PushOffer { hash, retry } => match proto.lock() {
+                Ok(mut guard) => match guard
+                    .retry_push_offer(ctx, stream, hash.clone(), retry) {
+                        (Ok(res), chans) => (Ok(res
+                            .map_retry(|retry| LargeObjEntry::PushOffer {
+                                retry: retry,
+                                hash: hash
+                            })), chans),
+                        (Err(err), chans) => (Err(WithMutexPoison::Inner {
+                            err: err
+                        }), chans)
+                    }
+                Err(_) => (Err(WithMutexPoison::MutexPoison), None)
             }
         }
     }
@@ -549,7 +562,7 @@ where
     pub(crate) fn complete_send<InMsg, OutMsg, PartyID, Types>(
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>,
+        proto: &mut Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>>>,
         err: FragsOrOffer<
             H::HashID,
             <Stream::PushFragError as RecoverableError>::Completable,
@@ -561,35 +574,45 @@ where
             Self,
             Parties<Stream::Parties>
         >,
-        LargeObjPushError<
+        WithMutexPoison<LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
             Stream::PushOfferError
-        >
+        >>
     >, Option<Stream::PullStreams>)
     where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
         match err {
-            FragsOrOffer::Frags { err, id } => match proto
-                .complete_push_frags(ctx, stream, id.clone(), err) {
-                (Ok(res), chans) => (Ok(res
-                    .map(|(when, parties)| (when, Some(parties)))
-                    .map_retry(|retry| LargeObjEntry::PushFrags {
-                        retry: retry,
-                        id: id
-                    })), chans),
-                (Err(res), chans) => (Err(res), chans)
+            FragsOrOffer::Frags { err, id } => match proto.lock() {
+                Ok(mut guard) => match guard
+                    .complete_push_frags(ctx, stream, id.clone(), err) {
+                    (Ok(res), chans) => (Ok(res
+                        .map(|(when, parties)| (when, Some(parties)))
+                        .map_retry(|retry| LargeObjEntry::PushFrags {
+                            retry: retry,
+                            id: id
+                        })), chans),
+                    (Err(err), chans) => (Err(WithMutexPoison::Inner {
+                        err: err
+                    }), chans)
+                }
+                Err(_) => (Err(WithMutexPoison::MutexPoison), None)
             }
-            FragsOrOffer::Offer { err, hash } => match proto
-                .complete_push_offer(ctx, stream, hash.clone(), err) {
-                (Ok(res), chans) => (Ok(res
-                    .map(|(when, parties)| (when, Some(parties)))
-                .map_retry(|retry| LargeObjEntry::PushOffer {
-                    retry: retry,
-                    hash: hash
-                })), chans),
-                (Err(res), chans) => (Err(res), chans)
+            FragsOrOffer::Offer { err, hash } => match proto.lock() {
+                Ok(mut guard) => match guard
+                    .complete_push_offer(ctx, stream, hash.clone(), err) {
+                    (Ok(res), chans) => (Ok(res
+                        .map(|(when, parties)| (when, Some(parties)))
+                    .map_retry(|retry| LargeObjEntry::PushOffer {
+                        retry: retry,
+                        hash: hash
+                    })), chans),
+                    (Err(err), chans) => (Err(WithMutexPoison::Inner {
+                        err: err
+                    }), chans)
+                }
+                Err(_) => (Err(WithMutexPoison::MutexPoison), None)
             }
         }
     }
@@ -597,43 +620,49 @@ where
     pub(crate) fn try_send<InMsg, OutMsg, PartyID, Types>(
         ctx: &mut Ctx,
         stream: &mut Stream,
-        proto: &mut LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>
+        proto: &mut Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, Stream::Frags, Types>>>,
     ) -> (Result<
         RetryIndefResult<
             (Option<Instant>, Option<Stream::Parties>),
             Self,
             Parties<Stream::Parties>
         >,
-        LargeObjPushError<
+        WithMutexPoison<LargeObjPushError<
             H::HashID,
             Stream::PushFragError,
             Stream::PushOfferError
-        >
+        >>
     >, Option<Stream::PullStreams>)
     where
         Types: LargeObjProtoTypes<InMsg, OutMsg, Hash = H, HashID = H::HashID>,
         PartyID: Clone {
-        match proto.try_push(ctx, stream, Instant::now()) {
-            (Ok(res), chans) => (Ok(res
-                .map(|(when, parties)| (when, Some(parties)))
-                .flat_map_retry(|retry| match retry {
-                    LargeObjPushRetry::Frags { retry, id } => {
-                        RetryIndefResult::Retry(LargeObjEntry::PushFrags {
-                            retry: retry,
-                            id: id
-                        })
-                    }
-                    LargeObjPushRetry::Offer { retry, hash } => {
-                        RetryIndefResult::Retry(LargeObjEntry::PushOffer {
-                            retry: retry,
-                            hash: hash
-                        })
-                    }
-                    LargeObjPushRetry::Retry { when } => {
-                        RetryIndefResult::Success((Some(when), None))
-                    }
-                })), chans),
-            (Err(res), chans) => (Err(res), chans)
+        match proto.lock() {
+            Ok(mut guard) => match guard
+                .try_push(ctx, stream, Instant::now()) {
+                (Ok(res), chans) => (Ok(res
+                    .map(|(when, parties)| (when, Some(parties)))
+                    .flat_map_retry(|retry| match retry {
+                        LargeObjPushRetry::Frags { retry, id } => {
+                            RetryIndefResult::Retry(LargeObjEntry::PushFrags {
+                                retry: retry,
+                                id: id
+                            })
+                        }
+                        LargeObjPushRetry::Offer { retry, hash } => {
+                            RetryIndefResult::Retry(LargeObjEntry::PushOffer {
+                                retry: retry,
+                                hash: hash
+                            })
+                        }
+                        LargeObjPushRetry::Retry { when } => {
+                            RetryIndefResult::Success((Some(when), None))
+                        }
+                    })), chans),
+                (Err(err), chans) => (Err(WithMutexPoison::Inner {
+                    err: err
+                }), chans)
+            }
+            Err(_) => (Err(WithMutexPoison::MutexPoison), None)
         }
     }
 }

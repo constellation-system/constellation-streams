@@ -19,6 +19,7 @@
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -111,18 +112,23 @@ where
 }
 
 pub trait MsgsWaker {
+    type Error: Debug + Display;
+
     fn set_waker(
         &mut self,
         waker: Arc<Waker>
-    );
+    ) -> Result<(), Self::Error>;
 }
 
 impl MsgsWaker for () {
+    type Error = Infallible;
+
     #[inline]
     fn set_waker(
         &mut self,
         _waker: Arc<Waker>
-    ) {
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
@@ -232,12 +238,13 @@ where
 }
 
 #[derive(Debug)]
-pub enum PollThreadCreateError<Mode, Channels, Stream, AuthN> {
+pub enum PollThreadCreateError<Mode, Channels, Stream, AuthN, Notify> {
     IO { err: Error },
     Mode { err: Mode },
     Channels { err: Channels },
     Stream { err: Stream },
-    AuthN { err: AuthN }
+    AuthN { err: AuthN },
+    Notify { err: Notify }
 }
 
 #[derive(Debug)]
@@ -296,7 +303,8 @@ where
             Types::ModeCreateError,
             Types::ChansCreateError,
             Types::StreamCreateError,
-            Types::MsgAuthCreateError
+            Types::MsgAuthCreateError,
+            Types::MsgsSetNotifyError
         >
     > {
         let (
@@ -328,7 +336,8 @@ where
         let notify = Arc::new(notify);
         let shutdown = ShutdownFlag::new(notify.clone());
 
-        msgs.set_waker(notify.clone());
+        msgs.set_waker(notify.clone())
+            .map_err(|err| PollThreadCreateError::Notify { err: err })?;
 
         Ok(PollThread {
             pull_streams: pull_streams,
@@ -1531,13 +1540,14 @@ where
     }
 }
 
-impl<Mode, Channels, Stream, AuthN> Display
-    for PollThreadCreateError<Mode, Channels, Stream, AuthN>
+impl<Mode, Channels, Stream, AuthN, Notify> Display
+    for PollThreadCreateError<Mode, Channels, Stream, AuthN, Notify>
 where
     Channels: Display,
     Mode: Display,
     Stream: Display,
-    AuthN: Display
+    AuthN: Display,
+    Notify: Display
 {
     fn fmt(
         &self,
@@ -1546,6 +1556,7 @@ where
         match self {
             PollThreadCreateError::IO { err } => write!(f, "{}", err),
             PollThreadCreateError::Channels { err } => err.fmt(f),
+            PollThreadCreateError::Notify { err } => err.fmt(f),
             PollThreadCreateError::Stream { err } => err.fmt(f),
             PollThreadCreateError::AuthN { err } => err.fmt(f),
             PollThreadCreateError::Mode { err } => err.fmt(f)

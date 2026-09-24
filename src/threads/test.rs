@@ -201,11 +201,14 @@ impl Create for TestDispatch {
 }
 
 impl MsgsWaker for TestRecv {
+    type Error = Infallible;
+
     #[inline]
     fn set_waker(
         &mut self,
         _waker: Arc<Waker>
-    ) {
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
@@ -638,6 +641,7 @@ where
     type MsgAuthCreateError = Infallible;
     type MsgAuthError = Infallible;
     type MsgPrin = NullCred;
+    type MsgsSetNotifyError = Infallible;
     type Msgs = ();
     type PullStreams = NullPullStreams<
         (StreamID<TestEndpoint, String, TestChannelParam>,

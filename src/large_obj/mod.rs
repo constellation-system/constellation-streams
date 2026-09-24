@@ -49,6 +49,7 @@ use constellation_common::codec::per::PERCodec;
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashAlgo;
@@ -368,7 +369,7 @@ where
     // XXX Replace this with a map from parties to frags parameters
     ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
-    notify: Notify,
+    notify: Option<Notify>,
     upstream: Types::Recv,
     msgs: Types::Msgs,
     retry: Retry,
@@ -485,6 +486,12 @@ pub enum LargeObjMsgDecodeError {
 pub enum LargeObjDataError {
     Frags { err: OutboundDataError },
     OutOfBounds
+}
+
+#[derive(Debug)]
+pub enum RegisterNotifyError<Inner> {
+    Inner { err: Inner },
+    Collision
 }
 
 pub enum FragsOrOffer<HashID, Frags, Offer> {
@@ -736,12 +743,45 @@ where
     PartyID: Clone + Eq + Hash,
     F: Frags
 {
+    type Error = RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>;
+
     #[inline]
     fn set_waker(
         &mut self,
         waker: Arc<Waker>
-    ) {
-        self.msgs.set_waker(waker)
+    ) -> Result<(), Self::Error> {
+        if self.notify.is_none() {
+            self.notify = Some(Notify::new(waker.clone()));
+
+            self.msgs.set_waker(waker)
+                .map_err(|err| RegisterNotifyError::Inner { err: err })
+        } else {
+            Err(RegisterNotifyError::Collision)
+        }
+    }
+}
+
+impl<InMsg, OutMsg, PartyID, F, Types> MsgsWaker
+    for Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, F, Types>>>
+where
+    Types: LargeObjProtoTypes<InMsg, OutMsg>,
+    Types::Msgs: MsgsWaker,
+    PartyID: Clone + Eq + Hash,
+    F: Frags
+{
+    type Error = WithMutexPoison<RegisterNotifyError<
+        <Types::Msgs as MsgsWaker>::Error
+    >>;
+
+    #[inline]
+    fn set_waker(
+        &mut self,
+        waker: Arc<Waker>
+    ) -> Result<(), Self::Error> {
+        self.lock()
+            .map_err(|_| WithMutexPoison::MutexPoison)?
+            .set_waker(waker)
+            .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }
 
@@ -1531,7 +1571,6 @@ where
             Types::DecoderConfig,
             Types::IDsConfig
         >,
-        notify: Notify,
         upstream: Types::Recv,
         msgs: Types::Msgs,
         auth: Types::MsgAuthN,
@@ -1581,7 +1620,7 @@ where
             outbound: outbound,
             parties: parties,
             upstream: upstream,
-            notify: notify,
+            notify: None,
             param: param,
             retry: retry,
             encoder: encoder,
@@ -2277,9 +2316,11 @@ where
         }?;
 
         // Notify, as all cases generate messages.
-        self.notify
-            .notify()
-            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+        if let Some(notify) = &self.notify {
+            notify
+                .notify()
+                .map_err(|_| LargeObjRecvError::MutexPoison)?;
+        }
 
         Ok(out)
     }
@@ -2384,9 +2425,11 @@ where
                     };
 
                     // Notify, as this will generate a finished message.
-                    self.notify
-                        .notify()
-                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
+                    if let Some(notify) = &self.notify {
+                        notify
+                            .notify()
+                            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+                    }
 
                     Ok(data)
                 } else {
@@ -2507,9 +2550,11 @@ where
 
             // Notify, as this could potentially generate new
             // messages.
-            self.notify
-                .notify()
-                .map_err(|_| LargeObjRecvError::MutexPoison)?;
+            if let Some(notify) = &self.notify {
+                notify
+                    .notify()
+                    .map_err(|_| LargeObjRecvError::MutexPoison)?;
+            }
 
             Ok(None)
         } else {
@@ -2568,9 +2613,11 @@ where
 
                     // Notify, as this could potentially generate new
                     // messages.
-                    self.notify
-                        .notify()
-                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
+                    if let Some(notify) = &self.notify {
+                        notify
+                            .notify()
+                            .map_err(|_| LargeObjRecvError::MutexPoison)?;
+                    }
 
                     Ok(None)
                 }
@@ -2867,6 +2914,20 @@ impl ScopedError for LargeObjMsgDecodeError {
     #[inline]
     fn scope(&self) -> ErrorScope {
         ErrorScope::Msg
+    }
+}
+
+impl<Inner> Display for RegisterNotifyError<Inner>
+where Inner: Display {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            RegisterNotifyError::Inner { err } => err.fmt(f),
+            RegisterNotifyError::Collision =>
+                write!(f, "notifier already registered")
+        }
     }
 }
 

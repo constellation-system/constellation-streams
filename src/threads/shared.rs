@@ -23,6 +23,8 @@ use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::iter::IntoIterator;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Instant;
 
 use constellation_auth::authn::MsgAuthNTypes;
@@ -30,6 +32,7 @@ use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::net::SharedMsgs;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
@@ -1777,18 +1780,18 @@ where
         ctx: &mut Ctx,
         stream: &mut Types::Stream,
         chans: &mut LazyInitVec<Types::PullStreams>,
-        proto: &mut LargeObjProto<
+        proto: &mut Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
-        err: LargeObjPushError<
+        >>>,
+        err: WithMutexPoison<LargeObjPushError<
             Types::HashID,
             Types::PushFragError,
             Types::PushOfferError
-        >
+        >>
     ) -> PushModeResult
     where
         LargeObjTypes: LargeObjProtoTypes<
@@ -1994,13 +1997,13 @@ where
 impl<InMsg, OutMsg, LargeObjTypes, Types, Ctx>
     PushMode<
         Types::Stream,
-        LargeObjProto<
+        Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
+        >>>,
         Ctx
     > for SharedLargeObjPushMode<Types, Ctx>
 where
@@ -2020,24 +2023,24 @@ where
             <Types::PushFragError as RecoverableError>::Permanent,
             <Types::PushOfferError as RecoverableError>::Permanent
         >,
-        LargeObjSendError<
+        WithMutexPoison<LargeObjSendError<
             Types::HashID,
             <LargeObjTypes::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
             <LargeObjTypes::Msgs as LargeObjMsgs<Types::Hash, OutMsg>
              >::AddMsgsError<LargeObjTypes::EncodeError>
-        >
+        >>
     >;
 
     fn send_from_outbound(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
+        proto: &mut Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
+        >>>,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
     ) -> (Result<PushModeResult, Self::SendError>,
@@ -2176,13 +2179,13 @@ where
     fn retry_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
+        proto: &mut Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
+        >>>,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>,
         now: Instant
@@ -2368,13 +2371,13 @@ where
     fn complete_pending(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
+        proto: &mut Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
+        >>>,
         stream: &mut Types::Stream,
         _live: &HashSet<Token>
     ) -> (Result<PushModeResult, Self::SendError>,
@@ -2504,13 +2507,13 @@ where
     fn retry_indefs(
         &mut self,
         ctx: &mut Ctx,
-        proto: &mut LargeObjProto<
+        proto: &mut Arc<Mutex<LargeObjProto<
             InMsg,
             OutMsg,
             Types::PartyID,
             Types::Frags,
             LargeObjTypes
-        >,
+        >>>,
         stream: &mut Types::Stream
     ) -> (Result<PushModeResult, Self::SendError>,
           Option<Vec<Types::PullStreams>>) {

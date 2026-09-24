@@ -1045,7 +1045,6 @@ where
             Stream::CancelBatchRetry
         >>,
         idx: MulticastStreamIdx,
-        len: usize,
         batch_id: Stream::BatchID,
         err: Stream::CancelBatchError
     ) {
@@ -1069,7 +1068,7 @@ where
                     })
                 }),
                 Err(err) => self.complete_abort(
-                    ctx, flags, retries, idx, len, batch_id, err
+                    ctx, flags, retries, idx, batch_id, err
                 )
             },
             _ => {
@@ -3034,7 +3033,6 @@ where
                             flags,
                             &mut retries,
                             idx,
-                            len,
                             batch_id,
                             err
                         )
@@ -3084,7 +3082,6 @@ where
                     flags,
                     &mut retries,
                     idx,
-                    len,
                     batch_id,
                     err
                 )
