@@ -1001,13 +1001,13 @@ where
                             }
                         }
                         Err(err) => {
-                            error!(target: "poll-thread",
+                            error!(target: "dispatch-thread",
                                    "error shutting down stream {}: {}",
                                    id, err);
                         }
                     }
                 } else {
-                    error!(target: "poll-thread",
+                    error!(target: "dispatch-thread",
                            "shutdown_retries.pop() should not be None")
                 }
             }
@@ -1188,7 +1188,7 @@ where
                     }
                 }
                 Err(err) => {
-                    error!(target: "poll-thread",
+                    error!(target: "dispatch-thread",
                            "error shutting down stream {}: {}",
                            id, err);
                 }
@@ -1275,7 +1275,7 @@ where
             .name(String::from("dispatch-thread"))
             .spawn(move || match Self::create(config, dispatcher, ctx) {
                 Ok(dispatch) => dispatch.run(),
-                Err(err) => error!(target: "poll-thread",
+                Err(err) => error!(target: "dispatch-thread",
                                        "error creating dispatch thread: {}",
                                        err)
             })
@@ -1636,7 +1636,7 @@ where
             }
 
             if let Some(mut retries) = self.orphan_shutdown_retries.take() {
-                trace!(target: "poll-thread",
+                trace!(target: "dispatch-thread",
                        "retrying shutdowns");
 
                 let nents = retries.len();
@@ -1646,7 +1646,7 @@ where
                     if let Some(ent) = retries.pop() {
                         let (id, retry) = ent.take();
 
-                        trace!(target: "poll-thread",
+                        trace!(target: "dispatch-thread",
                                "retrying shutdown of {}",
                                id);
 
@@ -2251,13 +2251,13 @@ where
                                     }
                                 }
                                 Err(err) => {
-                                    error!(target: "poll-thread",
+                                    error!(target: "dispatch-thread",
                                            "error shutting down stream {}: {}",
                                            id, err);
                                 }
                             }
                         } else {
-                            error!(target: "poll-thread",
+                            error!(target: "dispatch-thread",
                                    "shutdown_retries.pop() should not be None")
                         }
                     }
@@ -2278,7 +2278,7 @@ where
                         channels
                     }),
                     Err(err) => {
-                        error!(target: "poll-thread",
+                        error!(target: "dispatch-thread",
                                "error listening during shutdown: {}",
                                err);
 
@@ -2286,7 +2286,7 @@ where
                     }
                 }
             } else {
-                error!(target: "poll-thread",
+                error!(target: "dispatch-thread",
                        "channels should not be empty here");
 
                 None

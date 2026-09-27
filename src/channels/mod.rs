@@ -1600,25 +1600,31 @@ where
 }
 
 impl<Private, Shared> IntoIterator for SharedPrivateValue<Private, Shared>
-where Private: IntoIterator,
-      Shared: IntoIterator
+where
+    Private: IntoIterator,
+    Shared: IntoIterator
 {
     type IntoIter = SharedPrivateIter<Private::IntoIter, Shared::IntoIter>;
     type Item = SharedPrivateValue<Private::Item, Shared::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            SharedPrivateValue::Private { private } =>
-                SharedPrivateIter::Private { private: private.into_iter() },
-            SharedPrivateValue::Shared { shared } =>
-                SharedPrivateIter::Shared { shared: shared.into_iter() },
+            SharedPrivateValue::Private { private } => {
+                SharedPrivateIter::Private {
+                    private: private.into_iter()
+                }
+            }
+            SharedPrivateValue::Shared { shared } => SharedPrivateIter::Shared {
+                shared: shared.into_iter()
+            }
         }
     }
 }
 
 impl<Private, Shared> Iterator for SharedPrivateIter<Private, Shared>
-where Private: Iterator,
-      Shared: Iterator
+where
+    Private: Iterator,
+    Shared: Iterator
 {
     type Item = SharedPrivateValue<Private::Item, Shared::Item>;
 
@@ -1629,7 +1635,7 @@ where Private: Iterator,
                 .map(|item| SharedPrivateValue::Private { private: item }),
             SharedPrivateIter::Shared { shared } => shared
                 .next()
-                .map(|item| SharedPrivateValue::Shared { shared: item }),
+                .map(|item| SharedPrivateValue::Shared { shared: item })
         }
     }
 
@@ -1643,7 +1649,7 @@ where Private: Iterator,
                 .map(|item| SharedPrivateValue::Private { private: item }),
             SharedPrivateIter::Shared { shared } => shared
                 .nth(n)
-                .map(|item| SharedPrivateValue::Shared { shared: item }),
+                .map(|item| SharedPrivateValue::Shared { shared: item })
         }
     }
 
@@ -1663,14 +1669,16 @@ where Private: Iterator,
 }
 
 impl<Private, Shared> FusedIterator for SharedPrivateIter<Private, Shared>
-where Private: FusedIterator,
-      Shared: FusedIterator
+where
+    Private: FusedIterator,
+    Shared: FusedIterator
 {
 }
 
 impl<Private, Shared> ExactSizeIterator for SharedPrivateIter<Private, Shared>
-where Private: ExactSizeIterator,
-      Shared: ExactSizeIterator
+where
+    Private: ExactSizeIterator,
+    Shared: ExactSizeIterator
 {
     fn len(&self) -> usize {
         match self {
@@ -2646,8 +2654,8 @@ where
     Shared: PullStreamsOutput + PushStreamPartyID,
     Private: PullStreamsOutput
 {
-    type PullStreams = SharedPrivateValue<Private::PullStreams,
-                                          Shared::PullStreams>;
+    type PullStreams =
+        SharedPrivateValue<Private::PullStreams, Shared::PullStreams>;
 }
 
 impl<Private, Shared, Ctx> LargeObjStream<Ctx>
@@ -2669,23 +2677,24 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match self {
             SharedPrivateChannelStream::Shared { stream, .. } => {
                 let (res, streams) = stream.push_frags(ctx, id, frags);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -2702,9 +2711,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -2715,29 +2725,28 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -2751,27 +2760,28 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         retry: Self::PushFragRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_push_frags(ctx, id, frags, retry);
+                let (res, streams) =
+                    stream.retry_push_frags(ctx, id, frags, retry);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -2788,9 +2798,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -2799,35 +2810,34 @@ where
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateStreamRetry::Private { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_push_frags(ctx, id, frags, retry);
+                let (res, streams) =
+                    stream.retry_push_frags(ctx, id, frags, retry);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -2842,27 +2852,28 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateMatchError::Shared { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_push_frags(ctx, id, frags, err);
+                let (res, streams) =
+                    stream.complete_push_frags(ctx, id, frags, err);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -2879,9 +2890,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -2890,35 +2902,34 @@ where
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateMatchError::Private { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_push_frags(ctx, id, frags, err);
+                let (res, streams) =
+                    stream.complete_push_frags(ctx, id, frags, err);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -2951,23 +2962,24 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match self {
             SharedPrivateChannelStream::Shared { stream, .. } => {
                 let (res, streams) = stream.push_offer(ctx, hash, frags);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -2984,9 +2996,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -2997,29 +3010,28 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -3033,27 +3045,28 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retry: Self::PushOfferRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_push_offer(ctx, hash, frags, retry);
+                let (res, streams) =
+                    stream.retry_push_offer(ctx, hash, frags, retry);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -3070,9 +3083,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -3081,35 +3095,34 @@ where
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateStreamRetry::Private { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_push_offer(ctx, hash, frags, retry);
+                let (res, streams) =
+                    stream.retry_push_offer(ctx, hash, frags, retry);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -3124,27 +3137,28 @@ where
         hash: H,
         frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<Self::PullStreams>) {
+        Option<Self::PullStreams>
+    ) {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateMatchError::Shared { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_push_offer(ctx, hash, frags, err);
+                let (res, streams) =
+                    stream.complete_push_offer(ctx, hash, frags, err);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                        .map(|(when, parties)| {
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|(when, parties)| {
                             (
                                 when,
                                 SharedPrivateStreamParties::Shared {
@@ -3161,9 +3175,10 @@ where
                                     parties: parties
                                 }
                             })
-                        }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -3172,35 +3187,34 @@ where
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateMatchError::Private { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_push_offer(ctx, hash, frags, err);
+                let (res, streams) =
+                    stream.complete_push_offer(ctx, hash, frags, err);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map(|(when, parties)| {
-                             (
-                                 when,
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             )
-                         })
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map_indef(|parties| {
-                             parties.map(|parties| {
-                                 SharedPrivateStreamParties::Private {
-                                     parties: parties
-                                 }
-                             })
-                         }));
+                    .map(|res| {
+                        res.map(|(when, parties)| {
+                            (
+                                when,
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            )
+                        })
+                        .map_retry(|retry| SharedPrivateStreamRetry::Private {
+                            retry: retry
+                        })
+                        .map_indef(|parties| {
+                            parties.map(|parties| {
+                                SharedPrivateStreamParties::Private {
+                                    parties: parties
+                                }
+                            })
+                        })
+                    });
                 let streams = streams.map(|streams| {
-                    SharedPrivateValue::Private {
-                        private: streams
-                    }
+                    SharedPrivateValue::Private { private: streams }
                 });
 
                 (res, streams)
@@ -3309,43 +3323,41 @@ where
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                Self::SelectError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<Self::PullStreams>
+    ) {
         match self {
             SharedPrivateChannelStream::Private { stream } => {
-                let (res, streams) = stream
-                    .select(ctx, &mut selections.private);
+                let (res, streams) =
+                    stream.select(ctx, &mut selections.private);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
             SharedPrivateChannelStream::Shared { stream, party } => {
-                let (res, streams) = stream
-                    .select(ctx, &mut selections.shared, once(&*party));
+                let (res, streams) =
+                    stream.select(ctx, &mut selections.shared, once(&*party));
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map(|_| ())
-                         .map_indef(|_| ())
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|_| ()).map_indef(|_| ()).map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -3358,28 +3370,29 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                Self::SelectError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<Self::PullStreams>
+    ) {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateStreamRetry::Private { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_select(ctx, &mut selections.private, retry);
+                let (res, streams) =
+                    stream.retry_select(ctx, &mut selections.private, retry);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3387,20 +3400,17 @@ where
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateStreamRetry::Shared { retry }
             ) => {
-                let (res, streams) = stream
-                    .retry_select(ctx, &mut selections.shared, retry);
+                let (res, streams) =
+                    stream.retry_select(ctx, &mut selections.shared, retry);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map(|_| ())
-                         .map_indef(|_| ())
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|_| ()).map_indef(|_| ()).map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -3414,28 +3424,29 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                Self::SelectError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<Self::PullStreams>
+    ) {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
                 SharedPrivateMatchError::Private { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_select(ctx, &mut selections.private, err);
+                let (res, streams) =
+                    stream.complete_select(ctx, &mut selections.private, err);
                 let res = res
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3443,20 +3454,17 @@ where
                 SharedPrivateChannelStream::Shared { stream, .. },
                 SharedPrivateMatchError::Shared { err }
             ) => {
-                let (res, streams) = stream
-                    .complete_select(ctx, &mut selections.shared, err);
+                let (res, streams) =
+                    stream.complete_select(ctx, &mut selections.shared, err);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map(|_| ())
-                         .map_indef(|_| ())
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         }));
-                let streams = streams.map(|streams| SharedPrivateValue::Shared {
-                    shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map(|_| ()).map_indef(|_| ()).map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                    });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
                 });
 
                 (res, streams)
@@ -3585,10 +3593,13 @@ where
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<Self::PullStreams>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match self {
             SharedPrivateChannelStream::Private { stream } => {
                 let (res, streams) = stream.start_batch(ctx);
@@ -3596,38 +3607,32 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
             SharedPrivateChannelStream::Shared { stream, party } => {
                 let (res, streams) = stream.start_batch(ctx, once(&*party));
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }
@@ -3638,10 +3643,13 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<Self::PullStreams>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -3652,17 +3660,15 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3672,21 +3678,17 @@ where
             ) => {
                 let (res, streams) = stream.retry_start_batch(ctx, retry);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }
@@ -3698,10 +3700,13 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<Self::PullStreams>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -3712,17 +3717,15 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3732,21 +3735,17 @@ where
             ) => {
                 let (res, streams) = stream.complete_start_batch(ctx, err);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }
@@ -3842,9 +3841,13 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &T
-    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                 Self::PushError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::PushRetry>,
+            Self::PushError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match self {
             SharedPrivateChannelStream::Private { stream } => {
                 let (res, streams) = stream.push(ctx, msg);
@@ -3852,38 +3855,32 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
             SharedPrivateChannelStream::Shared { stream, party } => {
                 let (res, streams) = stream.push(ctx, once(&*party), msg);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }
@@ -3895,9 +3892,13 @@ where
         ctx: &mut Ctx,
         msg: &T,
         retry: Self::PushRetry
-    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                 Self::PushError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::PushRetry>,
+            Self::PushError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match (self, retry) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -3908,17 +3909,15 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3928,21 +3927,17 @@ where
             ) => {
                 let (res, streams) = stream.retry_push(ctx, msg, retry);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }
@@ -3955,9 +3950,13 @@ where
         ctx: &mut Ctx,
         msg: &T,
         err: <Self::PushError as RecoverableError>::Completable
-    ) -> (Result<RetryIndefResult<Self::BatchID, Self::PushRetry>,
-                 Self::PushError>, Option<Self::PullStreams>)
-    {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::PushRetry>,
+            Self::PushError
+        >,
+        Option<Self::PullStreams>
+    ) {
         match (self, err) {
             (
                 SharedPrivateChannelStream::Private { stream },
@@ -3968,17 +3967,15 @@ where
                     .map_err(|err| SharedPrivateMatchError::Private {
                         err: err
                     })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Private {
-                             retry: retry
-                         })
-                         .map(|id| SharedPrivateValue::Private {
-                             private: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Private {
-                        private: streams
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Private { retry: retry }
+                        })
+                        .map(|id| SharedPrivateValue::Private { private: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Private { private: streams }
+                });
 
                 (res, streams)
             }
@@ -3988,21 +3985,17 @@ where
             ) => {
                 let (res, streams) = stream.complete_push(ctx, msg, err);
                 let res = res
-                    .map_err(|err| SharedPrivateMatchError::Shared {
-                        err: err
-                    })
-                    .map(|res| res
-                         .map_retry(|retry| SharedPrivateStreamRetry::Shared {
-                             retry: retry
-                         })
-                         .map_indef(|_| ())
-                         .map(|id| SharedPrivateValue::Shared {
-                             shared: id
-                         }));
-                let streams = streams
-                    .map(|streams| SharedPrivateValue::Shared {
-                        shared: streams
+                    .map_err(|err| SharedPrivateMatchError::Shared { err: err })
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            SharedPrivateStreamRetry::Shared { retry: retry }
+                        })
+                        .map_indef(|_| ())
+                        .map(|id| SharedPrivateValue::Shared { shared: id })
                     });
+                let streams = streams.map(|streams| {
+                    SharedPrivateValue::Shared { shared: streams }
+                });
 
                 (res, streams)
             }

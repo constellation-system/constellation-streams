@@ -43,8 +43,8 @@ use crate::large_obj::LargeObjID;
 use crate::large_obj::LargeObjMsg;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
-use crate::stream::Parties;
 use crate::stream::NullPullStreams;
+use crate::stream::Parties;
 use crate::stream::PullStream;
 use crate::stream::PullStreamsOutput;
 use crate::stream::PushStream;
@@ -305,13 +305,13 @@ where
     type Frags = OutboundFrags;
     type Hash = H;
     type HashID = H::HashID;
+    type PullStreams = NullPullStreams<()>;
     type PushFragError = TestError<TestIndefAction<Option<Instant>>>;
     type PushFragErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
     type PushOfferError = TestError<TestIndefAction<Option<Instant>>>;
     type PushOfferErrorCompletable =
         TestCompletableError<TestIndefAction<Option<Instant>>>;
-    type PullStreams = NullPullStreams<()>;
     type StartBatchError = TestStartBatchError<
         TestError<TestIndefAction<()>>,
         TestBatchError<TestAction<()>>,
@@ -1288,7 +1288,8 @@ where
 impl<In, Out, H> PullStreamsOutput for TestPrivateStream<In, Out, H>
 where
     Out: Clone,
-    H: HashID {
+    H: HashID
+{
     type PullStreams = NullPullStreams<()>;
 }
 
@@ -1316,15 +1317,19 @@ where
         &mut self,
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams<()>>) {
-        (self.script
-            .try_borrow_mut()
-            .expect("try_borrow failed")
-            .select
-            .pop()
-            .expect("Expected scripted action"),
-         None)
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<NullPullStreams<()>>
+    ) {
+        (
+            self.script
+                .try_borrow_mut()
+                .expect("try_borrow failed")
+                .select
+                .pop()
+                .expect("Expected scripted action"),
+            None
+        )
     }
 
     #[inline]
@@ -1333,8 +1338,10 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         _retry: Self::SelectRetry
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams<()>>) {
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<NullPullStreams<()>>
+    ) {
         self.select(ctx, selections)
     }
 
@@ -1343,8 +1350,10 @@ where
         _ctx: &mut Ctx,
         _selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> (Result<RetryIndefResult<(), Self::SelectRetry>,
-                 Self::SelectError>, Option<NullPullStreams<()>>) {
+    ) -> (
+        Result<RetryIndefResult<(), Self::SelectRetry>, Self::SelectError>,
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefAction::Success { .. } => {
                 (Ok(RetryIndefResult::Success(())), None)
@@ -1430,10 +1439,13 @@ where
     fn start_batch(
         &mut self,
         ctx: &mut Ctx
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<NullPullStreams<()>>
+    ) {
         let (res, chans) = self.select(ctx, &mut ());
         let res = res
             .map_err(|err| TestStartBatchError::Select {
@@ -1441,51 +1453,48 @@ where
                 err: err
             })
             .and_then(|res| {
-                res
-                    .map_retry(|retry| TestStartBatchRetry::Select {
-                        selections: (),
-                        retry: retry
-                    })
-                    .flat_map_ok(|_| {
-                        Ok(self
-                            .create_batch(ctx, &mut (), &())
-                            .map(RetryIndefResult::from)
-                            .map_err(|err| match err {
-                                TestError::Permanent { err } => {
-                                    let mut batches = self
-                                        .batches
-                                        .try_borrow_mut()
-                                        .expect("try_borrow failed");
-                                    let batch = batches.len();
+                res.map_retry(|retry| TestStartBatchRetry::Select {
+                    selections: (),
+                    retry: retry
+                })
+                .flat_map_ok(|_| {
+                    Ok(self
+                        .create_batch(ctx, &mut (), &())
+                        .map(RetryIndefResult::from)
+                        .map_err(|err| match err {
+                            TestError::Permanent { err } => {
+                                let mut batches = self
+                                    .batches
+                                    .try_borrow_mut()
+                                    .expect("try_borrow failed");
+                                let batch = batches.len();
 
-                                    batches.push(
-                                        TestPrivateBatchState::StartError
-                                    );
+                                batches.push(TestPrivateBatchState::StartError);
 
-                                    TestStartBatchError::Create {
-                                        selections: (),
-                                        err: TestBatchError::Permanent {
-                                            err: TestPermanentBatchError {
-                                                batch: batch,
-                                                scope: err.scope
-                                            }
+                                TestStartBatchError::Create {
+                                    selections: (),
+                                    err: TestBatchError::Permanent {
+                                        err: TestPermanentBatchError {
+                                            batch: batch,
+                                            scope: err.scope
                                         }
                                     }
                                 }
-                                TestError::Completable { err } => {
-                                    TestStartBatchError::Create {
-                                        selections: (),
-                                        err: TestBatchError::Completable {
-                                            err: err
-                                        }
+                            }
+                            TestError::Completable { err } => {
+                                TestStartBatchError::Create {
+                                    selections: (),
+                                    err: TestBatchError::Completable {
+                                        err: err
                                     }
                                 }
-                            })?
-                            .map_retry(|retry| TestStartBatchRetry::Create {
-                                selections: (),
-                                retry: retry
-                            }))
-                    })
+                            }
+                        })?
+                        .map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: (),
+                            retry: retry
+                        }))
+                })
             });
 
         (res, chans)
@@ -1496,10 +1505,13 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<NullPullStreams<()>>
+    ) {
         match retry {
             TestStartBatchRetry::Select { retry, .. } => {
                 let (res, chans) = self.retry_select(ctx, &mut (), retry);
@@ -1509,89 +1521,94 @@ where
                         err: err
                     })
                     .and_then(|res| {
-                        res
-                            .map_retry(|retry| TestStartBatchRetry::Select {
-                                selections: (),
-                                retry: retry
-                            })
-                            .flat_map_ok(|_| {
-                                Ok(self
-                                    .create_batch(ctx, &mut (), &())
-                                    .map(RetryIndefResult::from)
-                                    .map_err(|err| match err {
-                                        TestError::Permanent { err } => {
-                                            let mut batches = self
-                                                .batches
-                                                .try_borrow_mut()
-                                                .expect("try_borrow failed");
-                                            let batch = batches.len();
+                        res.map_retry(|retry| TestStartBatchRetry::Select {
+                            selections: (),
+                            retry: retry
+                        })
+                        .flat_map_ok(|_| {
+                            Ok(self
+                                .create_batch(ctx, &mut (), &())
+                                .map(RetryIndefResult::from)
+                                .map_err(|err| match err {
+                                    TestError::Permanent { err } => {
+                                        let mut batches = self
+                                            .batches
+                                            .try_borrow_mut()
+                                            .expect("try_borrow failed");
+                                        let batch = batches.len();
 
-                                            batches.push(
-                                                TestPrivateBatchState::StartError
-                                            );
+                                        batches.push(
+                                            TestPrivateBatchState::StartError
+                                        );
 
-                                            TestStartBatchError::Create {
-                                                selections: (),
-                                                err: TestBatchError::Permanent {
-                                                    err: TestPermanentBatchError {
-                                                        batch: batch,
-                                                        scope: err.scope
-                                                    }
+                                        TestStartBatchError::Create {
+                                            selections: (),
+                                            err: TestBatchError::Permanent {
+                                                err: TestPermanentBatchError {
+                                                    batch: batch,
+                                                    scope: err.scope
                                                 }
                                             }
                                         }
-                                        TestError::Completable { err } => {
-                                            TestStartBatchError::Create {
-                                                selections: (),
-                                                err: TestBatchError::Completable {
-                                                    err: err
-                                                }
+                                    }
+                                    TestError::Completable { err } => {
+                                        TestStartBatchError::Create {
+                                            selections: (),
+                                            err: TestBatchError::Completable {
+                                                err: err
                                             }
                                         }
-                                    })?
-                                    .map_retry(|retry| TestStartBatchRetry::Create {
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    TestStartBatchRetry::Create {
                                         selections: (),
                                         retry: retry
-                                    }))
-                            })
+                                    }
+                                }))
+                        })
                     });
 
                 (res, chans)
-            },
-            TestStartBatchRetry::Create { retry, .. } => (self
-                .retry_create_batch(ctx, &mut (), &(), retry)
-                .map_err(|err| match err {
-                    TestError::Permanent { err } => {
-                        let mut batches = self
-                            .batches
-                            .try_borrow_mut()
-                            .expect("try_borrow failed");
-                        let batch = batches.len();
+            }
+            TestStartBatchRetry::Create { retry, .. } => (
+                self.retry_create_batch(ctx, &mut (), &(), retry)
+                    .map_err(|err| match err {
+                        TestError::Permanent { err } => {
+                            let mut batches = self
+                                .batches
+                                .try_borrow_mut()
+                                .expect("try_borrow failed");
+                            let batch = batches.len();
 
-                        batches.push(TestPrivateBatchState::StartError);
+                            batches.push(TestPrivateBatchState::StartError);
 
-                        TestStartBatchError::Create {
-                            selections: (),
-                            err: TestBatchError::Permanent {
-                                err: TestPermanentBatchError {
-                                    batch: batch,
-                                    scope: err.scope
+                            TestStartBatchError::Create {
+                                selections: (),
+                                err: TestBatchError::Permanent {
+                                    err: TestPermanentBatchError {
+                                        batch: batch,
+                                        scope: err.scope
+                                    }
                                 }
                             }
                         }
-                    }
-                    TestError::Completable { err } => {
-                        TestStartBatchError::Create {
-                            selections: (),
-                            err: TestBatchError::Completable { err: err }
+                        TestError::Completable { err } => {
+                            TestStartBatchError::Create {
+                                selections: (),
+                                err: TestBatchError::Completable { err: err }
+                            }
                         }
-                    }
-                })
-                .map(RetryIndefResult::from)
-                .map(|res| res.map_retry(|retry| TestStartBatchRetry::Create {
-                    selections: (),
-                    retry: retry
-                })), None)
+                    })
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: (),
+                            retry: retry
+                        })
+                    }),
+                None
+            )
         }
     }
 
@@ -1600,10 +1617,13 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>) {
+    ) -> (
+        Result<
+            RetryIndefResult<Self::BatchID, Self::StartBatchRetry>,
+            Self::StartBatchError
+        >,
+        Option<NullPullStreams<()>>
+    ) {
         match err {
             TestStartBatchError::Select { err, .. } => {
                 let (res, chans) = self.complete_select(ctx, &mut (), err);
@@ -1613,89 +1633,94 @@ where
                         err: err
                     })
                     .and_then(|res| {
-                        res
-                            .map_retry(|retry| TestStartBatchRetry::Select {
-                                selections: (),
-                                retry: retry
-                            })
-                            .flat_map_ok(|_| {
-                                Ok(self
-                                    .create_batch(ctx, &mut (), &())
-                                    .map(RetryIndefResult::from)
-                                    .map_err(|err| match err {
-                                        TestError::Permanent { err } => {
-                                            let mut batches = self
-                                                .batches
-                                                .try_borrow_mut()
-                                                .expect("try_borrow failed");
-                                            let batch = batches.len();
+                        res.map_retry(|retry| TestStartBatchRetry::Select {
+                            selections: (),
+                            retry: retry
+                        })
+                        .flat_map_ok(|_| {
+                            Ok(self
+                                .create_batch(ctx, &mut (), &())
+                                .map(RetryIndefResult::from)
+                                .map_err(|err| match err {
+                                    TestError::Permanent { err } => {
+                                        let mut batches = self
+                                            .batches
+                                            .try_borrow_mut()
+                                            .expect("try_borrow failed");
+                                        let batch = batches.len();
 
-                                            batches.push(
-                                                TestPrivateBatchState::StartError
-                                            );
+                                        batches.push(
+                                            TestPrivateBatchState::StartError
+                                        );
 
-                                            TestStartBatchError::Create {
-                                                selections: (),
-                                                err: TestBatchError::Permanent {
-                                                    err: TestPermanentBatchError {
-                                                        batch: batch,
-                                                        scope: err.scope
-                                                    }
+                                        TestStartBatchError::Create {
+                                            selections: (),
+                                            err: TestBatchError::Permanent {
+                                                err: TestPermanentBatchError {
+                                                    batch: batch,
+                                                    scope: err.scope
                                                 }
                                             }
                                         }
-                                        TestError::Completable { err } => {
-                                            TestStartBatchError::Create {
-                                                selections: (),
-                                                err: TestBatchError::Completable {
-                                                    err: err
-                                                }
+                                    }
+                                    TestError::Completable { err } => {
+                                        TestStartBatchError::Create {
+                                            selections: (),
+                                            err: TestBatchError::Completable {
+                                                err: err
                                             }
                                         }
-                                    })?
-                                    .map_retry(|retry| TestStartBatchRetry::Create {
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    TestStartBatchRetry::Create {
                                         selections: (),
                                         retry: retry
-                                    }))
-                            })
+                                    }
+                                }))
+                        })
                     });
 
                 (res, chans)
-            },
-            TestStartBatchError::Create { err, .. } => (self
-                .complete_create_batch(ctx, &mut (), &(), err)
-                .map_err(|err| match err {
-                    TestError::Permanent { err } => {
-                        let mut batches = self
-                            .batches
-                            .try_borrow_mut()
-                            .expect("try_borrow failed");
-                        let batch = batches.len();
+            }
+            TestStartBatchError::Create { err, .. } => (
+                self.complete_create_batch(ctx, &mut (), &(), err)
+                    .map_err(|err| match err {
+                        TestError::Permanent { err } => {
+                            let mut batches = self
+                                .batches
+                                .try_borrow_mut()
+                                .expect("try_borrow failed");
+                            let batch = batches.len();
 
-                        batches.push(TestPrivateBatchState::StartError);
+                            batches.push(TestPrivateBatchState::StartError);
 
-                        TestStartBatchError::Create {
-                            selections: (),
-                            err: TestBatchError::Permanent {
-                                err: TestPermanentBatchError {
-                                    batch: batch,
-                                    scope: err.scope
+                            TestStartBatchError::Create {
+                                selections: (),
+                                err: TestBatchError::Permanent {
+                                    err: TestPermanentBatchError {
+                                        batch: batch,
+                                        scope: err.scope
+                                    }
                                 }
                             }
                         }
-                    }
-                    TestError::Completable { err } => {
-                        TestStartBatchError::Create {
-                            selections: (),
-                            err: TestBatchError::Completable { err: err }
+                        TestError::Completable { err } => {
+                            TestStartBatchError::Create {
+                                selections: (),
+                                err: TestBatchError::Completable { err: err }
+                            }
                         }
-                    }
-                })
-                .map(RetryIndefResult::from)
-                .map(|res| res.map_retry(|retry| TestStartBatchRetry::Create {
-                    selections: (),
-                    retry: retry
-                })), None)
+                    })
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: (),
+                            retry: retry
+                        })
+                    }),
+                None
+            )
         }
     }
 
@@ -1831,7 +1856,8 @@ fn filter_select_error(
 impl<In, Out, H> PullStreamsOutput for TestSharedStream<In, Out, H>
 where
     Out: Clone,
-    H: HashID {
+    H: HashID
+{
     type PullStreams = NullPullStreams<()>;
 }
 
@@ -1880,14 +1906,17 @@ where
         _ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> (Result<
-        RetryIndefResult<
-            Vec<Self::PartyID>,
-            Self::SelectRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
         >,
-        Self::SelectError
-    >, Option<NullPullStreams<()>>)
+        Option<NullPullStreams<()>>
+    )
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -1898,51 +1927,50 @@ where
             .select
             .pop()
             .expect("Expected scripted action");
-        let out =
-            match out {
-                Ok(RetryIndefResult::Success(filter)) => {
+        let out = match out {
+            Ok(RetryIndefResult::Success(filter)) => {
+                let filter: HashSet<Self::PartyID> =
+                    filter.into_iter().collect();
+                let parties: Vec<Self::PartyID> = parties
+                    .filter(|party| filter.contains(party))
+                    .cloned()
+                    .collect();
+
+                for party in parties.iter() {
+                    selections.push(*party)
+                }
+
+                Ok(RetryIndefResult::Success(parties))
+            }
+            Ok(RetryIndefResult::Retry(retry)) => {
+                let parties = parties.cloned().collect();
+                let retry = TestPartiesRetry {
+                    parties: parties,
+                    when: retry.when
+                };
+
+                Ok(RetryIndefResult::Retry(retry))
+            }
+            Ok(RetryIndefResult::Indef(indef)) => match indef {
+                Parties::Some(filter) => {
                     let filter: HashSet<Self::PartyID> =
                         filter.into_iter().collect();
-                    let parties: Vec<Self::PartyID> = parties
+                    let parties = parties
                         .filter(|party| filter.contains(party))
                         .cloned()
                         .collect();
 
-                    for party in parties.iter() {
-                        selections.push(*party)
-                    }
-
-                    Ok(RetryIndefResult::Success(parties))
+                    Ok(RetryIndefResult::Indef(Parties::Some(parties)))
                 }
-                Ok(RetryIndefResult::Retry(retry)) => {
-                    let parties = parties.cloned().collect();
-                    let retry = TestPartiesRetry {
-                        parties: parties,
-                        when: retry.when
-                    };
+                Parties::All => Ok(RetryIndefResult::Indef(Parties::All))
+            },
+            Err(err) => {
+                let filter = parties.cloned().collect();
+                let err = filter_select_error(filter, err);
 
-                    Ok(RetryIndefResult::Retry(retry))
-                }
-                Ok(RetryIndefResult::Indef(indef)) => match indef {
-                    Parties::Some(filter) => {
-                        let filter: HashSet<Self::PartyID> =
-                            filter.into_iter().collect();
-                        let parties = parties
-                            .filter(|party| filter.contains(party))
-                            .cloned()
-                            .collect();
-
-                        Ok(RetryIndefResult::Indef(Parties::Some(parties)))
-                    }
-                    Parties::All => Ok(RetryIndefResult::Indef(Parties::All))
-                },
-                Err(err) => {
-                    let filter = parties.cloned().collect();
-                    let err = filter_select_error(filter, err);
-
-                    Err(err)
-                }
-            };
+                Err(err)
+            }
+        };
 
         (out, None)
     }
@@ -1953,14 +1981,17 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retry: Self::SelectRetry
-    ) -> (Result<
-        RetryIndefResult<
-            Vec<Self::PartyID>,
-            Self::SelectRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
         >,
-        Self::SelectError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         self.select(ctx, selections, retry.parties.iter())
     }
 
@@ -1969,14 +2000,17 @@ where
         _ctx: &mut Ctx,
         selections: &mut Self::Selections,
         err: <Self::SelectError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            Vec<Self::PartyID>,
-            Self::SelectRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
         >,
-        Self::SelectError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefPartiesAction::Success { parties } => {
                 *selections = parties.clone();
@@ -2072,14 +2106,17 @@ where
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> (Result<
-        RetryIndefResult<
-            Self::BatchID,
-            Self::StartBatchRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
         >,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>)
+        Option<NullPullStreams<()>>
+    )
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
@@ -2091,51 +2128,48 @@ where
                 err: err
             })
             .and_then(|res| {
-                res
-                    .map_retry(|retry| TestStartBatchRetry::Select {
-                        selections: selections.clone(),
-                        retry: retry
-                    })
-                    .flat_map_ok(|_| {
-                        Ok(self
-                            .create_batch(ctx, &mut (), &selections)
-                            .map(RetryIndefResult::from)
-                            .map_err(|err| match err {
-                                TestError::Permanent { err } => {
-                                    let mut batches = self
-                                        .batches
-                                        .try_borrow_mut()
-                                        .expect("try_borrow failed");
-                                    let batch = batches.len();
+                res.map_retry(|retry| TestStartBatchRetry::Select {
+                    selections: selections.clone(),
+                    retry: retry
+                })
+                .flat_map_ok(|_| {
+                    Ok(self
+                        .create_batch(ctx, &mut (), &selections)
+                        .map(RetryIndefResult::from)
+                        .map_err(|err| match err {
+                            TestError::Permanent { err } => {
+                                let mut batches = self
+                                    .batches
+                                    .try_borrow_mut()
+                                    .expect("try_borrow failed");
+                                let batch = batches.len();
 
-                                    batches.push(
-                                        TestSharedBatchState::StartError
-                                    );
+                                batches.push(TestSharedBatchState::StartError);
 
-                                    TestStartBatchError::Create {
-                                        selections: selections.clone(),
-                                        err: TestBatchError::Permanent {
-                                            err: TestPermanentBatchError {
-                                                batch: batch,
-                                                scope: err.scope
-                                            }
+                                TestStartBatchError::Create {
+                                    selections: selections.clone(),
+                                    err: TestBatchError::Permanent {
+                                        err: TestPermanentBatchError {
+                                            batch: batch,
+                                            scope: err.scope
                                         }
                                     }
                                 }
-                                TestError::Completable { err } => {
-                                    TestStartBatchError::Create {
-                                        selections: selections.clone(),
-                                        err: TestBatchError::Completable {
-                                            err: err
-                                        }
+                            }
+                            TestError::Completable { err } => {
+                                TestStartBatchError::Create {
+                                    selections: selections.clone(),
+                                    err: TestBatchError::Completable {
+                                        err: err
                                     }
                                 }
-                            })?
-                            .map_retry(|retry| TestStartBatchRetry::Create {
-                                selections: selections.clone(),
-                                retry: retry
-                            }))
-                    })
+                            }
+                        })?
+                        .map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: selections.clone(),
+                            retry: retry
+                        }))
+                })
             });
 
         (res, chans)
@@ -2146,110 +2180,118 @@ where
         &mut self,
         ctx: &mut Ctx,
         retry: Self::StartBatchRetry
-    ) -> (Result<
-        RetryIndefResult<
-            Self::BatchID,
-            Self::StartBatchRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
         >,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match retry {
             TestStartBatchRetry::Select {
                 retry,
                 mut selections
             } => {
-                let (res, chans) = self
-                    .retry_select(ctx, &mut selections, retry);
+                let (res, chans) =
+                    self.retry_select(ctx, &mut selections, retry);
                 let res = res
                     .map_err(|err| TestStartBatchError::Select {
                         selections: selections.clone(),
                         err: err
                     })
                     .and_then(|res| {
-                        res
-                            .map_retry(|retry| TestStartBatchRetry::Select {
-                                selections: selections.clone(),
-                                retry: retry
-                            })
-                            .flat_map_ok(|_| {
-                                Ok(self
-                                    .create_batch(ctx, &mut (), &selections)
-                                    .map(RetryIndefResult::from)
-                                    .map_err(|err| match err {
-                                        TestError::Permanent { err } => {
-                                            let mut batches = self
-                                                .batches
-                                                .try_borrow_mut()
-                                                .expect("try_borrow failed");
-                                            let batch = batches.len();
+                        res.map_retry(|retry| TestStartBatchRetry::Select {
+                            selections: selections.clone(),
+                            retry: retry
+                        })
+                        .flat_map_ok(|_| {
+                            Ok(self
+                                .create_batch(ctx, &mut (), &selections)
+                                .map(RetryIndefResult::from)
+                                .map_err(|err| match err {
+                                    TestError::Permanent { err } => {
+                                        let mut batches = self
+                                            .batches
+                                            .try_borrow_mut()
+                                            .expect("try_borrow failed");
+                                        let batch = batches.len();
 
-                                            batches.push(
-                                                TestSharedBatchState::StartError
-                                            );
+                                        batches.push(
+                                            TestSharedBatchState::StartError
+                                        );
 
-                                            TestStartBatchError::Create {
-                                                selections: selections.clone(),
-                                                err: TestBatchError::Permanent {
-                                                    err: TestPermanentBatchError {
-                                                        batch: batch,
-                                                        scope: err.scope
-                                                    }
+                                        TestStartBatchError::Create {
+                                            selections: selections.clone(),
+                                            err: TestBatchError::Permanent {
+                                                err: TestPermanentBatchError {
+                                                    batch: batch,
+                                                    scope: err.scope
                                                 }
                                             }
                                         }
-                                        TestError::Completable { err } => {
-                                            TestStartBatchError::Create {
-                                                selections: selections.clone(),
-                                                err: TestBatchError::Completable {
-                                                    err: err
-                                                }
+                                    }
+                                    TestError::Completable { err } => {
+                                        TestStartBatchError::Create {
+                                            selections: selections.clone(),
+                                            err: TestBatchError::Completable {
+                                                err: err
                                             }
                                         }
-                                    })?
-                                    .map_retry(|retry| TestStartBatchRetry::Create {
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    TestStartBatchRetry::Create {
                                         selections: selections.clone(),
                                         retry: retry
-                                    }))
-                            })
+                                    }
+                                }))
+                        })
                     });
 
                 (res, chans)
-            },
-            TestStartBatchRetry::Create { retry, selections } => (self
-                .retry_create_batch(ctx, &mut (), &selections, retry)
-                .map_err(|err| match err {
-                    TestError::Permanent { err } => {
-                        let mut batches = self
-                            .batches
-                            .try_borrow_mut()
-                            .expect("try_borrow failed");
-                        let batch = batches.len();
+            }
+            TestStartBatchRetry::Create { retry, selections } => (
+                self.retry_create_batch(ctx, &mut (), &selections, retry)
+                    .map_err(|err| match err {
+                        TestError::Permanent { err } => {
+                            let mut batches = self
+                                .batches
+                                .try_borrow_mut()
+                                .expect("try_borrow failed");
+                            let batch = batches.len();
 
-                        batches.push(TestSharedBatchState::StartError);
+                            batches.push(TestSharedBatchState::StartError);
 
-                        TestStartBatchError::Create {
-                            selections: selections.clone(),
-                            err: TestBatchError::Permanent {
-                                err: TestPermanentBatchError {
-                                    batch: batch,
-                                    scope: err.scope
+                            TestStartBatchError::Create {
+                                selections: selections.clone(),
+                                err: TestBatchError::Permanent {
+                                    err: TestPermanentBatchError {
+                                        batch: batch,
+                                        scope: err.scope
+                                    }
                                 }
                             }
                         }
-                    }
-                    TestError::Completable { err } => {
-                        TestStartBatchError::Create {
-                            selections: selections.clone(),
-                            err: TestBatchError::Completable { err: err }
+                        TestError::Completable { err } => {
+                            TestStartBatchError::Create {
+                                selections: selections.clone(),
+                                err: TestBatchError::Completable { err: err }
+                            }
                         }
-                    }
-                })
-                .map(RetryIndefResult::from)
-                .map(|res| res.map_retry(|retry| TestStartBatchRetry::Create {
-                    selections: selections.clone(),
-                    retry: retry
-                })), None)
+                    })
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: selections.clone(),
+                            retry: retry
+                        })
+                    }),
+                None
+            )
         }
     }
 
@@ -2258,110 +2300,118 @@ where
         &mut self,
         ctx: &mut Ctx,
         err: <Self::StartBatchError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            Self::BatchID,
-            Self::StartBatchRetry,
-            Parties<Self::IndefParties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
         >,
-        Self::StartBatchError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err {
             TestStartBatchError::Select {
                 err,
                 mut selections
             } => {
-                let (res, chans) = self
-                    .complete_select(ctx, &mut selections, err);
+                let (res, chans) =
+                    self.complete_select(ctx, &mut selections, err);
                 let res = res
                     .map_err(|err| TestStartBatchError::Select {
                         selections: selections.clone(),
                         err: err
                     })
                     .and_then(|res| {
-                        res
-                            .map_retry(|retry| TestStartBatchRetry::Select {
-                                selections: selections.clone(),
-                                retry: retry
-                            })
-                            .flat_map_ok(|_| {
-                                Ok(self
-                                    .create_batch(ctx, &mut (), &selections)
-                                    .map(RetryIndefResult::from)
-                                    .map_err(|err| match err {
-                                        TestError::Permanent { err } => {
-                                            let mut batches = self
-                                                .batches
-                                                .try_borrow_mut()
-                                                .expect("try_borrow failed");
-                                            let batch = batches.len();
+                        res.map_retry(|retry| TestStartBatchRetry::Select {
+                            selections: selections.clone(),
+                            retry: retry
+                        })
+                        .flat_map_ok(|_| {
+                            Ok(self
+                                .create_batch(ctx, &mut (), &selections)
+                                .map(RetryIndefResult::from)
+                                .map_err(|err| match err {
+                                    TestError::Permanent { err } => {
+                                        let mut batches = self
+                                            .batches
+                                            .try_borrow_mut()
+                                            .expect("try_borrow failed");
+                                        let batch = batches.len();
 
-                                            batches.push(
-                                                TestSharedBatchState::StartError
-                                            );
+                                        batches.push(
+                                            TestSharedBatchState::StartError
+                                        );
 
-                                            TestStartBatchError::Create {
-                                                selections: selections.clone(),
-                                                err: TestBatchError::Permanent {
-                                                    err: TestPermanentBatchError {
-                                                        batch: batch,
-                                                        scope: err.scope
-                                                    }
+                                        TestStartBatchError::Create {
+                                            selections: selections.clone(),
+                                            err: TestBatchError::Permanent {
+                                                err: TestPermanentBatchError {
+                                                    batch: batch,
+                                                    scope: err.scope
                                                 }
                                             }
                                         }
-                                        TestError::Completable { err } => {
-                                            TestStartBatchError::Create {
-                                                selections: selections.clone(),
-                                                err: TestBatchError::Completable {
-                                                    err: err
-                                                }
+                                    }
+                                    TestError::Completable { err } => {
+                                        TestStartBatchError::Create {
+                                            selections: selections.clone(),
+                                            err: TestBatchError::Completable {
+                                                err: err
                                             }
                                         }
-                                    })?
-                                    .map_retry(|retry| TestStartBatchRetry::Create {
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    TestStartBatchRetry::Create {
                                         selections: selections.clone(),
                                         retry: retry
-                                    }))
-                            })
+                                    }
+                                }))
+                        })
                     });
 
                 (res, chans)
-            },
-            TestStartBatchError::Create { err, selections } => (self
-                .complete_create_batch(ctx, &mut (), &selections, err)
-                .map_err(|err| match err {
-                    TestError::Permanent { err } => {
-                        let mut batches = self
-                            .batches
-                            .try_borrow_mut()
-                            .expect("try_borrow failed");
-                        let batch = batches.len();
+            }
+            TestStartBatchError::Create { err, selections } => (
+                self.complete_create_batch(ctx, &mut (), &selections, err)
+                    .map_err(|err| match err {
+                        TestError::Permanent { err } => {
+                            let mut batches = self
+                                .batches
+                                .try_borrow_mut()
+                                .expect("try_borrow failed");
+                            let batch = batches.len();
 
-                        batches.push(TestSharedBatchState::StartError);
+                            batches.push(TestSharedBatchState::StartError);
 
-                        TestStartBatchError::Create {
-                            selections: selections.clone(),
-                            err: TestBatchError::Permanent {
-                                err: TestPermanentBatchError {
-                                    batch: batch,
-                                    scope: err.scope
+                            TestStartBatchError::Create {
+                                selections: selections.clone(),
+                                err: TestBatchError::Permanent {
+                                    err: TestPermanentBatchError {
+                                        batch: batch,
+                                        scope: err.scope
+                                    }
                                 }
                             }
                         }
-                    }
-                    TestError::Completable { err } => {
-                        TestStartBatchError::Create {
-                            selections: selections.clone(),
-                            err: TestBatchError::Completable { err: err }
+                        TestError::Completable { err } => {
+                            TestStartBatchError::Create {
+                                selections: selections.clone(),
+                                err: TestBatchError::Completable { err: err }
+                            }
                         }
-                    }
-                })
-                .map(RetryIndefResult::from)
-                .map(|res| res.map_retry(|retry| TestStartBatchRetry::Create {
-                    selections: selections.clone(),
-                    retry: retry
-                })), None)
+                    })
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| TestStartBatchRetry::Create {
+                            selections: selections.clone(),
+                            retry: retry
+                        })
+                    }),
+                None
+            )
         }
     }
 
@@ -2435,14 +2485,17 @@ where
         _ctx: &mut Ctx,
         id: LargeObjID,
         _frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2469,14 +2522,17 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         self.push_frags(ctx, id, frags)
     }
 
@@ -2486,14 +2542,17 @@ where
         id: LargeObjID,
         _frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.frags
@@ -2506,8 +2565,9 @@ where
             TestIndefAction::Retry { retry } => {
                 (Ok(RetryIndefResult::Retry(retry)), None)
             }
-            TestIndefAction::Indef =>
-                (Ok(RetryIndefResult::Indef(Parties::All)), None),
+            TestIndefAction::Indef => {
+                (Ok(RetryIndefResult::Indef(Parties::All)), None)
+            }
             TestIndefAction::Error { err } => (Err(*err), None)
         }
     }
@@ -2528,14 +2588,17 @@ where
         _ctx: &mut Ctx,
         id: LargeObjID,
         _frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2551,18 +2614,21 @@ where
                 .push(id);
         }
 
-        (out.map(|res| {
-            res.map(|out| {
-                let parties = self
-                    .parties
-                    .iter()
-                    .cloned()
-                    .map(|(party, ())| party)
-                    .collect();
+        (
+            out.map(|res| {
+                res.map(|out| {
+                    let parties = self
+                        .parties
+                        .iter()
+                        .cloned()
+                        .map(|(party, ())| party)
+                        .collect();
 
-                (out, parties)
-            })
-        }), None)
+                    (out, parties)
+                })
+            }),
+            None
+        )
     }
 
     #[inline]
@@ -2572,14 +2638,17 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         self.push_frags(ctx, id, frags)
     }
 
@@ -2589,14 +2658,17 @@ where
         id: LargeObjID,
         _frags: &mut Self::Frags,
         err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.frags
@@ -2616,8 +2688,9 @@ where
             TestIndefAction::Retry { retry } => {
                 (Ok(RetryIndefResult::Retry(retry)), None)
             }
-            TestIndefAction::Indef =>
-                (Ok(RetryIndefResult::Indef(Parties::All)), None),
+            TestIndefAction::Indef => {
+                (Ok(RetryIndefResult::Indef(Parties::All)), None)
+            }
             TestIndefAction::Error { err } => (Err(*err), None)
         }
     }
@@ -2724,14 +2797,17 @@ where
         _ctx: &mut Ctx,
         hash: H,
         _frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2758,14 +2834,17 @@ where
         hash: H,
         frags: &mut Self::Frags,
         _retry: Self::PushOfferRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         self.push_offer(ctx, hash, frags)
     }
 
@@ -2775,14 +2854,17 @@ where
         hash: H,
         _frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.offers
@@ -2795,8 +2877,9 @@ where
             TestIndefAction::Retry { retry } => {
                 (Ok(RetryIndefResult::Retry(retry)), None)
             }
-            TestIndefAction::Indef =>
-                (Ok(RetryIndefResult::Indef(Parties::All)), None),
+            TestIndefAction::Indef => {
+                (Ok(RetryIndefResult::Indef(Parties::All)), None)
+            }
             TestIndefAction::Error { err } => (Err(*err), None)
         }
     }
@@ -2816,14 +2899,17 @@ where
         _ctx: &mut Ctx,
         hash: H,
         _frags: &mut Self::Frags
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         let out = self
             .script
             .try_borrow_mut()
@@ -2839,18 +2925,21 @@ where
                 .push(hash)
         }
 
-        (out.map(|res| {
-            res.map(|out| {
-                let parties = self
-                    .parties
-                    .iter()
-                    .cloned()
-                    .map(|(party, ())| party)
-                    .collect();
+        (
+            out.map(|res| {
+                res.map(|out| {
+                    let parties = self
+                        .parties
+                        .iter()
+                        .cloned()
+                        .map(|(party, ())| party)
+                        .collect();
 
-                (out, parties)
-            })
-        }), None)
+                    (out, parties)
+                })
+            }),
+            None
+        )
     }
 
     #[inline]
@@ -2860,14 +2949,17 @@ where
         hash: H,
         frags: &mut Self::Frags,
         _retry: Self::PushOfferRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         self.push_offer(ctx, hash, frags)
     }
 
@@ -2877,14 +2969,17 @@ where
         hash: H,
         _frags: &mut Self::Frags,
         err: <Self::PushOfferError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties),
-            Self::PushOfferRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushOfferRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushOfferError
         >,
-        Self::PushOfferError
-    >, Option<NullPullStreams<()>>) {
+        Option<NullPullStreams<()>>
+    ) {
         match err.action {
             TestIndefAction::Success { val } => {
                 self.offers
@@ -2904,8 +2999,9 @@ where
             TestIndefAction::Retry { retry } => {
                 (Ok(RetryIndefResult::Retry(retry)), None)
             }
-            TestIndefAction::Indef =>
-                (Ok(RetryIndefResult::Indef(Parties::All)), None),
+            TestIndefAction::Indef => {
+                (Ok(RetryIndefResult::Indef(Parties::All)), None)
+            }
             TestIndefAction::Error { err } => (Err(*err), None)
         }
     }

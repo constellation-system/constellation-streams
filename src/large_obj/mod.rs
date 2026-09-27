@@ -49,9 +49,9 @@ use constellation_common::codec::per::PERCodec;
 use constellation_common::config::Create;
 use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
-use constellation_common::error::WithMutexPoison;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
@@ -753,7 +753,8 @@ where
         if self.notify.is_none() {
             self.notify = Some(Notify::new(waker.clone()));
 
-            self.msgs.set_waker(waker)
+            self.msgs
+                .set_waker(waker)
                 .map_err(|err| RegisterNotifyError::Inner { err: err })
         } else {
             Err(RegisterNotifyError::Collision)
@@ -769,9 +770,8 @@ where
     PartyID: Clone + Eq + Hash,
     F: Frags
 {
-    type Error = WithMutexPoison<RegisterNotifyError<
-        <Types::Msgs as MsgsWaker>::Error
-    >>;
+    type Error =
+        WithMutexPoison<RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>>;
 
     #[inline]
     fn set_waker(
@@ -1669,22 +1669,25 @@ where
         ctx: &mut Ctx,
         stream: &mut Stream,
         now: Instant
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
-            LargeObjPushRetry<
-                Types::HashID,
-                Stream::PushFragRetry,
-                Stream::PushOfferRetry
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Stream::Parties),
+                LargeObjPushRetry<
+                    Types::HashID,
+                    Stream::PushFragRetry,
+                    Stream::PushOfferRetry
+                >,
+                Parties<Stream::Parties>
             >,
-            Parties<Stream::Parties>
+            LargeObjPushError<
+                Types::HashID,
+                Stream::PushFragError,
+                Stream::PushOfferError
+            >
         >,
-        LargeObjPushError<
-            Types::HashID,
-            Stream::PushFragError,
-            Stream::PushOfferError
-        >
-    >, Option<Stream::PullStreams>)
+        Option<Stream::PullStreams>
+    )
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
@@ -1698,7 +1701,8 @@ where
         let mut outbound = match self
             .outbound
             .lock()
-            .map_err(|_| LargeObjPushError::MutexPoison) {
+            .map_err(|_| LargeObjPushError::MutexPoison)
+        {
             Ok(outbound) => outbound,
             Err(err) => return (Err(err), None)
         };
@@ -1724,11 +1728,14 @@ where
                                "pushing fragments for {}",
                                id);
 
-                        let (res, streams) = stream
-                            .push_frags(ctx, id.clone(), &mut ents[0].1.frags);
+                        let (res, streams) = stream.push_frags(
+                            ctx,
+                            id.clone(),
+                            &mut ents[0].1.frags
+                        );
 
-                        (res
-                            .map_err(|err| LargeObjPushError::Frags {
+                        (
+                            res.map_err(|err| LargeObjPushError::Frags {
                                 err: err,
                                 id: id.clone()
                             })
@@ -1755,18 +1762,22 @@ where
                                         }
                                     }
                                 )
-                            }), streams)
+                            }),
+                            streams
+                        )
                     } else {
                         trace!(target: "large-obj-proto",
                                "pushing offer for {}",
                                hash);
 
-                        let (res, streams) = stream
-                            .push_offer(ctx, hash.clone(),
-                                        &mut ents[0].1.frags);
+                        let (res, streams) = stream.push_offer(
+                            ctx,
+                            hash.clone(),
+                            &mut ents[0].1.frags
+                        );
 
-                        (res
-                            .map_err(|err| LargeObjPushError::Offer {
+                        (
+                            res.map_err(|err| LargeObjPushError::Offer {
                                 hash: hash.clone(),
                                 err: err
                             })
@@ -1793,14 +1804,17 @@ where
                                         }
                                     }
                                 )
-                            }), streams)
+                            }),
+                            streams
+                        )
                     }
                 }
-                Some(when) => {
-                    (Ok(RetryIndefResult::Retry(LargeObjPushRetry::Retry {
+                Some(when) => (
+                    Ok(RetryIndefResult::Retry(LargeObjPushRetry::Retry {
                         when: when
-                    })), None)
-                }
+                    })),
+                    None
+                ),
                 None => (Ok(RetryIndefResult::Indef(Parties::All)), None)
             }
         } else {
@@ -1817,18 +1831,21 @@ where
         stream: &mut Stream,
         id: LargeObjID,
         retry: Stream::PushFragRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
-            Stream::PushFragRetry,
-            Parties<Stream::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Stream::Parties),
+                Stream::PushFragRetry,
+                Parties<Stream::Parties>
+            >,
+            LargeObjPushError<
+                Types::HashID,
+                Stream::PushFragError,
+                Stream::PushOfferError
+            >
         >,
-        LargeObjPushError<
-            Types::HashID,
-            Stream::PushFragError,
-            Stream::PushOfferError
-        >
-    >, Option<Stream::PullStreams>)
+        Option<Stream::PullStreams>
+    )
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
@@ -1841,7 +1858,8 @@ where
         let mut outbound = match self
             .outbound
             .lock()
-            .map_err(|_| LargeObjPushError::MutexPoison) {
+            .map_err(|_| LargeObjPushError::MutexPoison)
+        {
             Ok(outbound) => outbound,
             Err(err) => return (Err(err), None)
         };
@@ -1849,24 +1867,24 @@ where
             .hashes
             .get(&id)
             .cloned()
-            .ok_or(LargeObjPushError::NoID { id: id.clone() }) {
+            .ok_or(LargeObjPushError::NoID { id: id.clone() })
+        {
             Ok(hash) => hash,
             Err(err) => return (Err(err), None)
         };
-        let ent = match outbound
-            .objs
-            .get_mut(&hash)
-            .ok_or(LargeObjPushError::NoObjID {
+        let ent = match outbound.objs.get_mut(&hash).ok_or(
+            LargeObjPushError::NoObjID {
                 hash: hash,
                 id: id.clone()
-            }) {
+            }
+        ) {
             Ok(ent) => ent,
             Err(err) => return (Err(err), None)
         };
-        let (res, streams) = stream
-            .retry_push_frags(ctx, id.clone(), &mut ent.frags, retry);
-        let res = res
-            .map_err(|err| LargeObjPushError::Frags { id: id, err: err });
+        let (res, streams) =
+            stream.retry_push_frags(ctx, id.clone(), &mut ent.frags, retry);
+        let res =
+            res.map_err(|err| LargeObjPushError::Frags { id: id, err: err });
 
         (res, streams)
     }
@@ -1877,18 +1895,21 @@ where
         stream: &mut Stream,
         hash: Types::HashID,
         retry: Stream::PushOfferRetry
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
-            Stream::PushOfferRetry,
-            Parties<Stream::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Stream::Parties),
+                Stream::PushOfferRetry,
+                Parties<Stream::Parties>
+            >,
+            LargeObjPushError<
+                Types::HashID,
+                Stream::PushFragError,
+                Stream::PushOfferError
+            >
         >,
-        LargeObjPushError<
-            Types::HashID,
-            Stream::PushFragError,
-            Stream::PushOfferError
-        >
-    >, Option<Stream::PullStreams>)
+        Option<Stream::PullStreams>
+    )
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
@@ -1901,24 +1922,25 @@ where
         let mut outbound = match self
             .outbound
             .lock()
-            .map_err(|_| LargeObjPushError::MutexPoison) {
+            .map_err(|_| LargeObjPushError::MutexPoison)
+        {
             Ok(outbound) => outbound,
             Err(err) => return (Err(err), None)
         };
         let ent = match outbound
             .objs
             .get_mut(&hash)
-            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() }) {
+            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })
+        {
             Ok(ent) => ent,
             Err(err) => return (Err(err), None)
         };
-        let (res, streams) = stream
-            .retry_push_offer(ctx, hash.clone(), &mut ent.frags, retry);
-        let res = res
-            .map_err(|err| LargeObjPushError::Offer {
-                hash: hash,
-                err: err
-            });
+        let (res, streams) =
+            stream.retry_push_offer(ctx, hash.clone(), &mut ent.frags, retry);
+        let res = res.map_err(|err| LargeObjPushError::Offer {
+            hash: hash,
+            err: err
+        });
 
         (res, streams)
     }
@@ -1929,18 +1951,21 @@ where
         stream: &mut Stream,
         id: LargeObjID,
         err: <Stream::PushFragError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
-            Stream::PushFragRetry,
-            Parties<Stream::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Stream::Parties),
+                Stream::PushFragRetry,
+                Parties<Stream::Parties>
+            >,
+            LargeObjPushError<
+                Types::HashID,
+                Stream::PushFragError,
+                Stream::PushOfferError
+            >
         >,
-        LargeObjPushError<
-            Types::HashID,
-            Stream::PushFragError,
-            Stream::PushOfferError
-        >
-    >, Option<Stream::PullStreams>)
+        Option<Stream::PullStreams>
+    )
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
@@ -1953,7 +1978,8 @@ where
         let mut outbound = match self
             .outbound
             .lock()
-            .map_err(|_| LargeObjPushError::MutexPoison) {
+            .map_err(|_| LargeObjPushError::MutexPoison)
+        {
             Ok(outbound) => outbound,
             Err(err) => return (Err(err), None)
         };
@@ -1961,24 +1987,24 @@ where
             .hashes
             .get(&id)
             .cloned()
-            .ok_or(LargeObjPushError::NoID { id: id.clone() }) {
+            .ok_or(LargeObjPushError::NoID { id: id.clone() })
+        {
             Ok(hash) => hash,
             Err(err) => return (Err(err), None)
         };
-        let ent = match outbound
-            .objs
-            .get_mut(&hash)
-            .ok_or(LargeObjPushError::NoObjID {
+        let ent = match outbound.objs.get_mut(&hash).ok_or(
+            LargeObjPushError::NoObjID {
                 hash: hash,
                 id: id.clone()
-            }) {
+            }
+        ) {
             Ok(ent) => ent,
             Err(err) => return (Err(err), None)
         };
-        let (res, streams) = stream
-            .complete_push_frags(ctx, id.clone(), &mut ent.frags, err);
-        let res = res
-            .map_err(|err| LargeObjPushError::Frags { id: id, err: err });
+        let (res, streams) =
+            stream.complete_push_frags(ctx, id.clone(), &mut ent.frags, err);
+        let res =
+            res.map_err(|err| LargeObjPushError::Frags { id: id, err: err });
 
         (res, streams)
     }
@@ -1989,18 +2015,21 @@ where
         stream: &mut Stream,
         hash: Types::HashID,
         err: <Stream::PushOfferError as RecoverableError>::Completable
-    ) -> (Result<
-        RetryIndefResult<
-            (Option<Instant>, Stream::Parties),
-            Stream::PushOfferRetry,
-            Parties<Stream::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Stream::Parties),
+                Stream::PushOfferRetry,
+                Parties<Stream::Parties>
+            >,
+            LargeObjPushError<
+                Types::HashID,
+                Stream::PushFragError,
+                Stream::PushOfferError
+            >
         >,
-        LargeObjPushError<
-            Types::HashID,
-            Stream::PushFragError,
-            Stream::PushOfferError
-        >
-    >, Option<Stream::PullStreams>)
+        Option<Stream::PullStreams>
+    )
     where
         Stream: LargeObjOfferStream<Types::HashID, Ctx, Frags = F>
             + PushStreamReportError<
@@ -2010,28 +2039,28 @@ where
                "completing pushing offer for {}",
                hash);
 
-
         let mut outbound = match self
             .outbound
             .lock()
-            .map_err(|_| LargeObjPushError::MutexPoison) {
+            .map_err(|_| LargeObjPushError::MutexPoison)
+        {
             Ok(outbound) => outbound,
             Err(err) => return (Err(err), None)
         };
         let ent = match outbound
             .objs
             .get_mut(&hash)
-            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() }) {
+            .ok_or(LargeObjPushError::NoObj { hash: hash.clone() })
+        {
             Ok(ent) => ent,
             Err(err) => return (Err(err), None)
         };
-        let (res, streams) = stream
-            .complete_push_offer(ctx, hash.clone(), &mut ent.frags, err);
-        let res = res
-            .map_err(|err| LargeObjPushError::Offer {
-                hash: hash,
-                err: err
-            });
+        let (res, streams) =
+            stream.complete_push_offer(ctx, hash.clone(), &mut ent.frags, err);
+        let res = res.map_err(|err| LargeObjPushError::Offer {
+            hash: hash,
+            err: err
+        });
 
         (res, streams)
     }
@@ -2903,6 +2932,13 @@ impl ScopedError for LargeObjDataError {
     }
 }
 
+impl<Info> ErrorReportInfo<Info> for LargeObjMsgEncodeError {
+    #[inline]
+    fn report_info(&self) -> Option<Info> {
+        None
+    }
+}
+
 impl ScopedError for LargeObjMsgEncodeError {
     #[inline]
     fn scope(&self) -> ErrorScope {
@@ -2918,15 +2954,18 @@ impl ScopedError for LargeObjMsgDecodeError {
 }
 
 impl<Inner> Display for RegisterNotifyError<Inner>
-where Inner: Display {
+where
+    Inner: Display
+{
     fn fmt(
         &self,
         f: &mut Formatter<'_>
     ) -> Result<(), Error> {
         match self {
             RegisterNotifyError::Inner { err } => err.fmt(f),
-            RegisterNotifyError::Collision =>
+            RegisterNotifyError::Collision => {
                 write!(f, "notifier already registered")
+            }
         }
     }
 }
@@ -3531,11 +3570,11 @@ use crate::large_obj::test::TestLargeObjMsgs;
 #[cfg(test)]
 use crate::large_obj::test::TestLargeObjProtoTypes;
 #[cfg(test)]
+use crate::stream::LargeObjStream;
+#[cfg(test)]
 use crate::stream::NullPullStreams;
 #[cfg(test)]
 use crate::stream::PullStreamsOutput;
-#[cfg(test)]
-use crate::stream::LargeObjStream;
 
 #[cfg(test)]
 struct TestStream {
