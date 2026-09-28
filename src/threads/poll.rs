@@ -58,11 +58,11 @@ use crate::channels::ChannelsListen;
 use crate::channels::ChannelsShutdown;
 use crate::config::PollThreadConfig;
 use crate::stream::PullStream;
-use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
@@ -321,6 +321,7 @@ where
             Some(nsessions) => HashMap::with_capacity(nsessions),
             None => HashMap::new()
         };
+        // XXX Pass in size hints here
         let mut ctx = ThreadInnerCtx::new(ctx)
             .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let channels = Types::Chans::create(chans_config, &mut ctx)

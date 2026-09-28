@@ -123,7 +123,7 @@ pub trait StreamRefresh<Ctx> {
     >;
 }
 
-pub trait ShutdownStream<Chans, Ctx>
+pub trait StreamShutdown<Chans, ID, Ctx>
 where
     Chans: ChannelsShutdown<Ctx> {
     fn shutdown_stream(
@@ -133,14 +133,9 @@ where
     ) -> Result<
         RetryResult<
             (Option<Vec<Chans::Param>>, Option<Instant>),
-            Vec<
-                StreamRetry<
-                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                    Chans::ShutdownStreamRetry
-                >
-            >
+            Vec<StreamRetry<ID, Chans::StreamShutdownRetry>>
         >,
-        Chans::ShutdownStreamError
+        Chans::StreamShutdownError
     >;
 }
 

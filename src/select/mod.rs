@@ -98,11 +98,11 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
 
 pub mod dispatch;
 mod sched;
@@ -1978,8 +1978,12 @@ where
     }
 }
 
-impl<Epochs, Resolve, Ctx, Chans, InnerCtx> ShutdownStream<Chans, InnerCtx>
-    for StreamSelector<Epochs, Resolve, Ctx>
+impl<Epochs, Resolve, Ctx, Chans, InnerCtx>
+    StreamShutdown<
+        Chans,
+        StreamID<Ctx::Addr, Ctx::ChannelID, Ctx::Param>,
+        InnerCtx
+    > for StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
@@ -2008,11 +2012,11 @@ where
             Vec<
                 StreamRetry<
                     StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                    Chans::ShutdownStreamRetry
+                    Chans::StreamShutdownRetry
                 >
             >
         >,
-        Chans::ShutdownStreamError
+        Chans::StreamShutdownError
     > {
         debug!(target: "stream-selector",
                "shutting down stream selector");

@@ -305,8 +305,8 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
 }
 
 pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
-    type ShutdownStreamError: Debug + Display + ScopedError;
-    type ShutdownStreamRetry: RetryWhen;
+    type StreamShutdownError: Debug + Display + ScopedError;
+    type StreamShutdownRetry: RetryWhen;
     type ShutdownListenError: Debug + Display + ScopedError;
 
     /// Shut down a given stream.
@@ -338,9 +338,9 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     >;
 
     fn retry_shutdown_stream(
@@ -348,13 +348,13 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         ctx: &mut Ctx,
         channel: &Self::ChannelID,
         param: &Self::Param,
-        retry: Self::ShutdownStreamRetry
+        retry: Self::StreamShutdownRetry
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     >;
 
     /// Variant of [listen](ChannelsListen::listen) for shutting down.
@@ -803,8 +803,8 @@ impl<Ctx> ChannelsListen<Ctx> for NullChannels {
 
 impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
     type ShutdownListenError = Infallible;
-    type ShutdownStreamError = Infallible;
-    type ShutdownStreamRetry = Infallible;
+    type StreamShutdownError = Infallible;
+    type StreamShutdownRetry = Infallible;
 
     #[inline]
     fn shutdown_stream(
@@ -816,9 +816,9 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         Ok(RetryResult::Success((None, None)))
     }
@@ -829,13 +829,13 @@ impl<Ctx> ChannelsShutdown<Ctx> for NullChannels {
         _ctx: &mut Ctx,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
-        _retry: Self::ShutdownStreamRetry
+        _retry: Self::StreamShutdownRetry
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         error!(target: "",
                "should never call retry_shutdown_stream");
@@ -1355,13 +1355,13 @@ where
         Private::ShutdownListenError,
         Shared::ShutdownListenError
     >;
-    type ShutdownStreamError = SharedPrivateMatchError<
-        Private::ShutdownStreamError,
-        Shared::ShutdownStreamError
+    type StreamShutdownError = SharedPrivateMatchError<
+        Private::StreamShutdownError,
+        Shared::StreamShutdownError
     >;
-    type ShutdownStreamRetry = SharedPrivateStreamRetry<
-        Private::ShutdownStreamRetry,
-        Shared::ShutdownStreamRetry
+    type StreamShutdownRetry = SharedPrivateStreamRetry<
+        Private::StreamShutdownRetry,
+        Shared::StreamShutdownRetry
     >;
 
     fn shutdown_stream(
@@ -1373,9 +1373,9 @@ where
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         match (channel, param, session) {
             (
@@ -1437,13 +1437,13 @@ where
         ctx: &mut Ctx,
         channel: &Self::ChannelID,
         param: &Self::Param,
-        retry: Self::ShutdownStreamRetry
+        retry: Self::StreamShutdownRetry
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         match (channel, param, retry) {
             (

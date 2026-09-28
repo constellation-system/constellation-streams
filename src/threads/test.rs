@@ -54,11 +54,11 @@ use crate::channels::test::TestStreamID;
 use crate::stream::NullPullStreams;
 use crate::stream::PullStream;
 use crate::stream::PullStreamsOutput;
-use crate::stream::ShutdownStream;
 use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
@@ -289,7 +289,12 @@ impl PullStreamsOutput for TestStream {
     )>;
 }
 
-impl<Chans, Ctx> ShutdownStream<Chans, Ctx> for TestStream
+impl<Chans, Ctx>
+    StreamShutdown<
+        Chans,
+        StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
+        Ctx
+    > for TestStream
 where
     Chans: ChannelsShutdown<Ctx>
 {
@@ -303,11 +308,11 @@ where
             Vec<
                 StreamRetry<
                     StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                    Chans::ShutdownStreamRetry
+                    Chans::StreamShutdownRetry
                 >
             >
         >,
-        Chans::ShutdownStreamError
+        Chans::StreamShutdownError
     > {
         Ok(RetryResult::Success((None, None)))
     }

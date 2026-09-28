@@ -51,7 +51,6 @@ use log::info;
 use log::trace;
 use log::warn;
 use mio::Events;
-use mio::Poll;
 use mio::Registry;
 use mio::Token;
 use mio::Waker;
@@ -66,10 +65,11 @@ use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
-use crate::threads::Tokens;
+use crate::threads::ThreadInnerCtx;
 use crate::threads::TokensCtx;
 use crate::threads::types::DispatchEntryTypes;
 use crate::threads::types::DispatchInboundTypes;
@@ -199,11 +199,9 @@ where
 
 pub struct DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx> {
-    channels: Chans,
-    ctx: Ctx,
-    poll: Poll,
-    tokens: Tokens
+    Chans: Channels<ThreadInnerCtx<Ctx>> {
+    inner: ThreadInnerCtx<Ctx>,
+    channels: Chans
 }
 
 pub struct DispatchThread<Types, Ctx>
@@ -391,7 +389,7 @@ where
         Stream::RefreshError
     >
     where
-        Chans: Channels<Ctx>,
+        Chans: Channels<ThreadInnerCtx<Ctx>>,
         Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
         <Stream::RefreshError as RecoverableError>::Completable: ScopedError
     {
@@ -407,7 +405,7 @@ where
         Stream::RefreshError
     >
     where
-        Chans: Channels<Ctx>,
+        Chans: Channels<ThreadInnerCtx<Ctx>>,
         Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
         <Stream::RefreshError as RecoverableError>::Completable: ScopedError
     {
@@ -422,7 +420,7 @@ where
         Stream::RefreshError
     >
     where
-        Chans: Channels<Ctx>,
+        Chans: Channels<ThreadInnerCtx<Ctx>>,
         Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
         <Stream::RefreshError as RecoverableError>::Completable: ScopedError
     {
@@ -441,7 +439,7 @@ where
 
 impl<Chans, Ctx> ChannelsID for DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     type ChannelID = Chans::ChannelID;
 
@@ -456,7 +454,7 @@ where
 
 impl<Chans, Ctx> Channels<()> for DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     type Addr = Chans::Addr;
     type OutNegoParam = Chans::OutNegoParam;
@@ -486,7 +484,7 @@ where
         Self::ReqStreamError
     > {
         self.channels.req_stream(
-            &mut self.ctx,
+            &mut self.inner,
             channel,
             param,
             endpoint,
@@ -502,17 +500,17 @@ where
     ) -> Result<Self::ParamsIter<I>, Self::ParamsError>
     where
         I: Iterator<Item = Self::ChannelID> {
-        self.channels.params(&mut self.ctx, channels)
+        self.channels.params(&mut self.inner, channels)
     }
 }
 
 impl<Chans, Ctx> TokensCtx for DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     #[inline]
     fn token(&mut self) -> Token {
-        self.tokens.token()
+        self.inner.tokens.token()
     }
 
     #[inline]
@@ -520,41 +518,42 @@ where
         &mut self,
         token: Token
     ) {
-        self.tokens.free_token(token)
+        self.inner.tokens.free_token(token)
     }
 }
 
 impl<Chans, Ctx> RegistryCtx for DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     #[inline]
     fn registry(&self) -> &Registry {
-        self.poll.registry()
+        self.inner.poll.registry()
     }
 }
 
 impl<Chans, Ctx> DispatchThreadCtx<Chans, Ctx>
 where
-    Chans: Channels<Ctx>
+    Chans: Channels<ThreadInnerCtx<Ctx>>
 {
     fn new(
-        ctx: Ctx,
-        poll: Poll,
-        channels: Chans,
-        tokens_hint: Option<usize>
+        inner: ThreadInnerCtx<Ctx>,
+        channels: Chans
     ) -> Self {
-        let tokens = match tokens_hint {
-            Some(hint) => Tokens::with_capacity(hint),
-            None => Tokens::new()
-        };
-
         DispatchThreadCtx {
             channels: channels,
-            ctx: ctx,
-            poll: poll,
-            tokens: tokens
+            inner: inner
         }
+    }
+
+    #[inline]
+    pub fn inner(&self) -> &Ctx {
+        self.inner.inner()
+    }
+
+    #[inline]
+    pub fn inner_mut(&mut self) -> &mut Ctx {
+        self.inner.inner_mut()
     }
 }
 
@@ -599,7 +598,7 @@ where
                 match ctx
                     .channels
                     .shutdown_stream(
-                        &mut ctx.ctx,
+                        &mut ctx.inner,
                         id.channel(),
                         id.param(),
                         stream
@@ -976,7 +975,7 @@ where
                     let (id, retry) = ent.take();
 
                     match ctx.channels.retry_shutdown_stream(
-                        &mut ctx.ctx,
+                        &mut ctx.inner,
                         id.channel(),
                         id.param(),
                         retry
@@ -1156,6 +1155,9 @@ where
     ) -> Result<(), Error> {
         let nsessions = self.pull_streams.len();
 
+        debug!(target: "dispatch-entry-shutdown",
+               "shutting down pull streams");
+
         // Shut down all streams.
         for (id, stream) in self.pull_streams.into_iter() {
             debug!(target: "dispatch-thread",
@@ -1163,7 +1165,7 @@ where
                    id, stream.prin());
 
             match ctx.channels.shutdown_stream(
-                &mut ctx.ctx,
+                &mut ctx.inner,
                 id.channel(),
                 id.param(),
                 stream
@@ -1203,7 +1205,40 @@ where
             *shutdown_retries = self.shutdown_retries
         }
 
-        self.dispatched.shutdown()
+        let out = self.dispatched.shutdown();
+
+        debug!(target: "dispatch-entry-shutdown",
+               "shutting down push stream");
+
+        // Shut down the push stream.
+        match self
+            .dispatched
+            .stream
+            .shutdown_stream(&mut ctx.inner, &mut ctx.channels)
+        {
+            Ok(res) => {
+                if let RetryResult::Retry(retries) = res {
+                    match shutdown_retries {
+                        Some(shutdown_retries) => {
+                            shutdown_retries.extend(retries);
+                        }
+                        None => {
+                            let mut heap = BinaryHeap::with_capacity(nsessions);
+
+                            heap.extend(retries);
+                            *shutdown_retries = Some(heap);
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                error!(target: "poll-thread-shutdown",
+                       "error shutting down push stream: {}",
+                       err);
+            }
+        }
+
+        out
     }
 }
 
@@ -1215,28 +1250,16 @@ where
     pub fn create(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
         dispatcher: Types::Disp,
-        mut ctx: Ctx
+        ctx: Ctx
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
-        let (
-            chans_config,
-            mode_config,
-            nevents,
-            nsessions,
-            ndispatched,
-            tokens_hint
-        ) = config.take();
+        let (chans_config, mode_config, nevents, _, ndispatched, _) =
+            config.take();
+        // XXX Pass in size hints here
+        let mut ctx = ThreadInnerCtx::new(ctx)
+            .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| DispatchThreadCreateError::Channels { err: err })?;
-        let poll = Poll::new()
-            .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
-        let tokens_hint =
-            tokens_hint.or_else(|| match (nsessions, ndispatched) {
-                (Some(nsessions), Some(ndispatched)) => {
-                    Some((nsessions * ndispatched) + (2 * ndispatched) + 1)
-                }
-                _ => None
-            });
-        let mut ctx = DispatchThreadCtx::new(ctx, poll, channels, tokens_hint);
+        let mut ctx = DispatchThreadCtx::new(ctx, channels);
         let (dispatched, parties, stream_ids) = match ndispatched {
             Some(ndispatched) => (
                 HashMap::with_capacity(ndispatched),
@@ -1397,7 +1420,7 @@ where
                            session.prin(), token.get());
 
                         match self.ctx.channels.shutdown_stream(
-                            &mut self.ctx.ctx,
+                            &mut self.ctx.inner,
                             id.channel(),
                             id.param(),
                             session
@@ -1505,7 +1528,7 @@ where
                                session.prin(), err);
 
                         match self.ctx.channels.shutdown_stream(
-                            &mut self.ctx.ctx,
+                            &mut self.ctx.inner,
                             id.channel(),
                             id.param(),
                             session
@@ -1651,7 +1674,7 @@ where
                                id);
 
                         match self.ctx.channels.retry_shutdown_stream(
-                            &mut self.ctx.ctx,
+                            &mut self.ctx.inner,
                             id.channel(),
                             id.param(),
                             retry
@@ -1706,7 +1729,7 @@ where
             trace!(target: "dispatch-thread",
                    "listening");
 
-            match self.ctx.channels.listen(&mut self.ctx.ctx, &live) {
+            match self.ctx.channels.listen(&mut self.ctx.inner, &live) {
                 Ok(RetryResult::Success((
                     streams,
                     endpoints,
@@ -2095,7 +2118,8 @@ where
                      }
 
                      self.ctx
-                         .poll
+                         .inner
+                         .poll()
                          .poll(&mut events, duration)
                          .inspect_err(|err| {
                              error!(target: "dispatch-thread",
@@ -2175,10 +2199,8 @@ where
         }
 
         let DispatchThreadCtx {
-            mut ctx,
-            mut poll,
-            channels,
-            ..
+            inner: mut ctx,
+            channels
         } = ctx;
         let mut channels = Some(channels);
         let mut next = None;
@@ -2199,7 +2221,8 @@ where
                            "waiting for poll indefinitely");
                     }
 
-                    poll.poll(&mut events, duration)
+                    ctx.poll
+                        .poll(&mut events, duration)
                         .inspect_err(|err| {
                             error!(target: "dispatch-thread",
                                     "error polling: {}",

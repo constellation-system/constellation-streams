@@ -1098,8 +1098,8 @@ where
     Stream: Clone
 {
     type ShutdownListenError = TestChannelsError;
-    type ShutdownStreamError = TestChannelsError;
-    type ShutdownStreamRetry = WithRetryWhen<Self::Stream>;
+    type StreamShutdownError = TestChannelsError;
+    type StreamShutdownRetry = WithRetryWhen<Self::Stream>;
 
     fn shutdown_stream(
         &mut self,
@@ -1110,9 +1110,9 @@ where
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         session
             .shutdown
@@ -1126,13 +1126,13 @@ where
         _ctx: &mut Ctx,
         _channel: &Self::ChannelID,
         _param: &Self::Param,
-        retry: Self::ShutdownStreamRetry
+        retry: Self::StreamShutdownRetry
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
-            Self::ShutdownStreamRetry
+            Self::StreamShutdownRetry
         >,
-        Self::ShutdownStreamError
+        Self::StreamShutdownError
     > {
         let (mut session, _) = retry.take();
 

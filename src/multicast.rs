@@ -74,12 +74,11 @@ use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
-use crate::stream::ShutdownStream;
 use crate::stream::StreamFinishCancel;
-use crate::stream::StreamID;
 use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
 use crate::threads::SelfPartyCtx;
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1677,11 +1676,12 @@ where
     }
 }
 
-impl<Party, Stream, Ctx, Chans, InnerCtx> ShutdownStream<Chans, InnerCtx>
+impl<Party, Stream, Ctx, StreamID, Chans, InnerCtx>
+    StreamShutdown<Chans, StreamID, InnerCtx>
     for StreamMulticaster<Party, Stream, Ctx>
 where
     Party: Clone + Debug + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + ShutdownStream<Chans, InnerCtx>,
+    Stream: PushStream<Ctx> + StreamShutdown<Chans, StreamID, InnerCtx>,
     Stream::BatchID: Clone,
     Chans: ChannelsShutdown<InnerCtx>
 {
@@ -1692,14 +1692,9 @@ where
     ) -> Result<
         RetryResult<
             (Option<Vec<Chans::Param>>, Option<Instant>),
-            Vec<
-                StreamRetry<
-                    StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
-                    Chans::ShutdownStreamRetry
-                >
-            >
+            Vec<StreamRetry<StreamID, Chans::StreamShutdownRetry>>
         >,
-        Chans::ShutdownStreamError
+        Chans::StreamShutdownError
     > {
         let mut res = None;
         let mut when = None;
