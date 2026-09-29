@@ -64,7 +64,6 @@ use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::Dispatched;
 use crate::threads::poll::MsgsWaker;
-use crate::threads::types::DispatchEntryTypes;
 use crate::threads::types::DispatchInboundTypes;
 use crate::threads::types::DispatchTypes;
 use crate::threads::types::PollThreadTypes;
@@ -212,11 +211,9 @@ impl MsgsWaker for TestRecv {
     }
 }
 
-impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
+impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch
+where Ctx: 'static + Send {
     type DispatchError = Infallible;
-    type Msgs = ();
-    type PushStream = TestStream;
-    type Recv = TestRecv;
 
     fn dispatch(
         &mut self,
@@ -224,10 +221,7 @@ impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch {
         _prin: &NullCred,
         shutdown: ShutdownFlag,
         _notify: Notify
-    ) -> Result<
-        Dispatched<ThreadTestTypes, Self::PushStream, Self::Msgs, Self::Recv>,
-        Self::DispatchError
-    > {
+    ) -> Result<Dispatched<ThreadTestTypes, Ctx>, Self::DispatchError> {
         let TestDispatchScriptEntry {
             msgs,
             stream_script
@@ -720,7 +714,7 @@ impl DispatchInboundTypes for ThreadTestTypes {
     type Wrapper = String;
 }
 
-impl<Ctx> DispatchEntryTypes<Ctx> for ThreadTestTypes
+impl<Ctx> DispatchTypes<Ctx> for ThreadTestTypes
 where
     Ctx: 'static + Send
 {
@@ -746,12 +740,4 @@ where
     type RefreshRetry = TestRefreshRetry;
     type ReportStreamError = Infallible;
     type Stream = TestStream;
-}
-
-impl<Ctx> DispatchTypes<Ctx> for ThreadTestTypes
-where
-    Ctx: 'static + Send
-{
-    type Disp = TestDispatch;
-    type DispatchError = Infallible;
 }

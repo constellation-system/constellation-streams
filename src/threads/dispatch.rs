@@ -71,8 +71,6 @@ use crate::threads::PushModeResult;
 use crate::threads::RegistryCtx;
 use crate::threads::ThreadInnerCtx;
 use crate::threads::TokensCtx;
-use crate::threads::types::DispatchEntryTypes;
-use crate::threads::types::DispatchInboundTypes;
 use crate::threads::types::DispatchTypes;
 
 /// Trait for session dispatchers.
@@ -90,20 +88,7 @@ use crate::threads::types::DispatchTypes;
 ///   authentication types.
 pub trait Dispatch<Types, Ctx>
 where
-    Types: DispatchInboundTypes {
-    /// Type of top-level push-side streams to be returned from
-    /// dispatch.
-    type PushStream;
-    /// Type of outbound message structures.
-    ///
-    /// This will be used by the created [PushStreamPrivateThread] to
-    /// obtain messages to be sent using the
-    /// [PushStream](Dispatch::PushStream) instance.
-    type Msgs;
-    /// Type of authenticated message receivers.
-    ///
-    /// This will be used to deliver incoming messages.
-    type Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg>;
+    Types: DispatchTypes<Ctx> {
     /// Type of errors that can occur during dispatch.
     type DispatchError: Debug + Display + ScopedError;
 
@@ -133,7 +118,7 @@ where
         shutdown: ShutdownFlag,
         notify: Notify
     ) -> Result<
-        Dispatched<Types, Self::PushStream, Self::Msgs, Self::Recv>,
+        Dispatched<Types, Ctx>,
         Self::DispatchError
     >;
 }
@@ -156,31 +141,30 @@ where
 /// - `Msgs`: Type of outbound message box used to generate outbound messages.
 ///
 /// - `Recv`: Type of [AuthNMsgRecv] used to send messages.
-pub struct Dispatched<Types, Stream, Msgs, Recv>
+pub struct Dispatched<Types, Ctx>
 where
-    Types: DispatchInboundTypes,
-    Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg> {
+    Types: DispatchTypes<Ctx> {
     /// Flag used to signal shutdown to the connected thread.
     shutdown: ShutdownFlag,
     /// Message authenticator to use for inbound messages.
     authn: Types::MsgAuth,
     /// Inbound message receiver.
-    recv: Recv,
+    recv: Types::Recv,
     /// Outbound message box.
-    msgs: Msgs,
+    msgs: Types::Msgs,
     /// [PushStream] used to send messages.
-    stream: Stream
+    stream: Types::Stream
 }
 
 pub struct DispatchedEntry<Types, Ctx>
 where
-    Types: DispatchEntryTypes<Ctx> {
+    Types: DispatchTypes<Ctx> {
     ctx: PhantomData<Ctx>,
     pull_streams: HashMap<
         StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
         Types::AuthNChan
     >,
-    dispatched: Dispatched<Types, Types::Stream, Types::Msgs, Types::Recv>,
+    dispatched: Dispatched<Types, Ctx>,
     notify: Notify,
     mode: Types::Mode,
     shutdown_retries: Option<
@@ -204,8 +188,9 @@ where
     channels: Chans
 }
 
-pub struct DispatchThread<Types, Ctx>
+pub struct DispatchThread<Types, Disp, Ctx>
 where
+    Disp: Dispatch<Types, Ctx> + Send,
     Types: DispatchTypes<Ctx> {
     ctx: DispatchThreadCtx<Types::Chans, Ctx>,
     // XXX Replace this hash table + counter with a better dense map
@@ -229,7 +214,7 @@ where
             >
         >
     >,
-    dispatcher: Types::Disp,
+    dispatcher: Disp,
     mode_config: Types::ModeConfig,
     shutdown: ShutdownFlag,
     notify: Arc<Waker>,
@@ -289,10 +274,9 @@ pub enum DispatchThreadRecvError<ID, Pull, AuthN, Recv> {
     }
 }
 
-impl<Types, Stream, Msgs, Recv> Dispatched<Types, Stream, Msgs, Recv>
+impl<Types, Ctx> Dispatched<Types, Ctx>
 where
-    Types: DispatchInboundTypes,
-    Recv: AuthNMsgRecv<Types::MsgPrin, Types::AuthNMsg>
+    Types: DispatchTypes<Ctx>,
 {
     /// Create a new `Dispatched` from its components.
     ///
@@ -311,10 +295,10 @@ where
     #[inline]
     pub fn new(
         shutdown: ShutdownFlag,
-        stream: Stream,
-        msgs: Msgs,
+        stream: Types::Stream,
+        msgs: Types::Msgs,
         authn: Types::MsgAuth,
-        recv: Recv
+        recv: Types::Recv
     ) -> Self {
         Dispatched {
             shutdown: shutdown,
@@ -345,7 +329,7 @@ where
         msg: Types::Wrapper
     ) -> Result<
         (),
-        DispatchThreadHandleMsgError<Types::MsgAuthError, Recv::RecvError>
+        DispatchThreadHandleMsgError<Types::MsgAuthError, Types::RecvError>
     >
     where
         ID: Display {
@@ -380,50 +364,35 @@ where
         }
     }
 
-    fn complete_refresh_stream<Ctx, Chans>(
+    fn complete_refresh_stream(
         &mut self,
-        ctx: &mut DispatchThreadCtx<Chans, Ctx>,
-        err: <Stream::RefreshError as RecoverableError>::Completable
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        err: Types::RefreshCompletableError
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::RefreshRetry>,
-        Stream::RefreshError
-    >
-    where
-        Chans: Channels<ThreadInnerCtx<Ctx>>,
-        Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
-        <Stream::RefreshError as RecoverableError>::Completable: ScopedError
-    {
+        RetryResult<Option<Instant>, Types::RefreshRetry>,
+        Types::RefreshError
+    > {
         self.stream.complete_refresh(ctx, err)
     }
 
-    fn retry_refresh_stream<Ctx, Chans>(
+    fn retry_refresh_stream(
         &mut self,
-        ctx: &mut DispatchThreadCtx<Chans, Ctx>,
-        retry: Stream::RefreshRetry
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
+        retry: Types::RefreshRetry
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::RefreshRetry>,
-        Stream::RefreshError
-    >
-    where
-        Chans: Channels<ThreadInnerCtx<Ctx>>,
-        Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
-        <Stream::RefreshError as RecoverableError>::Completable: ScopedError
-    {
+        RetryResult<Option<Instant>, Types::RefreshRetry>,
+        Types::RefreshError
+    > {
         self.stream.retry_refresh(ctx, retry)
     }
 
-    fn refresh_stream<Ctx, Chans>(
+    fn refresh_stream(
         &mut self,
-        ctx: &mut DispatchThreadCtx<Chans, Ctx>
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>
     ) -> Result<
-        RetryResult<Option<Instant>, Stream::RefreshRetry>,
-        Stream::RefreshError
-    >
-    where
-        Chans: Channels<ThreadInnerCtx<Ctx>>,
-        Stream: StreamRefresh<DispatchThreadCtx<Chans, Ctx>>,
-        <Stream::RefreshError as RecoverableError>::Completable: ScopedError
-    {
+        RetryResult<Option<Instant>, Types::RefreshRetry>,
+        Types::RefreshError
+    > {
         self.stream.refresh(ctx)
     }
 
@@ -559,7 +528,7 @@ where
 
 impl<Types, Ctx> DispatchedEntry<Types, Ctx>
 where
-    Types: DispatchEntryTypes<Ctx>
+    Types: DispatchTypes<Ctx>
 {
     /// Report a new stream for a given principal.
     ///
@@ -1242,14 +1211,15 @@ where
     }
 }
 
-impl<Types, Ctx> DispatchThread<Types, Ctx>
+impl<Types, Disp, Ctx> DispatchThread<Types, Disp, Ctx>
 where
+    Disp: 'static + Dispatch<Types, Ctx> + Send,
     Types: 'static + DispatchTypes<Ctx>,
     Ctx: 'static + Send
 {
     pub fn create(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
-        dispatcher: Types::Disp,
+        dispatcher: Disp,
         ctx: Ctx
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
         let (chans_config, mode_config, nevents, _, ndispatched, _) =
@@ -1291,7 +1261,7 @@ where
 
     pub fn start(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
-        dispatcher: Types::Disp,
+        dispatcher: Disp,
         ctx: Ctx
     ) -> Result<JoinHandle<()>, Error> {
         Builder::new()
@@ -1318,7 +1288,7 @@ where
             DispatchedID
         >,
         id: StreamID<Types::Addr, Types::ChannelID, Types::ChannelParam>,
-        dispatched: Dispatched<Types, Types::Stream, Types::Msgs, Types::Recv>,
+        dispatched: Dispatched<Types, Ctx>,
         mode: Types::Mode,
         stream: Types::AuthNChan,
         notify: Notify,
@@ -1475,7 +1445,7 @@ where
                 let notify = Notify::new(self.notify.clone());
 
                 match self.dispatcher.dispatch(
-                    &mut self.ctx,
+                    self.ctx.inner.inner_mut(),
                     session.prin(),
                     self.shutdown.clone(),
                     notify.clone()

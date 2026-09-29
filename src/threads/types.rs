@@ -107,7 +107,6 @@ use crate::stream::StreamReporter;
 use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::ThreadInnerCtx;
-use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::DispatchThreadCtx;
 use crate::threads::poll::MsgsWaker;
 use crate::threads::poll::PollThreadCtx;
@@ -367,7 +366,7 @@ pub trait DispatchInboundTypes {
         >;
 }
 
-pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
+pub trait DispatchTypes<Ctx>: DispatchInboundTypes {
     type Addr: Clone + Debug + Display + Eq + Hash;
     type ChannelParam: Clone
         + Debug
@@ -434,18 +433,6 @@ pub trait DispatchEntryTypes<Ctx>: DispatchInboundTypes {
             StreamShutdownError = Self::ChanShutdownError,
             StreamShutdownRetry = Self::ChanShutdownRetry
         >;
-}
-
-pub trait DispatchTypes<Ctx>: DispatchEntryTypes<Ctx> + Sized {
-    type DispatchError: Debug + Display + ScopedError;
-    type Disp: Dispatch<
-            Self,
-            DispatchThreadCtx<Self::Chans, Ctx>,
-            Msgs = Self::Msgs,
-            Recv = Self::Recv,
-            PushStream = Self::Stream,
-            DispatchError = Self::DispatchError
-        > + Send;
 }
 
 #[derive(Debug)]
@@ -5049,7 +5036,7 @@ where
 }
 
 impl<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Msgs, Recv, Ctx> DispatchEntryTypes<Ctx>
+     ChansCreateError, Resolve, Msgs, Recv, Ctx> DispatchTypes<Ctx>
     for DatagramDispatchTypes<InMsg, OutMsg, Wrapper, MsgAuth, Epochs, Chans,
                               ChansConfig, ChansCreateError, Resolve,
                               Msgs, Recv, Ctx>
@@ -5204,7 +5191,7 @@ where
 }
 
 impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Types, Ctx> DispatchEntryTypes<Ctx>
+     ChansCreateError, Resolve, Types, Ctx> DispatchTypes<Ctx>
     for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
                               ChansCreateError, Resolve, Types, Ctx>
 where
