@@ -355,8 +355,7 @@ pub trait DispatchInboundTypes {
     type MsgPrin: Clone + Display + Eq + Hash;
     type AuthNMsg: AuthNed<Self::MsgPrin>;
     type MsgAuthError: Debug + Display + ScopedError;
-    type MsgAuth: Clone
-        + MsgAuthN<
+    type MsgAuth: MsgAuthN<
             Self::InMsg,
             Self::Wrapper,
             Prin = Self::MsgPrin,
@@ -819,14 +818,32 @@ where
 }
 
 #[derive(Debug)]
-pub struct LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                                 ChansCreateError, Resolve, Types, Ctx>
+pub struct LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -835,14 +852,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -864,6 +881,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -877,6 +895,8 @@ where
     Types::Msgs: Send,
     Types::Recv: Send,
 {
+    wrapper: PhantomData<LargeObjWrapper>,
+    msgauth: PhantomData<LargeObjMsgAuth>,
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     outmsg: PhantomData<OutMsg>,
@@ -1563,16 +1583,44 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Types, Ctx> Clone
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> Clone for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -1581,14 +1629,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -1610,6 +1658,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -1626,6 +1675,8 @@ where
     #[inline]
     fn clone(&self) -> Self {
         LargeObjDispatchTypes {
+            msgauth: self.msgauth,
+            wrapper: self.wrapper,
             resolve: self.resolve,
             epochs: self.epochs,
             outmsg: self.outmsg,
@@ -2349,16 +2400,44 @@ where
     }
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Types, Ctx> Default
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> Default for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -2367,14 +2446,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -2396,6 +2475,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -2412,6 +2492,8 @@ where
     #[inline]
     fn default() -> Self {
         LargeObjDispatchTypes {
+            msgauth: PhantomData,
+            wrapper: PhantomData,
             resolve: PhantomData,
             epochs: PhantomData,
             outmsg: PhantomData,
@@ -3063,16 +3145,44 @@ where
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Resolve, Types, Ctx> Send
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> Send for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -3081,14 +3191,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -3110,6 +3220,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -3736,16 +3847,44 @@ where
 {
 }
 
-unsafe impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-            ChansCreateError, Resolve, Types, Ctx> Sync
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+unsafe impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> Sync for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -3754,14 +3893,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -3783,6 +3922,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -5120,16 +5260,44 @@ where
     >;
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Types, Ctx> DispatchInboundTypes
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> DispatchInboundTypes for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -5138,14 +5306,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -5167,6 +5335,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -5180,26 +5349,54 @@ where
     Types::Msgs: Send,
     Types::Recv: Send,
 {
-    type InMsg = InMsg;
+    type InMsg = LargeObjMsg<Types::HashID>;
     type OutMsg = OutMsg;
-    type Wrapper = Types::Wrapper;
-    type SessionPrin = Types::SessionPrin;
-    type MsgPrin = <Types::MsgAuthN as MsgAuthN<InMsg, Types::Wrapper>>::Prin;
-    type AuthNMsg = Types::AuthNMsg;
-    type MsgAuth = Types::MsgAuthN;
-    type MsgAuthError = Types::AuthNError;
+    type Wrapper = LargeObjWrapper;
+    type SessionPrin = LargeObjMsgAuth::SessionPrin;
+    type MsgPrin = Types::SessionPrin;
+    type AuthNMsg = LargeObjMsgAuth::AuthNMsg;
+    type MsgAuth = LargeObjMsgAuth;
+    type MsgAuthError = LargeObjMsgAuth::Error;
 }
 
-impl<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-     ChansCreateError, Resolve, Types, Ctx> DispatchTypes<Ctx>
-    for LargeObjDispatchTypes<InMsg, OutMsg, Epochs, Chans, ChansConfig,
-                              ChansCreateError, Resolve, Types, Ctx>
+impl<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+> DispatchTypes<Ctx> for LargeObjDispatchTypes<
+    InMsg,
+    OutMsg,
+    LargeObjWrapper,
+    LargeObjMsgAuth,
+    Epochs,
+    Chans,
+    ChansConfig,
+    ChansCreateError,
+    Resolve,
+    Types,
+    Ctx
+>
 where
     Epochs: Create + Iterator,
     Epochs::Config: Default,
     Epochs::Item: Clone + Debug + Display + Default + Eq,
     InMsg: Send,
     OutMsg: Clone + Send,
+    LargeObjMsgAuth: Create
+        + MsgAuthN<
+            LargeObjMsg<Types::HashID>,
+            LargeObjWrapper,
+            Prin = Types::SessionPrin
+        >,
+    LargeObjMsgAuth::Config: Send,
     ChansConfig: Send,
     ChansCreateError: Debug + Display,
     Chans: for<'a> CreateWithParam<&'a mut ThreadInnerCtx<Ctx>,
@@ -5208,14 +5405,14 @@ where
         + Channels<ThreadInnerCtx<Ctx>>
         + ChannelsListen<ThreadInnerCtx<Ctx>>
         + ChannelsShutdown<ThreadInnerCtx<Ctx>>,
-    Chans::Stream: Clone + AuthNed<Types::SessionPrin>
+    Chans::Stream: Clone + AuthNed<LargeObjMsgAuth::SessionPrin>
     + PushStream<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamPrivate<DispatchThreadCtx<Chans, Ctx>>
     + PushStreamAdd<LargeObjMsg<Types::HashID>,
                     DispatchThreadCtx<Chans, Ctx>>
     + LargeObjOfferStream<Types::HashID,
                           DispatchThreadCtx<Chans, Ctx>>
-    + PullStream<Types::Wrapper>,
+    + PullStream<LargeObjWrapper>,
     Chans::OutNegoParam: Clone + Eq + Hash,
     <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags: Send,
     <<Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags as Frags>::Param: Send + Sync,
@@ -5237,6 +5434,7 @@ where
     Resolve::Origin: Clone + Debug + Display + Eq + Hash,
     Resolve::OriginConfig: Clone,
     Resolve::Config: Clone + Default,
+    LargeObjMsgAuth::SessionPrin: Send + Sync,
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
     Types::Hash: Clone + HashAlgo + Send,
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
@@ -5279,10 +5477,23 @@ where
     type ChanShutdownRetry = Chans::StreamShutdownRetry;
     type ChanShutdownError = Chans::StreamShutdownError;
     type Chans = Chans;
-    type PullError = <Chans::Stream as PullStream<Types::Wrapper>>::PullError;
-    type Recv = Types::Recv;
-    type RecvError =
-        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError;
+    type PullError = <Chans::Stream as PullStream<LargeObjWrapper>>::PullError;
+    type Recv = Arc<Mutex<LargeObjProto<
+        InMsg,
+        OutMsg,
+        (),
+        <Chans::Stream as LargeObjStream<DispatchThreadCtx<Chans, Ctx>>>::Frags,
+        Types
+    >>>;
+    type RecvError = WithMutexPoison<LargeObjRecvError<
+        Types::HashID,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::AuthNError,
+        <Types::AuthNTypes as MsgAuthNTypes<InMsg>>::DecodeError,
+        <Types::Recv as AuthNMsgRecv<Types::Prin, Types::AuthNMsg>>::RecvError,
+        <<Chans::Stream as LargeObjStream<
+            DispatchThreadCtx<Chans, Ctx>
+        >>::Frags as Frags>::RecvReqError,
+    >>;
     type ModeConfig = PrivateLargeObjModeConfig;
     type ModeCreateError = Infallible;
     type Mode = PrivateLargeObjPushMode<
