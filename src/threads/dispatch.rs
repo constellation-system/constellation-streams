@@ -2516,7 +2516,7 @@ fn test_recv_session_send() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -2650,7 +2650,7 @@ fn test_recv_session_retry_send() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -2803,7 +2803,7 @@ fn test_recv_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -2896,7 +2896,7 @@ fn test_send_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -3038,7 +3038,7 @@ fn test_recv_session_send_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -3228,7 +3228,7 @@ fn test_recv_session_send_retry_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -3409,7 +3409,7 @@ fn test_recv_session_send_retry_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -3660,7 +3660,7 @@ fn test_recv_session_send_retry_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -3901,7 +3901,7 @@ fn test_recv_session_send_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -4095,7 +4095,7 @@ fn test_recv_session_send_complete_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -4321,7 +4321,7 @@ fn test_recv_session_send_complete_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -4572,7 +4572,7 @@ fn test_recv_session_send_complete_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -4811,7 +4811,7 @@ fn test_recv_session_recv_one() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -4949,7 +4949,7 @@ fn test_recv_session_recv_two() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -5112,7 +5112,7 @@ fn test_recv_session_recv_collide() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -5330,7 +5330,7 @@ fn test_recv_session_recv_collide_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -5529,7 +5529,7 @@ fn test_recv_session_recv_collide_retry_shutdown() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -5807,7 +5807,7 @@ fn test_recv_session_recv_collide_retry_shutdown_error() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -6033,7 +6033,7 @@ fn test_recv_session_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -6223,7 +6223,7 @@ fn test_recv_session_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -6414,7 +6414,7 @@ fn test_recv_session_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -6662,7 +6662,7 @@ fn test_recv_session_refresh_complete_imm_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -6860,7 +6860,7 @@ fn test_recv_session_refresh_complete_imm_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -7109,7 +7109,7 @@ fn test_recv_session_refresh_complete_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -7359,7 +7359,7 @@ fn test_recv_session_refresh_complete_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -7651,7 +7651,7 @@ fn test_recv_session_refresh_permanent() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -7824,7 +7824,7 @@ fn test_recv_session_refresh_complete_imm_permanent() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -7997,7 +7997,7 @@ fn test_recv_session_refresh_complete_permanent() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -8224,7 +8224,7 @@ fn test_recv_session_refresh_complete_imm_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -8474,7 +8474,7 @@ fn test_recv_session_refresh_complete_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -8765,7 +8765,7 @@ fn test_recv_session_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -9009,7 +9009,7 @@ fn test_recv_session_refresh_retry_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -9305,7 +9305,7 @@ fn test_recv_session_refresh_retry_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -9551,7 +9551,7 @@ fn test_recv_session_refresh_retry_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -9846,7 +9846,7 @@ fn test_recv_session_refresh_retry_permanent() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -10062,7 +10062,7 @@ fn test_recv_session_send_indef() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -10201,7 +10201,7 @@ fn test_recv_session_send_indef_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -10403,7 +10403,7 @@ fn test_recv_session_send_indef_retry_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -10653,7 +10653,7 @@ fn test_recv_session_send_indef_complete_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -10903,7 +10903,7 @@ fn test_recv_session_send_indef_indef_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -11100,7 +11100,7 @@ fn test_recv_session_send_indef_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -11357,7 +11357,7 @@ fn test_recv_session_send_indef_retry_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -11662,7 +11662,7 @@ fn test_recv_session_send_indef_complete_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -11966,7 +11966,7 @@ fn test_recv_session_send_indef_indef_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -12212,7 +12212,7 @@ fn test_recv_session_send_indef_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -12419,7 +12419,7 @@ fn test_recv_session_send_indef_retry_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -12674,7 +12674,7 @@ fn test_recv_session_send_indef_complete_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -12929,7 +12929,7 @@ fn test_recv_session_send_indef_indef_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -13128,7 +13128,7 @@ fn test_recv_session_send_indef_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -13387,7 +13387,7 @@ fn test_recv_session_send_indef_retry_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -13694,7 +13694,7 @@ fn test_recv_session_send_indef_complete_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -14000,7 +14000,7 @@ fn test_recv_session_send_indef_indef_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -14255,7 +14255,7 @@ fn test_recv_session_send_indef_listen_refresh() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -14463,7 +14463,7 @@ fn test_recv_session_send_indef_listen_refresh_retry() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -14723,7 +14723,7 @@ fn test_recv_session_send_indef_listen_refresh_complete_imm() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 
@@ -14933,7 +14933,7 @@ fn test_recv_session_send_indef_listen_refresh_complete() {
         None,
         None
     );
-    let mut thread: DispatchThread<ThreadTestTypes, _> =
+    let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
         DispatchThread::create(config, dispatcher, ())
             .expect("Expected success");
 

@@ -81,6 +81,7 @@ fn test_send_from_outbound_succeed() {
     let tokens = HashSet::new();
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -172,6 +173,7 @@ fn test_send_from_outbound_retry_select() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -216,6 +218,7 @@ fn test_send_from_outbound_retry_select() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -303,6 +306,7 @@ fn test_send_from_outbound_retry_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -347,6 +351,7 @@ fn test_send_from_outbound_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -434,6 +439,7 @@ fn test_send_from_outbound_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -482,6 +488,7 @@ fn test_send_from_outbound_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -569,6 +576,7 @@ fn test_send_from_outbound_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -617,6 +625,7 @@ fn test_send_from_outbound_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -711,6 +720,7 @@ fn test_send_from_outbound_retry_select_retry_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -755,6 +765,7 @@ fn test_send_from_outbound_retry_select_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -799,6 +810,7 @@ fn test_send_from_outbound_retry_select_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -893,6 +905,7 @@ fn test_send_from_outbound_retry_select_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -937,6 +950,7 @@ fn test_send_from_outbound_retry_select_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -985,6 +999,7 @@ fn test_send_from_outbound_retry_select_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1079,6 +1094,7 @@ fn test_send_from_outbound_retry_select_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -1123,6 +1139,7 @@ fn test_send_from_outbound_retry_select_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1171,6 +1188,7 @@ fn test_send_from_outbound_retry_select_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1265,6 +1283,7 @@ fn test_send_from_outbound_retry_create_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -1309,6 +1328,7 @@ fn test_send_from_outbound_retry_create_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1357,6 +1377,7 @@ fn test_send_from_outbound_retry_create_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1451,6 +1472,7 @@ fn test_send_from_outbound_retry_create_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -1495,6 +1517,7 @@ fn test_send_from_outbound_retry_create_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1543,6 +1566,7 @@ fn test_send_from_outbound_retry_create_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1637,6 +1661,7 @@ fn test_send_from_outbound_retry_add_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -1685,6 +1710,7 @@ fn test_send_from_outbound_retry_add_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1733,6 +1759,7 @@ fn test_send_from_outbound_retry_add_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1829,6 +1856,7 @@ fn test_send_from_outbound_retry_select_complete_create_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -1873,6 +1901,7 @@ fn test_send_from_outbound_retry_select_complete_create_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -1969,6 +1998,7 @@ fn test_send_from_outbound_retry_select_complete_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2013,6 +2043,7 @@ fn test_send_from_outbound_retry_select_complete_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2057,6 +2088,7 @@ fn test_send_from_outbound_retry_select_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2153,6 +2185,7 @@ fn test_send_from_outbound_retry_select_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2197,6 +2230,7 @@ fn test_send_from_outbound_retry_select_complete_add_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2293,6 +2327,7 @@ fn test_send_from_outbound_retry_select_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2337,6 +2372,7 @@ fn test_send_from_outbound_retry_select_complete_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2385,6 +2421,7 @@ fn test_send_from_outbound_retry_select_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2481,6 +2518,7 @@ fn test_send_from_outbound_retry_select_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2525,6 +2563,7 @@ fn test_send_from_outbound_retry_select_complete_finish_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2621,6 +2660,7 @@ fn test_send_from_outbound_retry_select_complete_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2665,6 +2705,7 @@ fn test_send_from_outbound_retry_select_complete_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2713,6 +2754,7 @@ fn test_send_from_outbound_retry_select_complete_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2809,6 +2851,7 @@ fn test_send_from_outbound_retry_create_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2853,6 +2896,7 @@ fn test_send_from_outbound_retry_create_complete_add_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -2949,6 +2993,7 @@ fn test_send_from_outbound_retry_create_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -2993,6 +3038,7 @@ fn test_send_from_outbound_retry_create_complete_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3041,6 +3087,7 @@ fn test_send_from_outbound_retry_create_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3137,6 +3184,7 @@ fn test_send_from_outbound_retry_create_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3181,6 +3229,7 @@ fn test_send_from_outbound_retry_create_complete_finish_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3277,6 +3326,7 @@ fn test_send_from_outbound_retry_create_complete_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3321,6 +3371,7 @@ fn test_send_from_outbound_retry_create_complete_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3369,6 +3420,7 @@ fn test_send_from_outbound_retry_create_complete_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3465,6 +3517,7 @@ fn test_send_from_outbound_retry_add_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3513,6 +3566,7 @@ fn test_send_from_outbound_retry_add_complete_finish_imm() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3609,6 +3663,7 @@ fn test_send_from_outbound_retry_add_complete_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3657,6 +3712,7 @@ fn test_send_from_outbound_retry_add_complete_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3705,6 +3761,7 @@ fn test_send_from_outbound_retry_add_complete_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3800,6 +3857,7 @@ fn test_send_from_outbound_retry_select_create_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3844,6 +3902,7 @@ fn test_send_from_outbound_retry_select_create_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -3942,6 +4001,7 @@ fn test_send_from_outbound_retry_select_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -3986,6 +4046,7 @@ fn test_send_from_outbound_retry_select_add_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4084,6 +4145,7 @@ fn test_send_from_outbound_retry_select_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4128,6 +4190,7 @@ fn test_send_from_outbound_retry_select_finish_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4226,6 +4289,7 @@ fn test_send_from_outbound_retry_create_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4270,6 +4334,7 @@ fn test_send_from_outbound_retry_create_add_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4368,6 +4433,7 @@ fn test_send_from_outbound_retry_create_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4412,6 +4478,7 @@ fn test_send_from_outbound_retry_create_finish_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4510,6 +4577,7 @@ fn test_send_from_outbound_retry_add_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4558,6 +4626,7 @@ fn test_send_from_outbound_retry_add_finish_permanent() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4648,6 +4717,7 @@ fn test_send_from_outbound_select_indef() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -4692,6 +4762,7 @@ fn test_send_from_outbound_select_indef() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4786,6 +4857,7 @@ fn test_send_from_outbound_select_indef_retry_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4830,6 +4902,7 @@ fn test_send_from_outbound_select_indef_retry_create() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -4874,6 +4947,7 @@ fn test_send_from_outbound_select_indef_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -4918,6 +4992,7 @@ fn test_send_from_outbound_select_indef_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5012,6 +5087,7 @@ fn test_send_from_outbound_select_indef_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5056,6 +5132,7 @@ fn test_send_from_outbound_select_indef_retry_add() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5104,6 +5181,7 @@ fn test_send_from_outbound_select_indef_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5152,6 +5230,7 @@ fn test_send_from_outbound_select_indef_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5246,6 +5325,7 @@ fn test_send_from_outbound_select_indef_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5290,6 +5370,7 @@ fn test_send_from_outbound_select_indef_retry_finish() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5338,6 +5419,7 @@ fn test_send_from_outbound_select_indef_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5386,6 +5468,7 @@ fn test_send_from_outbound_select_indef_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5482,6 +5565,7 @@ fn test_send_from_outbound_select_indef_complete_create_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5526,6 +5610,7 @@ fn test_send_from_outbound_select_indef_complete_create_imm() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5622,6 +5707,7 @@ fn test_send_from_outbound_select_indef_complete_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5666,6 +5752,7 @@ fn test_send_from_outbound_select_indef_complete_create() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5710,6 +5797,7 @@ fn test_send_from_outbound_select_indef_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5806,6 +5894,7 @@ fn test_send_from_outbound_select_indef_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5850,6 +5939,7 @@ fn test_send_from_outbound_select_indef_complete_add_imm() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -5946,6 +6036,7 @@ fn test_send_from_outbound_select_indef_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -5990,6 +6081,7 @@ fn test_send_from_outbound_select_indef_complete_add() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6038,6 +6130,7 @@ fn test_send_from_outbound_select_indef_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6134,6 +6227,7 @@ fn test_send_from_outbound_select_indef_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -6178,6 +6272,7 @@ fn test_send_from_outbound_select_indef_complete_finish_imm() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6274,6 +6369,7 @@ fn test_send_from_outbound_select_indef_complete_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -6318,6 +6414,7 @@ fn test_send_from_outbound_select_indef_complete_finish() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6366,6 +6463,7 @@ fn test_send_from_outbound_select_indef_complete_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6457,6 +6555,7 @@ fn test_send_from_outbound_complete_select_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -6552,6 +6651,7 @@ fn test_send_from_outbound_select_indef_create_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -6596,6 +6696,7 @@ fn test_send_from_outbound_select_indef_create_permanent() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6694,6 +6795,7 @@ fn test_send_from_outbound_select_indef_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -6738,6 +6840,7 @@ fn test_send_from_outbound_select_indef_add_permanent() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6836,6 +6939,7 @@ fn test_send_from_outbound_select_indef_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(later));
@@ -6880,6 +6984,7 @@ fn test_send_from_outbound_select_indef_finish_permanent() {
 
     let next = mode
         .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -6974,6 +7079,7 @@ fn test_send_from_outbound_complete_select() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7018,6 +7124,7 @@ fn test_send_from_outbound_complete_select() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -7107,6 +7214,7 @@ fn test_send_from_outbound_complete_create_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7196,6 +7304,7 @@ fn test_send_from_outbound_complete_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7240,6 +7349,7 @@ fn test_send_from_outbound_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -7329,6 +7439,7 @@ fn test_send_from_outbound_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7418,6 +7529,7 @@ fn test_send_from_outbound_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7466,6 +7578,7 @@ fn test_send_from_outbound_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -7555,6 +7668,7 @@ fn test_send_from_outbound_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7644,6 +7758,7 @@ fn test_send_from_outbound_complete_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7692,6 +7807,7 @@ fn test_send_from_outbound_complete_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -7786,6 +7902,7 @@ fn test_send_from_outbound_complete_select_imm_retry_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7830,6 +7947,7 @@ fn test_send_from_outbound_complete_select_imm_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -7924,6 +8042,7 @@ fn test_send_from_outbound_complete_select_retry_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -7968,6 +8087,7 @@ fn test_send_from_outbound_complete_select_retry_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8012,6 +8132,7 @@ fn test_send_from_outbound_complete_select_retry_create() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8106,6 +8227,7 @@ fn test_send_from_outbound_complete_select_imm_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8154,6 +8276,7 @@ fn test_send_from_outbound_complete_select_imm_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8248,6 +8371,7 @@ fn test_send_from_outbound_complete_select_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8292,6 +8416,7 @@ fn test_send_from_outbound_complete_select_retry_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8340,6 +8465,7 @@ fn test_send_from_outbound_complete_select_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8434,6 +8560,7 @@ fn test_send_from_outbound_complete_select_imm_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8482,6 +8609,7 @@ fn test_send_from_outbound_complete_select_imm_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8576,6 +8704,7 @@ fn test_send_from_outbound_complete_select_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8620,6 +8749,7 @@ fn test_send_from_outbound_complete_select_retry_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8668,6 +8798,7 @@ fn test_send_from_outbound_complete_select_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8760,6 +8891,7 @@ fn test_send_from_outbound_complete_create_imm_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8808,6 +8940,7 @@ fn test_send_from_outbound_complete_create_imm_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8900,6 +9033,7 @@ fn test_send_from_outbound_complete_create_retry_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -8944,6 +9078,7 @@ fn test_send_from_outbound_complete_create_retry_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -8991,6 +9126,7 @@ fn test_send_from_outbound_complete_create_retry_add() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9083,6 +9219,7 @@ fn test_send_from_outbound_complete_create_imm_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9131,6 +9268,7 @@ fn test_send_from_outbound_complete_create_imm_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9223,6 +9361,7 @@ fn test_send_from_outbound_complete_create_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9267,6 +9406,7 @@ fn test_send_from_outbound_complete_create_retry_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9315,6 +9455,7 @@ fn test_send_from_outbound_complete_create_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9407,6 +9548,7 @@ fn test_send_from_outbound_complete_add_imm_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9455,6 +9597,7 @@ fn test_send_from_outbound_complete_add_imm_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9547,6 +9690,7 @@ fn test_send_from_outbound_complete_add_retry_finish() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9595,6 +9739,7 @@ fn test_send_from_outbound_complete_add_retry_finish() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9643,6 +9788,7 @@ fn test_send_from_outbound_complete_add_retry_finish() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9739,6 +9885,7 @@ fn test_send_from_outbound_complete_select_imm_complete_create_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9835,6 +9982,7 @@ fn test_send_from_outbound_complete_select_imm_complete_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -9879,6 +10027,7 @@ fn test_send_from_outbound_complete_select_imm_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -9975,6 +10124,7 @@ fn test_send_from_outbound_complete_select_complete_create_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10019,6 +10169,7 @@ fn test_send_from_outbound_complete_select_complete_create_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10115,6 +10266,7 @@ fn test_send_from_outbound_complete_select_complete_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10159,6 +10311,7 @@ fn test_send_from_outbound_complete_select_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10203,6 +10356,7 @@ fn test_send_from_outbound_complete_select_complete_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10299,6 +10453,7 @@ fn test_send_from_outbound_complete_select_imm_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10394,6 +10549,7 @@ fn test_send_from_outbound_complete_select_imm_complete_add() {
     let tokens = HashSet::new();
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10442,6 +10598,7 @@ fn test_send_from_outbound_complete_select_imm_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10538,6 +10695,7 @@ fn test_send_from_outbound_complete_select_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10582,6 +10740,7 @@ fn test_send_from_outbound_complete_select_complete_add_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10678,6 +10837,7 @@ fn test_send_from_outbound_complete_select_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10722,6 +10882,7 @@ fn test_send_from_outbound_complete_select_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10770,6 +10931,7 @@ fn test_send_from_outbound_complete_select_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -10866,6 +11028,7 @@ fn test_send_from_outbound_complete_select_imm_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -10962,6 +11125,7 @@ fn test_send_from_outbound_complete_select_imm_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11010,6 +11174,7 @@ fn test_send_from_outbound_complete_select_imm_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11106,6 +11271,7 @@ fn test_send_from_outbound_complete_select_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11150,6 +11316,7 @@ fn test_send_from_outbound_complete_select_complete_finish_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11246,6 +11413,7 @@ fn test_send_from_outbound_complete_select_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11290,6 +11458,7 @@ fn test_send_from_outbound_complete_select_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11338,6 +11507,7 @@ fn test_send_from_outbound_complete_select_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11432,6 +11602,7 @@ fn test_send_from_outbound_complete_create_imm_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11526,6 +11697,7 @@ fn test_send_from_outbound_complete_create_imm_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11574,6 +11746,7 @@ fn test_send_from_outbound_complete_create_imm_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11668,6 +11841,7 @@ fn test_send_from_outbound_complete_create_complete_add_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11712,6 +11886,7 @@ fn test_send_from_outbound_complete_create_complete_add_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11806,6 +11981,7 @@ fn test_send_from_outbound_complete_create_complete_add() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -11850,6 +12026,7 @@ fn test_send_from_outbound_complete_create_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11898,6 +12075,7 @@ fn test_send_from_outbound_complete_create_complete_add() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -11992,6 +12170,7 @@ fn test_send_from_outbound_complete_create_imm_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12086,6 +12265,7 @@ fn test_send_from_outbound_complete_create_imm_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12134,6 +12314,7 @@ fn test_send_from_outbound_complete_create_imm_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12228,6 +12409,7 @@ fn test_send_from_outbound_complete_create_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12272,6 +12454,7 @@ fn test_send_from_outbound_complete_create_complete_finish_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12366,6 +12549,7 @@ fn test_send_from_outbound_complete_create_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12410,6 +12594,7 @@ fn test_send_from_outbound_complete_create_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12458,6 +12643,7 @@ fn test_send_from_outbound_complete_create_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12552,6 +12738,7 @@ fn test_send_from_outbound_complete_add_imm_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12646,6 +12833,7 @@ fn test_send_from_outbound_complete_add_imm_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12694,6 +12882,7 @@ fn test_send_from_outbound_complete_add_imm_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12788,6 +12977,7 @@ fn test_send_from_outbound_complete_add_complete_finish_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12836,6 +13026,7 @@ fn test_send_from_outbound_complete_add_complete_finish_imm() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -12930,6 +13121,7 @@ fn test_send_from_outbound_complete_add_finish_create() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -12978,6 +13170,7 @@ fn test_send_from_outbound_complete_add_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -13026,6 +13219,7 @@ fn test_send_from_outbound_complete_add_finish_create() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -13128,6 +13322,7 @@ fn test_send_from_outbound_complete_select_imm_create_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13226,6 +13421,7 @@ fn test_send_from_outbound_complete_select_create_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13270,6 +13466,7 @@ fn test_send_from_outbound_complete_select_create_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -13368,6 +13565,7 @@ fn test_send_from_outbound_complete_select_imm_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13466,6 +13664,7 @@ fn test_send_from_outbound_complete_select_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13510,6 +13709,7 @@ fn test_send_from_outbound_complete_select_add_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -13608,6 +13808,7 @@ fn test_send_from_outbound_complete_select_imm_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13706,6 +13907,7 @@ fn test_send_from_outbound_complete_select_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13750,6 +13952,7 @@ fn test_send_from_outbound_complete_select_finish_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -13846,6 +14049,7 @@ fn test_send_from_outbound_complete_create_imm_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13942,6 +14146,7 @@ fn test_send_from_outbound_complete_create_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -13986,6 +14191,7 @@ fn test_send_from_outbound_complete_create_add_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -14082,6 +14288,7 @@ fn test_send_from_outbound_complete_create_imm_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14178,6 +14385,7 @@ fn test_send_from_outbound_complete_create_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14222,6 +14430,7 @@ fn test_send_from_outbound_complete_create_finish_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -14318,6 +14527,7 @@ fn test_send_from_outbound_complete_add_imm_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14414,6 +14624,7 @@ fn test_send_from_outbound_complete_add_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14462,6 +14673,7 @@ fn test_send_from_outbound_complete_add_finish_permanent() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -14553,6 +14765,7 @@ fn test_send_from_outbound_select_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14640,6 +14853,7 @@ fn test_send_from_outbound_create_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14737,6 +14951,7 @@ fn test_send_from_outbound_create_permanent_abort_retry() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14788,6 +15003,7 @@ fn test_send_from_outbound_create_permanent_abort_retry() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -14879,6 +15095,7 @@ fn test_send_from_outbound_add_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -14973,6 +15190,7 @@ fn test_send_from_outbound_add_permanent_retry_cancel() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15027,6 +15245,7 @@ fn test_send_from_outbound_add_permanent_retry_cancel() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -15123,6 +15342,7 @@ fn test_send_from_outbound_add_permanent_complete_cancel_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15219,6 +15439,7 @@ fn test_send_from_outbound_add_permanent_complete_cancel() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15273,6 +15494,7 @@ fn test_send_from_outbound_add_permanent_complete_cancel() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -15368,6 +15590,7 @@ fn test_send_from_outbound_add_permanent_cancel_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15462,6 +15685,7 @@ fn test_send_from_outbound_finish_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15556,6 +15780,7 @@ fn test_send_from_outbound_finish_permanent_retry_cancel() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15610,6 +15835,7 @@ fn test_send_from_outbound_finish_permanent_retry_cancel() {
 
     let next = mode
         .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -15706,6 +15932,7 @@ fn test_send_from_outbound_finish_permanent_complete_cancel_imm() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15802,6 +16029,7 @@ fn test_send_from_outbound_finish_permanent_complete_cancel() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));
@@ -15856,6 +16084,7 @@ fn test_send_from_outbound_finish_permanent_complete_cancel() {
 
     let next = mode
         .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), None);
@@ -15951,6 +16180,7 @@ fn test_send_from_outbound_finish_permanent_cancel_permanent() {
 
     let next = mode
         .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
         .expect("Expected success");
 
     assert_eq!(next.next_outbound(), Some(when));

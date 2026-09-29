@@ -89,7 +89,7 @@ fn test_private_select_succeed() {
 
     assert!(matches!(
         stream.select(&mut (), &mut batches),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -152,6 +152,7 @@ fn test_private_select_indef() {
 
     let indef = stream
         .select(&mut (), &mut batches)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -220,6 +221,7 @@ fn test_private_select_retry_succeed() {
 
     let retry = stream
         .select(&mut (), &mut batches)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -229,7 +231,7 @@ fn test_private_select_retry_succeed() {
 
     assert!(matches!(
         stream.retry_select(&mut (), &mut batches, retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -295,7 +297,7 @@ fn test_private_select_permanent() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -378,7 +380,7 @@ fn test_private_select_complete_succeed() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -391,7 +393,7 @@ fn test_private_select_complete_succeed() {
 
     assert!(matches!(
         stream.complete_select(&mut (), &mut batches, completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -464,7 +466,7 @@ fn test_private_select_complete_retry() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -477,6 +479,7 @@ fn test_private_select_complete_retry() {
 
     let retry = stream
         .complete_select(&mut (), &mut batches, completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -486,7 +489,7 @@ fn test_private_select_complete_retry() {
 
     assert!(matches!(
         stream.retry_select(&mut (), &mut batches, retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -559,7 +562,7 @@ fn test_private_select_complete_permanent() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -570,7 +573,7 @@ fn test_private_select_complete_permanent() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut batches, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -660,7 +663,7 @@ fn test_private_select_complete_complete() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -671,7 +674,7 @@ fn test_private_select_complete_complete() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut batches, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -684,7 +687,7 @@ fn test_private_select_complete_complete() {
 
     assert!(matches!(
         stream.complete_select(&mut (), &mut batches, completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -748,7 +751,7 @@ fn test_shared_select_succeed() {
 
     assert!(matches!(
         stream.select(&mut (), &mut batches),
-        Ok(RetryIndefResult::Success(()))
+        (Ok(RetryIndefResult::Success(())), None)
     ));
 
     let stream =
@@ -812,6 +815,7 @@ fn test_shared_select_indef() {
 
     let indef = stream
         .select(&mut (), &mut batches)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -881,6 +885,7 @@ fn test_shared_select_retry_succeed() {
 
     let retry = stream
         .select(&mut (), &mut batches)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -890,7 +895,7 @@ fn test_shared_select_retry_succeed() {
 
     assert!(matches!(
         stream.retry_select(&mut (), &mut batches, retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -957,7 +962,7 @@ fn test_shared_select_permanent() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1043,7 +1048,7 @@ fn test_shared_select_complete_succeed() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1056,7 +1061,7 @@ fn test_shared_select_complete_succeed() {
 
     assert!(matches!(
         stream.complete_select(&mut (), &mut batches, completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -1133,7 +1138,7 @@ fn test_shared_select_complete_retry() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1146,6 +1151,7 @@ fn test_shared_select_complete_retry() {
 
     let retry = stream
         .complete_select(&mut (), &mut batches, completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -1155,7 +1161,7 @@ fn test_shared_select_complete_retry() {
 
     assert!(matches!(
         stream.retry_select(&mut (), &mut batches, retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -1229,7 +1235,7 @@ fn test_shared_select_complete_permanent() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1240,7 +1246,7 @@ fn test_shared_select_complete_permanent() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut batches, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1333,7 +1339,7 @@ fn test_shared_select_complete_complete() {
     let mut batches = SharedPrivateStreamCaches::default();
 
     let err = stream.select(&mut (), &mut batches);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1344,7 +1350,7 @@ fn test_shared_select_complete_complete() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut batches, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -1357,7 +1363,7 @@ fn test_shared_select_complete_complete() {
 
     assert!(matches!(
         stream.complete_select(&mut (), &mut batches, completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -2903,7 +2909,7 @@ fn test_private_start_batch_succeed() {
 
     assert!(matches!(
         stream.start_batch(&mut ()),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -2971,7 +2977,7 @@ fn test_private_start_batch_both_retry_succeed() {
         stream: test_stream
     };
 
-    let retry = stream.start_batch(&mut ()).expect("Expected success");
+    let retry = stream.start_batch(&mut ()).0.expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
     } else {
@@ -2992,6 +2998,7 @@ fn test_private_start_batch_both_retry_succeed() {
 
     let retry = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -3013,7 +3020,7 @@ fn test_private_start_batch_both_retry_succeed() {
 
     assert!(matches!(
         stream.retry_start_batch(&mut (), retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -3074,7 +3081,7 @@ fn test_private_start_batch_indef() {
         stream: test_stream
     };
 
-    let indef = stream.start_batch(&mut ()).expect("Expected success");
+    let indef = stream.start_batch(&mut ()).0.expect("Expected success");
 
     assert!(indef.is_indef());
 
@@ -3140,7 +3147,7 @@ fn test_private_start_batch_select_permanent() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3225,7 +3232,7 @@ fn test_private_start_batch_create_permanent() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3317,7 +3324,7 @@ fn test_private_start_batch_both_complete_succeed() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3341,7 +3348,7 @@ fn test_private_start_batch_both_complete_succeed() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3366,7 +3373,7 @@ fn test_private_start_batch_both_complete_succeed() {
 
     assert!(matches!(
         stream.complete_start_batch(&mut (), completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -3452,7 +3459,7 @@ fn test_private_start_batch_both_complete_complete() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3476,7 +3483,7 @@ fn test_private_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3500,7 +3507,7 @@ fn test_private_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3524,7 +3531,7 @@ fn test_private_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3549,7 +3556,7 @@ fn test_private_start_batch_both_complete_complete() {
 
     assert!(matches!(
         stream.complete_start_batch(&mut (), completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -3616,7 +3623,7 @@ fn test_private_start_batch_select_complete_indef() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3641,6 +3648,7 @@ fn test_private_start_batch_select_complete_indef() {
 
     let indef = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -3724,7 +3732,7 @@ fn test_private_start_batch_both_complete_retry() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3749,6 +3757,7 @@ fn test_private_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -3769,7 +3778,7 @@ fn test_private_start_batch_both_complete_retry() {
     };
 
     let err = stream.retry_start_batch(&mut (), retry);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3794,6 +3803,7 @@ fn test_private_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -3815,7 +3825,7 @@ fn test_private_start_batch_both_complete_retry() {
 
     assert!(matches!(
         stream.retry_start_batch(&mut (), retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -3896,7 +3906,7 @@ fn test_private_start_batch_both_complete_permanent() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3920,7 +3930,7 @@ fn test_private_start_batch_both_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3944,7 +3954,7 @@ fn test_private_start_batch_both_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4028,7 +4038,7 @@ fn test_shared_start_batch_succeed() {
 
     assert!(matches!(
         stream.start_batch(&mut ()),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -4100,7 +4110,7 @@ fn test_shared_start_batch_both_retry_succeed() {
         stream: test_stream
     };
 
-    let retry = stream.start_batch(&mut ()).expect("Expected success");
+    let retry = stream.start_batch(&mut ()).0.expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
     } else {
@@ -4121,6 +4131,7 @@ fn test_shared_start_batch_both_retry_succeed() {
 
     let retry = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -4142,7 +4153,7 @@ fn test_shared_start_batch_both_retry_succeed() {
 
     assert!(matches!(
         stream.retry_start_batch(&mut (), retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -4207,7 +4218,7 @@ fn test_shared_start_batch_indef() {
         stream: test_stream
     };
 
-    let indef = stream.start_batch(&mut ()).expect("Expected success");
+    let indef = stream.start_batch(&mut ()).0.expect("Expected success");
 
     assert!(indef.is_indef());
 
@@ -4274,7 +4285,7 @@ fn test_shared_start_batch_create_permanent() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4369,7 +4380,7 @@ fn test_shared_start_batch_both_complete_succeed() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4393,7 +4404,7 @@ fn test_shared_start_batch_both_complete_succeed() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4418,7 +4429,7 @@ fn test_shared_start_batch_both_complete_succeed() {
 
     assert!(matches!(
         stream.complete_start_batch(&mut (), completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -4510,7 +4521,7 @@ fn test_shared_start_batch_both_complete_complete() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4534,7 +4545,7 @@ fn test_shared_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4558,7 +4569,7 @@ fn test_shared_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4582,7 +4593,7 @@ fn test_shared_start_batch_both_complete_complete() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4607,7 +4618,7 @@ fn test_shared_start_batch_both_complete_complete() {
 
     assert!(matches!(
         stream.complete_start_batch(&mut (), completable),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -4680,7 +4691,7 @@ fn test_shared_start_batch_select_complete_indef() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4705,6 +4716,7 @@ fn test_shared_start_batch_select_complete_indef() {
 
     let indef = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -4792,7 +4804,7 @@ fn test_shared_start_batch_both_complete_retry() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4817,6 +4829,7 @@ fn test_shared_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -4837,7 +4850,7 @@ fn test_shared_start_batch_both_complete_retry() {
     };
 
     let err = stream.retry_start_batch(&mut (), retry);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4862,6 +4875,7 @@ fn test_shared_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -4883,7 +4897,7 @@ fn test_shared_start_batch_both_complete_retry() {
 
     assert!(matches!(
         stream.retry_start_batch(&mut (), retry),
-        Ok(RetryIndefResult::Success(_))
+        (Ok(RetryIndefResult::Success(_)), None)
     ));
 
     let stream =
@@ -4970,7 +4984,7 @@ fn test_shared_start_batch_both_complete_permanent() {
     };
 
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4994,7 +5008,7 @@ fn test_shared_start_batch_both_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -5018,7 +5032,7 @@ fn test_shared_start_batch_both_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -8748,7 +8762,7 @@ fn test_private_abort_start_batch_succeed() {
         stream: test_stream
     };
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -8844,7 +8858,7 @@ fn test_private_abort_start_batch_retry() {
         stream: test_stream
     };
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -8954,7 +8968,7 @@ fn test_shared_abort_start_batch_succeed() {
         stream: test_stream
     };
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9050,7 +9064,7 @@ fn test_shared_abort_start_batch_retry() {
         stream: test_stream
     };
     let err = stream.start_batch(&mut ());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11008,10 +11022,13 @@ fn test_private_frags_succeed() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     if let SharedPrivateChannelStream::Private { stream } = &stream {
@@ -11029,10 +11046,13 @@ fn test_private_frags_succeed() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11096,7 +11116,7 @@ fn test_private_frags_indef() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags),
-        Ok(RetryIndefResult::Indef(Parties::All))
+        (Ok(RetryIndefResult::Indef(Parties::All)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11164,6 +11184,7 @@ fn test_private_frags_retry() {
 
     let retry = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -11191,10 +11212,13 @@ fn test_private_frags_retry() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11262,7 +11286,7 @@ fn test_private_frags_permanent() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11348,7 +11372,7 @@ fn test_private_frags_complete_succeed() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11379,10 +11403,13 @@ fn test_private_frags_complete_succeed() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11457,7 +11484,7 @@ fn test_private_frags_complete_retry() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11488,6 +11515,7 @@ fn test_private_frags_complete_retry() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -11515,10 +11543,13 @@ fn test_private_frags_complete_retry() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11593,7 +11624,7 @@ fn test_private_frags_complete_permanent() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11623,7 +11654,7 @@ fn test_private_frags_complete_permanent() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11716,7 +11747,7 @@ fn test_private_frags_complete_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11746,7 +11777,7 @@ fn test_private_frags_complete_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11777,10 +11808,13 @@ fn test_private_frags_complete_complete() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -11849,7 +11883,7 @@ fn test_shared_frags_succeed() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     if let SharedPrivateChannelStream::Shared { stream, .. } = &stream {
@@ -11867,7 +11901,7 @@ fn test_shared_frags_succeed() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -11932,7 +11966,7 @@ fn test_shared_frags_indef() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags),
-        Ok(RetryIndefResult::Indef(Parties::All))
+        (Ok(RetryIndefResult::Indef(Parties::All)), None)
     ));
 
     let stream =
@@ -12001,6 +12035,7 @@ fn test_shared_frags_retry() {
 
     let retry = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12028,7 +12063,7 @@ fn test_shared_frags_retry() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -12097,7 +12132,7 @@ fn test_shared_frags_permanent() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12184,7 +12219,7 @@ fn test_shared_frags_complete_succeed() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12215,7 +12250,7 @@ fn test_shared_frags_complete_succeed() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -12291,7 +12326,7 @@ fn test_shared_frags_complete_retry() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12322,6 +12357,7 @@ fn test_shared_frags_complete_retry() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12349,7 +12385,7 @@ fn test_shared_frags_complete_retry() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -12425,7 +12461,7 @@ fn test_shared_frags_complete_permanent() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12455,7 +12491,7 @@ fn test_shared_frags_complete_permanent() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12549,7 +12585,7 @@ fn test_shared_frags_complete_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12579,7 +12615,7 @@ fn test_shared_frags_complete_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12609,7 +12645,7 @@ fn test_shared_frags_complete_complete() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -12680,10 +12716,13 @@ fn test_private_offer_succeed() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash_0.clone(), &mut frags),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     if let SharedPrivateChannelStream::Private { stream } = &stream {
@@ -12701,10 +12740,13 @@ fn test_private_offer_succeed() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash_1.clone(), &mut frags),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -12770,7 +12812,7 @@ fn test_private_offer_indef() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash.clone(), &mut frags),
-        Ok(RetryIndefResult::Indef(Parties::All))
+        (Ok(RetryIndefResult::Indef(Parties::All)), None)
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -12840,6 +12882,7 @@ fn test_private_offer_retry() {
 
     let retry = stream
         .push_offer(&mut (), hash.clone(), &mut frags)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12862,10 +12905,13 @@ fn test_private_offer_retry() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -12934,7 +12980,7 @@ fn test_private_offer_permanent() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13021,7 +13067,7 @@ fn test_private_offer_complete_succeed() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13052,10 +13098,13 @@ fn test_private_offer_complete_succeed() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -13131,7 +13180,7 @@ fn test_private_offer_complete_retry() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13157,6 +13206,7 @@ fn test_private_offer_complete_retry() {
 
     let retry = stream
         .complete_push_offer(&mut (), hash.clone(), &mut frags, completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -13179,10 +13229,13 @@ fn test_private_offer_complete_retry() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -13258,7 +13311,7 @@ fn test_private_offer_complete_permanent() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13288,7 +13341,7 @@ fn test_private_offer_complete_permanent() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13382,7 +13435,7 @@ fn test_private_offer_complete_complete() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13412,7 +13465,7 @@ fn test_private_offer_complete_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13442,10 +13495,13 @@ fn test_private_offer_complete_complete() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((
-            Some(_),
-            SharedPrivateStreamParties::Private { parties: () }
-        )))
+        (
+            Ok(RetryIndefResult::Success((
+                Some(_),
+                SharedPrivateStreamParties::Private { parties: () }
+            ))),
+            None
+        )
     ));
 
     let stream = if let SharedPrivateChannelStream::Private { stream } = stream
@@ -13517,7 +13573,7 @@ fn test_shared_offer_succeed() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash_0.clone(), &mut frags),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     if let SharedPrivateChannelStream::Shared { stream, .. } = &stream {
@@ -13535,7 +13591,7 @@ fn test_shared_offer_succeed() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash_1.clone(), &mut frags),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -13608,7 +13664,7 @@ fn test_shared_offer_indef() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash.clone(), &mut frags),
-        Ok(RetryIndefResult::Indef(Parties::All))
+        (Ok(RetryIndefResult::Indef(Parties::All)), None)
     ));
 
     let stream =
@@ -13679,6 +13735,7 @@ fn test_shared_offer_retry() {
 
     let retry = stream
         .push_offer(&mut (), hash.clone(), &mut frags)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -13701,7 +13758,7 @@ fn test_shared_offer_retry() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -13771,7 +13828,7 @@ fn test_shared_offer_permanent() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13859,7 +13916,7 @@ fn test_shared_offer_complete_succeed() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13890,7 +13947,7 @@ fn test_shared_offer_complete_succeed() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -13967,7 +14024,7 @@ fn test_shared_offer_complete_retry() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13993,6 +14050,7 @@ fn test_shared_offer_complete_retry() {
 
     let retry = stream
         .complete_push_offer(&mut (), hash.clone(), &mut frags, completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -14015,7 +14073,7 @@ fn test_shared_offer_complete_retry() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =
@@ -14092,7 +14150,7 @@ fn test_shared_offer_complete_permanent() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -14122,7 +14180,7 @@ fn test_shared_offer_complete_permanent() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -14217,7 +14275,7 @@ fn test_shared_offer_complete_complete() {
     let hash = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -14247,7 +14305,7 @@ fn test_shared_offer_complete_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -14278,7 +14336,7 @@ fn test_shared_offer_complete_complete() {
             &mut frags,
             completable
         ),
-        Ok(RetryIndefResult::Success((Some(_), _)))
+        (Ok(RetryIndefResult::Success((Some(_), _))), None)
     ));
 
     let stream =

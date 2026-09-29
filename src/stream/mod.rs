@@ -1490,6 +1490,7 @@ pub struct PassthruReporter<Addr, Prin, Stream> {
     addr: PhantomData<Addr>
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct NullPullStreams<T>(PhantomData<T>);
 
 impl<T> Default for NullPullStreams<T> {

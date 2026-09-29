@@ -115,6 +115,7 @@ fn test_select_all_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -257,6 +258,7 @@ fn test_select_multi_subset_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -403,6 +405,7 @@ fn test_select_all_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -545,6 +548,7 @@ fn test_select_subset_indef() {
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
         .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -691,6 +695,7 @@ fn test_select_one_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -847,6 +852,7 @@ fn test_select_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -856,6 +862,7 @@ fn test_select_retry_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1009,6 +1016,7 @@ fn test_select_succeed_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1018,6 +1026,7 @@ fn test_select_succeed_retry_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1175,6 +1184,7 @@ fn test_select_retry_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1184,6 +1194,7 @@ fn test_select_retry_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -1193,6 +1204,7 @@ fn test_select_retry_retry_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1346,6 +1358,7 @@ fn test_select_indef_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1355,6 +1368,7 @@ fn test_select_indef_retry_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1508,6 +1522,7 @@ fn test_select_indef_retry_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1517,6 +1532,7 @@ fn test_select_indef_retry_indef() {
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1670,6 +1686,7 @@ fn test_select_succeed_retry_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1679,6 +1696,7 @@ fn test_select_succeed_retry_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -1833,6 +1851,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -1842,6 +1861,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -1851,6 +1871,7 @@ fn test_select_indef_retry_indef_retry_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2005,6 +2026,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -2014,6 +2036,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -2023,6 +2046,7 @@ fn test_select_succeed_retry_indef_retry_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2177,6 +2201,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -2186,6 +2211,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -2195,6 +2221,7 @@ fn test_select_indef_retry_succeed_retry_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2344,7 +2371,7 @@ fn test_select_one_permanent() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -2506,7 +2533,7 @@ fn test_select_all_complete_succeed() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -2519,6 +2546,7 @@ fn test_select_all_complete_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2669,7 +2697,7 @@ fn test_select_succeed_complete() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -2682,6 +2710,7 @@ fn test_select_succeed_complete() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2832,7 +2861,7 @@ fn test_select_one_indef_complete_succeed() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -2845,6 +2874,7 @@ fn test_select_one_indef_complete_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -2995,7 +3025,7 @@ fn test_select_succeed_complete_indef() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3008,6 +3038,7 @@ fn test_select_succeed_complete_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3158,7 +3189,7 @@ fn test_select_indef_complete_indef() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3171,6 +3202,7 @@ fn test_select_indef_complete_indef() {
 
     let parties = if let RetryIndefResult::Indef(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3327,7 +3359,7 @@ fn test_select_complete_retry() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3340,6 +3372,7 @@ fn test_select_complete_retry() {
 
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3349,6 +3382,7 @@ fn test_select_complete_retry() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3503,7 +3537,7 @@ fn test_select_retry_complete() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3516,6 +3550,7 @@ fn test_select_retry_complete() {
 
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3525,6 +3560,7 @@ fn test_select_retry_complete() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3679,7 +3715,7 @@ fn test_select_retry_complete_indef() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3692,6 +3728,7 @@ fn test_select_retry_complete_indef() {
 
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3701,6 +3738,7 @@ fn test_select_retry_complete_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3872,7 +3910,7 @@ fn test_select_retry_complete_retry_complete() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3883,7 +3921,7 @@ fn test_select_retry_complete_retry_complete() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -3895,6 +3933,7 @@ fn test_select_retry_complete_retry_complete() {
     assert!(permanent.is_none());
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -3904,6 +3943,7 @@ fn test_select_retry_complete_retry_complete() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -4075,7 +4115,7 @@ fn test_select_retry_complete_retry_complete_indef() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4086,7 +4126,7 @@ fn test_select_retry_complete_retry_complete_indef() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4098,6 +4138,7 @@ fn test_select_retry_complete_retry_complete_indef() {
     assert!(permanent.is_none());
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -4107,6 +4148,7 @@ fn test_select_retry_complete_retry_complete_indef() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -4278,7 +4320,7 @@ fn test_select_retry_indef_complete_retry_complete() {
         &mut selections,
         vec![0.into(), 1.into(), 2.into()].iter()
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4289,7 +4331,7 @@ fn test_select_retry_indef_complete_retry_complete() {
 
     assert!(permanent.is_none());
     let err = stream.complete_select(&mut (), &mut selections, completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -4301,6 +4343,7 @@ fn test_select_retry_indef_complete_retry_complete() {
     assert!(permanent.is_none());
     let retry = if let RetryIndefResult::Retry(parties) = stream
         .complete_select(&mut (), &mut selections, completable)
+        .0
         .expect("Expected success")
     {
         parties
@@ -4310,6 +4353,7 @@ fn test_select_retry_indef_complete_retry_complete() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .retry_select(&mut (), &mut selections, retry)
+        .0
         .expect("Expected success")
     {
         parties
@@ -4457,6 +4501,7 @@ fn test_create_all_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -4613,6 +4658,7 @@ fn test_create_succeed_subset_selected() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -4764,6 +4810,7 @@ fn test_create_multi_subset_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .select(&mut (), &mut selections, [0.into(), 1.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -4929,6 +4976,7 @@ fn test_create_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -5177,6 +5225,7 @@ fn test_create_succeed_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -5430,6 +5479,7 @@ fn test_create_retry_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -5762,6 +5812,7 @@ fn test_create_one_permanent() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -5937,6 +5988,7 @@ fn test_create_all_complete_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -6189,6 +6241,7 @@ fn test_create_complete_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -6449,6 +6502,7 @@ fn test_create_complete_retry() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -6716,6 +6770,7 @@ fn test_create_retry_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -6994,6 +7049,7 @@ fn test_create_retry_complete_retry_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -7338,6 +7394,7 @@ fn test_start_batch_succeed() {
 
     stream
         .start_batch(&mut (), [0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
 
     assert_eq!(
@@ -7475,6 +7532,7 @@ fn test_start_batch_subset_succeed() {
 
     stream
         .start_batch(&mut (), [0.into(), 1.into()].iter())
+        .0
         .expect("Expected success");
 
     assert_eq!(
@@ -7615,6 +7673,7 @@ fn test_start_batch_select_retry_succeed() {
 
     let retry = stream
         .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -7700,6 +7759,7 @@ fn test_start_batch_select_retry_succeed() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -7843,6 +7903,7 @@ fn test_start_batch_create_retry_succeed() {
 
     let retry = stream
         .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -7930,6 +7991,7 @@ fn test_start_batch_create_retry_succeed() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -8076,6 +8138,7 @@ fn test_start_batch_both_retry_succeed() {
 
     let retry = stream
         .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -8161,6 +8224,7 @@ fn test_start_batch_both_retry_succeed() {
 
     let retry = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -8248,6 +8312,7 @@ fn test_start_batch_both_retry_succeed() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -8387,6 +8452,7 @@ fn test_start_batch_all_indef() {
 
     let indef = stream
         .start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -8523,6 +8589,7 @@ fn test_start_batch_one_indef() {
 
     stream
         .start_batch(&mut (), [0.into(), 1.into(), 2.into()].iter())
+        .0
         .expect("Expected success");
 
     assert!(
@@ -8663,7 +8730,7 @@ fn test_start_batch_select_permanent() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -8810,7 +8877,7 @@ fn test_start_batch_create_permanent() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -8960,7 +9027,7 @@ fn test_start_batch_select_complete_succeed() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9049,6 +9116,7 @@ fn test_start_batch_select_complete_succeed() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -9193,7 +9261,7 @@ fn test_start_batch_create_complete_succeed() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9284,6 +9352,7 @@ fn test_start_batch_create_complete_succeed() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -9433,7 +9502,7 @@ fn test_start_batch_both_complete_succeed() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9521,7 +9590,7 @@ fn test_start_batch_both_complete_succeed() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9612,6 +9681,7 @@ fn test_start_batch_both_complete_succeed() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -9763,7 +9833,7 @@ fn test_start_batch_select_complete_complete() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9851,7 +9921,7 @@ fn test_start_batch_select_complete_complete() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -9940,6 +10010,7 @@ fn test_start_batch_select_complete_complete() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -10091,7 +10162,7 @@ fn test_start_batch_create_complete_complete() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10181,7 +10252,7 @@ fn test_start_batch_create_complete_complete() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10272,6 +10343,7 @@ fn test_start_batch_create_complete_complete() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -10435,7 +10507,7 @@ fn test_start_batch_both_complete_complete() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10523,7 +10595,7 @@ fn test_start_batch_both_complete_complete() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10611,7 +10683,7 @@ fn test_start_batch_both_complete_complete() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10701,7 +10773,7 @@ fn test_start_batch_both_complete_complete() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10792,6 +10864,7 @@ fn test_start_batch_both_complete_complete() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -10946,7 +11019,7 @@ fn test_start_batch_complete_indef_all() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -10959,6 +11032,7 @@ fn test_start_batch_complete_indef_all() {
 
     let indef = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -11100,7 +11174,7 @@ fn test_start_batch_succeed_complete_indef_one() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11189,6 +11263,7 @@ fn test_start_batch_succeed_complete_indef_one() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -11342,7 +11417,7 @@ fn test_start_batch_complete_indef_one() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11431,6 +11506,7 @@ fn test_start_batch_complete_indef_one() {
 
     let batch = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -11580,7 +11656,7 @@ fn test_start_batch_select_complete_retry() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11669,6 +11745,7 @@ fn test_start_batch_select_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -11754,6 +11831,7 @@ fn test_start_batch_select_complete_retry() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -11904,7 +11982,7 @@ fn test_start_batch_create_complete_retry() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -11995,6 +12073,7 @@ fn test_start_batch_create_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12082,6 +12161,7 @@ fn test_start_batch_create_complete_retry() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -12242,7 +12322,7 @@ fn test_start_batch_both_complete_retry() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12331,6 +12411,7 @@ fn test_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12415,7 +12496,7 @@ fn test_start_batch_both_complete_retry() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.retry_start_batch(&mut (), retry);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12506,6 +12587,7 @@ fn test_start_batch_both_complete_retry() {
 
     let retry = stream
         .complete_start_batch(&mut (), completable)
+        .0
         .expect("Expected success");
     let retry = if let RetryIndefResult::Retry(retry) = retry {
         retry
@@ -12593,6 +12675,7 @@ fn test_start_batch_both_complete_retry() {
 
     let batch = stream
         .retry_start_batch(&mut (), retry)
+        .0
         .expect("Expected success");
 
     assert!(batch.is_success());
@@ -12743,7 +12826,7 @@ fn test_start_batch_select_complete_permanent() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12755,7 +12838,7 @@ fn test_start_batch_select_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12909,7 +12992,7 @@ fn test_start_batch_create_complete_permanent() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -12921,7 +13004,7 @@ fn test_start_batch_create_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13082,7 +13165,7 @@ fn test_start_batch_both_complete_permanent() {
 
     let err =
         stream.start_batch(&mut (), vec![0.into(), 1.into(), 2.into()].iter());
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13170,7 +13253,7 @@ fn test_start_batch_both_complete_permanent() {
     assert!(stream.stream(2.into()).failures.is_empty());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13182,7 +13265,7 @@ fn test_start_batch_both_complete_permanent() {
     assert!(permanent.is_none());
 
     let err = stream.complete_start_batch(&mut (), completable);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -13333,6 +13416,7 @@ fn test_cancel_batch_all_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -13499,6 +13583,7 @@ fn test_cancel_batch_subset_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -13660,6 +13745,7 @@ fn test_cancel_batch_multi_subset_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -13835,6 +13921,7 @@ fn test_cancel_batch_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -14094,6 +14181,7 @@ fn test_cancel_batch_succeed_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -14357,6 +14445,7 @@ fn test_cancel_batch_retry_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -14704,6 +14793,7 @@ fn test_cancel_batch_one_permanent() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -14891,6 +14981,7 @@ fn test_cancel_batch_all_complete_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -15157,6 +15248,7 @@ fn test_cancel_batch_succeed_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -15429,6 +15521,7 @@ fn test_cancel_batch_complete_retry() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -15720,6 +15813,7 @@ fn test_cancel_batch_retry_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -16082,6 +16176,7 @@ fn test_finish_batch_all_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -16248,6 +16343,7 @@ fn test_finish_batch_subset_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -16409,6 +16505,7 @@ fn test_finish_batch_multi_subset_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -16584,6 +16681,7 @@ fn test_finish_batch_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -16843,6 +16941,7 @@ fn test_finish_batch_succeed_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -17106,6 +17205,7 @@ fn test_finish_batch_retry_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -17453,6 +17553,7 @@ fn test_finish_batch_one_permanent() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -17640,6 +17741,7 @@ fn test_finish_batch_all_complete_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -17906,6 +18008,7 @@ fn test_finish_batch_succeed_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -18178,6 +18281,7 @@ fn test_finish_batch_complete_retry() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -18469,6 +18573,7 @@ fn test_finish_batch_retry_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -18831,6 +18936,7 @@ fn test_add_all_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -19003,6 +19109,7 @@ fn test_add_subset_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -19168,6 +19275,7 @@ fn test_add_multi_subset_succeed() {
 
     let parties = if let RetryIndefResult::Success(parties) = stream
         .select(&mut (), &mut selections, [1.into(), 2.into()].iter())
+        .0
         .expect("Expected success")
     {
         parties
@@ -19347,6 +19455,7 @@ fn test_add_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -19612,6 +19721,7 @@ fn test_add_succeed_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -19885,6 +19995,7 @@ fn test_add_retry_retry_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -20244,6 +20355,7 @@ fn test_add_one_permanent() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -20435,6 +20547,7 @@ fn test_add_all_complete_succeed() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -20707,6 +20820,7 @@ fn test_add_succeed_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -20989,6 +21103,7 @@ fn test_add_complete_retry() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -21290,6 +21405,7 @@ fn test_add_retry_complete() {
             &mut selections,
             [0.into(), 1.into(), 2.into()].iter()
         )
+        .0
         .expect("Expected success")
     {
         parties
@@ -21667,6 +21783,7 @@ fn test_push_frags_all_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -21755,6 +21872,7 @@ fn test_push_frags_all_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(2 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -21901,6 +22019,7 @@ fn test_push_frags_subset_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -22045,7 +22164,7 @@ fn test_push_frags_all_indef() {
 
     assert!(matches!(
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -22184,6 +22303,7 @@ fn test_push_frags_subset_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into()]))
@@ -22328,6 +22448,7 @@ fn test_push_frags_one_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -22482,6 +22603,7 @@ fn test_push_frags_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -22496,6 +22618,7 @@ fn test_push_frags_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -22648,6 +22771,7 @@ fn test_push_frags_succeed_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -22662,6 +22786,7 @@ fn test_push_frags_succeed_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -22815,6 +22940,7 @@ fn test_push_frags_retry_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -22829,6 +22955,7 @@ fn test_push_frags_retry_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -22843,6 +22970,7 @@ fn test_push_frags_retry_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -22995,6 +23123,7 @@ fn test_push_frags_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23009,6 +23138,7 @@ fn test_push_frags_indef_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -23157,6 +23287,7 @@ fn test_push_frags_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23171,7 +23302,7 @@ fn test_push_frags_indef_retry_indef() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -23319,6 +23450,7 @@ fn test_push_frags_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23333,6 +23465,7 @@ fn test_push_frags_succeed_retry_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -23485,6 +23618,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23499,6 +23633,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -23513,6 +23648,7 @@ fn test_push_frags_indef_retry_indef_retry_succeed() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into()]))
@@ -23664,6 +23800,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23678,6 +23815,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -23692,7 +23830,7 @@ fn test_push_frags_indef_retry_indef_retry_indef() {
             &mut frags,
             retry
         ),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -23838,6 +23976,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -23852,6 +23991,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -23866,6 +24006,7 @@ fn test_push_frags_indef_retry_succeed_retry_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into()]))
@@ -24014,7 +24155,7 @@ fn test_push_frags_one_permanent() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -24178,7 +24319,7 @@ fn test_push_frags_all_complete_succeed() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -24272,6 +24413,7 @@ fn test_push_frags_all_complete_succeed() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -24423,7 +24565,7 @@ fn test_push_frags_succeed_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -24519,6 +24661,7 @@ fn test_push_frags_succeed_complete() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -24670,7 +24813,7 @@ fn test_push_frags_one_indef_complete_succeed() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -24765,6 +24908,7 @@ fn test_push_frags_one_indef_complete_succeed() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -24915,7 +25059,7 @@ fn test_push_frags_one_succeed_complete_indef() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -25011,6 +25155,7 @@ fn test_push_frags_one_succeed_complete_indef() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -25160,7 +25305,7 @@ fn test_push_frags_one_indef_complete_indef() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -25254,6 +25399,7 @@ fn test_push_frags_one_indef_complete_indef() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -25404,7 +25550,7 @@ fn test_push_frags_complete_retry() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -25500,6 +25646,7 @@ fn test_push_frags_complete_retry() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -25592,6 +25739,7 @@ fn test_push_frags_complete_retry() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -25746,7 +25894,7 @@ fn test_push_frags_retry_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -25841,6 +25989,7 @@ fn test_push_frags_retry_complete() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -25933,6 +26082,7 @@ fn test_push_frags_retry_complete() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -26087,7 +26237,7 @@ fn test_push_frags_retry_complete_indef() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -26182,6 +26332,7 @@ fn test_push_frags_retry_complete_indef() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -26273,6 +26424,7 @@ fn test_push_frags_retry_complete_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -26440,7 +26592,7 @@ fn test_push_frags_retry_complete_retry_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -26534,7 +26686,7 @@ fn test_push_frags_retry_complete_retry_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -26629,6 +26781,7 @@ fn test_push_frags_retry_complete_retry_complete() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -26721,6 +26874,7 @@ fn test_push_frags_retry_complete_retry_complete() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -26889,7 +27043,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -26983,7 +27137,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -27078,6 +27232,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -27169,6 +27324,7 @@ fn test_push_frags_retry_complete_retry_complete_indef() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -27339,7 +27495,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
 
     let err =
         stream.push_frags(&mut (), LargeObjID::from(1 as u64), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -27432,7 +27588,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -27526,6 +27682,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
             &mut frags,
             completable
         )
+        .0
         .expect("Expected success")
     {
         retry
@@ -27617,6 +27774,7 @@ fn test_push_frags_retry_indef_complete_retry_complete() {
             &mut frags,
             retry
         )
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -27774,6 +27932,7 @@ fn test_push_offer_all_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -27862,6 +28021,7 @@ fn test_push_offer_all_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_1.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -28010,6 +28170,7 @@ fn test_push_offer_subset_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -28156,7 +28317,7 @@ fn test_push_offer_all_indef() {
 
     assert!(matches!(
         stream.push_offer(&mut (), hash_0.clone(), &mut frags),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -28297,6 +28458,7 @@ fn test_push_offer_subset_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into()]))
@@ -28443,6 +28605,7 @@ fn test_push_offer_one_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -28599,6 +28762,7 @@ fn test_push_offer_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -28608,6 +28772,7 @@ fn test_push_offer_retry_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -28762,6 +28927,7 @@ fn test_push_offer_succeed_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -28771,6 +28937,7 @@ fn test_push_offer_succeed_retry_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -28926,6 +29093,7 @@ fn test_push_offer_retry_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -28935,6 +29103,7 @@ fn test_push_offer_retry_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -28944,6 +29113,7 @@ fn test_push_offer_retry_retry_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -29098,6 +29268,7 @@ fn test_push_offer_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29107,6 +29278,7 @@ fn test_push_offer_indef_retry_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -29257,6 +29429,7 @@ fn test_push_offer_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29266,7 +29439,7 @@ fn test_push_offer_indef_retry_indef() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -29416,6 +29589,7 @@ fn test_push_offer_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29425,6 +29599,7 @@ fn test_push_offer_succeed_retry_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -29579,6 +29754,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29588,6 +29764,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29597,6 +29774,7 @@ fn test_push_offer_indef_retry_indef_retry_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into()]))
@@ -29750,6 +29928,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29759,6 +29938,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29768,7 +29948,7 @@ fn test_push_offer_indef_retry_indef_retry_indef() {
 
     assert!(matches!(
         stream.retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry),
-        Ok(RetryIndefResult::Indef(_))
+        (Ok(RetryIndefResult::Indef(_)), None)
     ));
 
     assert!(
@@ -29916,6 +30096,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .push_offer(&mut (), hash_0.clone(), &mut frags)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29925,6 +30106,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         retry
@@ -29934,6 +30116,7 @@ fn test_push_offer_indef_retry_succeed_retry_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into()]))
@@ -30083,7 +30266,7 @@ fn test_push_offer_one_permanent() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -30248,7 +30431,7 @@ fn test_push_offer_all_complete_succeed() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -30337,6 +30520,7 @@ fn test_push_offer_all_complete_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -30489,7 +30673,7 @@ fn test_push_offer_succeed_complete() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -30580,6 +30764,7 @@ fn test_push_offer_succeed_complete() {
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -30732,7 +30917,7 @@ fn test_push_offer_one_indef_complete_succeed() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -30822,6 +31007,7 @@ fn test_push_offer_one_indef_complete_succeed() {
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))
@@ -30973,7 +31159,7 @@ fn test_push_offer_one_succeed_complete_indef() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -31064,6 +31250,7 @@ fn test_push_offer_one_succeed_complete_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -31214,7 +31401,7 @@ fn test_push_offer_one_indef_complete_indef() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -31303,6 +31490,7 @@ fn test_push_offer_one_indef_complete_indef() {
 
     let indef = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success");
 
     assert!(indef.is_indef());
@@ -31454,7 +31642,7 @@ fn test_push_offer_complete_retry() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -31545,6 +31733,7 @@ fn test_push_offer_complete_retry() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -31632,6 +31821,7 @@ fn test_push_offer_complete_retry() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -31787,7 +31977,7 @@ fn test_push_offer_retry_complete() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -31877,6 +32067,7 @@ fn test_push_offer_retry_complete() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -31964,6 +32155,7 @@ fn test_push_offer_retry_complete() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -32119,7 +32311,7 @@ fn test_push_offer_retry_complete_indef() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -32209,6 +32401,7 @@ fn test_push_offer_retry_complete_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -32295,6 +32488,7 @@ fn test_push_offer_retry_complete_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -32463,7 +32657,7 @@ fn test_push_offer_retry_complete_retry_complete() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -32557,7 +32751,7 @@ fn test_push_offer_retry_complete_retry_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -32647,6 +32841,7 @@ fn test_push_offer_retry_complete_retry_complete() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -32735,6 +32930,7 @@ fn test_push_offer_retry_complete_retry_complete() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into(), 2.into()]))
@@ -32904,7 +33100,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -32998,7 +33194,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -33088,6 +33284,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -33174,6 +33371,7 @@ fn test_push_offer_retry_complete_retry_complete_indef() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![1.into(), 2.into()]))
@@ -33345,7 +33543,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
     let hash_0 = hasher.hash_bytes(once(&[0x00 as u8][..]));
 
     let err = stream.push_offer(&mut (), hash_0.clone(), &mut frags);
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -33438,7 +33636,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
         &mut frags,
         completable
     );
-    let err = if let Err(err) = err {
+    let err = if let Err(err) = err.0 {
         err
     } else {
         panic!("Expected error")
@@ -33527,6 +33725,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
 
     let retry = if let RetryIndefResult::Retry(retry) = stream
         .complete_push_offer(&mut (), hash_0.clone(), &mut frags, completable)
+        .0
         .expect("Expected success")
     {
         retry
@@ -33614,6 +33813,7 @@ fn test_push_offer_retry_indef_complete_retry_complete() {
 
     if let RetryIndefResult::Success(res) = stream
         .retry_push_offer(&mut (), hash_0.clone(), &mut frags, retry)
+        .0
         .expect("Expected success")
     {
         assert_eq!(res, (None, vec![0.into(), 1.into()]))

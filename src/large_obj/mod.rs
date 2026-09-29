@@ -3558,10 +3558,6 @@ use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::cred::NullCred;
 #[cfg(test)]
 use constellation_common::codec::test::TestBytesCodec;
-#[cfg(test)]
-use mio::Poll;
-#[cfg(test)]
-use mio::Token;
 
 #[cfg(test)]
 use crate::init;
@@ -3595,7 +3591,7 @@ impl PushStreamReportError<Infallible> for TestStream {
 
 #[cfg(test)]
 impl PullStreamsOutput for TestStream {
-    type PullStreams = NullPullStreams;
+    type PullStreams = NullPullStreams<()>;
 }
 
 #[cfg(test)]
@@ -3610,25 +3606,31 @@ impl LargeObjStream<()> for TestStream {
         _ctx: &mut (),
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
-        LargeObjMsg::frags(frags, id, 1024)
-            .expect("Expected success")
-            .map_ok(|res| match res {
-                Some((msg, when)) => {
-                    self.msgs.push(msg);
+        Option<NullPullStreams<()>>
+    ) {
+        (
+            LargeObjMsg::frags(frags, id, 1024)
+                .expect("Expected success")
+                .map_ok(|res| match res {
+                    Some((msg, when)) => {
+                        self.msgs.push(msg);
 
-                    Ok((Some(when), (), None))
-                }
-                None => Ok((None, (), None))
-            })
-            .map(RetryIndefResult::from)
+                        Ok((Some(when), ()))
+                    }
+                    None => Ok((None, ()))
+                })
+                .map(RetryIndefResult::from),
+            None
+        )
     }
 
     fn retry_push_frags(
@@ -3637,14 +3639,17 @@ impl LargeObjStream<()> for TestStream {
         _id: LargeObjID,
         _frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
+        Option<NullPullStreams<()>>
+    ) {
         panic!("Should not call this")
     }
 
@@ -3654,14 +3659,17 @@ impl LargeObjStream<()> for TestStream {
         _id: LargeObjID,
         _frags: &mut Self::Frags,
         _err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
+        Option<NullPullStreams<()>>
+    ) {
         panic!("Should not call this")
     }
 }
@@ -3676,22 +3684,28 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         _ctx: &mut (),
         id: SHA3ID,
         frags: &mut Self::Frags
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
-        LargeObjMsg::offer(frags, id, 1024)
-            .expect("Expected success")
-            .map_ok(|(msg, when)| {
-                self.msgs.push(msg);
+        Option<NullPullStreams<()>>
+    ) {
+        (
+            LargeObjMsg::offer(frags, id, 1024)
+                .expect("Expected success")
+                .map_ok(|(msg, when)| {
+                    self.msgs.push(msg);
 
-                Ok((Some(when), (), None))
-            })
-            .map(RetryIndefResult::from)
+                    Ok((Some(when), ()))
+                })
+                .map(RetryIndefResult::from),
+            None
+        )
     }
 
     fn retry_push_offer(
@@ -3700,14 +3714,17 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         _id: SHA3ID,
         _frags: &mut Self::Frags,
         _retry: Self::PushFragRetry
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
+        Option<NullPullStreams<()>>
+    ) {
         panic!("Should not call this")
     }
 
@@ -3717,14 +3734,17 @@ impl LargeObjOfferStream<SHA3ID, ()> for TestStream {
         _id: SHA3ID,
         _frags: &mut Self::Frags,
         _err: <Self::PushFragError as RecoverableError>::Completable
-    ) -> Result<
-        RetryIndefResult<
-            (Option<Instant>, Self::Parties, Option<NullPullStreams>),
-            Self::PushFragRetry,
-            Parties<Self::Parties>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Self::Parties),
+                Self::PushFragRetry,
+                Parties<Self::Parties>
+            >,
+            Self::PushFragError
         >,
-        Self::PushFragError
-    > {
+        Option<NullPullStreams<()>>
+    ) {
         panic!("Should not call this")
     }
 }
@@ -3740,10 +3760,6 @@ fn test_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3752,7 +3768,6 @@ fn test_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3771,7 +3786,6 @@ fn test_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -3790,9 +3804,10 @@ fn test_offer_complete() {
     // Have sender generate offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -3827,6 +3842,7 @@ fn test_offer_complete() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -3843,10 +3859,6 @@ fn test_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3855,7 +3867,6 @@ fn test_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3874,7 +3885,6 @@ fn test_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -3893,9 +3903,10 @@ fn test_offer_complete_repeat() {
     // Have sender generate offer.
     let when = if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         when.expect("Expected some")
     } else {
@@ -3912,9 +3923,10 @@ fn test_offer_complete_repeat() {
     // Have sender generate second offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, when)
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -3949,6 +3961,7 @@ fn test_offer_complete_repeat() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -3965,10 +3978,6 @@ fn test_offer_complete_repeat_multi_finish() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3977,7 +3986,6 @@ fn test_offer_complete_repeat_multi_finish() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -3997,7 +4005,6 @@ fn test_offer_complete_repeat_multi_finish() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4016,9 +4023,10 @@ fn test_offer_complete_repeat_multi_finish() {
     // Have sender generate offer.
     let when = if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         when.expect("Expected some")
     } else {
@@ -4030,9 +4038,10 @@ fn test_offer_complete_repeat_multi_finish() {
     // Have sender generate second offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, when)
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4085,6 +4094,7 @@ fn test_offer_complete_repeat_multi_finish() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -4101,10 +4111,6 @@ fn test_long_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4113,7 +4119,6 @@ fn test_long_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4132,7 +4137,6 @@ fn test_long_offer_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4151,9 +4155,10 @@ fn test_long_offer_complete_repeat() {
     // Have sender generate offer.
     let when = if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         when.expect("Expected some")
     } else {
@@ -4170,9 +4175,10 @@ fn test_long_offer_complete_repeat() {
     // Have sender generate second offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, when)
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4207,6 +4213,7 @@ fn test_long_offer_complete_repeat() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -4223,10 +4230,6 @@ fn test_offer_req_obj_frag_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4235,7 +4238,6 @@ fn test_offer_req_obj_frag_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4255,7 +4257,6 @@ fn test_offer_req_obj_frag_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4274,9 +4275,10 @@ fn test_offer_req_obj_frag_complete() {
     // Have sender generate offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4314,9 +4316,10 @@ fn test_offer_req_obj_frag_complete() {
     // Have sender generate frags.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4351,6 +4354,7 @@ fn test_offer_req_obj_frag_complete() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -4367,10 +4371,6 @@ fn test_offer_req_obj_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4379,7 +4379,6 @@ fn test_offer_req_obj_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4399,7 +4398,6 @@ fn test_offer_req_obj_offer_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4418,9 +4416,10 @@ fn test_offer_req_obj_offer_complete() {
     // Have sender generate offer.
     let when = if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         when.expect("Expected some")
     } else {
@@ -4437,9 +4436,10 @@ fn test_offer_req_obj_offer_complete() {
     // Have sender generate second offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, when)
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4487,6 +4487,7 @@ fn test_offer_req_obj_offer_complete() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -4503,10 +4504,6 @@ fn test_offer_req_frag_complete_repeat() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4515,7 +4512,6 @@ fn test_offer_req_frag_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4535,7 +4531,6 @@ fn test_offer_req_frag_complete_repeat() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4554,9 +4549,10 @@ fn test_offer_req_frag_complete_repeat() {
     // Have sender generate offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4594,9 +4590,10 @@ fn test_offer_req_frag_complete_repeat() {
     // Have sender generate frags.
     let when = if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         when.expect("Expected some")
     } else {
@@ -4610,9 +4607,10 @@ fn test_offer_req_frag_complete_repeat() {
     // Have sender generate frags.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, when)
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some())
     } else {
@@ -4647,6 +4645,7 @@ fn test_offer_req_frag_complete_repeat() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     );
@@ -4675,6 +4674,7 @@ fn test_offer_req_frag_complete_repeat() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
@@ -4691,10 +4691,6 @@ fn test_offer_req_obj_frag_req_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
-    let poll = Poll::new().expect("Expected success");
-    let waker =
-        Waker::new(poll.registry(), Token(0)).expect("Expected success");
-    let waker = Arc::new(waker);
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4703,7 +4699,6 @@ fn test_offer_req_obj_frag_req_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker.clone()),
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
@@ -4723,7 +4718,6 @@ fn test_offer_req_obj_frag_req_complete() {
         TestLargeObjProtoTypes<_>
     > = LargeObjProto::create(
         LargeObjProtoConfig::default(),
-        Notify::new(waker),
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
@@ -4742,9 +4736,10 @@ fn test_offer_req_obj_frag_req_complete() {
     // Have sender generate offer.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4782,9 +4777,10 @@ fn test_offer_req_obj_frag_req_complete() {
     // Have sender generate frags.
     if let RetryIndefResult::Success(res) = sender
         .try_push(&mut (), &mut sender_stream, Instant::now())
+        .0
         .expect("Expected success")
     {
-        let (when, (), _) = res;
+        let (when, ()) = res;
 
         assert!(when.is_some());
     } else {
@@ -4819,6 +4815,7 @@ fn test_offer_req_obj_frag_req_complete() {
     assert!(
         sender
             .try_push(&mut (), &mut sender_stream, Instant::now())
+            .0
             .expect("Expected success")
             .is_indef()
     )
