@@ -62,6 +62,7 @@ use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
+use crate::threads::dispatch::DispatchThreadCtx;
 use crate::threads::dispatch::Dispatched;
 use crate::threads::poll::MsgsWaker;
 use crate::threads::types::DispatchInboundTypes;
@@ -212,12 +213,14 @@ impl MsgsWaker for TestRecv {
 }
 
 impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch
-where Ctx: 'static + Send {
+where
+    Ctx: 'static + Send
+{
     type DispatchError = Infallible;
 
     fn dispatch(
         &mut self,
-        ctx: &mut Ctx,
+        ctx: &mut DispatchThreadCtx<TestChannels<TestChannelCore>, Ctx>,
         _prin: &NullCred,
         shutdown: ShutdownFlag,
         _notify: Notify

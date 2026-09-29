@@ -113,14 +113,11 @@ where
     ///   outbound messages.
     fn dispatch(
         &mut self,
-        ctx: &mut Ctx,
+        ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         prin: &Types::SessionPrin,
         shutdown: ShutdownFlag,
         notify: Notify
-    ) -> Result<
-        Dispatched<Types, Ctx>,
-        Self::DispatchError
-    >;
+    ) -> Result<Dispatched<Types, Ctx>, Self::DispatchError>;
 }
 
 /// Session handler for a specific principal.
@@ -276,7 +273,7 @@ pub enum DispatchThreadRecvError<ID, Pull, AuthN, Recv> {
 
 impl<Types, Ctx> Dispatched<Types, Ctx>
 where
-    Types: DispatchTypes<Ctx>,
+    Types: DispatchTypes<Ctx>
 {
     /// Create a new `Dispatched` from its components.
     ///
@@ -1445,7 +1442,7 @@ where
                 let notify = Notify::new(self.notify.clone());
 
                 match self.dispatcher.dispatch(
-                    self.ctx.inner.inner_mut(),
+                    &mut self.ctx,
                     session.prin(),
                     self.shutdown.clone(),
                     notify.clone()
@@ -1585,8 +1582,14 @@ where
     ) -> bool {
         let mut valid = true;
 
+        trace!(target: "dispatch-thread",
+               "handling events {:?}", live);
+
         // If we have pending completes, run them.
         if let Some(completes) = completes {
+            trace!(target: "dispatch-thread",
+                   "processing pending completes");
+
             for token in completes.into_iter() {
                 if let Some(ent) = self.dispatched.get_mut(&token) {
                     valid &= ent.complete_pending(&mut self.ctx, &live)
@@ -1601,6 +1604,9 @@ where
 
         // If we have pending retries, run them.
         if let Some(retries) = retries {
+            trace!(target: "dispatch-thread",
+                   "processing pending retries");
+
             for token in retries.into_iter() {
                 // Look up the dispatched entry.
                 if let Some(ent) = self.dispatched.get_mut(&token) {
@@ -1616,6 +1622,9 @@ where
 
         // If we have pending shutdown retries, run them.
         if let Some(shutdown_retries) = shutdown_retries {
+            trace!(target: "dispatch-thread",
+                   "processing pending shutdown retries");
+
             for token in shutdown_retries.into_iter() {
                 // Look up the dispatched entry.
                 if let Some(ent) = self.dispatched.get_mut(&token) {
@@ -1690,7 +1699,9 @@ where
         }
 
         // Do pulls before pushing new messages.
-        let need_refreshes = if next_listen.is_some_and(|when| when <= now) {
+        let need_refreshes = if !live.is_empty() ||
+            next_listen.is_some_and(|when| when <= now)
+        {
             let mut need_refreshes =
                 HashSet::with_capacity(self.dispatched.len());
 
@@ -1733,6 +1744,10 @@ where
                     // Report new streams.
                     for (addr, channel_id, param, stream) in streams {
                         let id = StreamID::new(addr, channel_id.clone(), param);
+
+                        trace!(target: "dispatch-thread",
+                               "reporting {}", id);
+
                         let (disp, refreshes, next_refresh) =
                             self.recv_session(id.clone(), stream, now);
 

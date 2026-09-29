@@ -332,6 +332,7 @@ pub struct PollThreadConfig<Channels, Mode, Stream, MsgAuthN> {
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "dispatch-config")]
 pub struct DispatchThreadConfig<Channels, Mode> {
+    #[serde(flatten)]
     channels: Channels,
     #[serde(flatten)]
     #[serde(default)]
