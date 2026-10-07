@@ -2811,6 +2811,22 @@ where
     const MAX_BYTES: usize = 1286;
 }
 
+impl<Encoder, Decoder, IDs> ScopedError
+    for LargeObjProtoCreateError<Encoder, Decoder, IDs>
+where
+    Encoder: ScopedError,
+    Decoder: ScopedError,
+    IDs: ScopedError
+{
+    fn scope(&self) -> ErrorScope {
+        match self {
+            LargeObjProtoCreateError::Encoder { err } => err.scope(),
+            LargeObjProtoCreateError::Decoder { err } => err.scope(),
+            LargeObjProtoCreateError::IDs { err } => err.scope()
+        }
+    }
+}
+
 impl<Encode> ScopedError for LargeObjProtoAddOutboundError<Encode>
 where
     Encode: ScopedError

@@ -786,11 +786,11 @@ where
         for config in parties.into_iter() {
             let (party, stream) = config.take();
 
-            debug!(target: "stream-multicaster",
-                   "creating individual stream for party {}",
-                   party);
-
             if ctx.self_party() != Some(&party) {
+                debug!(target: "stream-multicaster",
+                       "creating individual stream for party {}",
+                       party);
+
                 let stream = Stream::create(stream, ctx)?;
                 let ent = StreamMulticasterParty {
                     party: party.clone(),
@@ -800,6 +800,10 @@ where
                 rev_map.push(ent);
                 fwd_map.insert(party, MulticastStreamIdx::from(i));
                 i += 1;
+            } else {
+                debug!(target: "stream-multicaster",
+                       "skipping self-party {}",
+                       party);
             }
         }
 
