@@ -25,6 +25,8 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io::Error;
 use std::sync::Arc;
+use std::sync::mpsc::RecvError;
+use std::sync::mpsc::channel;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -118,6 +120,12 @@ pub trait MsgsWaker {
         &mut self,
         waker: Arc<Waker>
     ) -> Result<(), Self::Error>;
+}
+
+#[derive(Debug)]
+pub enum PollThreadStartError {
+    IO { err: Error },
+    Recv { err: RecvError }
 }
 
 impl MsgsWaker for () {
@@ -374,17 +382,35 @@ where
         ctx: Ctx,
         recv: Types::Recv,
         msgs: Types::Msgs
-    ) -> Result<JoinHandle<()>, Error> {
-        Builder::new()
+    ) -> Result<(JoinHandle<()>, ShutdownFlag), PollThreadStartError> {
+        // XXX Replace this with oneshot when it stabilizes.
+        let (tx, rx) = channel();
+        let out = Builder::new()
             .name(String::from("poll-thread"))
             .spawn(move || {
                 match Self::create(config, self_party, ctx, recv, msgs) {
-                    Ok(poll) => poll.run(),
-                    Err(err) => error!(target: "poll-thread",
+                    Ok(poll) => {
+                        let shutdown_flag = poll.shutdown_flag();
+
+                        if let Err(err) = tx.send(shutdown_flag) {
+                            error!(target: "poll-thread-start",
+                                   "error reporting shutdown flag: {}",
+                                   err)
+                        } else {
+                            poll.run();
+                        }
+                    }
+                    Err(err) => error!(target: "poll-thread-start",
                                        "error creating poll thread: {}",
                                        err)
                 }
             })
+            .map_err(|err| PollThreadStartError::IO { err: err })?;
+        let shutdown_flag = rx
+            .recv()
+            .map_err(|err| PollThreadStartError::Recv { err: err })?;
+
+        Ok((out, shutdown_flag))
     }
 
     #[inline]
@@ -399,13 +425,9 @@ where
         self.notify.clone()
     }
 
-    /// Shut down this `Dispatched`.
-    ///
-    /// This will trigger the [ShutdownFlag] associated with this
-    /// `Dispatched`.
     #[inline]
-    pub fn shutdown_flag(&mut self) -> Result<(), Error> {
-        self.shutdown.set()
+    pub fn shutdown_flag(&self) -> ShutdownFlag {
+        self.shutdown.clone()
     }
 
     fn handle_msg(
@@ -1579,6 +1601,18 @@ where
             PollThreadRecvError::Pull { err } => err.fmt(f),
             PollThreadRecvError::AuthN { err } => err.fmt(f),
             PollThreadRecvError::Recv { err } => err.fmt(f)
+        }
+    }
+}
+
+impl Display for PollThreadStartError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), std::fmt::Error> {
+        match self {
+            PollThreadStartError::Recv { err } => write!(f, "{}", err),
+            PollThreadStartError::IO { err } => write!(f, "{}", err)
         }
     }
 }
