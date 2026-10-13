@@ -108,7 +108,7 @@ use crate::stream::StreamShutdown;
 use crate::threads::PushMode;
 use crate::threads::ThreadInnerCtx;
 use crate::threads::dispatch::DispatchThreadCtx;
-use crate::threads::poll::MsgsWaker;
+use crate::threads::poll::MsgsSetNotify;
 use crate::threads::poll::PollThreadCtx;
 use crate::threads::private::PrivateDatagramPushMode;
 use crate::threads::private::PrivateLargeObjPushMode;
@@ -296,7 +296,7 @@ where
     type AuthNMsg: AuthNed<Self::MsgPrin>;
     type Wrapper;
     type MsgsSetNotifyError: Debug + Display;
-    type Msgs: MsgsWaker<Error = Self::MsgsSetNotifyError> + Send;
+    type Msgs: MsgsSetNotify<Error = Self::MsgsSetNotifyError> + Send;
     type ChansConfig: Send;
     type ChansCreateError: Debug + Display;
     type ChanShutdownRetry: RetryWhen;
@@ -634,7 +634,7 @@ pub struct DatagramSelectorPollTypes<
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send {
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -742,7 +742,7 @@ pub struct LargeObjSelectorPollTypes<
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -985,7 +985,7 @@ pub struct DatagramMulticastPollTypes<
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send {
     resolve: PhantomData<Resolve>,
     epochs: PhantomData<Epochs>,
     msgauth: PhantomData<MsgAuth>,
@@ -1117,7 +1117,7 @@ pub struct LargeObjMulticastPollTypes<
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -1365,7 +1365,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -1492,7 +1492,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -1781,7 +1781,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
     fn clone(&self) -> Self {
@@ -1932,7 +1932,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -2186,7 +2186,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send
 {
     #[inline]
     fn default() -> Self {
@@ -2313,7 +2313,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -2598,7 +2598,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     #[inline]
     fn default() -> Self {
@@ -2749,7 +2749,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -2975,7 +2975,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send
 {
 }
 
@@ -3087,7 +3087,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -3329,7 +3329,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
@@ -3465,7 +3465,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -3677,7 +3677,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send
 {
 }
 
@@ -3789,7 +3789,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -4031,7 +4031,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
 }
 
@@ -4167,7 +4167,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -4848,7 +4848,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + PrivateMsgs<OutMsg> + Send
+    Msgs: MsgsSetNotify + PrivateMsgs<OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
@@ -4878,7 +4878,7 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
-    type MsgsSetNotifyError = <Msgs as MsgsWaker>::Error;
+    type MsgsSetNotifyError = <Msgs as MsgsSetNotify>::Error;
     type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type PullStreams = SelectedPullStreams<
         StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
@@ -5018,7 +5018,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::SessionPrin: Send + Sync,
     Types::MsgAuthN: Create + Send,
@@ -5067,8 +5067,9 @@ where
             >
         >
     >;
-    type MsgsSetNotifyError =
-        WithMutexPoison<RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>>;
+    type MsgsSetNotifyError = WithMutexPoison<
+        RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>
+    >;
     type PullError = <Chans::Stream as PullStream<LargeObjWrapper>>::PullError;
     type PullStreams = SelectedPullStreams<
         StreamID<Chans::Addr, Chans::ChannelID, Chans::Param>,
@@ -5598,7 +5599,7 @@ where
     Resolve::OriginConfig: Clone + Send,
     Resolve::Config: Clone + Default + Send,
     Recv: AuthNMsgRecv<MsgAuth::Prin, MsgAuth::AuthNMsg> + Send,
-    Msgs: MsgsWaker + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
+    Msgs: MsgsSetNotify + SharedMsgs<MulticastStreamIdx, OutMsg> + Send
 {
     type Addr = Chans::Addr;
     type AuthNChan = Chans::Stream;
@@ -5632,7 +5633,7 @@ where
     type MsgAuthError = MsgAuth::Error;
     type MsgPrin = MsgAuth::Prin;
     type Msgs = Msgs;
-    type MsgsSetNotifyError = <Msgs as MsgsWaker>::Error;
+    type MsgsSetNotifyError = <Msgs as MsgsSetNotify>::Error;
     type PullError = <Chans::Stream as PullStream<Wrapper>>::PullError;
     type PullStreams = StreamMulticastPullStreams<
         SelectedPullStreams<
@@ -5815,7 +5816,7 @@ where
     Types::HashID: Clone + Debug + Display + Hash + HashID + Eq + Send,
     Types::Decoder: Send,
     Types::Encoder: Send,
-    Types::Msgs: MsgsWaker + Send,
+    Types::Msgs: MsgsSetNotify + Send,
     Types::IDs: Send,
     Types::MsgAuthN: Create + Send,
     Types::AuthNError: ScopedError,
@@ -5867,8 +5868,9 @@ where
             >
         >
     >;
-    type MsgsSetNotifyError =
-        WithMutexPoison<RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>>;
+    type MsgsSetNotifyError = WithMutexPoison<
+        RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>
+    >;
     type PullError = <Chans::Stream as PullStream<LargeObjWrapper>>::PullError;
     type PullStreams = StreamMulticastPullStreams<
         SelectedPullStreams<

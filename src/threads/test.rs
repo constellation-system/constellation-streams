@@ -41,7 +41,6 @@ use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::sync::Notify;
 use mio::Token;
-use mio::Waker;
 
 use crate::addrs::test::TestEndpoint;
 use crate::channels::ChannelsShutdown;
@@ -64,7 +63,7 @@ use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::DispatchThreadCtx;
 use crate::threads::dispatch::Dispatched;
-use crate::threads::poll::MsgsWaker;
+use crate::threads::poll::MsgsSetNotify;
 use crate::threads::types::DispatchInboundTypes;
 use crate::threads::types::DispatchTypes;
 use crate::threads::types::PollThreadTypes;
@@ -200,13 +199,13 @@ impl Create for TestDispatch {
     }
 }
 
-impl MsgsWaker for TestRecv {
+impl MsgsSetNotify for TestRecv {
     type Error = Infallible;
 
     #[inline]
-    fn set_waker(
+    fn set_notify(
         &mut self,
-        _waker: Arc<Waker>
+        _notify: Notify
     ) -> Result<(), Self::Error> {
         Ok(())
     }

@@ -66,7 +66,6 @@ use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::trace;
-use mio::Waker;
 
 use crate::config::LargeObjProtoConfig;
 use crate::error::ErrorReportInfo;
@@ -88,7 +87,7 @@ use crate::generated::large_obj::LargeObjReqObj;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
-use crate::threads::poll::MsgsWaker;
+use crate::threads::poll::MsgsSetNotify;
 
 pub mod test;
 
@@ -735,26 +734,26 @@ where
     }
 }
 
-impl<InMsg, OutMsg, PartyID, F, Types> MsgsWaker
+impl<InMsg, OutMsg, PartyID, F, Types> MsgsSetNotify
     for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    Types::Msgs: MsgsWaker,
+    Types::Msgs: MsgsSetNotify,
     PartyID: Clone + Eq + Hash,
     F: Frags
 {
-    type Error = RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>;
+    type Error = RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>;
 
     #[inline]
-    fn set_waker(
+    fn set_notify(
         &mut self,
-        waker: Arc<Waker>
+        notify: Notify
     ) -> Result<(), Self::Error> {
         if self.notify.is_none() {
-            self.notify = Some(Notify::new(waker.clone()));
+            self.notify = Some(notify.clone());
 
             self.msgs
-                .set_waker(waker)
+                .set_notify(notify)
                 .map_err(|err| RegisterNotifyError::Inner { err: err })
         } else {
             Err(RegisterNotifyError::Collision)
@@ -762,25 +761,26 @@ where
     }
 }
 
-impl<InMsg, OutMsg, PartyID, F, Types> MsgsWaker
+impl<InMsg, OutMsg, PartyID, F, Types> MsgsSetNotify
     for Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, F, Types>>>
 where
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    Types::Msgs: MsgsWaker,
+    Types::Msgs: MsgsSetNotify,
     PartyID: Clone + Eq + Hash,
     F: Frags
 {
-    type Error =
-        WithMutexPoison<RegisterNotifyError<<Types::Msgs as MsgsWaker>::Error>>;
+    type Error = WithMutexPoison<
+        RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>
+    >;
 
     #[inline]
-    fn set_waker(
+    fn set_notify(
         &mut self,
-        waker: Arc<Waker>
+        notify: Notify
     ) -> Result<(), Self::Error> {
         self.lock()
             .map_err(|_| WithMutexPoison::MutexPoison)?
-            .set_waker(waker)
+            .set_notify(notify)
             .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }

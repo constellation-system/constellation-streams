@@ -44,6 +44,7 @@ use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
+use constellation_common::sync::Notify;
 use log::debug;
 use log::error;
 use log::info;
@@ -113,12 +114,12 @@ where
     nevents: usize
 }
 
-pub trait MsgsWaker {
+pub trait MsgsSetNotify {
     type Error: Debug + Display;
 
-    fn set_waker(
+    fn set_notify(
         &mut self,
-        waker: Arc<Waker>
+        notify: Notify
     ) -> Result<(), Self::Error>;
 }
 
@@ -128,13 +129,13 @@ pub enum PollThreadStartError {
     Recv { err: RecvError }
 }
 
-impl MsgsWaker for () {
+impl MsgsSetNotify for () {
     type Error = Infallible;
 
     #[inline]
-    fn set_waker(
+    fn set_notify(
         &mut self,
-        _waker: Arc<Waker>
+        _notify: Notify
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -345,7 +346,7 @@ where
         let notify = Arc::new(notify);
         let shutdown = ShutdownFlag::new(notify.clone());
 
-        msgs.set_waker(notify.clone())
+        msgs.set_notify(Notify::new(notify.clone()))
             .map_err(|err| PollThreadCreateError::Notify { err: err })?;
 
         Ok(PollThread {
