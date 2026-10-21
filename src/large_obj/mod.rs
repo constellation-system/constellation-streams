@@ -1331,8 +1331,9 @@ where
         val: &LargeObjMsg<H::HashID>
     ) -> Result<Vec<u8>, Self::EncodeError> {
         let mut buf = vec![0; Self::MAX_BYTES];
+        let offset = self.encode(val, &mut buf)?;
 
-        self.encode(val, &mut buf)?;
+        buf.truncate(offset);
 
         Ok(buf)
     }

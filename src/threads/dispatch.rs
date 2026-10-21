@@ -37,8 +37,10 @@ use constellation_auth::authn::AuthNed;
 use constellation_auth::authn::MsgAuthN;
 use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::MutexPoison;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::error::WithMutexPoison;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
 use constellation_common::retry::next_retry;
@@ -225,6 +227,7 @@ pub struct DispatchedID(usize);
 
 #[derive(Debug)]
 pub enum DispatchThreadCreateError<Channels> {
+    Shutdown { err: MutexPoison },
     Channels { err: Channels },
     IO { err: Error }
 }
@@ -398,7 +401,7 @@ where
     /// This will trigger the [ShutdownFlag] associated with this
     /// `Dispatched`.
     #[inline]
-    fn shutdown(&mut self) -> Result<(), Error> {
+    fn shutdown(&mut self) -> Result<(), WithMutexPoison<Error>> {
         self.shutdown.set()
     }
 }
@@ -1118,7 +1121,7 @@ where
                 >
             >
         >
-    ) -> Result<(), Error> {
+    ) -> Result<(), WithMutexPoison<Error>> {
         let nsessions = self.pull_streams.len();
 
         debug!(target: "dispatch-entry-shutdown",
@@ -1217,7 +1220,8 @@ where
     pub fn create(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
         dispatcher: Disp,
-        ctx: Ctx
+        ctx: Ctx,
+        mut shutdown: ShutdownFlag
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
         let (chans_config, mode_config, nevents, _, ndispatched, _) =
             config.take();
@@ -1239,7 +1243,10 @@ where
         let notify = Waker::new(ctx.registry(), token)
             .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
         let notify = Arc::new(notify);
-        let shutdown = ShutdownFlag::new(notify.clone());
+
+        shutdown
+            .add_waker(notify.clone())
+            .map_err(|err| DispatchThreadCreateError::Shutdown { err: err })?;
 
         Ok(DispatchThread {
             mode_config: mode_config,
@@ -1259,15 +1266,18 @@ where
     pub fn start(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
         dispatcher: Disp,
-        ctx: Ctx
+        ctx: Ctx,
+        shutdown: ShutdownFlag
     ) -> Result<JoinHandle<()>, Error> {
         Builder::new()
             .name(String::from("dispatch-thread"))
-            .spawn(move || match Self::create(config, dispatcher, ctx) {
-                Ok(dispatch) => dispatch.run(),
-                Err(err) => error!(target: "dispatch-thread",
+            .spawn(move || {
+                match Self::create(config, dispatcher, ctx, shutdown) {
+                    Ok(dispatch) => dispatch.run(),
+                    Err(err) => error!(target: "dispatch-thread",
                                        "error creating dispatch thread: {}",
                                        err)
+                }
             })
     }
 
@@ -1444,7 +1454,7 @@ where
                 match self.dispatcher.dispatch(
                     &mut self.ctx,
                     session.prin(),
-                    self.shutdown.clone(),
+                    ShutdownFlag::new(),
                     notify.clone()
                 ) {
                     Ok(dispatched) => match Types::Mode::create(
@@ -2143,6 +2153,7 @@ where
             mut ctx,
             mut dispatched,
             parties,
+            mut shutdown,
             ..
         } = self;
         let mut shutdown_retries: Option<BinaryHeap<_>> = None;
@@ -2150,21 +2161,27 @@ where
         info!(target: "dispatch-thread",
               "mio dispatch thread shutting down");
 
+        if let Err(err) = shutdown.set() {
+            error!(target: "dispatch-thread-shutdown",
+                   "error triggering shutdown flag: {}",
+                   err);
+        }
+
         // Shutdown all dispatched entries.
         for (party, token) in parties.into_iter() {
             if let Some(ent) = dispatched.remove(&token) {
-                info!(target: "dispatch-thread",
+                info!(target: "dispatch-thread-shutdown",
                       "shutting down dispatched entry for {}",
                       party);
 
                 if let Err(err) = ent.shutdown(&mut ctx, &mut shutdown_retries)
                 {
-                    error!(target: "dispatch-thread",
+                    error!(target: "dispatch-thread-shutdown",
                            "error setting shutdown flag for {} ({}): {}",
                            token, party, err);
                 }
             } else {
-                trace!(target: "dispatch-thread",
+                trace!(target: "dispatch-thread-shutdown",
                        "entry missing for {}, {}",
                        party, token);
             }
@@ -2172,12 +2189,12 @@ where
 
         // Empty out the remaining tokens.
         for (token, ent) in dispatched.into_iter() {
-            warn!(target: "dispatch-thread",
+            warn!(target: "dispatch-thread-shutdown",
                   "shutting down dispatched entry for {} with no party",
                   token);
 
             if let Err(err) = ent.shutdown(&mut ctx, &mut shutdown_retries) {
-                error!(target: "dispatch-thread",
+                error!(target: "dispatch-thread-shutdown",
                        "error setting shutdown flag for {}: {}",
                        token, err);
             }
@@ -2198,18 +2215,18 @@ where
                     let duration = next.map(|next| next - now);
 
                     if let Some(duration) = &duration {
-                        trace!(target: "dispatch-thread",
+                        trace!(target: "dispatch-thread-shutdown",
                            "waiting for poll for {}.{:03}",
                            duration.as_secs(), duration.subsec_millis());
                     } else {
-                        trace!(target: "dispatch-thread",
+                        trace!(target: "dispatch-thread-shutdown",
                            "waiting for poll indefinitely");
                     }
 
                     ctx.poll
                         .poll(&mut events, duration)
                         .inspect_err(|err| {
-                            error!(target: "dispatch-thread",
+                            error!(target: "dispatch-thread-shutdown",
                                     "error polling: {}",
                                     err)
                         })
@@ -2259,13 +2276,13 @@ where
                                     }
                                 }
                                 Err(err) => {
-                                    error!(target: "dispatch-thread",
+                                    error!(target: "dispatch-thread-shutdown",
                                            "error shutting down stream {}: {}",
                                            id, err);
                                 }
                             }
                         } else {
-                            error!(target: "dispatch-thread",
+                            error!(target: "dispatch-thread-shutdown",
                                    "shutdown_retries.pop() should not be None")
                         }
                     }
@@ -2286,7 +2303,7 @@ where
                         channels
                     }),
                     Err(err) => {
-                        error!(target: "dispatch-thread",
+                        error!(target: "dispatch-thread-shutdown",
                                "error listening during shutdown: {}",
                                err);
 
@@ -2294,14 +2311,14 @@ where
                     }
                 }
             } else {
-                error!(target: "dispatch-thread",
+                error!(target: "dispatch-thread-shutdown",
                        "channels should not be empty here");
 
                 None
             }
         }
 
-        info!(target: "dispatch-thread",
+        info!(target: "dispatch-thread-shutdown",
               "mio dispatch thread exiting");
     }
 }
@@ -2341,6 +2358,7 @@ where
     ) -> Result<(), std::fmt::Error> {
         match self {
             DispatchThreadCreateError::Channels { err } => err.fmt(f),
+            DispatchThreadCreateError::Shutdown { err } => write!(f, "{}", err),
             DispatchThreadCreateError::IO { err } => write!(f, "{}", err)
         }
     }
@@ -2517,7 +2535,7 @@ fn test_recv_session_send() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -2651,7 +2669,7 @@ fn test_recv_session_retry_send() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -2804,7 +2822,7 @@ fn test_recv_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -2897,7 +2915,7 @@ fn test_send_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -3039,7 +3057,7 @@ fn test_recv_session_send_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -3229,7 +3247,7 @@ fn test_recv_session_send_retry_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -3410,7 +3428,7 @@ fn test_recv_session_send_retry_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -3661,7 +3679,7 @@ fn test_recv_session_send_retry_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -3902,7 +3920,7 @@ fn test_recv_session_send_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -4096,7 +4114,7 @@ fn test_recv_session_send_complete_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -4322,7 +4340,7 @@ fn test_recv_session_send_complete_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -4573,7 +4591,7 @@ fn test_recv_session_send_complete_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -4812,7 +4830,7 @@ fn test_recv_session_recv_one() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -4950,7 +4968,7 @@ fn test_recv_session_recv_two() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -5113,7 +5131,7 @@ fn test_recv_session_recv_collide() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -5331,7 +5349,7 @@ fn test_recv_session_recv_collide_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -5530,7 +5548,7 @@ fn test_recv_session_recv_collide_retry_shutdown() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -5808,7 +5826,7 @@ fn test_recv_session_recv_collide_retry_shutdown_error() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -6034,7 +6052,7 @@ fn test_recv_session_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -6224,7 +6242,7 @@ fn test_recv_session_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -6415,7 +6433,7 @@ fn test_recv_session_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -6663,7 +6681,7 @@ fn test_recv_session_refresh_complete_imm_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -6861,7 +6879,7 @@ fn test_recv_session_refresh_complete_imm_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -7110,7 +7128,7 @@ fn test_recv_session_refresh_complete_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -7360,7 +7378,7 @@ fn test_recv_session_refresh_complete_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -7652,7 +7670,7 @@ fn test_recv_session_refresh_permanent() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -7825,7 +7843,7 @@ fn test_recv_session_refresh_complete_imm_permanent() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -7998,7 +8016,7 @@ fn test_recv_session_refresh_complete_permanent() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -8225,7 +8243,7 @@ fn test_recv_session_refresh_complete_imm_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -8475,7 +8493,7 @@ fn test_recv_session_refresh_complete_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -8766,7 +8784,7 @@ fn test_recv_session_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -9010,7 +9028,7 @@ fn test_recv_session_refresh_retry_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -9306,7 +9324,7 @@ fn test_recv_session_refresh_retry_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -9552,7 +9570,7 @@ fn test_recv_session_refresh_retry_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -9847,7 +9865,7 @@ fn test_recv_session_refresh_retry_permanent() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -10063,7 +10081,7 @@ fn test_recv_session_send_indef() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -10202,7 +10220,7 @@ fn test_recv_session_send_indef_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -10404,7 +10422,7 @@ fn test_recv_session_send_indef_retry_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -10654,7 +10672,7 @@ fn test_recv_session_send_indef_complete_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -10904,7 +10922,7 @@ fn test_recv_session_send_indef_indef_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -11101,7 +11119,7 @@ fn test_recv_session_send_indef_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -11358,7 +11376,7 @@ fn test_recv_session_send_indef_retry_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -11663,7 +11681,7 @@ fn test_recv_session_send_indef_complete_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -11967,7 +11985,7 @@ fn test_recv_session_send_indef_indef_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -12213,7 +12231,7 @@ fn test_recv_session_send_indef_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -12420,7 +12438,7 @@ fn test_recv_session_send_indef_retry_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -12675,7 +12693,7 @@ fn test_recv_session_send_indef_complete_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -12930,7 +12948,7 @@ fn test_recv_session_send_indef_indef_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -13129,7 +13147,7 @@ fn test_recv_session_send_indef_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -13388,7 +13406,7 @@ fn test_recv_session_send_indef_retry_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -13695,7 +13713,7 @@ fn test_recv_session_send_indef_complete_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -14001,7 +14019,7 @@ fn test_recv_session_send_indef_indef_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -14256,7 +14274,7 @@ fn test_recv_session_send_indef_listen_refresh() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -14464,7 +14482,7 @@ fn test_recv_session_send_indef_listen_refresh_retry() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -14724,7 +14742,7 @@ fn test_recv_session_send_indef_listen_refresh_complete_imm() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
@@ -14934,7 +14952,7 @@ fn test_recv_session_send_indef_listen_refresh_complete() {
         None
     );
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, ())
+        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
             .expect("Expected success");
 
     let mut next_listen = Some(pre);
