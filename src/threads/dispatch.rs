@@ -47,6 +47,7 @@ use constellation_common::retry::next_retry;
 use constellation_common::retry::next_retry_definite;
 use constellation_common::shutdown::ShutdownFlag;
 use constellation_common::sync::Notify;
+use constellation_common::sync::NotifyFlag;
 use log::debug;
 use log::error;
 use log::info;
@@ -118,7 +119,7 @@ where
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         prin: &Types::SessionPrin,
         shutdown: ShutdownFlag,
-        notify: Notify
+        notify: NotifyFlag
     ) -> Result<Dispatched<Types, Ctx>, Self::DispatchError>;
 }
 
@@ -155,7 +156,7 @@ where
     stream: Types::Stream
 }
 
-pub struct DispatchedEntry<Types, Ctx>
+struct DispatchedEntry<Types, Ctx>
 where
     Types: DispatchTypes<Ctx> {
     ctx: PhantomData<Ctx>,
@@ -164,7 +165,7 @@ where
         Types::AuthNChan
     >,
     dispatched: Dispatched<Types, Ctx>,
-    notify: Notify,
+    notify: NotifyFlag,
     mode: Types::Mode,
     shutdown_retries: Option<
         BinaryHeap<
@@ -187,7 +188,16 @@ where
     channels: Chans
 }
 
-pub struct DispatchThread<Types, Disp, Ctx>
+pub struct DispatchThreadStarter<Types, Ctx>
+where
+    Types: 'static + DispatchTypes<Ctx>,
+    Ctx: 'static + Send {
+    config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
+    ctx: ThreadInnerCtx<Ctx>,
+    notify: Notify
+}
+
+struct DispatchThread<Types, Disp, Ctx>
 where
     Disp: Dispatch<Types, Ctx> + Send,
     Types: DispatchTypes<Ctx> {
@@ -216,7 +226,7 @@ where
     dispatcher: Disp,
     mode_config: Types::ModeConfig,
     shutdown: ShutdownFlag,
-    notify: Arc<Waker>,
+    notify: Notify,
     nevents: usize
 }
 
@@ -1211,6 +1221,62 @@ where
     }
 }
 
+impl<Types, Ctx> DispatchThreadStarter<Types, Ctx>
+where
+    Types: 'static + DispatchTypes<Ctx>,
+    Ctx: 'static + Send
+{
+    pub fn create(
+        config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
+        ctx: Ctx
+    ) -> Result<(Self, Notify), Error> {
+        let mut ctx = ThreadInnerCtx::new(ctx)?;
+        let token = ctx.token();
+        let waker = Waker::new(ctx.registry(), token)?;
+        let waker = Arc::new(waker);
+        let notify = Notify::new(waker);
+        let starter = DispatchThreadStarter {
+            config: config,
+            notify: notify.clone(),
+            ctx: ctx
+        };
+
+        Ok((starter, notify))
+    }
+
+    pub fn start<Disp>(
+        self,
+        dispatcher: Disp,
+        mut shutdown: ShutdownFlag
+    ) -> Result<JoinHandle<()>, WithMutexPoison<Error>>
+    where
+        Disp: 'static + Dispatch<Types, Ctx> + Send {
+        let DispatchThreadStarter {
+            config,
+            notify,
+            ctx
+        } = self;
+
+        shutdown
+            .add_notify(notify.clone())
+            .map_err(|_| WithMutexPoison::MutexPoison)?;
+
+        Builder::new()
+            .name(String::from("dispatch-thread"))
+            .spawn(move || {
+                match DispatchThread::create(
+                    config, dispatcher, ctx, notify, shutdown
+                ) {
+                    Ok(dispatch) => dispatch.run(),
+                    Err(err) => error!(target: "dispatch-thread",
+                                       "error creating dispatch thread: {}",
+                                       err)
+                }
+            })
+            .map_err(|err| WithMutexPoison::Inner { err: err })
+    }
+}
+
 impl<Types, Disp, Ctx> DispatchThread<Types, Disp, Ctx>
 where
     Disp: 'static + Dispatch<Types, Ctx> + Send,
@@ -1220,17 +1286,15 @@ where
     pub fn create(
         config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
         dispatcher: Disp,
-        ctx: Ctx,
-        mut shutdown: ShutdownFlag
+        mut ctx: ThreadInnerCtx<Ctx>,
+        notify: Notify,
+        shutdown: ShutdownFlag
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
         let (chans_config, mode_config, nevents, _, ndispatched, _) =
             config.take();
-        // XXX Pass in size hints here
-        let mut ctx = ThreadInnerCtx::new(ctx)
-            .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| DispatchThreadCreateError::Channels { err: err })?;
-        let mut ctx = DispatchThreadCtx::new(ctx, channels);
+        let ctx = DispatchThreadCtx::new(ctx, channels);
         let (dispatched, parties, stream_ids) = match ndispatched {
             Some(ndispatched) => (
                 HashMap::with_capacity(ndispatched),
@@ -1239,14 +1303,6 @@ where
             ),
             None => (HashMap::new(), HashMap::new(), HashMap::new())
         };
-        let token = ctx.token();
-        let notify = Waker::new(ctx.registry(), token)
-            .map_err(|err| DispatchThreadCreateError::IO { err: err })?;
-        let notify = Arc::new(notify);
-
-        shutdown
-            .add_waker(notify.clone())
-            .map_err(|err| DispatchThreadCreateError::Shutdown { err: err })?;
 
         Ok(DispatchThread {
             mode_config: mode_config,
@@ -1263,29 +1319,6 @@ where
         })
     }
 
-    pub fn start(
-        config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
-        dispatcher: Disp,
-        ctx: Ctx,
-        shutdown: ShutdownFlag
-    ) -> Result<JoinHandle<()>, Error> {
-        Builder::new()
-            .name(String::from("dispatch-thread"))
-            .spawn(move || {
-                match Self::create(config, dispatcher, ctx, shutdown) {
-                    Ok(dispatch) => dispatch.run(),
-                    Err(err) => error!(target: "dispatch-thread",
-                                       "error creating dispatch thread: {}",
-                                       err)
-                }
-            })
-    }
-
-    #[inline]
-    pub fn shutdown_flag(&self) -> ShutdownFlag {
-        self.shutdown.clone()
-    }
-
     /// Install a newly dispatched session into the tables.
     fn setup_dispatched(
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
@@ -1298,7 +1331,7 @@ where
         dispatched: Dispatched<Types, Ctx>,
         mode: Types::Mode,
         stream: Types::AuthNChan,
-        notify: Notify,
+        notify: NotifyFlag,
         token: DispatchedID,
         now: Instant
     ) -> Result<
@@ -1449,7 +1482,7 @@ where
                        "dispatching for {}",
                        session.prin());
 
-                let notify = Notify::new(self.notify.clone());
+                let notify = NotifyFlag::from(&self.notify);
 
                 match self.dispatcher.dispatch(
                     &mut self.ctx,
@@ -2534,10 +2567,20 @@ fn test_recv_session_send() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -2668,10 +2711,20 @@ fn test_recv_session_retry_send() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -2821,10 +2874,20 @@ fn test_recv_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -2914,10 +2977,20 @@ fn test_send_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -3056,10 +3129,20 @@ fn test_recv_session_send_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -3246,10 +3329,20 @@ fn test_recv_session_send_retry_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -3427,10 +3520,20 @@ fn test_recv_session_send_retry_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -3678,10 +3781,20 @@ fn test_recv_session_send_retry_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -3919,10 +4032,20 @@ fn test_recv_session_send_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -4113,10 +4236,20 @@ fn test_recv_session_send_complete_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -4339,10 +4472,20 @@ fn test_recv_session_send_complete_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -4590,10 +4733,20 @@ fn test_recv_session_send_complete_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -4829,10 +4982,20 @@ fn test_recv_session_recv_one() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -4967,10 +5130,20 @@ fn test_recv_session_recv_two() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -5130,10 +5303,20 @@ fn test_recv_session_recv_collide() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -5348,10 +5531,20 @@ fn test_recv_session_recv_collide_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -5547,10 +5740,20 @@ fn test_recv_session_recv_collide_retry_shutdown() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -5825,10 +6028,20 @@ fn test_recv_session_recv_collide_retry_shutdown_error() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -6051,10 +6264,20 @@ fn test_recv_session_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -6241,10 +6464,20 @@ fn test_recv_session_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -6432,10 +6665,20 @@ fn test_recv_session_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -6680,10 +6923,20 @@ fn test_recv_session_refresh_complete_imm_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -6878,10 +7131,20 @@ fn test_recv_session_refresh_complete_imm_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -7127,10 +7390,20 @@ fn test_recv_session_refresh_complete_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -7377,10 +7650,20 @@ fn test_recv_session_refresh_complete_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -7669,10 +7952,20 @@ fn test_recv_session_refresh_permanent() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -7842,10 +8135,20 @@ fn test_recv_session_refresh_complete_imm_permanent() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -8015,10 +8318,20 @@ fn test_recv_session_refresh_complete_permanent() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -8242,10 +8555,20 @@ fn test_recv_session_refresh_complete_imm_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -8492,10 +8815,20 @@ fn test_recv_session_refresh_complete_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -8783,10 +9116,20 @@ fn test_recv_session_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -9027,10 +9370,20 @@ fn test_recv_session_refresh_retry_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -9323,10 +9676,20 @@ fn test_recv_session_refresh_retry_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -9569,10 +9932,20 @@ fn test_recv_session_refresh_retry_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -9864,10 +10237,20 @@ fn test_recv_session_refresh_retry_permanent() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -10080,10 +10463,20 @@ fn test_recv_session_send_indef() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -10219,10 +10612,20 @@ fn test_recv_session_send_indef_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -10421,10 +10824,20 @@ fn test_recv_session_send_indef_retry_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -10671,10 +11084,20 @@ fn test_recv_session_send_indef_complete_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -10921,10 +11344,20 @@ fn test_recv_session_send_indef_indef_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -11118,10 +11551,20 @@ fn test_recv_session_send_indef_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -11375,10 +11818,20 @@ fn test_recv_session_send_indef_retry_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -11680,10 +12133,20 @@ fn test_recv_session_send_indef_complete_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -11984,10 +12447,20 @@ fn test_recv_session_send_indef_indef_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -12230,10 +12703,20 @@ fn test_recv_session_send_indef_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -12437,10 +12920,20 @@ fn test_recv_session_send_indef_retry_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -12692,10 +13185,20 @@ fn test_recv_session_send_indef_complete_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -12947,10 +13450,20 @@ fn test_recv_session_send_indef_indef_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -13146,10 +13659,20 @@ fn test_recv_session_send_indef_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -13405,10 +13928,20 @@ fn test_recv_session_send_indef_retry_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -13712,10 +14245,20 @@ fn test_recv_session_send_indef_complete_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -14018,10 +14561,20 @@ fn test_recv_session_send_indef_indef_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -14273,10 +14826,20 @@ fn test_recv_session_send_indef_listen_refresh() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -14481,10 +15044,20 @@ fn test_recv_session_send_indef_listen_refresh_retry() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -14741,10 +15314,20 @@ fn test_recv_session_send_indef_listen_refresh_complete_imm() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;
@@ -14951,10 +15534,20 @@ fn test_recv_session_send_indef_listen_refresh_complete() {
         None,
         None
     );
+    let mut ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let token = ctx.token();
+    let waker = Waker::new(ctx.registry(), token).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let mut thread: DispatchThread<ThreadTestTypes, TestDispatch, _> =
-        DispatchThread::create(config, dispatcher, (), ShutdownFlag::new())
-            .expect("Expected success");
-
+        DispatchThread::create(
+            config,
+            dispatcher,
+            ctx,
+            notify,
+            ShutdownFlag::new()
+        )
+        .expect("Expected success");
     let mut next_listen = Some(pre);
     let mut outbounds: Option<Vec<DispatchedID>> = None;
     let mut shutdown_retries: Option<Vec<DispatchedID>> = None;

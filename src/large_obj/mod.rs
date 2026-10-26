@@ -51,7 +51,6 @@ use constellation_common::error::ErrorScope;
 use constellation_common::error::MutexPoison;
 use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
-use constellation_common::error::WithMutexPoison;
 use constellation_common::hashid::HashAlgo;
 use constellation_common::hashid::HashID;
 use constellation_common::net::PrivateMsgs;
@@ -87,7 +86,6 @@ use crate::generated::large_obj::LargeObjReqObj;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
-use crate::threads::poll::MsgsSetNotify;
 
 pub mod test;
 
@@ -368,7 +366,7 @@ where
     // XXX Replace this with a map from parties to frags parameters
     ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
-    notify: Option<Notify>,
+    notify: Notify,
     upstream: Types::Recv,
     msgs: Types::Msgs,
     retry: Retry,
@@ -485,12 +483,6 @@ pub enum LargeObjMsgDecodeError {
 pub enum LargeObjDataError {
     Frags { err: OutboundDataError },
     OutOfBounds
-}
-
-#[derive(Debug)]
-pub enum RegisterNotifyError<Inner> {
-    Inner { err: Inner },
-    Collision
 }
 
 pub enum FragsOrOffer<HashID, Frags, Offer> {
@@ -731,57 +723,6 @@ where
         id: LargeObjID
     ) -> Self {
         LargeObjMsg::Finish { hash: hash, id: id }
-    }
-}
-
-impl<InMsg, OutMsg, PartyID, F, Types> MsgsSetNotify
-    for LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
-where
-    Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    Types::Msgs: MsgsSetNotify,
-    PartyID: Clone + Eq + Hash,
-    F: Frags
-{
-    type Error = RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>;
-
-    #[inline]
-    fn set_notify(
-        &mut self,
-        notify: Notify
-    ) -> Result<(), Self::Error> {
-        if self.notify.is_none() {
-            self.notify = Some(notify.clone());
-
-            self.msgs
-                .set_notify(notify)
-                .map_err(|err| RegisterNotifyError::Inner { err: err })
-        } else {
-            Err(RegisterNotifyError::Collision)
-        }
-    }
-}
-
-impl<InMsg, OutMsg, PartyID, F, Types> MsgsSetNotify
-    for Arc<Mutex<LargeObjProto<InMsg, OutMsg, PartyID, F, Types>>>
-where
-    Types: LargeObjProtoTypes<InMsg, OutMsg>,
-    Types::Msgs: MsgsSetNotify,
-    PartyID: Clone + Eq + Hash,
-    F: Frags
-{
-    type Error = WithMutexPoison<
-        RegisterNotifyError<<Types::Msgs as MsgsSetNotify>::Error>
-    >;
-
-    #[inline]
-    fn set_notify(
-        &mut self,
-        notify: Notify
-    ) -> Result<(), Self::Error> {
-        self.lock()
-            .map_err(|_| WithMutexPoison::MutexPoison)?
-            .set_notify(notify)
-            .map_err(|err| WithMutexPoison::Inner { err: err })
     }
 }
 
@@ -1575,7 +1516,8 @@ where
         upstream: Types::Recv,
         msgs: Types::Msgs,
         auth: Types::MsgAuthN,
-        hash: Types::Hash
+        hash: Types::Hash,
+        notify: Notify
     ) -> Result<
         Self,
         LargeObjProtoCreateError<
@@ -1621,7 +1563,7 @@ where
             outbound: outbound,
             parties: parties,
             upstream: upstream,
-            notify: None,
+            notify: notify,
             param: param,
             retry: retry,
             encoder: encoder,
@@ -2346,11 +2288,9 @@ where
         }?;
 
         // Notify, as all cases generate messages.
-        if let Some(notify) = &self.notify {
-            notify
-                .notify()
-                .map_err(|_| LargeObjRecvError::MutexPoison)?;
-        }
+        self.notify
+            .notify()
+            .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
         Ok(out)
     }
@@ -2455,11 +2395,9 @@ where
                     };
 
                     // Notify, as this will generate a finished message.
-                    if let Some(notify) = &self.notify {
-                        notify
-                            .notify()
-                            .map_err(|_| LargeObjRecvError::MutexPoison)?;
-                    }
+                    self.notify
+                        .notify()
+                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
                     Ok(data)
                 } else {
@@ -2580,11 +2518,9 @@ where
 
             // Notify, as this could potentially generate new
             // messages.
-            if let Some(notify) = &self.notify {
-                notify
-                    .notify()
-                    .map_err(|_| LargeObjRecvError::MutexPoison)?;
-            }
+            self.notify
+                .notify()
+                .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
             Ok(None)
         } else {
@@ -2643,11 +2579,9 @@ where
 
                     // Notify, as this could potentially generate new
                     // messages.
-                    if let Some(notify) = &self.notify {
-                        notify
-                            .notify()
-                            .map_err(|_| LargeObjRecvError::MutexPoison)?;
-                    }
+                    self.notify
+                        .notify()
+                        .map_err(|_| LargeObjRecvError::MutexPoison)?;
 
                     Ok(None)
                 }
@@ -2967,23 +2901,6 @@ impl ScopedError for LargeObjMsgDecodeError {
     #[inline]
     fn scope(&self) -> ErrorScope {
         ErrorScope::Msg
-    }
-}
-
-impl<Inner> Display for RegisterNotifyError<Inner>
-where
-    Inner: Display
-{
-    fn fmt(
-        &self,
-        f: &mut Formatter<'_>
-    ) -> Result<(), Error> {
-        match self {
-            RegisterNotifyError::Inner { err } => err.fmt(f),
-            RegisterNotifyError::Collision => {
-                write!(f, "notifier already registered")
-            }
-        }
     }
 }
 
@@ -3575,6 +3492,12 @@ use constellation_auth::authn::test::TestAuthNMsgRecv;
 use constellation_auth::cred::NullCred;
 #[cfg(test)]
 use constellation_common::codec::test::TestBytesCodec;
+#[cfg(test)]
+use mio::Poll;
+#[cfg(test)]
+use mio::Token;
+#[cfg(test)]
+use mio::Waker;
 
 #[cfg(test)]
 use crate::init;
@@ -3777,6 +3700,10 @@ fn test_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3788,13 +3715,18 @@ fn test_offer_complete() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -3806,7 +3738,8 @@ fn test_offer_complete() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -3876,6 +3809,10 @@ fn test_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -3887,13 +3824,18 @@ fn test_offer_complete_repeat() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -3905,7 +3847,8 @@ fn test_offer_complete_repeat() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -3995,6 +3938,10 @@ fn test_offer_complete_repeat_multi_finish() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4006,7 +3953,8 @@ fn test_offer_complete_repeat_multi_finish() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
@@ -4014,6 +3962,10 @@ fn test_offer_complete_repeat_multi_finish() {
         vec![(None, None), (None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4025,7 +3977,8 @@ fn test_offer_complete_repeat_multi_finish() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -4128,6 +4081,10 @@ fn test_long_offer_complete_repeat() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4139,13 +4096,18 @@ fn test_long_offer_complete_repeat() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
     let script: Vec<(Option<Vec<u8>>, Option<Instant>)> = vec![(None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4157,7 +4119,8 @@ fn test_long_offer_complete_repeat() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -4247,6 +4210,10 @@ fn test_offer_req_obj_frag_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4258,7 +4225,8 @@ fn test_offer_req_obj_frag_complete() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
@@ -4266,6 +4234,10 @@ fn test_offer_req_obj_frag_complete() {
         vec![(None, None), (None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4277,7 +4249,8 @@ fn test_offer_req_obj_frag_complete() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -4388,6 +4361,10 @@ fn test_offer_req_obj_offer_complete() {
         vec![(Some(msg.clone()), None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4399,7 +4376,8 @@ fn test_offer_req_obj_offer_complete() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
@@ -4407,6 +4385,10 @@ fn test_offer_req_obj_offer_complete() {
         vec![(None, None), (None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4418,7 +4400,8 @@ fn test_offer_req_obj_offer_complete() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -4521,6 +4504,10 @@ fn test_offer_req_frag_complete_repeat() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4532,7 +4519,8 @@ fn test_offer_req_frag_complete_repeat() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
@@ -4540,6 +4528,10 @@ fn test_offer_req_frag_complete_repeat() {
         vec![(None, None), (None, None), (None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4551,7 +4543,8 @@ fn test_offer_req_frag_complete_repeat() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 
@@ -4708,6 +4701,10 @@ fn test_offer_req_obj_frag_req_complete() {
         vec![(Some(msg.clone()), None), (None, None)];
     let sender_msgs = TestLargeObjMsgs::new(script);
     let sender_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut sender: LargeObjProto<
         _,
         _,
@@ -4719,7 +4716,8 @@ fn test_offer_req_obj_frag_req_complete() {
         sender_recv.clone(),
         sender_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
     let mut sender_stream = TestStream { msgs: Vec::new() };
@@ -4727,6 +4725,10 @@ fn test_offer_req_obj_frag_req_complete() {
         vec![(None, None), (None, None)];
     let receiver_msgs = TestLargeObjMsgs::new(script);
     let receiver_recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let notify = Notify::new(Arc::new(waker));
     let mut receiver: LargeObjProto<
         _,
         _,
@@ -4738,7 +4740,8 @@ fn test_offer_req_obj_frag_req_complete() {
         receiver_recv.clone(),
         receiver_msgs,
         PassthruMsgAuthN::default(),
-        SHA3Algo::default()
+        SHA3Algo::default(),
+        notify
     )
     .expect("Expected success");
 

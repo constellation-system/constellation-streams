@@ -36,6 +36,7 @@ use constellation_common::hashid::SHA3Algo;
 use constellation_common::hashid::SHA3ID;
 use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
+use constellation_common::sync::Notify;
 use constellation_streams::config::LargeObjProtoConfig;
 use constellation_streams::config::PrivateLargeObjModeConfig;
 use constellation_streams::large_obj::LargeObjFrag;
@@ -58,6 +59,9 @@ use constellation_streams::stream::test::TestPrivateStreamScript;
 use constellation_streams::stream::test::TestRetry;
 use constellation_streams::threads::PushMode;
 use constellation_streams::threads::private::PrivateLargeObjPushMode;
+use mio::Poll;
+use mio::Token;
+use mio::Waker;
 
 use crate::init;
 
@@ -100,13 +104,19 @@ fn test_send_from_outbound_offer_succeed() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -251,13 +261,19 @@ fn test_send_from_outbound_offer_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -448,13 +464,19 @@ fn test_send_from_outbound_offer_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -647,13 +669,19 @@ fn test_send_from_outbound_offer_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -801,13 +829,19 @@ fn test_send_from_outbound_offer_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -992,13 +1026,19 @@ fn test_send_from_outbound_offer_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -1095,13 +1135,19 @@ fn test_send_from_outbound_offer_retry_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -1346,13 +1392,19 @@ fn test_send_from_outbound_offer_retry_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -1552,13 +1604,19 @@ fn test_send_from_outbound_offer_retry_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -1799,13 +1857,19 @@ fn test_send_from_outbound_offer_retry_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -2042,13 +2106,19 @@ fn test_send_from_outbound_offer_retry_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -2186,13 +2256,19 @@ fn test_send_from_outbound_offer_indef_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -2429,13 +2505,19 @@ fn test_send_from_outbound_offer_indef_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -2677,13 +2759,19 @@ fn test_send_from_outbound_offer_indef_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -2879,13 +2967,19 @@ fn test_send_from_outbound_offer_indef_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -3118,13 +3212,19 @@ fn test_send_from_outbound_offer_indef_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -3268,13 +3368,19 @@ fn test_send_from_outbound_offer_complete_imm_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -3472,13 +3578,19 @@ fn test_send_from_outbound_offer_complete_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -3719,13 +3831,19 @@ fn test_send_from_outbound_offer_complete_imm_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -3921,13 +4039,19 @@ fn test_send_from_outbound_offer_complete_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -4172,13 +4296,19 @@ fn test_send_from_outbound_offer_complete_imm_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -4333,13 +4463,19 @@ fn test_send_from_outbound_offer_complete_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -4539,13 +4675,19 @@ fn test_send_from_outbound_offer_complete_imm_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -4745,13 +4887,19 @@ fn test_send_from_outbound_offer_complete_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -4995,13 +5143,19 @@ fn test_send_from_outbound_offer_complete_imm_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -5153,13 +5307,19 @@ fn test_send_from_outbound_offer_complete_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -5303,13 +5463,19 @@ fn test_send_from_outbound_frags_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -5501,13 +5667,19 @@ fn test_send_from_outbound_frags_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -5701,13 +5873,19 @@ fn test_send_from_outbound_frags_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -5855,13 +6033,19 @@ fn test_send_from_outbound_frags_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -6054,13 +6238,19 @@ fn test_send_from_outbound_frags_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -6210,13 +6400,19 @@ fn test_send_from_outbound_frags_retry_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -6463,13 +6659,19 @@ fn test_send_from_outbound_frags_retry_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -6670,13 +6872,19 @@ fn test_send_from_outbound_frags_retry_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -6919,13 +7127,19 @@ fn test_send_from_outbound_frags_retry_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -7171,13 +7385,19 @@ fn test_send_from_outbound_frags_retry_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -7369,13 +7589,19 @@ fn test_send_from_outbound_frags_indef_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -7614,13 +7840,19 @@ fn test_send_from_outbound_frags_indef_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -7863,13 +8095,19 @@ fn test_send_from_outbound_frags_indef_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -8066,13 +8304,19 @@ fn test_send_from_outbound_frags_indef_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -8314,13 +8558,19 @@ fn test_send_from_outbound_frags_indef_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -8518,13 +8768,19 @@ fn test_send_from_outbound_frags_complete_imm_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -8723,13 +8979,19 @@ fn test_send_from_outbound_frags_complete_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -8972,13 +9234,19 @@ fn test_send_from_outbound_frags_complete_imm_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -9175,13 +9443,19 @@ fn test_send_from_outbound_frags_complete_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -9430,13 +9704,19 @@ fn test_send_from_outbound_frags_complete_imm_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -9593,13 +9873,19 @@ fn test_send_from_outbound_frags_complete_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -9802,13 +10088,19 @@ fn test_send_from_outbound_frags_complete_imm_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10011,13 +10303,19 @@ fn test_send_from_outbound_frags_complete_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10263,13 +10561,19 @@ fn test_send_from_outbound_frags_complete_imm_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10422,13 +10726,19 @@ fn test_send_from_outbound_frags_complete_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10613,13 +10923,19 @@ fn test_send_from_outbound_msg_succeed() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10727,13 +11043,19 @@ fn test_send_from_outbound_msg_select_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -10886,13 +11208,19 @@ fn test_send_from_outbound_msg_create_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -11045,13 +11373,19 @@ fn test_send_from_outbound_msg_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -11205,13 +11539,19 @@ fn test_send_from_outbound_msg_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -11374,13 +11714,19 @@ fn test_send_from_outbound_msg_select_retry_create_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -11581,13 +11927,19 @@ fn test_send_from_outbound_msg_select_retry_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -11789,13 +12141,19 @@ fn test_send_from_outbound_msg_select_retry_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -12003,13 +12361,19 @@ fn test_send_from_outbound_msg_create_retry_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -12211,13 +12575,19 @@ fn test_send_from_outbound_msg_create_retry_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -12425,13 +12795,19 @@ fn test_send_from_outbound_msg_add_retry_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -12642,13 +13018,19 @@ fn test_send_from_outbound_msg_select_retry_create_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -12806,13 +13188,19 @@ fn test_send_from_outbound_msg_select_retry_create_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13015,13 +13403,19 @@ fn test_send_from_outbound_msg_select_retry_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13179,13 +13573,19 @@ fn test_send_from_outbound_msg_select_retry_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13389,13 +13789,19 @@ fn test_send_from_outbound_msg_select_retry_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13553,13 +13959,19 @@ fn test_send_from_outbound_msg_select_retry_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13769,13 +14181,19 @@ fn test_send_from_outbound_msg_create_retry_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -13933,13 +14351,19 @@ fn test_send_from_outbound_msg_create_retry_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -14143,13 +14567,19 @@ fn test_send_from_outbound_msg_create_retry_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -14307,13 +14737,19 @@ fn test_send_from_outbound_msg_create_retry_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -14523,13 +14959,19 @@ fn test_send_from_outbound_msg_add_retry_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -14688,13 +15130,19 @@ fn test_send_from_outbound_msg_add_retry_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -14904,13 +15352,19 @@ fn test_send_from_outbound_msg_select_retry_create_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15067,13 +15521,19 @@ fn test_send_from_outbound_msg_select_retry_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15230,13 +15690,19 @@ fn test_send_from_outbound_msg_select_retry_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15393,13 +15859,19 @@ fn test_send_from_outbound_msg_create_retry_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15556,13 +16028,19 @@ fn test_send_from_outbound_msg_create_retry_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15719,13 +16197,19 @@ fn test_send_from_outbound_msg_add_retry_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -15876,13 +16360,19 @@ fn test_send_from_outbound_msg_select_indef() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -16038,13 +16528,19 @@ fn test_send_from_outbound_msg_select_indef_create_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -16245,13 +16741,19 @@ fn test_send_from_outbound_msg_select_indef_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -16453,13 +16955,19 @@ fn test_send_from_outbound_msg_select_indef_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -16666,13 +17174,19 @@ fn test_send_from_outbound_msg_select_indef_create_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -16827,13 +17341,19 @@ fn test_send_from_outbound_msg_select_indef_create_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17033,13 +17553,19 @@ fn test_send_from_outbound_msg_select_indef_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17194,13 +17720,19 @@ fn test_send_from_outbound_msg_select_indef_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17401,13 +17933,19 @@ fn test_send_from_outbound_msg_select_indef_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17562,13 +18100,19 @@ fn test_send_from_outbound_msg_select_indef_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17772,13 +18316,19 @@ fn test_send_from_outbound_msg_select_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -17885,13 +18435,19 @@ fn test_send_from_outbound_msg_select_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18043,13 +18599,19 @@ fn test_send_from_outbound_msg_create_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18156,13 +18718,19 @@ fn test_send_from_outbound_msg_create_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18314,13 +18882,19 @@ fn test_send_from_outbound_msg_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18427,13 +19001,19 @@ fn test_send_from_outbound_msg_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18586,13 +19166,19 @@ fn test_send_from_outbound_msg_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18699,13 +19285,19 @@ fn test_send_from_outbound_msg_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -18870,13 +19462,19 @@ fn test_send_from_outbound_msg_select_complete_imm_create_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -19034,13 +19632,19 @@ fn test_send_from_outbound_msg_select_complete_create_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -19243,13 +19847,19 @@ fn test_send_from_outbound_msg_select_complete_imm_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -19408,13 +20018,19 @@ fn test_send_from_outbound_msg_select_complete_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -19618,13 +20234,19 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -19789,13 +20411,19 @@ fn test_send_from_outbound_msg_select_complete_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20005,13 +20633,19 @@ fn test_send_from_outbound_msg_create_complete_imm_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20170,13 +20804,19 @@ fn test_send_from_outbound_msg_create_complete_add_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20380,13 +21020,19 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20551,13 +21197,19 @@ fn test_send_from_outbound_msg_create_complete_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20767,13 +21419,19 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -20938,13 +21596,19 @@ fn test_send_from_outbound_msg_add_complete_finish_retry() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21154,13 +21818,19 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21272,13 +21942,19 @@ fn test_send_from_outbound_msg_select_complete_create_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21435,13 +22111,19 @@ fn test_send_from_outbound_msg_select_complete_imm_create_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21598,13 +22280,19 @@ fn test_send_from_outbound_msg_select_complete_create_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21806,13 +22494,19 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -21924,13 +22618,19 @@ fn test_send_from_outbound_msg_select_complete_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22087,13 +22787,19 @@ fn test_send_from_outbound_msg_select_complete_imm_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22251,13 +22957,19 @@ fn test_send_from_outbound_msg_select_complete_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22460,13 +23172,19 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22578,13 +23296,19 @@ fn test_send_from_outbound_msg_select_complete_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22741,13 +23465,19 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -22911,13 +23641,19 @@ fn test_send_from_outbound_msg_select_complete_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23126,13 +23862,19 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23244,13 +23986,19 @@ fn test_send_from_outbound_msg_create_complete_add_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23407,13 +24155,19 @@ fn test_send_from_outbound_msg_create_complete_imm_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23571,13 +24325,19 @@ fn test_send_from_outbound_msg_create_complete_add_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23780,13 +24540,19 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -23898,13 +24664,19 @@ fn test_send_from_outbound_msg_create_complete_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24061,13 +24833,19 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24231,13 +25009,19 @@ fn test_send_from_outbound_msg_create_complete_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24446,13 +25230,19 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24564,13 +25354,19 @@ fn test_send_from_outbound_msg_add_complete_finish_complete_imm() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24728,13 +25524,19 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -24898,13 +25700,19 @@ fn test_send_from_outbound_msg_add_complete_finish_complete() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25113,13 +25921,19 @@ fn test_send_from_outbound_msg_select_complete_imm_create_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25230,13 +26044,19 @@ fn test_send_from_outbound_msg_select_complete_create_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25392,13 +26212,19 @@ fn test_send_from_outbound_msg_select_complete_imm_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25509,13 +26335,19 @@ fn test_send_from_outbound_msg_select_complete_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25671,13 +26503,19 @@ fn test_send_from_outbound_msg_select_complete_imm_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25788,13 +26626,19 @@ fn test_send_from_outbound_msg_select_complete_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -25950,13 +26794,19 @@ fn test_send_from_outbound_msg_create_complete_imm_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26067,13 +26917,19 @@ fn test_send_from_outbound_msg_create_complete_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26229,13 +27085,19 @@ fn test_send_from_outbound_msg_create_complete_imm_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26346,13 +27208,19 @@ fn test_send_from_outbound_msg_create_complete_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26508,13 +27376,19 @@ fn test_send_from_outbound_msg_add_complete_imm_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26625,13 +27499,19 @@ fn test_send_from_outbound_msg_add_complete_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26783,13 +27663,19 @@ fn test_send_from_outbound_msg_select_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -26891,13 +27777,19 @@ fn test_send_from_outbound_msg_create_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27011,13 +27903,19 @@ fn test_send_from_outbound_msg_create_permanent_retry_abort() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27175,13 +28073,19 @@ fn test_send_from_outbound_msg_add_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27292,13 +28196,19 @@ fn test_send_from_outbound_msg_add_permanent_retry_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27461,13 +28371,19 @@ fn test_send_from_outbound_msg_add_permanent_complete_imm_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27578,13 +28494,19 @@ fn test_send_from_outbound_msg_add_permanent_complete_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27746,13 +28668,19 @@ fn test_send_from_outbound_msg_add_permanent_cancel_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27858,13 +28786,19 @@ fn test_send_from_outbound_msg_finish_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -27975,13 +28909,19 @@ fn test_send_from_outbound_msg_finish_permanent_retry_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -28150,13 +29090,19 @@ fn test_send_from_outbound_msg_finish_permanent_complete_imm_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -28267,13 +29213,19 @@ fn test_send_from_outbound_msg_finish_permanent_complete_cancel() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));
@@ -28441,13 +29393,19 @@ fn test_send_from_outbound_msg_finish_permanent_cancel_permanent() {
     > = PrivateLargeObjPushMode::create(config).expect("Expected success");
     let recv: TestAuthNMsgRecv<Vec<u8>> = TestAuthNMsgRecv::default();
     let tokens = HashSet::new();
+    let poll = Poll::new().expect("Expected success");
+    let waker =
+        Waker::new(poll.registry(), Token(0)).expect("Expected success");
+    let waker = Arc::new(waker);
+    let notify = Notify::new(waker);
     let proto: LargeObjProto<_, _, _, _, TestLargeObjProtoTypes<_>> =
         LargeObjProto::create(
             LargeObjProtoConfig::default(),
             recv,
             msgs,
             PassthruMsgAuthN::default(),
-            SHA3Algo::default()
+            SHA3Algo::default(),
+            notify
         )
         .expect("Expected success");
     let mut proto = Arc::new(Mutex::new(proto));

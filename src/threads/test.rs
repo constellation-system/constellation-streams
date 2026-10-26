@@ -39,7 +39,7 @@ use constellation_common::retry::RetryWhen;
 use constellation_common::retry::WithRetryWhen;
 use constellation_common::retry::next_retry;
 use constellation_common::shutdown::ShutdownFlag;
-use constellation_common::sync::Notify;
+use constellation_common::sync::NotifyFlag;
 use mio::Token;
 
 use crate::addrs::test::TestEndpoint;
@@ -63,7 +63,6 @@ use crate::threads::PushModeResult;
 use crate::threads::dispatch::Dispatch;
 use crate::threads::dispatch::DispatchThreadCtx;
 use crate::threads::dispatch::Dispatched;
-use crate::threads::poll::MsgsSetNotify;
 use crate::threads::types::DispatchInboundTypes;
 use crate::threads::types::DispatchTypes;
 use crate::threads::types::PollThreadTypes;
@@ -199,18 +198,6 @@ impl Create for TestDispatch {
     }
 }
 
-impl MsgsSetNotify for TestRecv {
-    type Error = Infallible;
-
-    #[inline]
-    fn set_notify(
-        &mut self,
-        _notify: Notify
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
 impl<Ctx> Dispatch<ThreadTestTypes, Ctx> for TestDispatch
 where
     Ctx: 'static + Send
@@ -222,7 +209,7 @@ where
         ctx: &mut DispatchThreadCtx<TestChannels<TestChannelCore>, Ctx>,
         _prin: &NullCred,
         shutdown: ShutdownFlag,
-        _notify: Notify
+        _notify: NotifyFlag
     ) -> Result<Dispatched<ThreadTestTypes, Ctx>, Self::DispatchError> {
         let TestDispatchScriptEntry {
             msgs,
@@ -681,7 +668,6 @@ where
     type MsgAuthError = Infallible;
     type MsgPrin = NullCred;
     type Msgs = ();
-    type MsgsSetNotifyError = Infallible;
     type PullError = TestError;
     type PullStreams = NullPullStreams<(
         StreamID<TestEndpoint, String, TestChannelParam>,

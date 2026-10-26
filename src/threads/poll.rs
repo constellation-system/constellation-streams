@@ -19,7 +19,6 @@
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
@@ -82,7 +81,23 @@ where
     channels: Chans
 }
 
-pub struct PollThread<Ctx, Types>
+pub struct PollThreadStarter<Ctx, Types>
+where
+    Types: 'static + PollThreadTypes<Ctx>,
+    Ctx: 'static + Send {
+    config: PollThreadConfig<
+        Types::ChansConfig,
+        Types::ModeConfig,
+        Types::StreamConfig,
+        Types::MsgAuthConfig
+    >,
+    self_party: Option<Types::SessionPrin>,
+    ctx: ThreadInnerCtx<Ctx>,
+    notify_token: Token,
+    notify: Notify
+}
+
+struct PollThread<Ctx, Types>
 where
     Types: PollThreadTypes<Ctx>,
     Ctx: 'static + Send {
@@ -105,7 +120,6 @@ where
     mode: Types::Mode,
     /// Source of outbound messages.
     msgs: Types::Msgs,
-    notify: Arc<Waker>,
     notify_token: Token,
     /// Flag to use to shut the stream down.
     shutdown: ShutdownFlag,
@@ -114,30 +128,20 @@ where
     nevents: usize
 }
 
-pub trait MsgsSetNotify {
-    type Error: Debug + Display;
-
-    fn set_notify(
-        &mut self,
-        notify: Notify
-    ) -> Result<(), Self::Error>;
-}
-
 #[derive(Debug)]
 pub enum PollThreadStartError {
     IO { err: Error },
-    Recv { err: RecvError }
+    Recv { err: RecvError },
+    Shutdown { err: MutexPoison }
 }
 
 #[derive(Debug)]
-pub enum PollThreadCreateError<Mode, Channels, Stream, AuthN, Notify> {
-    Shutdown { err: MutexPoison },
+pub enum PollThreadCreateError<Mode, Channels, Stream, AuthN> {
     IO { err: Error },
     Mode { err: Mode },
     Channels { err: Channels },
     Stream { err: Stream },
-    AuthN { err: AuthN },
-    Notify { err: Notify }
+    AuthN { err: AuthN }
 }
 
 #[derive(Debug)]
@@ -145,18 +149,6 @@ pub enum PollThreadRecvError<Pull, AuthN, Recv> {
     Pull { err: Pull },
     AuthN { err: AuthN },
     Recv { err: Recv }
-}
-
-impl MsgsSetNotify for () {
-    type Error = Infallible;
-
-    #[inline]
-    fn set_notify(
-        &mut self,
-        _notify: Notify
-    ) -> Result<(), Self::Error> {
-        Ok(())
-    }
 }
 
 impl<Party, Chans, Ctx> ChannelsID for PollThreadCtx<Party, Chans, Ctx>
@@ -291,10 +283,10 @@ where
     }
 }
 
-impl<Ctx, Types> PollThread<Ctx, Types>
+impl<Ctx, Types> PollThreadStarter<Ctx, Types>
 where
-    Types: PollThreadTypes<Ctx>,
-    Ctx: Send
+    Types: 'static + PollThreadTypes<Ctx>,
+    Ctx: 'static + Send
 {
     pub fn create(
         config: PollThreadConfig<
@@ -304,18 +296,91 @@ where
             Types::MsgAuthConfig
         >,
         self_party: Option<Types::SessionPrin>,
-        ctx: Ctx,
+        ctx: Ctx
+    ) -> Result<(Self, Notify), Error> {
+        let mut ctx = ThreadInnerCtx::new(ctx)?;
+        let token = ctx.token();
+        let waker = Waker::new(ctx.registry(), token)?;
+        let waker = Arc::new(waker);
+        let notify = Notify::new(waker);
+        let starter = PollThreadStarter {
+            config: config,
+            self_party: self_party,
+            ctx: ctx,
+            notify_token: token,
+            notify: notify.clone()
+        };
+
+        Ok((starter, notify))
+    }
+
+    pub fn start(
+        self,
         recv: Types::Recv,
-        mut msgs: Types::Msgs,
+        msgs: Types::Msgs,
         mut shutdown: ShutdownFlag
+    ) -> Result<JoinHandle<()>, PollThreadStartError> {
+        let PollThreadStarter {
+            config,
+            self_party,
+            ctx,
+            notify_token,
+            notify
+        } = self;
+
+        shutdown
+            .add_notify(notify.clone())
+            .map_err(|err| PollThreadStartError::Shutdown { err: err })?;
+
+        let out = Builder::new()
+            .name(String::from("poll-thread"))
+            .spawn(move || {
+                match PollThread::<_, Types>::create(
+                    config,
+                    self_party,
+                    ctx,
+                    recv,
+                    msgs,
+                    notify_token,
+                    shutdown
+                ) {
+                    Ok(poll) => poll.run(),
+                    Err(err) => error!(target: "poll-thread-start",
+                                       "error creating poll thread: {}",
+                                       err)
+                }
+            })
+            .map_err(|err| PollThreadStartError::IO { err: err })?;
+
+        Ok(out)
+    }
+}
+
+impl<Ctx, Types> PollThread<Ctx, Types>
+where
+    Types: PollThreadTypes<Ctx>,
+    Ctx: Send
+{
+    fn create(
+        config: PollThreadConfig<
+            Types::ChansConfig,
+            Types::ModeConfig,
+            Types::StreamConfig,
+            Types::MsgAuthConfig
+        >,
+        self_party: Option<Types::SessionPrin>,
+        mut ctx: ThreadInnerCtx<Ctx>,
+        recv: Types::Recv,
+        msgs: Types::Msgs,
+        notify_token: Token,
+        shutdown: ShutdownFlag
     ) -> Result<
         Self,
         PollThreadCreateError<
             Types::ModeCreateError,
             Types::ChansCreateError,
             Types::StreamCreateError,
-            Types::MsgAuthCreateError,
-            Types::MsgsSetNotifyError
+            Types::MsgAuthCreateError
         >
     > {
         let (
@@ -332,9 +397,6 @@ where
             Some(nsessions) => HashMap::with_capacity(nsessions),
             None => HashMap::new()
         };
-        // XXX Pass in size hints here
-        let mut ctx = ThreadInnerCtx::new(ctx)
-            .map_err(|err| PollThreadCreateError::IO { err: err })?;
         let channels = Types::Chans::create(chans_config, &mut ctx)
             .map_err(|err| PollThreadCreateError::Channels { err: err })?;
         let mut ctx = PollThreadCtx::new(ctx, channels, self_party);
@@ -342,16 +404,6 @@ where
             .map_err(|err| PollThreadCreateError::Stream { err: err })?;
         let mode = Types::Mode::create(mode_config, &stream)
             .map_err(|err| PollThreadCreateError::Mode { err: err })?;
-        let notify_token = ctx.token();
-        let notify = Waker::new(ctx.inner.registry(), notify_token)
-            .map_err(|err| PollThreadCreateError::IO { err: err })?;
-        let notify = Arc::new(notify);
-
-        shutdown
-            .add_waker(notify.clone())
-            .map_err(|err| PollThreadCreateError::Shutdown { err: err })?;
-        msgs.set_notify(Notify::new(notify.clone()))
-            .map_err(|err| PollThreadCreateError::Notify { err: err })?;
 
         Ok(PollThread {
             pull_streams: pull_streams,
@@ -360,7 +412,6 @@ where
             authn: authn,
             mode: mode,
             msgs: msgs,
-            notify: notify,
             notify_token: notify_token,
             shutdown: shutdown,
             stream: stream,
@@ -376,52 +427,10 @@ where
     Types: 'static + PollThreadTypes<Ctx>,
     Ctx: 'static + Send
 {
-    pub fn start(
-        config: PollThreadConfig<
-            Types::ChansConfig,
-            Types::ModeConfig,
-            Types::StreamConfig,
-            Types::MsgAuthConfig
-        >,
-        self_party: Option<Types::SessionPrin>,
-        ctx: Ctx,
-        recv: Types::Recv,
-        msgs: Types::Msgs,
-        shutdown: ShutdownFlag
-    ) -> Result<JoinHandle<()>, PollThreadStartError> {
-        // XXX Replace this with oneshot when it stabilizes.
-        let out = Builder::new()
-            .name(String::from("poll-thread"))
-            .spawn(move || {
-                match Self::create(
-                    config, self_party, ctx, recv, msgs, shutdown
-                ) {
-                    Ok(poll) => poll.run(),
-                    Err(err) => error!(target: "poll-thread-start",
-                                       "error creating poll thread: {}",
-                                       err)
-                }
-            })
-            .map_err(|err| PollThreadStartError::IO { err: err })?;
-
-        Ok(out)
-    }
-
+    #[cfg(test)]
     #[inline]
     pub fn stream(&self) -> &Types::Stream {
         &self.stream
-    }
-
-    /// Get the [Waker] used to signal availability of new messages
-    /// to this thread.
-    #[inline]
-    pub fn notify(&self) -> Arc<Waker> {
-        self.notify.clone()
-    }
-
-    #[inline]
-    pub fn shutdown_flag(&self) -> ShutdownFlag {
-        self.shutdown.clone()
     }
 
     fn handle_msg(
@@ -1564,14 +1573,13 @@ where
     }
 }
 
-impl<Mode, Channels, Stream, AuthN, Notify> Display
-    for PollThreadCreateError<Mode, Channels, Stream, AuthN, Notify>
+impl<Mode, Channels, Stream, AuthN> Display
+    for PollThreadCreateError<Mode, Channels, Stream, AuthN>
 where
     Channels: Display,
     Mode: Display,
     Stream: Display,
-    AuthN: Display,
-    Notify: Display
+    AuthN: Display
 {
     fn fmt(
         &self,
@@ -1579,11 +1587,9 @@ where
     ) -> Result<(), std::fmt::Error> {
         match self {
             PollThreadCreateError::Channels { err } => err.fmt(f),
-            PollThreadCreateError::Notify { err } => err.fmt(f),
             PollThreadCreateError::Stream { err } => err.fmt(f),
             PollThreadCreateError::AuthN { err } => err.fmt(f),
             PollThreadCreateError::Mode { err } => err.fmt(f),
-            PollThreadCreateError::Shutdown { err } => write!(f, "{}", err),
             PollThreadCreateError::IO { err } => write!(f, "{}", err)
         }
     }
@@ -1613,6 +1619,7 @@ impl Display for PollThreadStartError {
         f: &mut Formatter<'_>
     ) -> Result<(), std::fmt::Error> {
         match self {
+            PollThreadStartError::Shutdown { err } => write!(f, "{}", err),
             PollThreadStartError::Recv { err } => write!(f, "{}", err),
             PollThreadStartError::IO { err } => write!(f, "{}", err)
         }
@@ -1684,9 +1691,17 @@ fn test_send() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -1754,9 +1769,17 @@ fn test_send_later() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -1816,9 +1839,17 @@ fn test_send_error() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -1891,9 +1922,17 @@ fn test_send_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2004,9 +2043,17 @@ fn test_send_after_and_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2117,9 +2164,17 @@ fn test_send_and_retry_after() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2217,9 +2272,17 @@ fn test_send_retry_error() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2327,9 +2390,17 @@ fn test_send_retry_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2433,9 +2504,17 @@ fn test_send_retry_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2531,9 +2610,17 @@ fn test_send_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2638,9 +2725,17 @@ fn test_send_after_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2748,9 +2843,17 @@ fn test_send_complete_after() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2845,9 +2948,17 @@ fn test_send_complete_error() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -2949,9 +3060,17 @@ fn test_send_complete_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3082,9 +3201,17 @@ fn test_send_complete_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3192,9 +3319,17 @@ fn test_listen_new_stream_recv_none() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3282,9 +3417,17 @@ fn test_listen_new_stream_recv_one() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3373,9 +3516,17 @@ fn test_listen_new_stream_recv_two() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3487,9 +3638,17 @@ fn test_listen_new_stream_recv_collide() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3626,9 +3785,17 @@ fn test_listen_new_stream_recv_collide_error() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3767,9 +3934,17 @@ fn test_listen_new_stream_recv_collide_retry_shutdown() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -3939,9 +4114,17 @@ fn test_listen_new_stream_recv_collide_retry_shutdown_error() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4066,9 +4249,17 @@ fn test_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4138,9 +4329,17 @@ fn test_refresh_complete_imm_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4210,9 +4409,17 @@ fn test_refresh_complete_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4313,9 +4520,17 @@ fn test_refresh_complete_imm_complete_imm_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4390,9 +4605,17 @@ fn test_refresh_complete_imm_complete_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4493,9 +4716,17 @@ fn test_refresh_complete_complete_imm_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4597,9 +4828,17 @@ fn test_refresh_complete_complete_success() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4718,9 +4957,17 @@ fn test_refresh_permanent() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4792,9 +5039,17 @@ fn test_refresh_complete_imm_permanent() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4867,9 +5122,17 @@ fn test_refresh_complete_permanent() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -4968,9 +5231,17 @@ fn test_refresh_complete_imm_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5070,9 +5341,17 @@ fn test_refresh_complete_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5192,9 +5471,17 @@ fn test_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5292,9 +5579,17 @@ fn test_refresh_retry_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5419,9 +5714,17 @@ fn test_refresh_retry_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5521,9 +5824,17 @@ fn test_refresh_retry_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5646,9 +5957,17 @@ fn test_refresh_retry_permanent() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5744,9 +6063,17 @@ fn test_send_indef() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5816,9 +6143,17 @@ fn test_send_indef_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -5926,9 +6261,17 @@ fn test_send_indef_retry_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6059,9 +6402,17 @@ fn test_send_indef_complete_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6192,9 +6543,17 @@ fn test_send_indef_indef_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6294,9 +6653,17 @@ fn test_send_indef_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6434,9 +6801,17 @@ fn test_send_indef_retry_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6597,9 +6972,17 @@ fn test_send_indef_complete_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6759,9 +7142,17 @@ fn test_send_indef_indef_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -6888,9 +7279,17 @@ fn test_send_indef_refresh_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7003,9 +7402,17 @@ fn test_send_indef_retry_refresh_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7141,9 +7548,17 @@ fn test_send_indef_complete_refresh_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7279,9 +7694,17 @@ fn test_send_indef_indef_refresh_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7383,9 +7806,17 @@ fn test_send_indef_refresh_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7525,9 +7956,17 @@ fn test_send_indef_retry_refresh_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7690,9 +8129,17 @@ fn test_send_indef_complete_refresh_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7854,9 +8301,17 @@ fn test_send_indef_indef_refresh_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -7990,9 +8445,17 @@ fn test_send_indef_listen_refresh() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -8107,9 +8570,17 @@ fn test_send_indef_listen_refresh_retry() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -8251,9 +8722,17 @@ fn test_send_indef_listen_refresh_complete_imm() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
@@ -8370,9 +8849,17 @@ fn test_send_indef_listen_refresh_complete() {
         16,
         None
     );
-    let mut poll: PollThread<_, ThreadTestTypes> =
-        PollThread::create(config, None, (), recv, (), ShutdownFlag::new())
-            .expect("Expected success");
+    let ctx = ThreadInnerCtx::new(()).expect("Expected success");
+    let mut poll: PollThread<_, ThreadTestTypes> = PollThread::create(
+        config,
+        None,
+        ctx,
+        recv,
+        (),
+        Token(0),
+        ShutdownFlag::new()
+    )
+    .expect("Expected success");
     let reports = poll.stream().reports.clone();
     let sendbuf = poll.stream().sends.clone();
 
