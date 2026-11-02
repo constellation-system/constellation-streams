@@ -1211,7 +1211,7 @@ where
                 }
             }
             Err(err) => {
-                error!(target: "poll-thread-shutdown",
+                error!(target: "dispatch-thread-shutdown",
                        "error shutting down push stream: {}",
                        err);
             }
@@ -1624,9 +1624,6 @@ where
         now: Instant
     ) -> bool {
         let mut valid = true;
-
-        trace!(target: "dispatch-thread",
-               "handling events {:?}", live);
 
         // If we have pending completes, run them.
         if let Some(completes) = completes {

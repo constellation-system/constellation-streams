@@ -24,7 +24,6 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io::Error;
 use std::sync::Arc;
-use std::sync::mpsc::RecvError;
 use std::thread::Builder;
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -131,7 +130,6 @@ where
 #[derive(Debug)]
 pub enum PollThreadStartError {
     IO { err: Error },
-    Recv { err: RecvError },
     Shutdown { err: MutexPoison }
 }
 
@@ -1620,7 +1618,6 @@ impl Display for PollThreadStartError {
     ) -> Result<(), std::fmt::Error> {
         match self {
             PollThreadStartError::Shutdown { err } => write!(f, "{}", err),
-            PollThreadStartError::Recv { err } => write!(f, "{}", err),
             PollThreadStartError::IO { err } => write!(f, "{}", err)
         }
     }
