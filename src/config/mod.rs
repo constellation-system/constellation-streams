@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -97,10 +97,7 @@ pub struct BatchSlotsConfig {
 ///
 /// # YAML Format
 ///
-/// The YAML format has three fields, two of which are mandatory:
-///
-/// * `channels`: Extra configuration information for the channels. This type
-///   must have a [Default] instance, and this field is optional.
+/// The YAML format has two fields, both of which are mandatory:
 ///
 /// * `channel-names`: An array of names of channels (defined elsewhere) that
 ///   can be used to reach the endpoints.
@@ -109,15 +106,23 @@ pub struct BatchSlotsConfig {
 ///   addresses).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[serde(rename = "connections-config")]
-pub struct ConnectionConfig<Channels: Default, Channel, Endpoint> {
-    /// Configuration for channels as a whole.
-    #[serde(default)]
-    channels: Channels,
+#[serde(rename = "connection")]
+pub struct ConnectionConfig<Channel, Verify, Endpoint>
+where
+    Verify: Default {
     /// Names of channels over which to connect.
     channel_names: Vec<Channel>,
     /// Endpoints to which to connect.
-    endpoints: Vec<Endpoint>
+    endpoints: Vec<ConnectionEndpoint<Verify, Endpoint>>
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "connection-endpoint")]
+pub struct ConnectionEndpoint<Verify, Endpoint> {
+    addr: Endpoint,
+    #[serde(default)]
+    verify: Verify
 }
 
 /// Parameters for the far-channel multiplexing scheme.
@@ -218,19 +223,24 @@ pub struct FarSchedulerConfig {
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
 #[serde(default)]
-pub struct LargeObjProtoConfig<Codec, IDs>
+pub struct LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default {
     /// Retry for sending fragments.
-    #[serde(default = "LargeObjProtoConfig::<Codec, IDs>::default_retry")]
+    #[serde(
+        default = "LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_retry"
+    )]
     retry: Retry,
     #[serde(default)]
-    codec: Codec,
+    encoder: Encoder,
+    #[serde(default)]
+    decoder: Decoder,
     #[serde(default)]
     ids: IDs,
     #[serde(
-        default = "LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration"
+        default = "LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_tombstone_duration"
     )]
     tombstone_duration: Duration,
     #[serde(default)]
@@ -266,10 +276,10 @@ where
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
-pub struct PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
+pub struct PartyConfig<Resolver, Epochs, Channel, Verify, Endpoint>
 where
     Resolver: Default,
-    Channels: Default,
+    Verify: Default,
     Epochs: Default {
     /// Scheduler configuration.
     #[serde(default)]
@@ -284,9 +294,59 @@ where
     #[serde(default)]
     retry: Retry,
     /// Possible ways to form connections to the party.
-    connections: Vec<ConnectionConfig<Channels, Channel, Endpoint>>,
+    connections: Vec<ConnectionConfig<Channel, Verify, Endpoint>>,
     #[serde(default)]
     size_hint: Option<usize>
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct MulticastPartyConfig<PartyID, Stream> {
+    party: PartyID,
+    #[serde(flatten)]
+    stream: Stream
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "poll-config")]
+pub struct PollThreadConfig<Channels, Mode, Stream, MsgAuthN> {
+    #[serde(flatten)]
+    channels: Channels,
+    msg_authn: MsgAuthN,
+    #[serde(flatten)]
+    stream: Stream,
+    #[serde(flatten)]
+    #[serde(default)]
+    mode: Mode,
+    #[serde(
+        default = "PollThreadConfig::<Channels, Mode, Stream, MsgAuthN>::default_nevents"
+    )]
+    num_events: usize,
+    #[serde(default)]
+    num_sessions: Option<usize>
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "dispatch-config")]
+pub struct DispatchThreadConfig<Channels, Mode> {
+    #[serde(flatten)]
+    channels: Channels,
+    #[serde(flatten)]
+    #[serde(default)]
+    mode: Mode,
+    #[serde(
+        default = "DispatchThreadConfig::<Channels, Mode>::default_nevents"
+    )]
+    num_events: usize,
+    #[serde(default)]
+    num_sessions: Option<usize>,
+    #[serde(default)]
+    num_dispatched: Option<usize>,
+    #[serde(default)]
+    num_tokens: Option<usize>
 }
 
 #[derive(
@@ -337,6 +397,16 @@ pub struct SharedDatagramModeConfig {
     retries_hint: Option<usize>
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "stream-multicaster")]
+pub struct StreamMulticasterConfig<PartyID, Stream> {
+    #[serde(default)]
+    #[serde(flatten)]
+    batch_slots: BatchSlotsConfig,
+    parties: Vec<MulticastPartyConfig<PartyID, Stream>>
+}
+
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -356,6 +426,153 @@ where
     retry: Retry,
     #[serde(default)]
     size_hint: Option<usize>
+}
+
+impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
+    #[inline]
+    pub fn new(
+        channels: Channels,
+        mode: Mode,
+        num_events: usize,
+        num_sessions: Option<usize>,
+        num_dispatched: Option<usize>,
+        num_tokens: Option<usize>
+    ) -> Self {
+        DispatchThreadConfig {
+            channels: channels,
+            mode: mode,
+            num_events: num_events,
+            num_sessions: num_sessions,
+            num_dispatched: num_dispatched,
+            num_tokens: num_tokens
+        }
+    }
+
+    #[inline]
+    pub fn channels(&self) -> &Channels {
+        &self.channels
+    }
+
+    #[inline]
+    pub fn mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    #[inline]
+    pub fn nevents(&self) -> usize {
+        self.num_events
+    }
+
+    #[inline]
+    pub fn nsession(&self) -> Option<usize> {
+        self.num_sessions
+    }
+
+    #[inline]
+    pub fn ndispatched(&self) -> Option<usize> {
+        self.num_dispatched
+    }
+
+    #[inline]
+    pub fn ntokens(&self) -> Option<usize> {
+        self.num_tokens
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (
+        Channels,
+        Mode,
+        usize,
+        Option<usize>,
+        Option<usize>,
+        Option<usize>
+    ) {
+        (
+            self.channels,
+            self.mode,
+            self.num_events,
+            self.num_sessions,
+            self.num_dispatched,
+            self.num_tokens
+        )
+    }
+
+    fn default_nevents() -> usize {
+        1024
+    }
+}
+
+impl<Channels, Mode, Stream, MsgAuthN>
+    PollThreadConfig<Channels, Mode, Stream, MsgAuthN>
+{
+    #[inline]
+    pub fn new(
+        channels: Channels,
+        mode: Mode,
+        stream: Stream,
+        msg_authn: MsgAuthN,
+        nevents: usize,
+        nsessions: Option<usize>
+    ) -> Self {
+        PollThreadConfig {
+            channels: channels,
+            mode: mode,
+            stream: stream,
+            msg_authn: msg_authn,
+            num_events: nevents,
+            num_sessions: nsessions
+        }
+    }
+
+    #[inline]
+    pub fn channels(&self) -> &Channels {
+        &self.channels
+    }
+
+    #[inline]
+    pub fn mode(&self) -> &Mode {
+        &self.mode
+    }
+
+    #[inline]
+    pub fn stream(&self) -> &Stream {
+        &self.stream
+    }
+
+    #[inline]
+    pub fn msg_authn(&self) -> &MsgAuthN {
+        &self.msg_authn
+    }
+
+    #[inline]
+    pub fn nevents(&self) -> usize {
+        self.num_events
+    }
+
+    #[inline]
+    pub fn nsession(&self) -> Option<usize> {
+        self.num_sessions
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (Channels, Mode, Stream, MsgAuthN, usize, Option<usize>) {
+        (
+            self.channels,
+            self.mode,
+            self.stream,
+            self.msg_authn,
+            self.num_events,
+            self.num_sessions
+        )
+    }
+
+    fn default_nevents() -> usize {
+        1024
+    }
 }
 
 impl PrivateDatagramModeConfig {
@@ -664,9 +881,9 @@ impl Default for FarSchedulerConfig {
     }
 }
 
-impl<Channels, Channel, Endpoint> ConnectionConfig<Channels, Channel, Endpoint>
+impl<Channel, Verify, Endpoint> ConnectionConfig<Channel, Verify, Endpoint>
 where
-    Channels: Default
+    Verify: Default
 {
     /// Create a new `ConnectionConfig` from its components.
     ///
@@ -674,21 +891,13 @@ where
     /// fields in the YAML format.  See documentation for details.
     #[inline]
     pub fn new(
-        channels: Channels,
         channel_names: Vec<Channel>,
-        endpoints: Vec<Endpoint>
+        endpoints: Vec<ConnectionEndpoint<Verify, Endpoint>>
     ) -> Self {
         ConnectionConfig {
-            channels: channels,
             channel_names: channel_names,
             endpoints: endpoints
         }
-    }
-
-    /// Get the channel configuration information.
-    #[inline]
-    pub fn channels(&self) -> &Channels {
-        &self.channels
     }
 
     /// Get the array of channel names.
@@ -699,21 +908,53 @@ where
 
     /// Get the array of endpoints.
     #[inline]
-    pub fn endpoints(&self) -> &[Endpoint] {
+    pub fn endpoints(&self) -> &[ConnectionEndpoint<Verify, Endpoint>] {
         &self.endpoints
     }
 
     /// Deconstruct this into the channel configuration, channel
     /// names, and endpoints.
     #[inline]
-    pub fn take(self) -> (Channels, Vec<Channel>, Vec<Endpoint>) {
-        (self.channels, self.channel_names, self.endpoints)
+    pub fn take(
+        self
+    ) -> (Vec<Channel>, Vec<ConnectionEndpoint<Verify, Endpoint>>) {
+        (self.channel_names, self.endpoints)
     }
 }
 
-impl<Codec, IDs> Default for LargeObjProtoConfig<Codec, IDs>
+impl<Verify, Endpoint> ConnectionEndpoint<Verify, Endpoint> {
+    #[inline]
+    pub fn new(
+        addr: Endpoint,
+        verify: Verify
+    ) -> Self {
+        ConnectionEndpoint {
+            addr: addr,
+            verify: verify
+        }
+    }
+
+    #[inline]
+    pub fn addr(&self) -> &Endpoint {
+        &self.addr
+    }
+
+    #[inline]
+    pub fn verify(&self) -> &Verify {
+        &self.verify
+    }
+
+    #[inline]
+    pub fn take(self) -> (Endpoint, Verify) {
+        (self.addr, self.verify)
+    }
+}
+
+impl<Encoder, Decoder, IDs> Default
+    for LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default
 {
     #[inline]
@@ -722,23 +963,26 @@ where
             inbound_size_hint: None,
             outbound_size_hint: None,
             tombstone_duration:
-                LargeObjProtoConfig::<Codec, IDs>::default_tombstone_duration(),
-            retry: LargeObjProtoConfig::<Codec, IDs>::default_retry(),
-            codec: Codec::default(),
+                LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_tombstone_duration(),
+            retry: LargeObjProtoConfig::<Encoder, Decoder, IDs>::default_retry(),
+            encoder: Encoder::default(),
+            decoder: Decoder::default(),
             ids: IDs::default()
         }
     }
 }
 
-impl<Codec, IDs> LargeObjProtoConfig<Codec, IDs>
+impl<Encoder, Decoder, IDs> LargeObjProtoConfig<Encoder, Decoder, IDs>
 where
-    Codec: Default,
+    Decoder: Default,
+    Encoder: Default,
     IDs: Default
 {
     #[inline]
     pub fn new(
         retry: Retry,
-        codec: Codec,
+        encoder: Encoder,
+        decoder: Decoder,
         ids: IDs,
         tombstone_duration: Duration,
         inbound_size_hint: Option<usize>,
@@ -748,8 +992,9 @@ where
             inbound_size_hint: inbound_size_hint,
             outbound_size_hint: outbound_size_hint,
             tombstone_duration: tombstone_duration,
+            encoder: encoder,
+            decoder: decoder,
             retry: retry,
-            codec: codec,
             ids: ids
         }
     }
@@ -775,8 +1020,13 @@ where
     }
 
     #[inline]
-    pub fn codec(&self) -> &Codec {
-        &self.codec
+    pub fn decoder(&self) -> &Decoder {
+        &self.decoder
+    }
+
+    #[inline]
+    pub fn encoder(&self) -> &Encoder {
+        &self.encoder
     }
 
     #[inline]
@@ -787,10 +1037,19 @@ where
     #[inline]
     pub fn take(
         self
-    ) -> (Retry, Codec, IDs, Duration, Option<usize>, Option<usize>) {
+    ) -> (
+        Retry,
+        Encoder,
+        Decoder,
+        IDs,
+        Duration,
+        Option<usize>,
+        Option<usize>
+    ) {
         (
             self.retry,
-            self.codec,
+            self.encoder,
+            self.decoder,
             self.ids,
             self.tombstone_duration,
             self.inbound_size_hint,
@@ -807,13 +1066,32 @@ where
     }
 }
 
-impl<Resolver, Channels, Epochs, Channel, Endpoint>
-    PartyConfig<Resolver, Channels, Epochs, Channel, Endpoint>
+impl<Resolver, Epochs, Channel, Verify, Endpoint>
+    PartyConfig<Resolver, Epochs, Channel, Verify, Endpoint>
 where
     Resolver: Default,
-    Channels: Default,
+    Verify: Default,
     Epochs: Default
 {
+    #[inline]
+    pub fn new(
+        scheduler: FarSchedulerConfig,
+        resolve: Resolver,
+        epochs: Epochs,
+        retry: Retry,
+        connections: Vec<ConnectionConfig<Channel, Verify, Endpoint>>,
+        size_hint: Option<usize>
+    ) -> Self {
+        PartyConfig {
+            scheduler: scheduler,
+            resolve: resolve,
+            epochs: epochs,
+            retry: retry,
+            connections: connections,
+            size_hint: size_hint
+        }
+    }
+
     /// Get the scheduler configuration.
     #[inline]
     pub fn scheduler(&self) -> &FarSchedulerConfig {
@@ -842,7 +1120,7 @@ where
     #[inline]
     pub fn connections(
         &self
-    ) -> &[ConnectionConfig<Channels, Channel, Endpoint>] {
+    ) -> &[ConnectionConfig<Channel, Verify, Endpoint>] {
         &self.connections
     }
 
@@ -864,7 +1142,7 @@ where
         Epochs,
         Retry,
         Option<usize>,
-        Vec<ConnectionConfig<Channels, Channel, Endpoint>>
+        Vec<ConnectionConfig<Channel, Verify, Endpoint>>
     ) {
         (
             self.scheduler,
@@ -874,6 +1152,64 @@ where
             self.size_hint,
             self.connections
         )
+    }
+}
+
+impl<PartyID, Stream> StreamMulticasterConfig<PartyID, Stream> {
+    #[inline]
+    pub fn new(
+        parties: Vec<MulticastPartyConfig<PartyID, Stream>>,
+        batch_slots: BatchSlotsConfig
+    ) -> Self {
+        StreamMulticasterConfig {
+            batch_slots: batch_slots,
+            parties: parties
+        }
+    }
+
+    #[inline]
+    pub fn batch_slots(&self) -> &BatchSlotsConfig {
+        &self.batch_slots
+    }
+
+    #[inline]
+    pub fn parties(&self) -> &[MulticastPartyConfig<PartyID, Stream>] {
+        &self.parties
+    }
+
+    #[inline]
+    pub fn take(
+        self
+    ) -> (Vec<MulticastPartyConfig<PartyID, Stream>>, BatchSlotsConfig) {
+        (self.parties, self.batch_slots)
+    }
+}
+
+impl<PartyID, Stream> MulticastPartyConfig<PartyID, Stream> {
+    #[inline]
+    pub fn new(
+        party: PartyID,
+        stream: Stream
+    ) -> Self {
+        MulticastPartyConfig {
+            party: party,
+            stream: stream
+        }
+    }
+
+    #[inline]
+    pub fn party(&self) -> &PartyID {
+        &self.party
+    }
+
+    #[inline]
+    pub fn stream(&self) -> &Stream {
+        &self.stream
+    }
+
+    #[inline]
+    pub fn take(self) -> (PartyID, Stream) {
+        (self.party, self.stream)
     }
 }
 
@@ -924,13 +1260,17 @@ fn test_connection_config() {
         "  - \"chan-1\"\n",
         "  - \"chan-2\"\n",
         "endpoints:\n",
-        "  - 10.10.10.10:10000\n",
+        "  - addr: 10.10.10.10:10000\n",
     );
     let addr: SocketAddr = "10.10.10.10:10000".parse().unwrap();
+    let endpoint = ConnectionEndpoint {
+        addr: addr,
+        verify: ()
+    };
     let channames = vec!["chan-1", "chan-2"];
-    let endpoints = vec![addr];
-    let expected = ConnectionConfig::new((), channames, endpoints);
-    let actual = serde_yaml::from_str(yaml).unwrap();
+    let endpoints = vec![endpoint];
+    let expected = ConnectionConfig::new(channames, endpoints);
+    let actual = yaml_serde::from_str(yaml).unwrap();
 
     assert_eq!(expected, actual);
 }
@@ -969,7 +1309,7 @@ fn test_connection_config() {
 // retry: retry,
 // endpoint: endpoint
 // };
-// let actual = serde_yaml::from_str(yaml).unwrap();
+// let actual = yaml_serde::from_str(yaml).unwrap();
 //
 // assert_eq!(expected, actual);
 // }

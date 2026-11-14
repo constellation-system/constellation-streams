@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -18,42 +18,17 @@
 
 //! Error-management utilities.
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::io::ErrorKind;
 
 use constellation_common::error::CodecStreamError;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
+use constellation_common::util::LazyInitVec;
 
 use crate::stream::CompoundBatchID;
-
-/// Type for errors that can be returned from batching functionality
-/// in [PushStream](crate::stream::PushStream) and its sub-traits.
-///
-/// The essential combinators for streams (particularly
-/// multicasting) often involve reconciling errors that may occur on
-/// multiple streams.  To do this effectively, it is necessary to
-/// identify which errors can be recovered versus which cannot, and to
-/// then decompose and reconstruct error types to separate recoverable
-/// and non-recoverable errors into separate types for the combined
-/// streams.
-///
-/// A prime example of this is [std::io::Error], which includes a
-/// number of non-recoverable conditions, but also includes
-/// [Interrupted](ErrorKind::Interrupted) and
-/// [WouldBlock](ErrorKind::WouldBlock).
-///
-/// This trait represents the splitting portion of this process.
-pub trait BatchError: Sized {
-    /// Type of permanent errors.
-    type Permanent: Display + ScopedError;
-    /// Type of errors that can be retried.
-    type Completable;
-
-    /// Project this into a completable and permanent portion.
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>);
-}
 
 pub trait ErrorReportInfo<Info> {
     fn report_info(&self) -> Option<Info>;
@@ -95,7 +70,7 @@ pub struct ErrorSet<Idx, Success, Err> {
     errors: Vec<(Idx, Err)>
 }
 
-/// Wrapper around a [BatchError] that contains a set of parties.
+/// Wrapper around a [RecoverableError] that contains a set of parties.
 ///
 /// This is useful for some implementations of
 /// [PushStreamSharedSingle](crate::stream::PushStreamSharedSingle).
@@ -108,6 +83,7 @@ pub struct PartiesBatchError<Parties, Err> {
 }
 
 /// Wrapper for errors that need to indicate no selection was made.
+#[derive(Debug)]
 pub enum SelectionsError<Inner, Info> {
     /// Underlying error type.
     Inner {
@@ -118,32 +94,6 @@ pub enum SelectionsError<Inner, Info> {
     NoSelections {
         /// Information about selections.
         info: Info
-    }
-}
-
-impl<Encode, Write> BatchError for CodecStreamError<Encode, Write>
-where
-    Encode: Display,
-    Write: BatchError
-{
-    type Completable = CodecStreamError<Infallible, Write::Completable>;
-    type Permanent = CodecStreamError<Encode, Write::Permanent>;
-
-    #[inline]
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
-        match self {
-            CodecStreamError::Codec { err } => {
-                (None, Some(CodecStreamError::Codec { err }))
-            }
-            CodecStreamError::IO { err } => {
-                let (completable, permanent) = err.split();
-
-                (
-                    completable.map(|res| CodecStreamError::IO { err: res }),
-                    permanent.map(|res| CodecStreamError::IO { err: res })
-                )
-            }
-        }
     }
 }
 
@@ -173,9 +123,10 @@ where
     }
 }
 
-impl<Inner, Info> BatchError for SelectionsError<Inner, Info>
+impl<Inner, Info> RecoverableError for SelectionsError<Inner, Info>
 where
-    Inner: BatchError
+    Inner: RecoverableError,
+    Info: Debug
 {
     type Completable = Inner::Completable;
     type Permanent = SelectionsError<Inner::Permanent, Info>;
@@ -194,16 +145,6 @@ where
                 (None, Some(SelectionsError::NoSelections { info: info }))
             }
         }
-    }
-}
-
-impl BatchError for Infallible {
-    type Completable = Infallible;
-    type Permanent = Infallible;
-
-    #[inline]
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
-        (None, Some(self))
     }
 }
 
@@ -258,22 +199,9 @@ impl<Parties, Err> PartiesBatchError<Parties, Err> {
     }
 }
 
-impl BatchError for std::io::Error {
-    type Completable = ();
-    type Permanent = std::io::Error;
-
-    #[inline]
-    fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
-        match self.kind() {
-            ErrorKind::WouldBlock | ErrorKind::Interrupted => (Some(()), None),
-            _ => (None, Some(self))
-        }
-    }
-}
-
-impl<Parties, Err> BatchError for PartiesBatchError<Parties, Err>
+impl<Parties, Err> RecoverableError for PartiesBatchError<Parties, Err>
 where
-    Err: BatchError
+    Err: RecoverableError
 {
     type Completable = PartiesBatchError<Parties, Err::Completable>;
     type Permanent = Err::Permanent;
@@ -307,11 +235,12 @@ where
     }
 }
 
-impl<Idx, Success, Err> BatchError for CompoundBatchError<Idx, Success, Err>
+impl<Idx, Success, Err> RecoverableError
+    for CompoundBatchError<Idx, Success, Err>
 where
-    Err: BatchError,
-    Success: Clone,
-    Idx: Clone + Display
+    Err: RecoverableError,
+    Success: Clone + Debug,
+    Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
     type Permanent = CompoundBatchError<Idx, Success, Err::Permanent>;
@@ -351,11 +280,11 @@ where
     }
 }
 
-impl<Idx, Success, Err> BatchError for ErrorSet<Idx, Success, Err>
+impl<Idx, Success, Err> RecoverableError for ErrorSet<Idx, Success, Err>
 where
-    Err: BatchError,
-    Success: Clone,
-    Idx: Clone + Display
+    Err: RecoverableError,
+    Success: Clone + Debug,
+    Idx: Clone + Debug + Display
 {
     type Completable = ErrorSet<Idx, Success, Err::Completable>;
     type Permanent = ErrorSet<Idx, Success, Err::Permanent>;
@@ -364,49 +293,27 @@ where
     fn split(self) -> (Option<Self::Completable>, Option<Self::Permanent>) {
         let ErrorSet { successes, errors } = self;
         let len = errors.len();
-        let mut permanents: Option<Vec<(Idx, Err::Permanent)>> = None;
-        let mut completables: Option<Vec<(Idx, Err::Completable)>> = None;
+        let mut permanents = LazyInitVec::new(len);
+        let mut completables = LazyInitVec::new(len);
 
         for (idx, err) in errors {
             let (completable, permanent) = err.split();
 
             if let Some(completable) = completable {
-                match &mut completables {
-                    Some(completables) => {
-                        completables.push((idx.clone(), completable))
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), completable));
-
-                        completables = Some(vec)
-                    }
-                }
+                completables.push((idx.clone(), completable))
             }
 
             if let Some(permanent) = permanent {
-                match &mut permanents {
-                    Some(permanents) => {
-                        permanents.push((idx.clone(), permanent))
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((idx.clone(), permanent));
-
-                        permanents = Some(vec)
-                    }
-                }
+                permanents.push((idx.clone(), permanent))
             }
         }
 
-        let completable = completables.map(|completables| ErrorSet {
+        let completable = completables.take().map(|completables| ErrorSet {
             successes: successes.clone(),
             errors: completables
         });
-        let permanent = permanents.map(|permanents| ErrorSet {
-            successes: successes.clone(),
+        let permanent = permanents.take().map(|permanents| ErrorSet {
+            successes: successes,
             errors: permanents
         });
 

@@ -1,4 +1,4 @@
-# Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+# Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License, version
@@ -22,14 +22,13 @@ description = "Streams API for the Constellation distributed systems platform"
 repository = "https://github.com/constellation-system/constellation-streams"
 version = "0.0.0"
 authors = [ "Eric McCorkle <eric.mccorkle@jhuapl.edu>" ]
-rust-version = "1.83"
+edition = "2024"
 license = "AGPL-3.0-only"
 keywords = ["networking", "distributed systems"]
 categories = ["network-programming"]
 exclude = [
     ".gitignore"
 ]
-edition = "2018"
 
 [features]
 default = ["gssapi", "log", "openssl", "unix"]
@@ -61,10 +60,12 @@ bitvec = { version = "1.0" }
 constellation-auth = { git = "https://github.com/constellation-system/constellation-auth.git", branch = "project/ioc", default-features = false }
 constellation-common = { git = "https://github.com/constellation-system/constellation-common.git", branch = "project/ioc", default-features = false }
 log = { version = "0.4", optional = true }
+mio = { version = "1.0" }
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
 asn1rs = { version = "0.3" }
 
 [dev-dependencies]
-serde_yaml = { version = "0.9" }
+env_logger = { version = "0.10" }
+yaml_serde = { version = "0.10" }

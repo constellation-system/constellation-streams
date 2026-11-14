@@ -1,0 +1,15443 @@
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
+//
+// This program is free software: you can redistribute it and/or
+// modify it under the terms of the GNU Affero General Public License,
+// version 3, as published by the Free Software Foundation.  If you
+// would like to purchase a commercial license for this software, please
+// contact APL’s Tech Transfer at 240-592-0817 or
+// techtransfer@jhuapl.edu.
+//
+// This program is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public
+// License along with this program.  If not, see
+// <https://www.gnu.org/licenses/>.
+
+use std::collections::HashSet;
+use std::ops::Deref;
+use std::time::Duration;
+use std::time::Instant;
+
+use constellation_common::config::Create;
+use constellation_common::error::ErrorScope;
+use constellation_common::hashid::SHA3ID;
+use constellation_common::net::test::TestMsgsError;
+use constellation_common::net::test::TestPrivateMsgs;
+use constellation_common::retry::RetryIndefResult;
+use constellation_common::retry::RetryResult;
+use constellation_streams::config::PrivateDatagramModeConfig;
+use constellation_streams::stream::test::TestAbortRetry;
+use constellation_streams::stream::test::TestAction;
+use constellation_streams::stream::test::TestCompletableError;
+use constellation_streams::stream::test::TestError;
+use constellation_streams::stream::test::TestIndefAction;
+use constellation_streams::stream::test::TestPermanentError;
+use constellation_streams::stream::test::TestPrivateBatchState;
+use constellation_streams::stream::test::TestPrivateStream;
+use constellation_streams::stream::test::TestPrivateStreamScript;
+use constellation_streams::stream::test::TestRetry;
+use constellation_streams::threads::PushMode;
+use constellation_streams::threads::private::PrivateDatagramPushMode;
+
+use crate::init;
+
+#[test]
+fn test_send_from_outbound_succeed() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_create_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![RetryResult::Success(())],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_select_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Retry(TestRetry { when: when })),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_create_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_retry_add_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: later })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(later));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: later })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(later));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: later })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(later));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, later)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_create_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![RetryResult::Success(())],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_indef_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let later = when + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![
+            Ok(RetryIndefResult::Indef(())),
+            Ok(RetryIndefResult::Success(())),
+        ],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(later)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(later));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_indefs(&mut (), &mut msgs, &mut stream)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_retry_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_retry_finish() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_create_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_add_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_add() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_complete_finish_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_finish_create() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![],
+        finish_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Finished {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_create_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![RetryResult::Success(())],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_create_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![RetryResult::Success(())],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_imm_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_select_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestIndefAction::Success { val: () }
+            }
+        })],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Ok(RetryResult::Success(()))],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_imm_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_create_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_imm_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_complete_add_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_select_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        create_batch: vec![],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert_eq!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPermanentError {
+            scope: ErrorScope::Session
+        }]
+    );
+    assert!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+}
+
+#[test]
+fn test_send_from_outbound_create_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![RetryResult::Success(())],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_create_permanent_abort_retry() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        cancel_batch: vec![],
+        finish_batch: vec![],
+        abort_start_batch: vec![
+            RetryResult::Retry(TestAbortRetry {
+                batch: 0,
+                when: when
+            }),
+            RetryResult::Success(()),
+        ],
+        add: vec![],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::StartError,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Aborted,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_add_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_add_permanent_retry_cancel() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_add_permanent_complete_cancel_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_add_permanent_complete_cancel() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_add_permanent_cancel_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        finish_batch: vec![],
+        abort_start_batch: vec![],
+        add: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live { msgs: vec![] },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_finish_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Ok(RetryResult::Success(()))],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_finish_permanent_retry_cancel() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![
+            Ok(RetryResult::Retry(TestRetry { when: when })),
+            Ok(RetryResult::Success(())),
+        ],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), Some(when));
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+
+    let next = mode
+        .retry_pending(&mut (), &mut msgs, &mut stream, &tokens, when)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_finish_permanent_complete_cancel_imm() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::Retryable,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_finish_permanent_complete_cancel() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Completable {
+            err: TestCompletableError {
+                scope: ErrorScope::WouldBlock,
+                action: TestAction::Success { val: () }
+            }
+        })],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+
+    let next = mode
+        .complete_pending(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), None);
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Canceled,]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}
+
+#[test]
+fn test_send_from_outbound_finish_permanent_cancel_permanent() {
+    init();
+
+    let when = Instant::now() + Duration::from_secs(1);
+    let script = TestPrivateStreamScript {
+        select: vec![Ok(RetryIndefResult::Success(()))],
+        create_batch: vec![Ok(RetryResult::Success(()))],
+        cancel_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        finish_batch: vec![Err(TestError::Permanent {
+            err: TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        })],
+        abort_start_batch: vec![],
+        add: vec![Ok(RetryResult::Success(()))],
+        push_frags: vec![],
+        push_offers: vec![],
+        report_failure: vec![],
+        inbound: vec![]
+    };
+    let mut stream: TestPrivateStream<&str, &str, SHA3ID> =
+        TestPrivateStream::new(script);
+    let script: Vec<
+        Result<(Option<Vec<&str>>, Option<Instant>), TestMsgsError>
+    > = vec![Ok((Some(vec!["hello"]), Some(when)))];
+    let mut msgs = TestPrivateMsgs::new(script);
+    let config = PrivateDatagramModeConfig::default();
+    let mut mode: PrivateDatagramPushMode<
+        &str,
+        TestPrivateStream<&str, &str, SHA3ID>,
+        ()
+    > = PrivateDatagramPushMode::create(config).expect("Expected success");
+    let tokens = HashSet::new();
+
+    let next = mode
+        .send_from_outbound(&mut (), &mut msgs, &mut stream, &tokens)
+        .0
+        .expect("Expected success");
+
+    assert_eq!(next.next_outbound(), Some(when));
+    assert_eq!(next.retry_pending(), None);
+    assert!(!next.has_completes());
+    assert_eq!(
+        stream
+            .batches
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![TestPrivateBatchState::Live {
+            msgs: vec!["hello"]
+        },]
+    );
+    assert!(
+        stream
+            .frags
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(
+        stream
+            .offers
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert!(stream.failures.is_empty());
+    assert!(
+        stream
+            .reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .is_empty()
+    );
+    assert_eq!(
+        stream
+            .batch_reports
+            .try_borrow()
+            .expect("try_borrow failed")
+            .deref(),
+        &vec![(
+            0,
+            TestPermanentError {
+                scope: ErrorScope::Session
+            }
+        )]
+    );
+}

@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -24,12 +24,15 @@
 //! serving as the origins.  `Addrs` provides basic functionality for
 //! periodically refreshing the resolution of addresses, obtaining the
 //! current set of addresses, and determining when next to refresh.
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::time::Instant;
 
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
+
+pub mod test;
 
 /// Trait for sources of addresses that may need to be periodically
 /// refreshed.
@@ -44,14 +47,14 @@ pub trait Addrs {
     /// DNS example, this is the DNS name.
     type Origin;
     /// Type of addresses.
-    type Addr: Clone + Display + Eq + Hash;
+    type Addr: Clone + Debug + Display + Eq + Hash;
     /// Type of iterators for the results.
     ///
     /// This indicates the address, the source from which it
     /// originates, and when it was last cached.
     type AddrsIter: Iterator<Item = (Self::Addr, Self::Origin, Instant)>;
     /// Type of errors that can occur when resolving addresses.
-    type AddrsError: Display + ScopedError;
+    type AddrsError: Debug + Display + ScopedError;
 
     /// Get the earliest future time that addresses will be refreshed.
     ///
@@ -80,16 +83,19 @@ pub trait Addrs {
 }
 
 /// Sub-trait of [Addrs] that can be created from a configuration object.
-pub trait AddrsCreate<Ctx, Origins>: Sized + Addrs {
+pub trait AddrsCreate<Ctx>: Sized + Addrs {
     /// Type of configurations from which this is created.
     type Config;
+    type OriginConfig: Clone + Into<Self::Origin>;
     /// Type of errors that can occur during creation.
-    type CreateError: Display;
+    type CreateError: Debug + Display;
 
     /// Create an instance of this `Addrs` from its configuration.
-    fn create(
+    fn create<I>(
         ctx: &mut Ctx,
         config: Self::Config,
-        origin: Origins
-    ) -> Result<Self, Self::CreateError>;
+        origin: I
+    ) -> Result<Self, Self::CreateError>
+    where
+        I: Iterator<Item = Self::OriginConfig>;
 }

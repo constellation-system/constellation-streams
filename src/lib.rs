@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -76,8 +76,6 @@
 //! The API also manages message-level authentication on incoming
 //! messages.  Messages delivered to the upper layer are then
 //! identified by a *counterparty*, not an address.
-#![feature(let_chains)]
-#![allow(incomplete_features)]
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
@@ -99,3 +97,22 @@ pub mod xciap;
 #[allow(clippy::all)]
 #[rustfmt::skip]
 mod generated;
+
+#[cfg(test)]
+use std::sync::Once;
+
+#[cfg(test)]
+use log::LevelFilter;
+
+#[cfg(test)]
+static INIT: Once = Once::new();
+
+#[cfg(test)]
+fn init() {
+    INIT.call_once(|| {
+        env_logger::builder()
+            .is_test(true)
+            .filter_level(LevelFilter::Trace)
+            .init()
+    })
+}

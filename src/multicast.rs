@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -24,37 +24,47 @@
 
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
 use std::fmt::Formatter;
 use std::hash::Hash;
+use std::iter::Flatten;
 use std::marker::PhantomData;
 use std::time::Instant;
 use std::vec::IntoIter;
 
+use bitvec::bitvec;
+use constellation_common::config::CreateWithParam;
 use constellation_common::error::ErrorScope;
+use constellation_common::error::RecoverableError;
 use constellation_common::error::ScopedError;
 use constellation_common::hashid::HashID;
 use constellation_common::retry::Retry;
+use constellation_common::retry::RetryIndefResult;
 use constellation_common::retry::RetryResult;
 use constellation_common::retry::RetryWhen;
+use constellation_common::retry::next_retry;
+use constellation_common::retry::next_retry_definite;
+use constellation_common::util::LazyInitVec;
 use log::debug;
 use log::error;
 use log::trace;
 
-use crate::config::BatchSlotsConfig;
-use crate::error::BatchError;
+use crate::channels::ChannelsShutdown;
+use crate::config::StreamMulticasterConfig;
 use crate::error::CompoundBatchError;
 use crate::error::ErrorSet;
 use crate::error::SelectionsError;
 use crate::frags::Frags;
 use crate::generated::large_obj::LargeObjFragReq;
 use crate::large_obj::LargeObjID;
-use crate::large_obj::LargeObjMsg;
 use crate::stream::CompoundBatchID;
 use crate::stream::CompoundBatches;
 use crate::stream::LargeObjOfferStream;
 use crate::stream::LargeObjStream;
+use crate::stream::Parties;
+use crate::stream::PullStreamsOutput;
 use crate::stream::PushStream;
 use crate::stream::PushStreamAdd;
 use crate::stream::PushStreamParties;
@@ -62,24 +72,24 @@ use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamReportBatchError;
 use crate::stream::PushStreamReportError;
-use crate::stream::PushStreamReporter;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 use crate::stream::StreamFinishCancel;
+use crate::stream::StreamRefresh;
 use crate::stream::StreamReporter;
+use crate::stream::StreamRetry;
+use crate::stream::StreamShutdown;
+use crate::threads::SelfPartyCtx;
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MulticastStreamIdx(usize);
 
 /// Information about counterparty streams.
-struct StreamMulticasterParty<Msg, Party, Stream, Frags, Ctx>
-where
-    Stream: PushStreamAdd<Msg, Ctx> {
-    msg: PhantomData<Msg>,
-    ctx: PhantomData<Ctx>,
+struct StreamMulticasterParty<Party, Stream> {
     /// The counterparty for this stream.
     party: Party,
     /// The lower-level stream to use.
-    stream: Stream,
-    /// Parameter for creating fragments.
-    frags: Frags
+    stream: Stream
 }
 
 /// Type of batch IDs used by [StreamMulticaster].
@@ -95,19 +105,6 @@ pub struct StreamMulticasterSelections<Inner> {
     inner: Vec<Option<Inner>>
 }
 
-pub type DatagramStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
-    StreamMulticaster<Party, Idx, Msg, Stream, (), Ctx>;
-
-pub type LargeObjStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
-    StreamMulticaster<
-        Party,
-        Idx,
-        Msg,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >;
-
 /// Synthetic multicasting combinator for [PushStream]s.
 ///
 /// This combinator maintains a separate stream for each of a set of
@@ -121,38 +118,37 @@ pub type LargeObjStreamMulticaster<Party, Idx, Msg, Stream, Ctx> =
 /// [SharedPrivateChannelStream](crate::channels::SharedPrivateChannelStream)
 /// to manage a combination of unicast and true multicast channels.
 pub struct StreamMulticaster<
-    Party: Clone + Display + Eq + Hash,
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Msg,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    Frags,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
     Ctx
 > {
+    ctx: PhantomData<Ctx>,
     /// Map from the `Party` type to a dense index type.
-    fwd_map: HashMap<Party, Idx>,
+    fwd_map: HashMap<Party, MulticastStreamIdx>,
     /// Map from dense index types to party and stream data.
-    rev_map: Vec<StreamMulticasterParty<Msg, Party, Stream, Frags, Ctx>>,
+    rev_map: Vec<StreamMulticasterParty<Party, Stream>>,
     /// Currently-live batches.
     batches: CompoundBatches<StreamMulticasterBatch<Stream::BatchID>>
 }
 
-pub struct StreamMulticasterFrags<Idx, F>
+pub struct StreamMulticastPullStreams<T>
 where
-    Idx: Clone + Display + From<usize> + Into<usize>,
+    T: IntoIterator {
+    inners: Vec<T>
+}
+
+pub struct StreamMulticasterFrags<F>
+where
     F: Frags {
-    idx: PhantomData<Idx>,
     frags: Vec<F>
 }
 
-/// [StreamReporter] instance for [StreamMulticaster].
-pub struct StreamMulticasterReporter<
-    Idx: Clone + Into<usize>,
-    Reporter: StreamReporter
-> {
-    /// Map from the `Party` type to a dense index type.
-    fwd_map: HashMap<Reporter::Prin, Idx>,
-    /// Map from dense index types to party and stream data.
-    rev_map: Vec<Reporter>
+#[derive(Clone, Debug)]
+pub struct MulticastRetry<Retry>
+where
+    Retry: RetryWhen {
+    retries: Vec<Retry>,
+    indefs: Vec<MulticastStreamIdx>
 }
 
 /// Errors that can occur while canceling a push operation.
@@ -193,6 +189,7 @@ pub enum StreamMulticasterStartError<Select, Create, Selections, Batches> {
 
 /// Errors that can occur when attempting to report another error that
 /// occurred while starting a batch.
+#[derive(Debug)]
 pub enum StreamMulticasterStartReportError<Select, Create> {
     /// Error reporting an error from the select phase.
     Select {
@@ -208,7 +205,7 @@ pub enum StreamMulticasterStartReportError<Select, Create> {
 
 /// Errors that can occur in a complete
 /// [push](PushStreamSharedSingle::push) implementation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum StreamMulticasterPushError<Start, Add, Finish, BatchID> {
     /// Error occurred while starting the batch.
     Start {
@@ -233,6 +230,7 @@ pub enum StreamMulticasterPushError<Start, Add, Finish, BatchID> {
 
 /// Errors that can occur when attempting to report another error that
 /// occurred while performing a push.
+#[derive(Debug)]
 pub enum StreamMulticasterPushReportError<Start, Add, Finish> {
     /// Error reporting an error from the start phase.
     Start {
@@ -249,6 +247,12 @@ pub enum StreamMulticasterPushReportError<Start, Add, Finish> {
         /// Err while reporting.
         finish: Finish
     }
+}
+
+#[derive(Debug)]
+pub enum StreamMulticasterCreateError<Stream, Refresh> {
+    Stream { err: Stream },
+    Refresh { err: Refresh }
 }
 
 /// Retry information for an attempt to cancel a push operation.
@@ -273,9 +277,9 @@ pub enum StreamMulticasterCancelPushRetry<Start, Cancel, Flags, BatchID> {
 }
 
 /// Retry information for an attempt to abort a batch.
-#[derive(Clone)]
-pub struct StreamMulticasterAbortRetry<Idx, BatchID, Retry> {
-    idx: Idx,
+#[derive(Clone, Debug)]
+pub struct StreamMulticasterAbortRetry<BatchID, Retry> {
+    idx: MulticastStreamIdx,
     batch: BatchID,
     retry: Retry
 }
@@ -295,6 +299,25 @@ pub enum StreamMulticasterReportError<Report, Party> {
     }
 }
 
+#[derive(Debug)]
+pub enum StreamMulticasterBatchPartiesError {
+    NotFound { batch_id: CompoundBatchID }
+}
+
+impl From<usize> for MulticastStreamIdx {
+    #[inline]
+    fn from(val: usize) -> Self {
+        MulticastStreamIdx(val)
+    }
+}
+
+impl From<MulticastStreamIdx> for usize {
+    #[inline]
+    fn from(val: MulticastStreamIdx) -> usize {
+        val.0
+    }
+}
+
 impl<Inner> Default for StreamMulticasterSelections<Inner> {
     #[inline]
     fn default() -> Self {
@@ -302,42 +325,18 @@ impl<Inner> Default for StreamMulticasterSelections<Inner> {
     }
 }
 
-impl<Idx, Reporter> StreamReporter for StreamMulticasterReporter<Idx, Reporter>
+impl<Retry> RetryWhen for MulticastRetry<Retry>
 where
-    Idx: Clone + Into<usize>,
-    Reporter: StreamReporter
+    Retry: RetryWhen
 {
-    type Prin = Reporter::Prin;
-    type ReportError =
-        StreamMulticasterReportError<Reporter::ReportError, Reporter::Prin>;
-    type Src = Reporter::Src;
-    type Stream = Reporter::Stream;
-
-    fn report(
-        &mut self,
-        src: Self::Src,
-        prin: Self::Prin,
-        stream: Self::Stream
-    ) -> Result<Option<Self::Stream>, Self::ReportError> {
-        debug!(target: "stream-multicaster",
-               "reporting stream {} for {}",
-               src, prin);
-
-        match self.fwd_map.get(&prin) {
-            Some(idx) => {
-                let idx: usize = idx.clone().into();
-
-                self.rev_map[idx].report(src, prin, stream).map_err(|err| {
-                    StreamMulticasterReportError::Report { error: err }
-                })
-            }
-            None => Err(StreamMulticasterReportError::NotFound { party: prin })
-        }
+    #[inline]
+    fn when(&self) -> Instant {
+        self.retries.when()
     }
 }
 
-impl<Idx, BatchRetry, Retry> RetryWhen
-    for StreamMulticasterAbortRetry<Idx, BatchRetry, Retry>
+impl<BatchRetry, Retry> RetryWhen
+    for StreamMulticasterAbortRetry<BatchRetry, Retry>
 where
     Retry: RetryWhen
 {
@@ -405,6 +404,17 @@ where
         match self {
             StreamMulticasterReportError::Report { error } => error.scope(),
             StreamMulticasterReportError::NotFound { .. } => ErrorScope::System
+        }
+    }
+}
+
+impl ScopedError for StreamMulticasterBatchPartiesError {
+    #[inline]
+    fn scope(&self) -> ErrorScope {
+        match self {
+            StreamMulticasterBatchPartiesError::NotFound { .. } => {
+                ErrorScope::Unrecoverable
+            }
         }
     }
 }
@@ -498,42 +508,26 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamReporter
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<T> IntoIterator for StreamMulticastPullStreams<T>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReporter,
-    Stream::Reporter: StreamReporter<Prin = Party>
+    T: IntoIterator
 {
-    type Reporter = StreamMulticasterReporter<Idx, Stream::Reporter>;
+    type IntoIter = Flatten<IntoIter<T>>;
+    type Item = T::Item;
 
     #[inline]
-    fn reporter(&self) -> StreamMulticasterReporter<Idx, Stream::Reporter> {
-        let fwd_map = self.fwd_map.clone();
-        let rev_map = self
-            .rev_map
-            .iter()
-            .map(|party| party.stream.reporter())
-            .collect();
-
-        StreamMulticasterReporter {
-            fwd_map: fwd_map,
-            rev_map: rev_map
-        }
+    fn into_iter(self) -> Self::IntoIter {
+        self.inners.into_iter().flatten()
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Inner, Info>
+impl<Party, Stream, Ctx, Inner, Info>
     PushStreamReportError<SelectionsError<Inner, Info>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
-        PushStreamReportError<Inner>
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Stream, Ctx>: PushStreamReportError<Inner>
 {
     type ReportError = <Self as PushStreamReportError<Inner>>::ReportError;
 
@@ -549,26 +543,14 @@ where
     }
 }
 
-impl<
-        Party,
-        Idx,
-        Msg,
-        Stream,
-        Frags,
-        Ctx,
-        Select,
-        Create,
-        Selections,
-        Batches
-    >
+impl<Party, Stream, Ctx, Select, Create, Selections, Batches>
     PushStreamReportError<
         StreamMulticasterStartError<Select, Create, Selections, Batches>
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Stream, Ctx>:
         PushStreamReportError<Select> + PushStreamReportError<Create>
 {
     type ReportError = StreamMulticasterStartReportError<
@@ -600,22 +582,24 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
-    PushStreamReportError<ErrorSet<Idx, Success, Err>>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx, Success, Err>
+    PushStreamReportError<ErrorSet<MulticastStreamIdx, Success, Err>>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx> + PushStreamReportError<Err>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + PushStreamReportError<Err>,
     Err: Display
 {
-    type ReportError =
-        ErrorSet<Idx, (), <Stream as PushStreamReportError<Err>>::ReportError>;
+    type ReportError = ErrorSet<
+        MulticastStreamIdx,
+        (),
+        <Stream as PushStreamReportError<Err>>::ReportError
+    >;
 
     fn report_error(
         &mut self,
-        errors: &ErrorSet<Idx, Success, Err>
+        errors: &ErrorSet<MulticastStreamIdx, Success, Err>
     ) -> Result<(), Self::ReportError> {
         let mut successes = Vec::with_capacity(errors.errors().len());
         let mut failures = Vec::with_capacity(errors.errors().len());
@@ -646,52 +630,44 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
-    PushStreamReportBatchError<ErrorSet<Idx, Success, Err>, CompoundBatchID>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx, Success, Err>
+    PushStreamReportBatchError<
+        ErrorSet<MulticastStreamIdx, Success, Err>,
+        CompoundBatchID
+    > for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>
 {
-    type ReportBatchError = CompoundBatchError<Idx, (), Stream::ReportError>;
+    type ReportBatchError =
+        CompoundBatchError<MulticastStreamIdx, (), Stream::ReportError>;
 
     fn report_error_with_batch(
         &mut self,
         batch: &CompoundBatchID,
-        errors: &ErrorSet<Idx, Success, Err>
+        errors: &ErrorSet<MulticastStreamIdx, Success, Err>
     ) -> Result<(), Self::ReportBatchError> {
         match self.batches.get(batch) {
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::ReportError)>> = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each error, get the batch ID, and
                 // report the error up.
                 for (idx, _) in errors.errors() {
                     let i: usize = idx.clone().into();
 
-                    if let Some(batch_id) = &batch_ids[i] {
-                        if let Err(err) =
+                    if let Some(batch_id) = &batch_ids[i] &&
+                        let Err(err) =
                             self.rev_map[i].stream.report_failure(batch_id)
-                        {
-                            match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
-                        }
+                    {
+                        errs.push((idx.clone(), err))
                     }
                 }
 
-                match errs {
+                match errs.take() {
                     // There were errors
                     Some(errs) => Err(CompoundBatchError::Batch {
                         errs: ErrorSet::create(results, errs)
@@ -705,31 +681,29 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Success, Err>
+impl<Party, Stream, Ctx, Success, Err>
     PushStreamReportBatchError<
-        CompoundBatchError<Idx, Success, Err>,
+        CompoundBatchError<MulticastStreamIdx, Success, Err>,
         CompoundBatchID
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
     Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
-        PushStreamReportBatchError<
-            ErrorSet<Idx, Success, Err>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Stream, Ctx>: PushStreamReportBatchError<
+            ErrorSet<MulticastStreamIdx, Success, Err>,
             CompoundBatchID
         >
 {
     type ReportBatchError = <Self as PushStreamReportBatchError<
-        ErrorSet<Idx, Success, Err>,
+        ErrorSet<MulticastStreamIdx, Success, Err>,
         CompoundBatchID
     >>::ReportBatchError;
 
     fn report_error_with_batch(
         &mut self,
         batch: &CompoundBatchID,
-        errors: &CompoundBatchError<Idx, Success, Err>
+        errors: &CompoundBatchError<MulticastStreamIdx, Success, Err>
     ) -> Result<(), Self::ReportBatchError> {
         if let CompoundBatchError::Batch { errs } = errors {
             self.report_error_with_batch(batch, errs)
@@ -739,18 +713,16 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx, Start, Add, Finish, BatchID>
+impl<Party, Stream, Ctx, Start, Add, Finish, BatchID>
     PushStreamReportError<
         StreamMulticasterPushError<Start, Add, Finish, BatchID>
-    > for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+    > for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>:
-        PushStreamReportError<Start>
-            + PushStreamReportBatchError<Add, BatchID>
-            + PushStreamReportBatchError<Finish, BatchID>
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
+    StreamMulticaster<Party, Stream, Ctx>: PushStreamReportError<Start>
+        + PushStreamReportBatchError<Add, BatchID>
+        + PushStreamReportBatchError<Finish, BatchID>
 {
     type ReportError = StreamMulticasterPushReportError<
         <Self as PushStreamReportError<Start>>::ReportError,
@@ -782,45 +754,74 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, F, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, F, Ctx>
+impl<'a, Party, Stream, Config, CreateError, Ctx> CreateWithParam<&'a mut Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
+    Ctx: SelfPartyCtx<Party>,
     Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>
+    Party: Clone + Debug + Display + Eq + Hash,
+    CreateError: Debug + Display,
+    Stream: PushStream<Ctx>
+        + for<'b> CreateWithParam<
+            &'b mut Ctx,
+            Config = Config,
+            CreateError = CreateError
+        >
 {
-    /// Create a `StreamMulticaster` from an iterator over the
-    /// counterparties.
-    #[inline]
-    pub fn create<I>(
-        iter: I,
-        config: BatchSlotsConfig
-    ) -> Self
-    where
-        I: Iterator<Item = (Party, F, Stream)> {
-        let rev_map: Vec<StreamMulticasterParty<Msg, Party, Stream, F, Ctx>> =
-            iter.map(|(party, param, stream)| StreamMulticasterParty {
-                msg: PhantomData,
-                ctx: PhantomData,
-                party: party,
-                stream: stream,
-                frags: param
-            })
-            .collect();
-        let mut fwd_map = HashMap::with_capacity(rev_map.len());
+    type Config = StreamMulticasterConfig<Party, Config>;
+    type CreateError = CreateError;
 
-        for (i, item) in rev_map.iter().enumerate() {
-            fwd_map.insert(item.party.clone(), Idx::from(i));
+    fn create(
+        config: Self::Config,
+        ctx: &'a mut Ctx
+    ) -> Result<Self, Self::CreateError> {
+        let (parties, slots_config) = config.take();
+        let mut rev_map = Vec::with_capacity(parties.len());
+        let mut fwd_map = HashMap::with_capacity(rev_map.len());
+        let mut i = 0;
+
+        debug!(target: "stream-multicaster",
+               "creating stream multicaster");
+
+        for config in parties.into_iter() {
+            let (party, stream) = config.take();
+
+            if ctx.self_party() != Some(&party) {
+                debug!(target: "stream-multicaster",
+                       "creating individual stream for party {}",
+                       party);
+
+                let stream = Stream::create(stream, ctx)?;
+                let ent = StreamMulticasterParty {
+                    party: party.clone(),
+                    stream: stream
+                };
+
+                rev_map.push(ent);
+                fwd_map.insert(party, MulticastStreamIdx::from(i));
+                i += 1;
+            } else {
+                debug!(target: "stream-multicaster",
+                       "skipping self-party {}",
+                       party);
+            }
         }
 
-        StreamMulticaster {
-            batches: CompoundBatches::create(config),
+        Ok(StreamMulticaster {
+            ctx: PhantomData,
+            batches: CompoundBatches::create(slots_config),
             fwd_map: fwd_map,
             rev_map: rev_map
-        }
+        })
     }
+}
 
+impl<Party, Stream, Ctx> StreamMulticaster<Party, Stream, Ctx>
+where
+    Stream::BatchID: Clone,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>
+{
     /// Get the number of counterparties.
     #[inline]
     pub fn nparties(&self) -> usize {
@@ -832,7 +833,7 @@ where
     pub fn party_idx(
         &self,
         party: &Party
-    ) -> Option<&Idx> {
+    ) -> Option<&MulticastStreamIdx> {
         self.fwd_map.get(party)
     }
 
@@ -840,37 +841,32 @@ where
     #[inline]
     pub fn idx_party(
         &self,
-        idx: usize
+        idx: MulticastStreamIdx
     ) -> Option<&Party> {
-        if idx < self.rev_map.len() {
-            Some(&self.rev_map[idx].party)
+        if idx.0 < self.rev_map.len() {
+            Some(&self.rev_map[idx.0].party)
         } else {
             None
         }
     }
-}
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
-where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Stream::BatchID: Clone,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
-    Frags: Clone
-{
     #[inline]
-    pub fn frags_param(&self) -> Vec<Frags> {
-        self.rev_map.iter().map(|ent| ent.frags.clone()).collect()
+    pub fn stream(
+        &self,
+        idx: MulticastStreamIdx
+    ) -> &Stream {
+        let i: usize = idx.into();
+
+        &self.rev_map[i].stream
     }
 }
 
-impl<Cancel, Flags, BatchID> BatchError
+impl<Cancel, Flags, BatchID> RecoverableError
     for StreamMulticasterCancelPushError<Cancel, Flags, BatchID>
 where
-    Cancel: BatchError,
+    Cancel: RecoverableError,
     Flags: Clone,
-    BatchID: Clone
+    BatchID: Clone + Debug
 {
     type Completable =
         StreamMulticasterCancelPushError<Cancel::Completable, Flags, BatchID>;
@@ -908,11 +904,11 @@ where
     }
 }
 
-impl<Select, Create, Selections, Batches> BatchError
+impl<Select, Create, Selections, Batches> RecoverableError
     for StreamMulticasterStartError<Select, Create, Selections, Batches>
 where
-    Select: BatchError,
-    Create: BatchError,
+    Select: RecoverableError,
+    Create: RecoverableError,
     Selections: Clone,
     Batches: Clone
 {
@@ -974,13 +970,13 @@ where
     }
 }
 
-impl<Start, Add, Finish, BatchID> BatchError
+impl<Start, Add, Finish, BatchID> RecoverableError
     for StreamMulticasterPushError<Start, Add, Finish, BatchID>
 where
-    Start: BatchError,
-    Add: BatchError,
-    Finish: BatchError,
-    BatchID: Clone
+    Start: RecoverableError,
+    Add: RecoverableError,
+    Finish: RecoverableError,
+    BatchID: Clone + Debug
 {
     type Completable = StreamMulticasterPushError<
         Start::Completable,
@@ -1042,29 +1038,23 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     fn complete_abort(
         &mut self,
         ctx: &mut Ctx,
         flags: &mut <Self as PushStream<Ctx>>::StreamFlags,
-        retries: &mut Option<
-            Vec<
-                StreamMulticasterAbortRetry<
-                    Idx,
-                    Stream::BatchID,
-                    Stream::CancelBatchRetry
-                >
+        retries: &mut LazyInitVec<
+            StreamMulticasterAbortRetry<
+                Stream::BatchID,
+                Stream::CancelBatchRetry
             >
         >,
-        idx: Idx,
-        len: usize,
+        idx: MulticastStreamIdx,
         batch_id: Stream::BatchID,
         err: Stream::CancelBatchError
     ) {
@@ -1080,29 +1070,16 @@ where
                 .stream
                 .complete_cancel_batch(ctx, flags, &batch_id, complete)
             {
-                Ok(val) => val.app_retry(|retry| match retries {
-                    Some(retries) => {
-                        retries.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        });
-
-                        *retries = Some(vec)
-                    }
+                Ok(val) => val.app_retry(|retry| {
+                    retries.push(StreamMulticasterAbortRetry {
+                        idx: idx,
+                        batch: batch_id,
+                        retry: retry
+                    })
                 }),
-                Err(err) => self.complete_abort(
-                    ctx, flags, retries, idx, len, batch_id, err
-                )
+                Err(err) => {
+                    self.complete_abort(ctx, flags, retries, idx, batch_id, err)
+                }
             },
             _ => {
                 error!(target: "stream-multicaster",
@@ -1113,11 +1090,11 @@ where
 
     fn decide_outcome<Retry, Err>(
         &mut self,
-        mut results: Vec<(Idx, RetryResult<(), Retry>)>,
-        errs: Option<Vec<(Idx, Err)>>
+        mut results: Vec<(MulticastStreamIdx, RetryResult<(), Retry>)>,
+        errs: Option<Vec<(MulticastStreamIdx, Err)>>
     ) -> Result<
         RetryResult<(), Vec<RetryResult<(), Retry>>>,
-        CompoundBatchError<Idx, RetryResult<(), Retry>, Err>
+        CompoundBatchError<MulticastStreamIdx, RetryResult<(), Retry>, Err>
     >
     where
         Retry: RetryWhen {
@@ -1148,45 +1125,35 @@ where
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx>
-    StreamMulticaster<
-        Party,
-        Idx,
-        LargeObjMsg<H>,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+impl<Party, Stream, Ctx> StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjStream<Ctx>
-        + PushStream<Ctx>
-        + PushStreamAdd<LargeObjMsg<H>, Ctx>,
-    Stream::BatchID: Clone,
-    H: Clone + HashID
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: LargeObjStream<Ctx> + PushStream<Ctx>,
+    Stream::BatchID: Clone
 {
     fn decide_push_frag_result(
         &mut self,
         mut elems: Vec<(
-            Idx,
-            RetryResult<
+            MulticastStreamIdx,
+            RetryIndefResult<
                 Option<Instant>,
                 <Stream as LargeObjStream<Ctx>>::PushFragRetry
             >
         )>,
         errs: Option<
-            Vec<(Idx, <Stream as LargeObjStream<Ctx>>::PushFragError)>
+            Vec<(
+                MulticastStreamIdx,
+                <Stream as LargeObjStream<Ctx>>::PushFragError
+            )>
         >
     ) -> Result<
-        RetryResult<
-            Option<Instant>,
-            <Self as LargeObjStream<Ctx>>::PushFragRetry
+        RetryIndefResult<
+            (Option<Instant>, Vec<MulticastStreamIdx>),
+            <Self as LargeObjStream<Ctx>>::PushFragRetry,
+            Parties<Vec<MulticastStreamIdx>>
         >,
         <Self as LargeObjStream<Ctx>>::PushFragError
-    >
-    where
-        Stream: LargeObjStream<Ctx> {
+    > {
         match errs {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(elems, errs)),
@@ -1197,52 +1164,72 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut all_success = true;
-                let mut when = None;
+                let mut indefs = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
+                let mut has_retry = false;
+                let mut all_indef = true;
+                let mut min = None;
 
-                for (_, res) in elems.into_iter() {
-                    match &res {
-                        RetryResult::Success(retry) => {
-                            when = when.map_or(*retry, |when: Instant| {
-                                retry.map(|retry| when.min(retry))
-                            })
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(val) => {
+                            all_indef = false;
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
                         }
-                        RetryResult::Retry(_) => all_success = false
+                        RetryIndefResult::Retry(retry) => {
+                            all_indef = false;
+                            has_retry = true;
+                            min =
+                                Some(next_retry_definite(&min, &retry.when()));
+                            results.push(RetryResult::Retry(retry));
+                        }
+                        RetryIndefResult::Indef(()) => indefs.push(id)
                     }
-
-                    results.push(res);
                 }
 
-                if all_success {
-                    Ok(RetryResult::Success(when))
+                if all_indef {
+                    Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Success((min, ids)))
                 }
             }
         }
     }
 
-    fn decide_push_offer_result(
+    fn decide_push_offer_result<H>(
         &mut self,
         mut elems: Vec<(
-            Idx,
-            RetryResult<
+            MulticastStreamIdx,
+            RetryIndefResult<
                 Option<Instant>,
                 <Stream as LargeObjOfferStream<H, Ctx>>::PushOfferRetry
             >
         )>,
         errs: Option<
-            Vec<(Idx, <Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError)>
+            Vec<(
+                MulticastStreamIdx,
+                <Stream as LargeObjOfferStream<H, Ctx>>::PushOfferError
+            )>
         >
     ) -> Result<
-        RetryResult<
-            Option<Instant>,
-            <Self as LargeObjOfferStream<H, Ctx>>::PushOfferRetry
+        RetryIndefResult<
+            (Option<Instant>, Vec<MulticastStreamIdx>),
+            <Self as LargeObjOfferStream<H, Ctx>>::PushOfferRetry,
+            Parties<Vec<MulticastStreamIdx>>
         >,
         <Self as LargeObjOfferStream<H, Ctx>>::PushOfferError
     >
     where
-        Stream: LargeObjOfferStream<H, Ctx> {
+        Stream: LargeObjOfferStream<H, Ctx> + PushStream<Ctx>,
+        H: Clone + HashID {
         match errs {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(elems, errs)),
@@ -1253,51 +1240,74 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut all_success = true;
-                let mut when = None;
+                let mut indefs = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
+                let mut has_retry = false;
+                let mut all_indef = true;
+                let mut min = None;
 
-                for (_, res) in elems.into_iter() {
-                    match &res {
-                        RetryResult::Success(retry) => {
-                            when = when.map_or(*retry, |when: Instant| {
-                                retry.map(|retry| when.min(retry))
-                            })
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(val) => {
+                            all_indef = false;
+                            results.push(RetryResult::Success(val));
+                            ids.push(id);
                         }
-                        RetryResult::Retry(_) => all_success = false
+                        RetryIndefResult::Retry(retry) => {
+                            all_indef = false;
+                            has_retry = true;
+                            min =
+                                Some(next_retry_definite(&min, &retry.when()));
+                            results.push(RetryResult::Retry(retry));
+                        }
+                        RetryIndefResult::Indef(()) => indefs.push(id)
                     }
-
-                    results.push(res);
                 }
 
-                if all_success {
-                    Ok(RetryResult::Success(when))
+                if all_indef {
+                    Ok(RetryIndefResult::Indef(Parties::Some(indefs)))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Success((min, ids)))
                 }
             }
         }
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx>
-    StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
-    Stream::BatchID: Clone
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStreamPrivate<Ctx> + PushStream<Ctx>,
+    Stream::BatchID: Clone + Debug
 {
     fn decide_select_result(
         &mut self,
         mut elems: Vec<(
-            Idx,
-            RetryResult<(), <Stream as PushStreamPrivate<Ctx>>::SelectRetry>
+            MulticastStreamIdx,
+            RetryIndefResult<
+                (),
+                <Stream as PushStreamPrivate<Ctx>>::SelectRetry
+            >
         )>,
         errs: Option<
-            Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::SelectError)>
+            Vec<(
+                MulticastStreamIdx,
+                <Stream as PushStreamPrivate<Ctx>>::SelectError
+            )>
         >
     ) -> Result<
-        RetryResult<(), <Self as PushStreamShared<Ctx>>::SelectRetry>,
+        RetryIndefResult<
+            Vec<MulticastStreamIdx>,
+            <Self as PushStreamShared<Ctx>>::SelectRetry,
+            Vec<MulticastStreamIdx>
+        >,
         <Self as PushStreamShared<Ctx>>::SelectError
     > {
         match errs {
@@ -1312,20 +1322,111 @@ where
                 // Try to convert to straightforward batch IDs.
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut all_success = true;
+                let mut indefs = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
+                let mut has_retry = false;
+                let mut all_indef = true;
 
-                for (_, res) in elems.into_iter() {
-                    if let RetryResult::Retry(_) = &res {
-                        all_success = false
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(()) => {
+                            all_indef = false;
+                            results.push(RetryResult::Success(()));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_indef = false;
+                            has_retry = true;
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef(()) => indefs.push(id)
                     }
-
-                    results.push(res);
                 }
 
-                if all_success {
-                    Ok(RetryResult::Success(()))
+                if all_indef {
+                    Ok(RetryIndefResult::Indef(indefs))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
                 } else {
-                    Ok(RetryResult::Retry(results))
+                    Ok(RetryIndefResult::Success(ids))
+                }
+            }
+        }
+    }
+
+    fn decide_select_retry_result(
+        &mut self,
+        mut elems: Vec<(
+            MulticastStreamIdx,
+            RetryIndefResult<
+                (),
+                <Stream as PushStreamPrivate<Ctx>>::SelectRetry
+            >
+        )>,
+        mut indefs: Vec<MulticastStreamIdx>,
+        errs: Option<
+            Vec<(
+                MulticastStreamIdx,
+                <Stream as PushStreamPrivate<Ctx>>::SelectError
+            )>
+        >
+    ) -> Result<
+        RetryIndefResult<
+            Vec<MulticastStreamIdx>,
+            <Self as PushStreamShared<Ctx>>::SelectRetry,
+            Vec<MulticastStreamIdx>
+        >,
+        <Self as PushStreamShared<Ctx>>::SelectError
+    > {
+        match errs {
+            // There were errors.
+            // XXX need to capture the indefinite retries here
+            Some(errs) => Err(SelectionsError::Inner {
+                inner: ErrorSet::create(elems, errs)
+            }),
+            // No errors, check for retries.
+            None => {
+                elems.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut results = Vec::with_capacity(len);
+                let mut ids = Vec::with_capacity(len);
+                let mut has_retry = false;
+                let mut all_indef = true;
+
+                for (id, res) in elems.into_iter() {
+                    match res {
+                        RetryIndefResult::Success(()) => {
+                            all_indef = false;
+                            results.push(RetryResult::Success(()));
+                            ids.push(id);
+                        }
+                        RetryIndefResult::Retry(when) => {
+                            all_indef = false;
+                            has_retry = true;
+                            results.push(RetryResult::Retry(when));
+                        }
+                        RetryIndefResult::Indef(()) => indefs.push(id)
+                    }
+                }
+
+                if all_indef {
+                    Ok(RetryIndefResult::Indef(indefs))
+                } else if has_retry {
+                    let out = MulticastRetry {
+                        retries: results,
+                        indefs: indefs
+                    };
+
+                    Ok(RetryIndefResult::Retry(out))
+                } else {
+                    Ok(RetryIndefResult::Success(ids))
                 }
             }
         }
@@ -1334,14 +1435,17 @@ where
     fn decide_create_result(
         &mut self,
         mut elems: Vec<(
-            Idx,
+            MulticastStreamIdx,
             RetryResult<
                 <Stream as PushStream<Ctx>>::BatchID,
                 <Stream as PushStreamPrivate<Ctx>>::CreateBatchRetry
             >
         )>,
         errs: Option<
-            Vec<(Idx, <Stream as PushStreamPrivate<Ctx>>::CreateBatchError)>
+            Vec<(
+                MulticastStreamIdx,
+                <Stream as PushStreamPrivate<Ctx>>::CreateBatchError
+            )>
         >
     ) -> Result<
         RetryResult<
@@ -1391,23 +1495,256 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStream<Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStream<Ctx> + PushStreamAdd<Msg, Ctx>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + StreamRefresh<Ctx>,
+    Stream::BatchID: Clone
+{
+    fn decide_refresh_outcome<Retry, Err>(
+        &mut self,
+        mut elems: Vec<(
+            MulticastStreamIdx,
+            RetryResult<Option<Instant>, Retry>
+        )>,
+        errs: Option<Vec<(MulticastStreamIdx, Err)>>
+    ) -> Result<
+        RetryResult<Option<Instant>, Vec<RetryResult<Option<Instant>, Retry>>>,
+        ErrorSet<MulticastStreamIdx, RetryResult<Option<Instant>, Retry>, Err>
+    >
+    where
+        Retry: RetryWhen {
+        match errs {
+            // There were errors
+            Some(errs) => Err(ErrorSet::create(elems, errs)),
+            // No errors, check if there are retries.
+            None => {
+                elems.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+                // Try to convert to straightforward batch IDs.
+                let len = self.rev_map.len();
+                let mut min = None;
+                let mut results = Vec::with_capacity(len);
+                let mut all_success = true;
+
+                for (_, res) in elems.into_iter() {
+                    if let RetryResult::Success(when) = &res {
+                        min = next_retry(&min, when);
+                    } else {
+                        all_success = false
+                    }
+
+                    results.push(res);
+                }
+
+                if all_success {
+                    Ok(RetryResult::Success(min))
+                } else {
+                    Ok(RetryResult::Retry(results))
+                }
+            }
+        }
+    }
+}
+
+impl<Party, Stream, ChannelID, Chan, Ctx> StreamReporter<Party, ChannelID, Chan>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    ChannelID: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + StreamReporter<Party, ChannelID, Chan>,
+    Stream::BatchID: Clone
+{
+    type ReportStreamError =
+        StreamMulticasterReportError<Stream::ReportStreamError, Party>;
+
+    fn report_stream(
+        &mut self,
+        party: &Party,
+        id: ChannelID,
+        stream: Chan
+    ) -> Result<Option<Chan>, Self::ReportStreamError> {
+        debug!(target: "stream-multicaster",
+               "reporting stream {} for {}",
+               id, party);
+
+        match self.fwd_map.get(party) {
+            Some(idx) => {
+                let idx: usize = idx.clone().into();
+
+                self.rev_map[idx]
+                    .stream
+                    .report_stream(party, id, stream)
+                    .map_err(|err| StreamMulticasterReportError::Report {
+                        error: err
+                    })
+            }
+            None => Err(StreamMulticasterReportError::NotFound {
+                party: party.clone()
+            })
+        }
+    }
+}
+
+impl<Party, Stream, Ctx> StreamRefresh<Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + StreamRefresh<Ctx>,
+    Stream::BatchID: Clone
+{
+    type RefreshError = ErrorSet<
+        MulticastStreamIdx,
+        RetryResult<Option<Instant>, Stream::RefreshRetry>,
+        Stream::RefreshError
+    >;
+    type RefreshRetry = Vec<RetryResult<Option<Instant>, Stream::RefreshRetry>>;
+
+    fn refresh(
+        &mut self,
+        ctx: &mut Ctx
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        let len = self.rev_map.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs = LazyInitVec::new(len);
+
+        // Run through each party and try to add the message.
+        for (i, party) in self.rev_map.iter_mut().enumerate() {
+            let idx = MulticastStreamIdx::from(i);
+
+            match party.stream.refresh(ctx) {
+                Ok(res) => results.push((idx, res)),
+                Err(err) => errs.push((idx.clone(), err))
+            }
+        }
+
+        self.decide_refresh_outcome(results, errs.take())
+    }
+
+    fn retry_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        retries: Self::RefreshRetry
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        let len = self.rev_map.len();
+        let mut results = Vec::with_capacity(len);
+        let mut errs = LazyInitVec::new(len);
+
+        for (i, retry) in retries.into_iter().enumerate() {
+            let idx = MulticastStreamIdx::from(i);
+
+            match retry {
+                RetryResult::Success(when) => {
+                    results.push((idx, RetryResult::Success(when)))
+                }
+                RetryResult::Retry(retry) => {
+                    match self.rev_map[i].stream.retry_refresh(ctx, retry) {
+                        Ok(res) => results.push((idx, res)),
+                        Err(err) => errs.push((idx.clone(), err))
+                    }
+                }
+            }
+        }
+
+        self.decide_refresh_outcome(results, errs.take())
+    }
+
+    fn complete_refresh(
+        &mut self,
+        ctx: &mut Ctx,
+        errs: <Self::RefreshError as RecoverableError>::Completable
+    ) -> Result<
+        RetryResult<Option<Instant>, Self::RefreshRetry>,
+        Self::RefreshError
+    > {
+        let len = self.rev_map.len();
+        let (mut results, retries) = errs.take();
+        let mut errs = LazyInitVec::new(len);
+
+        for (idx, err) in retries {
+            let i: usize = idx.clone().into();
+
+            match self.rev_map[i].stream.complete_refresh(ctx, err) {
+                Ok(res) => results.push((idx, res)),
+                Err(err) => errs.push((idx.clone(), err))
+            }
+        }
+
+        self.decide_refresh_outcome(results, errs.take())
+    }
+}
+
+impl<Party, Stream, Ctx, StreamID, Chans, InnerCtx>
+    StreamShutdown<Chans, StreamID, InnerCtx>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx> + StreamShutdown<Chans, StreamID, InnerCtx>,
+    Stream::BatchID: Clone,
+    Chans: ChannelsShutdown<InnerCtx>
+{
+    fn shutdown_stream(
+        self,
+        ctx: &mut InnerCtx,
+        chans: &mut Chans
+    ) -> Result<
+        RetryResult<
+            (Option<Vec<Chans::Param>>, Option<Instant>),
+            Vec<StreamRetry<StreamID, Chans::StreamShutdownRetry>>
+        >,
+        Chans::StreamShutdownError
+    > {
+        let mut res = None;
+        let mut when = None;
+        let nstreams = self.rev_map.len();
+        let mut retries = LazyInitVec::new(nstreams);
+
+        debug!(target: "stream-multicaster",
+               "shutting down stream multicaster");
+
+        for party in self.rev_map.into_iter() {
+            trace!(target: "stream-multicaster",
+                   "shutting down party {}", party.party);
+
+            match party.stream.shutdown_stream(ctx, chans)? {
+                RetryResult::Success((params, retry)) => {
+                    res = params.or(res);
+                    when = next_retry(&retry, &when);
+                }
+                RetryResult::Retry(mut retry) => retries.append(&mut retry)
+            }
+        }
+
+        if let Some(retries) = retries.take() {
+            Ok(RetryResult::Retry(retries))
+        } else {
+            Ok(RetryResult::Success((res, when)))
+        }
+    }
+}
+
+impl<Party, Stream, Ctx> PushStream<Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     type BatchID = CompoundBatchID;
     type CancelBatchError = CompoundBatchError<
-        Idx,
+        MulticastStreamIdx,
         RetryResult<(), Stream::CancelBatchRetry>,
         Stream::CancelBatchError
     >;
     type CancelBatchRetry = Vec<RetryResult<(), Stream::CancelBatchRetry>>;
     type FinishBatchError = CompoundBatchError<
-        Idx,
+        MulticastStreamIdx,
         RetryResult<
             (),
             StreamFinishCancel<
@@ -1426,7 +1763,8 @@ where
             >
         >
     >;
-    type ReportError = CompoundBatchError<Idx, (), Stream::ReportError>;
+    type ReportError =
+        CompoundBatchError<MulticastStreamIdx, (), Stream::ReportError>;
     type StreamFlags = Stream::StreamFlags;
 
     #[inline]
@@ -1450,23 +1788,15 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(
-                        Idx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to finish the batch.
                 for (i, batch_id) in batch_ids.iter().enumerate() {
                     if let Some(batch_id) = batch_id {
-                        let idx = Idx::from(i);
+                        let idx = MulticastStreamIdx::from(i);
 
                         // If this party is active, finish the batch.
-                        match self.rev_map[idx.clone().into()]
+                        match self.rev_map[i]
                             .stream
                             .finish_batch(ctx, flags, batch_id)
                         {
@@ -1482,23 +1812,14 @@ where
                                     StreamFinishCancel::Finish { finish: err };
 
                                 // An error occurred; add this to the error set.
-                                match &mut errs {
-                                    Some(errs) => errs.push((idx, err)),
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push((idx, err));
-
-                                        errs = Some(vec)
-                                    }
-                                }
+                                errs.push((idx, err));
                             }
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1522,18 +1843,10 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<
-                    Vec<(
-                        Idx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = &batch_ids[i] {
                         match retry {
@@ -1542,73 +1855,53 @@ where
                             }
                             RetryResult::Retry(
                                 StreamFinishCancel::Finish { finish }
-                            ) => match self.rev_map[idx.clone().into()]
-                                .stream
-                                .retry_finish_batch(
+                            ) => {
+                                match self.rev_map[i].stream.retry_finish_batch(
                                     ctx, flags, batch_id, finish
                                 ) {
-                                Ok(res) => {
-                                    let res = res.map_retry(|retry| {
-                                        StreamFinishCancel::Finish {
-                                            finish: retry
-                                        }
-                                    });
+                                    Ok(res) => {
+                                        let res = res.map_retry(|retry| {
+                                            StreamFinishCancel::Finish {
+                                                finish: retry
+                                            }
+                                        });
 
-                                    results.push((idx, res))
-                                }
-                                Err(err) => {
-                                    let err = StreamFinishCancel::Finish {
-                                        finish: err
-                                    };
+                                        results.push((idx, res))
+                                    }
+                                    Err(err) => {
+                                        let err = StreamFinishCancel::Finish {
+                                            finish: err
+                                        };
 
-                                    // An error occurred; add this to
-                                    // the error set.
-                                    match &mut errs {
-                                        Some(errs) => errs.push((idx, err)),
-                                        None => {
-                                            let mut vec =
-                                                Vec::with_capacity(len);
-
-                                            vec.push((idx, err));
-
-                                            errs = Some(vec)
-                                        }
+                                        // An error occurred; add this to
+                                        // the error set.
+                                        errs.push((idx, err));
                                     }
                                 }
-                            },
+                            }
                             RetryResult::Retry(
                                 StreamFinishCancel::Cancel { cancel }
-                            ) => match self.rev_map[idx.clone().into()]
-                                .stream
-                                .retry_cancel_batch(
+                            ) => {
+                                match self.rev_map[i].stream.retry_cancel_batch(
                                     ctx, flags, batch_id, cancel
                                 ) {
-                                Ok(res) => {
-                                    let res = res.map_retry(|retry| {
-                                        StreamFinishCancel::Cancel {
-                                            cancel: retry
-                                        }
-                                    });
+                                    Ok(res) => {
+                                        let res = res.map_retry(|retry| {
+                                            StreamFinishCancel::Cancel {
+                                                cancel: retry
+                                            }
+                                        });
 
-                                    results.push((idx, res))
-                                }
-                                Err(err) => {
-                                    let err = StreamFinishCancel::Cancel {
-                                        cancel: err
-                                    };
+                                        results.push((idx, res))
+                                    }
+                                    Err(err) => {
+                                        let err = StreamFinishCancel::Cancel {
+                                            cancel: err
+                                        };
 
-                                    // An error occurred; add this to
-                                    // the error set.
-                                    match &mut errs {
-                                        Some(errs) => errs.push((idx, err)),
-                                        None => {
-                                            let mut vec =
-                                                Vec::with_capacity(len);
-
-                                            vec.push((idx, err));
-
-                                            errs = Some(vec)
-                                        }
+                                        // An error occurred; add this to
+                                        // the error set.
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -1617,7 +1910,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1634,22 +1927,14 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        errs: <Self::FinishBatchError as BatchError>::Completable
+        errs: <Self::FinishBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::FinishBatchRetry>, Self::FinishBatchError>
     {
         match self.batches.get(batch) {
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<
-                    Vec<(
-                        Idx,
-                        StreamFinishCancel<
-                            Stream::FinishBatchError,
-                            Stream::CancelBatchError
-                        >
-                    )>
-                > = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -1657,7 +1942,7 @@ where
                     if let Some(batch_id) = &batch_ids[i] {
                         match err {
                             StreamFinishCancel::Finish { finish } => {
-                                match self.rev_map[idx.clone().into()]
+                                match self.rev_map[i]
                                     .stream
                                     .complete_finish_batch(
                                         ctx, flags, batch_id, finish
@@ -1678,22 +1963,12 @@ where
 
                                         // An error occurred; add this
                                         // to the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
                             StreamFinishCancel::Cancel { cancel } => {
-                                match self.rev_map[idx.clone().into()]
+                                match self.rev_map[i]
                                     .stream
                                     .complete_cancel_batch(
                                         ctx, flags, batch_id, cancel
@@ -1714,17 +1989,7 @@ where
 
                                         // An error occurred; add this
                                         // to the error set.
-                                        match &mut errs {
-                                            Some(errs) => errs.push((idx, err)),
-                                            None => {
-                                                let mut vec =
-                                                    Vec::with_capacity(len);
-
-                                                vec.push((idx, err));
-
-                                                errs = Some(vec)
-                                            }
-                                        }
+                                        errs.push((idx, err));
                                     }
                                 }
                             }
@@ -1733,7 +1998,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1764,32 +2029,22 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::CancelBatchError)>> =
-                    None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to cancel the batch.
                 for (i, party) in self.rev_map.iter_mut().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = &batch_ids[i] {
                         match party.stream.cancel_batch(ctx, flags, batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1813,11 +2068,10 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::CancelBatchError)>> =
-                    None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = &batch_ids[i] {
                         match retry {
@@ -1829,19 +2083,7 @@ where
                                     ctx, flags, batch_id, retry
                                 ) {
                                     Ok(res) => results.push((idx, res)),
-                                    Err(err) => match &mut errs {
-                                        Some(errs) => {
-                                            errs.push((idx.clone(), err))
-                                        }
-                                        None => {
-                                            let mut vec =
-                                                Vec::with_capacity(len);
-
-                                            vec.push((idx.clone(), err));
-
-                                            errs = Some(vec)
-                                        }
-                                    }
+                                    Err(err) => errs.push((idx.clone(), err))
                                 }
                             }
                         }
@@ -1849,7 +2091,7 @@ where
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1866,15 +2108,14 @@ where
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
         batch: &Self::BatchID,
-        errs: <Self::CancelBatchError as BatchError>::Completable
+        errs: <Self::CancelBatchError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelBatchRetry>, Self::CancelBatchError>
     {
         match self.batches.get(batch) {
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<Vec<(Idx, Stream::CancelBatchError)>> =
-                    None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -1885,22 +2126,13 @@ where
                             .complete_cancel_batch(ctx, flags, batch_id, err)
                         {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
                 // Free the batch if we succeed.
-                let out = self.decide_outcome(results, errs);
+                let out = self.decide_outcome(results, errs.take());
 
                 if let Ok(RetryResult::Success(_)) = out {
                     self.batches.free_batch(batch);
@@ -1920,39 +2152,27 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::ReportError)>> = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to finish the batch.
                 for (i, batch_id) in batch_ids.iter().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = batch_id {
                         // If this party is active, finish the batch.
-                        match self.rev_map[idx.clone().into()]
-                            .stream
-                            .report_failure(batch_id)
-                        {
+                        match self.rev_map[i].stream.report_failure(batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx, err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx, err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx, err))
                         }
                     }
                 }
 
-                match errs {
+                match errs.take() {
                     // There were errors
                     Some(errs) => Err(CompoundBatchError::Batch {
                         errs: ErrorSet::create(results, errs)
                     }),
-                    // No errors, check if there are retries.
+                    // No errors.
                     None => Ok(())
                 }
             }
@@ -1961,16 +2181,15 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamAdd<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Msg, Stream, Ctx> PushStreamAdd<Msg, Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx>,
     Stream::BatchID: Clone
 {
     type AddError = CompoundBatchError<
-        Idx,
+        MulticastStreamIdx,
         RetryResult<(), Stream::AddRetry>,
         Stream::AddError
     >;
@@ -1987,30 +2206,21 @@ where
             Some(StreamMulticasterBatch { batch_ids }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::AddError)>> = None;
+                let mut errs = LazyInitVec::new(len);
 
                 // Run through each party and try to add the message.
                 for (i, party) in self.rev_map.iter_mut().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = &batch_ids[i] {
                         match party.stream.add(ctx, flags, msg, batch_id) {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
@@ -2028,10 +2238,10 @@ where
             Some(StreamMulticasterBatch { batch_ids, .. }) => {
                 let len = self.rev_map.len();
                 let mut results = Vec::with_capacity(len);
-                let mut errs: Option<Vec<(Idx, Stream::AddError)>> = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (i, retry) in retries.into_iter().enumerate() {
-                    let idx = Idx::from(i);
+                    let idx = MulticastStreamIdx::from(i);
 
                     if let Some(batch_id) = &batch_ids[i] {
                         match retry {
@@ -2043,22 +2253,13 @@ where
                                 .retry_add(ctx, flags, msg, batch_id, retry)
                             {
                                 Ok(res) => results.push((idx, res)),
-                                Err(err) => match &mut errs {
-                                    Some(errs) => errs.push((idx.clone(), err)),
-                                    None => {
-                                        let mut vec = Vec::with_capacity(len);
-
-                                        vec.push((idx.clone(), err));
-
-                                        errs = Some(vec)
-                                    }
-                                }
+                                Err(err) => errs.push((idx.clone(), err))
                             }
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
@@ -2070,13 +2271,13 @@ where
         flags: &mut Self::StreamFlags,
         msg: &Msg,
         batch: &Self::BatchID,
-        errs: <Self::AddError as BatchError>::Completable
+        errs: <Self::AddError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::AddRetry>, Self::AddError> {
         match self.batches.get(batch) {
             Some(StreamMulticasterBatch { batch_ids, .. }) => {
                 let len = self.rev_map.len();
                 let (mut results, retries) = errs.take();
-                let mut errs: Option<Vec<(Idx, Stream::AddError)>> = None;
+                let mut errs = LazyInitVec::new(len);
 
                 for (idx, err) in retries {
                     let i: usize = idx.clone().into();
@@ -2087,53 +2288,44 @@ where
                             .complete_add(ctx, flags, msg, batch_id, err)
                         {
                             Ok(res) => results.push((idx, res)),
-                            Err(err) => match &mut errs {
-                                Some(errs) => errs.push((idx.clone(), err)),
-                                None => {
-                                    let mut vec = Vec::with_capacity(len);
-
-                                    vec.push((idx.clone(), err));
-
-                                    errs = Some(vec)
-                                }
-                            }
+                            Err(err) => errs.push((idx.clone(), err))
                         }
                     }
                 }
 
-                self.decide_outcome(results, errs)
+                self.decide_outcome(results, errs.take())
             }
             None => Err(CompoundBatchError::BadID { id: *batch })
         }
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamPartyID
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> PushStreamPartyID
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
-    type PartyID = Idx;
+    type PartyID = MulticastStreamIdx;
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamParties
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> PushStreamParties
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamAdd<Msg, Ctx>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStream<Ctx>,
     Stream::BatchID: Clone
 {
     type PartiesError = Infallible;
-    type PartiesIter = IntoIter<(Idx, Party)>;
+    type PartiesIter = IntoIter<(MulticastStreamIdx, Party)>;
     type PartyInfo = Party;
 
     #[inline]
-    fn parties(&self) -> Result<IntoIter<(Idx, Party)>, Infallible> {
-        let vec: Vec<(Idx, Party)> = self
+    fn parties(
+        &self
+    ) -> Result<IntoIter<(MulticastStreamIdx, Party)>, Infallible> {
+        let vec: Vec<(MulticastStreamIdx, Party)> = self
             .fwd_map
             .iter()
             .map(|(a, b)| (b.clone(), a.clone()))
@@ -2143,24 +2335,31 @@ where
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamShared<Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Stream, Ctx> PullStreamsOutput
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: PushStreamPrivate<Ctx> + PushStreamAdd<Msg, Ctx>,
-    Stream::BatchID: Clone
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PullStreamsOutput + PushStream<Ctx>,
+    Stream::BatchID: Clone + Debug
+{
+    type PullStreams = StreamMulticastPullStreams<Stream::PullStreams>;
+}
+
+impl<Party, Stream, Ctx> PushStreamShared<Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
+where
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: PushStreamPrivate<Ctx> + PushStream<Ctx>,
+    Stream::BatchID: Clone + Debug
 {
     type AbortBatchRetry = Vec<
-        StreamMulticasterAbortRetry<
-            Idx,
-            Stream::BatchID,
-            Stream::CancelBatchRetry
-        >
+        StreamMulticasterAbortRetry<Stream::BatchID, Stream::CancelBatchRetry>
     >;
+    type BatchPartiesError = StreamMulticasterBatchPartiesError;
+    type BatchPartiesIter = IntoIter<MulticastStreamIdx>;
     type CreateBatchError = SelectionsError<
         ErrorSet<
-            Idx,
+            MulticastStreamIdx,
             RetryResult<Stream::BatchID, Stream::CreateBatchRetry>,
             Stream::CreateBatchError
         >,
@@ -2168,15 +2367,16 @@ where
     >;
     type CreateBatchRetry =
         Vec<RetryResult<Stream::BatchID, Stream::CreateBatchRetry>>;
+    type IndefParties = Vec<MulticastStreamIdx>;
     type SelectError = SelectionsError<
         ErrorSet<
-            Idx,
-            RetryResult<(), Stream::SelectRetry>,
+            MulticastStreamIdx,
+            RetryIndefResult<(), Stream::SelectRetry>,
             Stream::SelectError
         >,
         usize
     >;
-    type SelectRetry = Vec<RetryResult<(), Stream::SelectRetry>>;
+    type SelectRetry = MulticastRetry<RetryResult<(), Stream::SelectRetry>>;
     type Selections = StreamMulticasterSelections<Stream::Selections>;
     type StartBatchError = StreamMulticasterStartError<
         Self::SelectError,
@@ -2216,18 +2416,49 @@ where
         Stream::empty_batches_with_capacity(size)
     }
 
+    fn batch_parties(
+        &self,
+        batch_id: &Self::BatchID
+    ) -> Result<Self::BatchPartiesIter, Self::BatchPartiesError> {
+        let StreamMulticasterBatch { batch_ids } =
+            self.batches.get(batch_id).ok_or(
+                StreamMulticasterBatchPartiesError::NotFound {
+                    batch_id: *batch_id
+                }
+            )?;
+        let ids: Vec<MulticastStreamIdx> = batch_ids
+            .iter()
+            .enumerate()
+            .flat_map(|(i, batch_id)| {
+                batch_id.as_ref().map(|_| MulticastStreamIdx::from(i))
+            })
+            .collect();
+
+        Ok(ids.into_iter())
+    }
+
     fn select<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         parties: I
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    )
     where
-        I: Iterator<Item = &'a Idx>,
-        Idx: 'a {
+        I: Iterator<Item = &'a MulticastStreamIdx> {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         for _ in 0..len {
             selections.inner.push(None);
@@ -2238,29 +2469,40 @@ where
             let i: usize = idx.clone().into();
 
             if selections.inner[i].is_none() {
-                let selections = selections.inner[i]
+                let selection = selections.inner[i]
                     .insert(self.rev_map[i].stream.empty_selections());
+                let (res, streams) =
+                    self.rev_map[i].stream.select(ctx, selection);
 
-                match self.rev_map[i].stream.select(ctx, selections) {
+                if let Some(streams) = streams {
+                    streambuf.push(streams)
+                }
+
+                match res {
                     // We're good; add this to the output.
-                    Ok(id) => results.push((Idx::from(i), id)),
+                    Ok(id) => {
+                        if id.is_indef() {
+                            selections.inner[i] = None;
+                        }
+
+                        results.push((MulticastStreamIdx::from(i), id))
+                    }
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => errs.push((Idx::from(i), err)),
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((Idx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 }
             }
         }
 
-        self.decide_select_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (
+            self.decide_select_result(results, errs.take())
+                .map(|res| res.map_indef(Parties::Some)),
+            streams
+        )
     }
 
     fn retry_select(
@@ -2268,86 +2510,157 @@ where
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
         retries: Self::SelectRetry
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
+        let mut streambuf = LazyInitVec::new(len);
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
-            let selections = match &mut selections.inner[i] {
-                Some(selections) => Ok(selections),
-                None => Err(SelectionsError::NoSelections { info: i })
-            }?;
+            while skip[i + offset] {
+                offset += 1;
+            }
+
+            let i = i + offset;
+            let idx = MulticastStreamIdx::from(i);
+            let selection = match &mut selections.inner[i] {
+                Some(selections) => selections,
+                None => {
+                    return (
+                        Err(SelectionsError::NoSelections { info: i }),
+                        None
+                    );
+                }
+            };
 
             match res {
                 // Actually do retries.
-                RetryResult::Retry(retry) => match self.rev_map[i]
-                    .stream
-                    .retry_select(ctx, selections, retry)
-                {
-                    // We're good; add this to the output.
-                    Ok(id) => results.push((Idx::from(i), id)),
-                    // An error happened; record the fact that we still
-                    // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => errs.push((Idx::from(i), err)),
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
+                RetryResult::Retry(retry) => {
+                    let (res, streams) = self.rev_map[i]
+                        .stream
+                        .retry_select(ctx, selection, retry);
 
-                            vec.push((Idx::from(i), err));
-
-                            errs = Some(vec)
-                        }
+                    if let Some(streams) = streams {
+                        streambuf.push(streams)
                     }
-                },
+
+                    match res {
+                        // We're good; add this to the output.
+                        Ok(id) => {
+                            if id.is_indef() {
+                                selections.inner[i] = None;
+                            }
+
+                            results.push((idx, id))
+                        }
+                        // An error happened; record the fact that we still
+                        // need to create a batch for this party.
+                        Err(err) => errs.push((idx, err))
+                    }
+                }
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) => {
+                    results.push((idx, RetryIndefResult::Success(val)))
+                }
             }
         }
 
-        self.decide_select_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (
+            self.decide_select_retry_result(results, indefs, errs.take())
+                .map(|res| res.map_indef(Parties::Some)),
+            streams
+        )
     }
 
     fn complete_select(
         &mut self,
         ctx: &mut Ctx,
         selections: &mut Self::Selections,
-        retries: <Self::SelectError as BatchError>::Completable
-    ) -> Result<RetryResult<(), Self::SelectRetry>, Self::SelectError> {
+        retries: <Self::SelectError as RecoverableError>::Completable
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Vec<Self::PartyID>,
+                Self::SelectRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::SelectError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<Vec<(Idx, Stream::SelectError)>> = None;
         let len = retries.len();
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
             let i: usize = idx.into();
-            let selections = match &mut selections.inner[i] {
-                Some(selections) => Ok(selections),
-                None => Err(SelectionsError::NoSelections { info: i })
-            }?;
+            let selection = match &mut selections.inner[i] {
+                Some(selection) => selection,
+                None => {
+                    return (
+                        Err(SelectionsError::NoSelections { info: i }),
+                        None
+                    );
+                }
+            };
+            let (res, streams) =
+                self.rev_map[i].stream.complete_select(ctx, selection, err);
 
-            match self.rev_map[i].stream.complete_select(ctx, selections, err) {
+            if let Some(streams) = streams {
+                streambuf.push(streams)
+            }
+
+            match res {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(id) => {
+                    if id.is_indef() {
+                        selections.inner[i] = None;
+                    }
+
+                    results.push((MulticastStreamIdx::from(i), id))
+                }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_select_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (
+            self.decide_select_result(results, errs.take())
+                .map(|res| res.map_indef(Parties::Some)),
+            streams
+        )
     }
 
     fn create_batch(
@@ -2361,7 +2674,7 @@ where
     > {
         let len = self.rev_map.len();
         let mut ids = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(Idx, Stream::CreateBatchError)>> = None;
+        let mut errs = LazyInitVec::new(len);
 
         // Have each party create a new batch.
         for (i, selections) in selections.inner.iter().enumerate() {
@@ -2371,24 +2684,15 @@ where
                     .create_batch(ctx, batches, selections)
                 {
                     // We're good; add this to the output.
-                    Ok(id) => ids.push((Idx::from(i), id)),
+                    Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => errs.push((Idx::from(i), err)),
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((Idx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 }
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn retry_create_batch(
@@ -2403,12 +2707,12 @@ where
     > {
         // Decompose the error set into successes and retries.
         let mut ids = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(Idx, Stream::CreateBatchError)>> = None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
+            let idx = MulticastStreamIdx::from(i);
             let selections = match &selections.inner[i] {
                 Some(selections) => Ok(selections),
                 None => Err(SelectionsError::NoSelections { info: i })
@@ -2421,26 +2725,17 @@ where
                     .retry_create_batch(ctx, batches, selections, retry)
                 {
                     // We're good; add this to the output.
-                    Ok(id) => ids.push((Idx::from(i), id)),
+                    Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                     // An error happened; record the fact that we still
                     // need to create a batch for this party.
-                    Err(err) => match &mut errs {
-                        Some(errs) => errs.push((Idx::from(i), err)),
-                        None => {
-                            let mut vec = Vec::with_capacity(len);
-
-                            vec.push((Idx::from(i), err));
-
-                            errs = Some(vec)
-                        }
-                    }
+                    Err(err) => errs.push((MulticastStreamIdx::from(i), err))
                 },
                 // Retain prior successes.
                 res => ids.push((idx, res))
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn complete_create_batch(
@@ -2448,14 +2743,14 @@ where
         ctx: &mut Ctx,
         batches: &mut Self::StartBatchStreamBatches,
         selections: &Self::Selections,
-        retries: <Self::CreateBatchError as BatchError>::Completable
+        retries: <Self::CreateBatchError as RecoverableError>::Completable
     ) -> Result<
         RetryResult<Self::BatchID, Self::CreateBatchRetry>,
         Self::CreateBatchError
     > {
         let (mut ids, retries) = retries.take();
-        let mut errs: Option<Vec<(Idx, Stream::CreateBatchError)>> = None;
         let len = retries.len();
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
@@ -2470,190 +2765,288 @@ where
                 .complete_create_batch(ctx, batches, selections, err)
             {
                 // We're good; add this to the output.
-                Ok(id) => ids.push((Idx::from(i), id)),
+                Ok(id) => ids.push((MulticastStreamIdx::from(i), id)),
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_create_result(ids, errs)
+        self.decide_create_result(ids, errs.take())
     }
 
     fn start_batch<'a, I>(
         &mut self,
         ctx: &mut Ctx,
         parties: I
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    >
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    )
     where
-        I: Iterator<Item = &'a Idx>,
-        Idx: 'a {
+        I: Iterator<Item = &'a MulticastStreamIdx> {
         let mut selections = self.empty_selections();
 
-        if let RetryResult::Retry(retry) = self
-            .select(ctx, &mut selections, parties)
-            .map_err(|err| StreamMulticasterStartError::Select {
-                selections: selections.clone(),
-                select: err
-            })?
-        {
-            return Ok(RetryResult::Retry(
-                StreamMulticasterStartError::Select {
-                    selections: selections,
-                    select: retry
-                }
-            ));
-        };
+        let (res, streams) = self.select(ctx, &mut selections, parties);
 
-        let mut batches = self.empty_batches();
+        match res {
+            Ok(RetryIndefResult::Success(_)) => {
+                let mut batches = self.empty_batches();
+                let res =
+                    match self.create_batch(ctx, &mut batches, &selections) {
+                        Ok(res) => match res {
+                            RetryResult::Success(id) => {
+                                Ok(RetryIndefResult::Success(id))
+                            }
+                            RetryResult::Retry(retry) => {
+                                Ok(RetryIndefResult::Retry(
+                                    StreamMulticasterStartError::Create {
+                                        selections: selections,
+                                        batches: batches,
+                                        create: retry
+                                    }
+                                ))
+                            }
+                        },
+                        Err(err) => Err(StreamMulticasterStartError::Create {
+                            selections: selections.clone(),
+                            batches: batches.clone(),
+                            create: err
+                        })
+                    };
 
-        Ok(self
-            .create_batch(ctx, &mut batches, &selections)
-            .map_err(|err| StreamMulticasterStartError::Create {
-                selections: selections.clone(),
-                batches: batches.clone(),
-                create: err
-            })?
-            .map_retry(|retry| StreamMulticasterStartError::Create {
-                selections: selections,
-                batches: batches,
-                create: retry
-            }))
+                (res, streams)
+            }
+            Ok(RetryIndefResult::Retry(retry)) => (
+                Ok(RetryIndefResult::Retry(
+                    StreamMulticasterStartError::Select {
+                        selections: selections,
+                        select: retry
+                    }
+                )),
+                streams
+            ),
+            Ok(RetryIndefResult::Indef(parties)) => {
+                (Ok(RetryIndefResult::Indef(parties)), streams)
+            }
+            Err(err) => (
+                Err(StreamMulticasterStartError::Select {
+                    selections: selections.clone(),
+                    select: err
+                }),
+                streams
+            )
+        }
     }
 
     fn retry_start_batch(
         &mut self,
         ctx: &mut Ctx,
         retries: Self::StartBatchRetry
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         match retries {
             StreamMulticasterStartError::Select {
                 select,
                 mut selections
             } => {
-                if let RetryResult::Retry(retry) = self
-                    .retry_select(ctx, &mut selections, select)
+                let (res, streams) =
+                    self.retry_select(ctx, &mut selections, select);
+                let res = res
                     .map_err(|err| StreamMulticasterStartError::Select {
                         selections: selections.clone(),
                         select: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterStartError::Select {
-                            selections: selections,
-                            select: retry
+                    })
+                    .and_then(|res| match res {
+                        RetryIndefResult::Success(_) => {
+                            let mut batches = self.empty_batches();
+
+                            match self
+                                .create_batch(ctx, &mut batches, &selections) {
+                                Ok(res) => match res {
+                                    RetryResult::Success(id) =>
+                                        Ok(RetryIndefResult::Success(id)),
+                                    RetryResult::Retry(retry) =>
+                                        Ok(RetryIndefResult::Retry(
+                                            StreamMulticasterStartError::Create {
+                                                selections: selections,
+                                                batches: batches,
+                                                create: retry
+                                            }
+                                        )),
+                                }
+                                Err(err) => Err(StreamMulticasterStartError::Create {
+                                    selections: selections.clone(),
+                                    batches: batches.clone(),
+                                    create: err
+                                })
+                            }
                         }
-                    ));
-                };
+                        RetryIndefResult::Retry(retry) => Ok(RetryIndefResult::Retry(
+                            StreamMulticasterStartError::Select {
+                                selections: selections,
+                                select: retry
+                            }
+                        )),
+                        RetryIndefResult::Indef(parties) => {
+                            Ok(RetryIndefResult::Indef(parties))
+                        }
+                    });
 
-                let mut batches = self.empty_batches();
-
-                Ok(self
-                    .create_batch(ctx, &mut batches, &selections)
-                    .map_err(|err| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches.clone(),
-                        create: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches,
-                        create: retry
-                    }))
+                (res, streams)
             }
             StreamMulticasterStartError::Create {
                 selections,
                 mut batches,
                 create
-            } => Ok(self
-                .retry_create_batch(ctx, &mut batches, &selections, create)
-                .map_err(|err| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches.clone(),
-                    create: err
-                })?
-                .map_retry(|retry| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches,
-                    create: retry
-                }))
+            } => match self.retry_create_batch(
+                ctx,
+                &mut batches,
+                &selections,
+                create
+            ) {
+                Ok(res) => match res {
+                    RetryResult::Success(id) => {
+                        (Ok(RetryIndefResult::Success(id)), None)
+                    }
+                    RetryResult::Retry(retry) => (
+                        Ok(RetryIndefResult::Retry(
+                            StreamMulticasterStartError::Create {
+                                selections: selections,
+                                batches: batches,
+                                create: retry
+                            }
+                        )),
+                        None
+                    )
+                },
+                Err(err) => (
+                    Err(StreamMulticasterStartError::Create {
+                        selections: selections.clone(),
+                        batches: batches.clone(),
+                        create: err
+                    }),
+                    None
+                )
+            }
         }
     }
 
     fn complete_start_batch(
         &mut self,
         ctx: &mut Ctx,
-        retries: <Self::StartBatchError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Self::BatchID, Self::StartBatchRetry>,
-        Self::StartBatchError
-    > {
+        retries: <Self::StartBatchError as RecoverableError>::Completable
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::StartBatchRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::StartBatchError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         match retries {
             StreamMulticasterStartError::Select {
                 select,
                 mut selections
             } => {
-                if let RetryResult::Retry(retry) = self
-                    .complete_select(ctx, &mut selections, select)
+                let (res, streams) =
+                    self.complete_select(ctx, &mut selections, select);
+                let res = res
                     .map_err(|err| StreamMulticasterStartError::Select {
                         selections: selections.clone(),
                         select: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterStartError::Select {
-                            selections: selections,
-                            select: retry
+                    })
+                    .and_then(|res| match res {
+                        RetryIndefResult::Success(_) => {
+                            let mut batches = self.empty_batches();
+
+                            match self
+                                .create_batch(ctx, &mut batches, &selections) {
+                                Ok(res) => match res {
+                                    RetryResult::Success(id) =>
+                                        Ok(RetryIndefResult::Success(id)),
+                                    RetryResult::Retry(retry) =>
+                                        Ok(RetryIndefResult::Retry(
+                                            StreamMulticasterStartError::Create {
+                                                selections: selections,
+                                                batches: batches,
+                                                create: retry
+                                            }
+                                        )),
+                                }
+                                Err(err) => Err(StreamMulticasterStartError::Create {
+                                    selections: selections.clone(),
+                                    batches: batches.clone(),
+                                    create: err
+                                })
+                            }
                         }
-                    ));
-                };
+                        RetryIndefResult::Retry(retry) => Ok(RetryIndefResult::Retry(
+                            StreamMulticasterStartError::Select {
+                                selections: selections,
+                                select: retry
+                            }
+                        )),
+                        RetryIndefResult::Indef(parties) => {
+                            Ok(RetryIndefResult::Indef(parties))
+                        }
+                    });
 
-                let mut batches = self.empty_batches();
-
-                Ok(self
-                    .create_batch(ctx, &mut batches, &selections)
-                    .map_err(|err| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches.clone(),
-                        create: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterStartError::Create {
-                        selections: selections.clone(),
-                        batches: batches,
-                        create: retry
-                    }))
+                (res, streams)
             }
             StreamMulticasterStartError::Create {
                 selections,
                 mut batches,
                 create
-            } => Ok(self
-                .complete_create_batch(ctx, &mut batches, &selections, create)
-                .map_err(|err| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches.clone(),
-                    create: err
-                })?
-                .map_retry(|retry| StreamMulticasterStartError::Create {
-                    selections: selections.clone(),
-                    batches: batches,
-                    create: retry
-                }))
+            } => match self.complete_create_batch(
+                ctx,
+                &mut batches,
+                &selections,
+                create
+            ) {
+                Ok(res) => match res {
+                    RetryResult::Success(id) => {
+                        (Ok(RetryIndefResult::Success(id)), None)
+                    }
+                    RetryResult::Retry(retry) => (
+                        Ok(RetryIndefResult::Retry(
+                            StreamMulticasterStartError::Create {
+                                selections: selections,
+                                batches: batches,
+                                create: retry
+                            }
+                        )),
+                        None
+                    )
+                },
+                Err(err) => (
+                    Err(StreamMulticasterStartError::Create {
+                        selections: selections.clone(),
+                        batches: batches.clone(),
+                        create: err
+                    }),
+                    None
+                )
+            }
         }
     }
 
@@ -2661,7 +3054,7 @@ where
         &mut self,
         ctx: &mut Ctx,
         flags: &mut Self::StreamFlags,
-        err: <Self::StartBatchError as BatchError>::Permanent
+        err: <Self::StartBatchError as RecoverableError>::Permanent
     ) -> RetryResult<(), Self::AbortBatchRetry> {
         if let StreamMulticasterStartError::Create {
             create: SelectionsError::Inner { inner: err },
@@ -2669,16 +3062,8 @@ where
         } = err
         {
             let (results, _) = err.take();
-            let mut retries: Option<
-                Vec<
-                    StreamMulticasterAbortRetry<
-                        Idx,
-                        Stream::BatchID,
-                        Stream::CancelBatchRetry
-                    >
-                >
-            > = None;
             let len = results.len();
+            let mut retries = LazyInitVec::new(len);
 
             for (idx, result) in results {
                 let i: usize = idx.clone().into();
@@ -2688,32 +3073,18 @@ where
                         .stream
                         .cancel_batch(ctx, flags, &batch_id)
                     {
-                        Ok(val) => val.app_retry(|retry| match &mut retries {
-                            Some(retries) => {
-                                retries.push(StreamMulticasterAbortRetry {
-                                    idx: idx,
-                                    batch: batch_id,
-                                    retry: retry
-                                })
-                            }
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push(StreamMulticasterAbortRetry {
-                                    idx: idx,
-                                    batch: batch_id,
-                                    retry: retry
-                                });
-
-                                retries = Some(vec)
-                            }
+                        Ok(val) => val.app_retry(|retry| {
+                            retries.push(StreamMulticasterAbortRetry {
+                                idx: idx,
+                                batch: batch_id,
+                                retry: retry
+                            })
                         }),
                         Err(err) => self.complete_abort(
                             ctx,
                             flags,
                             &mut retries,
                             idx,
-                            len,
                             batch_id,
                             err
                         )
@@ -2721,7 +3092,7 @@ where
                 });
             }
 
-            match retries {
+            match retries.take() {
                 Some(retries) => RetryResult::Retry(retries),
                 None => RetryResult::Success(())
             }
@@ -2736,16 +3107,8 @@ where
         flags: &mut Self::StreamFlags,
         retry: Self::AbortBatchRetry
     ) -> RetryResult<(), Self::AbortBatchRetry> {
-        let mut retries: Option<
-            Vec<
-                StreamMulticasterAbortRetry<
-                    Idx,
-                    Stream::BatchID,
-                    Stream::CancelBatchRetry
-                >
-            >
-        > = None;
         let len = retry.len();
+        let mut retries = LazyInitVec::new(len);
 
         for ent in retry {
             let StreamMulticasterAbortRetry {
@@ -2759,52 +3122,37 @@ where
                 .stream
                 .retry_cancel_batch(ctx, flags, &batch_id, retry)
             {
-                Ok(val) => val.app_retry(|retry| match &mut retries {
-                    Some(retries) => {
-                        retries.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        })
-                    }
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push(StreamMulticasterAbortRetry {
-                            idx: idx,
-                            batch: batch_id,
-                            retry: retry
-                        });
-
-                        retries = Some(vec)
-                    }
+                Ok(val) => val.app_retry(|retry| {
+                    retries.push(StreamMulticasterAbortRetry {
+                        idx: idx,
+                        batch: batch_id,
+                        retry: retry
+                    })
                 }),
                 Err(err) => self.complete_abort(
                     ctx,
                     flags,
                     &mut retries,
                     idx,
-                    len,
                     batch_id,
                     err
                 )
             }
         }
 
-        match retries {
+        match retries.take() {
             Some(retries) => RetryResult::Retry(retries),
             None => RetryResult::Success(())
         }
     }
 }
 
-impl<Idx, F> Frags for StreamMulticasterFrags<Idx, F>
+impl<F> Frags for StreamMulticasterFrags<F>
 where
-    Idx: Clone + Display + From<usize> + Into<usize>,
     F: Frags
 {
     type Param = Vec<F::Param>;
-    type RecvReqError = ErrorSet<Idx, (), F::RecvReqError>;
+    type RecvReqError = ErrorSet<MulticastStreamIdx, (), F::RecvReqError>;
 
     #[inline]
     fn param(_retry: Retry) -> Self::Param {
@@ -2822,10 +3170,7 @@ where
             .map(|param| F::from_data(param, data.clone()))
             .collect();
 
-        StreamMulticasterFrags {
-            idx: PhantomData,
-            frags: frags
-        }
+        StreamMulticasterFrags { frags: frags }
     }
 
     #[inline]
@@ -2834,8 +3179,8 @@ where
     }
 
     #[inline]
-    fn len(&self) -> usize {
-        self.frags[0].len()
+    fn nbytes(&self) -> usize {
+        self.frags[0].nbytes()
     }
 
     fn recv_req(
@@ -2844,26 +3189,17 @@ where
     ) -> Result<(), Self::RecvReqError> {
         let len = self.frags.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(Idx, F::RecvReqError)>> = None;
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to receive.
         for (i, frags) in self.frags.iter_mut().enumerate() {
             match frags.recv_req(req) {
-                Ok(()) => results.push((Idx::from(i), ())),
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Ok(()) => results.push((MulticastStreamIdx::from(i), ())),
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        match errs {
+        match errs.take() {
             // There were errors.
             Some(errs) => Err(ErrorSet::create(results, errs)),
             // No errors, check for retries.
@@ -2872,65 +3208,71 @@ where
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx> LargeObjStream<Ctx>
-    for StreamMulticaster<
-        Party,
-        Idx,
-        LargeObjMsg<H>,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+impl<Party, Stream, Ctx> LargeObjStream<Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjStream<Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
-    H: Clone + HashID
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: LargeObjStream<Ctx> + PushStream<Ctx>
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
-    type Frags = StreamMulticasterFrags<Idx, Stream::Frags>;
+    type Frags = StreamMulticasterFrags<Stream::Frags>;
+    type Parties = Vec<MulticastStreamIdx>;
     type PushFragError = ErrorSet<
-        Idx,
-        RetryResult<Option<Instant>, Stream::PushFragRetry>,
+        MulticastStreamIdx,
+        RetryIndefResult<Option<Instant>, Stream::PushFragRetry>,
         Stream::PushFragError
     >;
     type PushFragRetry =
-        Vec<RetryResult<Option<Instant>, Stream::PushFragRetry>>;
+        MulticastRetry<RetryResult<Option<Instant>, Stream::PushFragRetry>>;
 
     fn push_frags(
         &mut self,
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
-        Self::PushFragError
-    > {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushFragRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushFragError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to push the fragment.
         for (i, frag) in frags.frags.iter_mut().enumerate() {
-            match self.rev_map[i].stream.push_frags(ctx, id.clone(), frag) {
+            let (res, streams) =
+                self.rev_map[i].stream.push_frags(ctx, id.clone(), frag);
+
+            if let Some(streams) = streams {
+                streambuf.push(streams)
+            }
+
+            match res {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                    results.push((MulticastStreamIdx::from(i), res))
+                }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_frag_result(results, errs.take()), streams)
     }
 
     fn retry_push_frags(
@@ -2939,50 +3281,82 @@ where
         id: LargeObjID,
         frags: &mut Self::Frags,
         retries: Self::PushFragRetry
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
-        Self::PushFragError
-    > {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushFragRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushFragError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
+            while skip[i + offset] {
+                offset += 1;
+            }
+            let i = i + offset;
 
             match res {
                 // Actually do retries.
                 RetryResult::Retry(retry) => {
-                    match self.rev_map[i].stream.retry_push_frags(
-                        ctx,
-                        id.clone(),
-                        &mut frags.frags[i],
-                        retry
-                    ) {
+                    let (res, streams) =
+                        self.rev_map[i].stream.retry_push_frags(
+                            ctx,
+                            id.clone(),
+                            &mut frags.frags[i],
+                            retry
+                        );
+
+                    if let Some(streams) = streams {
+                        streambuf.push(streams)
+                    }
+
+                    match res {
                         // We're good; add this to the output.
-                        Ok(id) => results.push((Idx::from(i), id)),
+                        Ok(res) => {
+                            let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                            results.push((MulticastStreamIdx::from(i), res))
+                        }
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
-                        Err(err) => match &mut errs {
-                            Some(errs) => errs.push((Idx::from(i), err)),
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((Idx::from(i), err));
-
-                                errs = Some(vec)
-                            }
+                        Err(err) => {
+                            errs.push((MulticastStreamIdx::from(i), err))
                         }
                     }
                 }
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) => {
+                    let idx = MulticastStreamIdx::from(i);
+
+                    results.push((idx, RetryIndefResult::Success(val)))
+                }
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_frag_result(results, errs.take()), streams)
     }
 
     fn complete_push_frags(
@@ -2990,104 +3364,122 @@ where
         ctx: &mut Ctx,
         id: LargeObjID,
         frags: &mut Self::Frags,
-        retries: <Self::PushFragError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushFragRetry>,
-        Self::PushFragError
-    > {
+        retries: <Self::PushFragError as RecoverableError>::Completable
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushFragRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushFragError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<Vec<(Idx, Stream::PushFragError)>> = None;
         let len = retries.len();
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
             let i: usize = idx.into();
-
-            match self.rev_map[i].stream.complete_push_frags(
+            let (res, streams) = self.rev_map[i].stream.complete_push_frags(
                 ctx,
                 id.clone(),
                 &mut frags.frags[i],
                 err
-            ) {
+            );
+
+            if let Some(streams) = streams {
+                streambuf.push(streams)
+            }
+
+            match res {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                    results.push((MulticastStreamIdx::from(i), res))
+                }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_frag_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_frag_result(results, errs.take()), streams)
     }
 }
 
-impl<Party, Idx, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
-    for StreamMulticaster<
-        Party,
-        Idx,
-        LargeObjMsg<H>,
-        Stream,
-        <<Stream as LargeObjStream<Ctx>>::Frags as Frags>::Param,
-        Ctx
-    >
+impl<Party, H, Stream, Ctx> LargeObjOfferStream<H, Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
-    Stream: LargeObjOfferStream<H, Ctx> + PushStreamAdd<LargeObjMsg<H>, Ctx>,
+    Party: Clone + Debug + Display + Eq + Hash,
+    Stream: LargeObjOfferStream<H, Ctx> + PushStream<Ctx>,
     H: Clone + HashID
 {
     // ISSUE #27: This requires a separate copy of the data for each party.
     type PushOfferError = ErrorSet<
-        Idx,
-        RetryResult<Option<Instant>, Stream::PushOfferRetry>,
+        MulticastStreamIdx,
+        RetryIndefResult<Option<Instant>, Stream::PushOfferRetry>,
         Stream::PushOfferError
     >;
     type PushOfferRetry =
-        Vec<RetryResult<Option<Instant>, Stream::PushOfferRetry>>;
+        MulticastRetry<RetryResult<Option<Instant>, Stream::PushOfferRetry>>;
 
     fn push_offer(
         &mut self,
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
-        Self::PushOfferError
-    > {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushOfferRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushOfferError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         let len = self.rev_map.len();
         let mut results = Vec::with_capacity(len);
-        let mut errs: Option<Vec<(Idx, Stream::PushOfferError)>> = None;
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         // Go through each sub-stream and try to push the fragment.
         for (i, frag) in frags.frags.iter_mut().enumerate() {
-            match self.rev_map[i].stream.push_offer(ctx, hash.clone(), frag) {
+            let (res, streams) =
+                self.rev_map[i].stream.push_offer(ctx, hash.clone(), frag);
+
+            if let Some(streams) = streams {
+                streambuf.push(streams)
+            }
+
+            match res {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                    results.push((MulticastStreamIdx::from(i), res))
+                }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_offer_result(results, errs.take()), streams)
     }
 
     fn retry_push_offer(
@@ -3096,50 +3488,84 @@ where
         hash: H,
         frags: &mut Self::Frags,
         retries: Self::PushOfferRetry
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
-        Self::PushOfferError
-    > {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushOfferRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushOfferError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         // Decompose the error set into successes and retries.
         let mut results = Vec::with_capacity(self.rev_map.len());
-        let mut errs: Option<Vec<(Idx, Stream::PushOfferError)>> = None;
+        let MulticastRetry { retries, indefs } = retries;
         let len = retries.len();
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
+        let mut skip = bitvec![0; self.rev_map.len()];
+        let mut offset = 0;
+
+        for idx in indefs.iter() {
+            let i: usize = idx.clone().into();
+
+            skip.set(i, true);
+        }
 
         // Go through the retries and try to create the batch.
         for (i, res) in retries.into_iter().enumerate() {
-            let idx = Idx::from(i);
+            while skip[i + offset] {
+                offset += 1;
+            }
+
+            let i = i + offset;
 
             match res {
                 // Actually do retries.
                 RetryResult::Retry(retry) => {
-                    match self.rev_map[i].stream.retry_push_offer(
-                        ctx,
-                        hash.clone(),
-                        &mut frags.frags[i],
-                        retry
-                    ) {
+                    let (res, streams) =
+                        self.rev_map[i].stream.retry_push_offer(
+                            ctx,
+                            hash.clone(),
+                            &mut frags.frags[i],
+                            retry
+                        );
+
+                    if let Some(streams) = streams {
+                        streambuf.push(streams)
+                    }
+
+                    match res {
                         // We're good; add this to the output.
-                        Ok(id) => results.push((Idx::from(i), id)),
+                        // We're good; add this to the output.
+                        Ok(res) => {
+                            let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                            results.push((MulticastStreamIdx::from(i), res))
+                        }
                         // An error happened; record the fact that we still
                         // need to create a batch for this party.
-                        Err(err) => match &mut errs {
-                            Some(errs) => errs.push((Idx::from(i), err)),
-                            None => {
-                                let mut vec = Vec::with_capacity(len);
-
-                                vec.push((Idx::from(i), err));
-
-                                errs = Some(vec)
-                            }
+                        Err(err) => {
+                            errs.push((MulticastStreamIdx::from(i), err))
                         }
                     }
                 }
                 // Retain prior successes.
-                res => results.push((idx, res))
+                RetryResult::Success(val) => {
+                    let idx = MulticastStreamIdx::from(i);
+
+                    results.push((idx, RetryIndefResult::Success(val)))
+                }
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_offer_result(results, errs.take()), streams)
     }
 
     fn complete_push_offer(
@@ -3147,54 +3573,65 @@ where
         ctx: &mut Ctx,
         hash: H,
         frags: &mut Self::Frags,
-        retries: <Self::PushOfferError as BatchError>::Completable
-    ) -> Result<
-        RetryResult<Option<Instant>, Self::PushOfferRetry>,
-        Self::PushOfferError
-    > {
+        retries: <Self::PushOfferError as RecoverableError>::Completable
+    ) -> (
+        Result<
+            RetryIndefResult<
+                (Option<Instant>, Vec<MulticastStreamIdx>),
+                Self::PushOfferRetry,
+                Parties<Vec<MulticastStreamIdx>>
+            >,
+            Self::PushOfferError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         let (mut results, retries) = retries.take();
-        let mut errs: Option<Vec<(Idx, Stream::PushOfferError)>> = None;
         let len = retries.len();
+        let mut streambuf = LazyInitVec::new(len);
+        let mut errs = LazyInitVec::new(len);
 
         // Go through the retries and try to create the batch.
         for (idx, err) in retries {
             let i: usize = idx.into();
-
-            match self.rev_map[i].stream.complete_push_offer(
+            let (res, streams) = self.rev_map[i].stream.complete_push_offer(
                 ctx,
                 hash.clone(),
                 &mut frags.frags[i],
                 err
-            ) {
+            );
+
+            if let Some(streams) = streams {
+                streambuf.push(streams)
+            }
+
+            match res {
                 // We're good; add this to the output.
-                Ok(id) => results.push((Idx::from(i), id)),
+                Ok(res) => {
+                    let res = res.map(|(res, _)| res).map_indef(|_| ());
+
+                    results.push((MulticastStreamIdx::from(i), res))
+                }
                 // An error happened; record the fact that we still
                 // need to create a batch for this party.
-                Err(err) => match &mut errs {
-                    Some(errs) => errs.push((Idx::from(i), err)),
-                    None => {
-                        let mut vec = Vec::with_capacity(len);
-
-                        vec.push((Idx::from(i), err));
-
-                        errs = Some(vec)
-                    }
-                }
+                Err(err) => errs.push((MulticastStreamIdx::from(i), err))
             }
         }
 
-        self.decide_push_offer_result(results, errs)
+        let streams = streambuf
+            .take()
+            .map(|streambuf| StreamMulticastPullStreams { inners: streambuf });
+
+        (self.decide_push_offer_result(results, errs.take()), streams)
     }
 }
 
-impl<Party, Idx, Msg, Stream, Frags, Ctx> PushStreamSharedSingle<Msg, Ctx>
-    for StreamMulticaster<Party, Idx, Msg, Stream, Frags, Ctx>
+impl<Party, Msg, Stream, Ctx> PushStreamSharedSingle<Msg, Ctx>
+    for StreamMulticaster<Party, Stream, Ctx>
 where
-    Idx: Clone + Display + Eq + Hash + From<usize> + Into<usize> + Ord,
-    Party: Clone + Display + Eq + Hash,
+    Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStreamAdd<Msg, Ctx> + PushStreamPrivate<Ctx>,
     Stream::StreamFlags: Clone,
-    Stream::BatchID: Clone
+    Stream::BatchID: Clone + Debug
 {
     type CancelPushError = StreamMulticasterCancelPushError<
         Self::CancelBatchError,
@@ -3225,53 +3662,72 @@ where
         ctx: &mut Ctx,
         parties: I,
         msg: &Msg
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::PushRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::PushError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    )
     where
         I: Iterator<Item = &'a Self::PartyID>,
         Self::PartyID: 'a {
-        // Create the batch.
-        let batch = match self
-            .start_batch(ctx, parties)
-            .map_err(|err| StreamMulticasterPushError::Start { start: err })?
+        let (res, streams) = self.start_batch(ctx, parties);
+
+        match res
+            .map_err(|err| StreamMulticasterPushError::Start { start: err })
         {
-            RetryResult::Success(batch) => batch,
-            RetryResult::Retry(retry) => {
-                return Ok(RetryResult::Retry(
-                    StreamMulticasterPushError::Start { start: retry }
-                ))
+            Ok(res) => {
+                let res = res
+                    .map_retry(|retry| StreamMulticasterPushError::Start {
+                        start: retry
+                    })
+                    .flat_map_ok(|batch| {
+                        // Add the message.
+                        let mut flags = self.empty_flags();
+
+                        self.add(ctx, &mut flags, msg, &batch)
+                            .map_err(|err| StreamMulticasterPushError::Add {
+                                batch: batch,
+                                add: err
+                            })?
+                            .map_retry(|retry| {
+                                StreamMulticasterPushError::Add {
+                                    batch: batch,
+                                    add: retry
+                                }
+                            })
+                            .flat_map_ok(|()| {
+                                // Finish the batch.
+                                let mut flags = self.empty_flags();
+
+                                Ok(self
+                                    .finish_batch(ctx, &mut flags, &batch)
+                                    .map_err(|err| {
+                                        StreamMulticasterPushError::Finish {
+                                            batch: batch,
+                                            finish: err
+                                        }
+                                    })?
+                                    .map_retry(|retry| {
+                                        StreamMulticasterPushError::Finish {
+                                            batch: batch,
+                                            finish: retry
+                                        }
+                                    })
+                                    .map(|()| batch))
+                            })
+                            .map(RetryIndefResult::from)
+                    });
+
+                (res, streams)
             }
-        };
-
-        // Add the message.
-        let mut flags = self.empty_flags();
-
-        if let RetryResult::Retry(retry) = self
-            .add(ctx, &mut flags, msg, &batch)
-            .map_err(|err| StreamMulticasterPushError::Add {
-                batch: batch,
-                add: err
-            })?
-        {
-            return Ok(RetryResult::Retry(StreamMulticasterPushError::Add {
-                batch: batch,
-                add: retry
-            }));
+            Err(err) => (Err(err), streams)
         }
-
-        // Finish the batch.
-        let mut flags = self.empty_flags();
-
-        Ok(self
-            .finish_batch(ctx, &mut flags, &batch)
-            .map_err(|err| StreamMulticasterPushError::Finish {
-                batch: batch,
-                finish: err
-            })?
-            .map_retry(|retry| StreamMulticasterPushError::Finish {
-                batch: batch,
-                finish: retry
-            })
-            .map(|()| batch))
     }
 
     fn retry_push(
@@ -3279,91 +3735,109 @@ where
         ctx: &mut Ctx,
         msg: &Msg,
         retry: Self::PushRetry
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::PushRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::PushError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         match retry {
             StreamMulticasterPushError::Start { start: retry } => {
-                // Create the batch.
-                let batch =
-                    match self.retry_start_batch(ctx, retry).map_err(|err| {
-                        StreamMulticasterPushError::Start { start: err }
-                    })? {
-                        RetryResult::Success(batch) => batch,
-                        RetryResult::Retry(retry) => {
-                            return Ok(RetryResult::Retry(
-                                StreamMulticasterPushError::Start {
-                                    start: retry
-                                }
-                            ))
-                        }
-                    };
-
-                // Add the message.
-                let mut flags = self.empty_flags();
-
-                if let RetryResult::Retry(retry) = self
-                    .add(ctx, &mut flags, msg, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Add {
-                        batch: batch,
-                        add: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                let (res, streams) = self.retry_start_batch(ctx, retry);
+                let res = res
+                    .map_err(|err| StreamMulticasterPushError::Start {
+                        start: err
                     })
-                    .map(|()| batch))
+                    .and_then(|res| {
+                        res.map_retry(|retry| {
+                            StreamMulticasterPushError::Start { start: retry }
+                        })
+                        .flat_map_ok(|batch| {
+                            // Add the message.
+                            let mut flags = self.empty_flags();
+
+                            self.add(ctx, &mut flags, msg, &batch)
+                                .map_err(|err| {
+                                    StreamMulticasterPushError::Add {
+                                        batch: batch,
+                                        add: err
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    StreamMulticasterPushError::Add {
+                                        batch: batch,
+                                        add: retry
+                                    }
+                                })
+                                .flat_map_ok(|()| {
+                                    // Finish the batch.
+                                    let mut flags = self.empty_flags();
+
+                                    Ok(self
+                                        .finish_batch(ctx, &mut flags, &batch)
+                                        .map_err(|err| {
+                                            StreamMulticasterPushError::Finish {
+                                                batch: batch,
+                                                finish: err
+                                            }
+                                        })?
+                                        .map_retry(|retry| {
+                                            StreamMulticasterPushError::Finish {
+                                                batch: batch,
+                                                finish: retry
+                                            }
+                                        })
+                                        .map(|()| batch))
+                                })
+                                .map(RetryIndefResult::from)
+                        })
+                    });
+
+                (res, streams)
             }
             StreamMulticasterPushError::Add { batch, add: retry } => {
-                // Add the message.
+                // Finish the batch.
                 let mut flags = self.empty_flags();
-
-                if let RetryResult::Retry(retry) = self
+                let res = self
                     .retry_add(ctx, &mut flags, msg, &batch, retry)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
+                    })
+                    .and_then(|res| {
+                        res.map_retry(|retry| StreamMulticasterPushError::Add {
                             batch: batch,
                             add: retry
-                        }
-                    ));
-                }
+                        })
+                        .flat_map_ok(|()| {
+                            // Finish the batch.
+                            let mut flags = self.empty_flags();
 
-                // Finish the batch.
-                let mut flags = self.empty_flags();
+                            Ok(self
+                                .finish_batch(ctx, &mut flags, &batch)
+                                .map_err(|err| {
+                                    StreamMulticasterPushError::Finish {
+                                        batch: batch,
+                                        finish: err
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    StreamMulticasterPushError::Finish {
+                                        batch: batch,
+                                        finish: retry
+                                    }
+                                })
+                                .map(|()| batch))
+                        })
+                        .map(RetryIndefResult::from)
+                    });
 
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
-                    })
-                    .map(|()| batch))
+                (res, None)
             }
             StreamMulticasterPushError::Finish {
                 batch,
@@ -3371,18 +3845,24 @@ where
             } => {
                 // Finish the batch.
                 let mut flags = self.empty_flags();
-
-                Ok(self
+                let res = self
                     .retry_finish_batch(ctx, &mut flags, &batch, retry)
                     .map_err(|err| StreamMulticasterPushError::Finish {
                         batch: batch,
                         finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
                     })
-                    .map(|()| batch))
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            StreamMulticasterPushError::Finish {
+                                batch: batch,
+                                finish: retry
+                            }
+                        })
+                        .map(|()| batch)
+                    });
+
+                (res, None)
             }
         }
     }
@@ -3391,105 +3871,132 @@ where
         &mut self,
         ctx: &mut Ctx,
         msg: &Msg,
-        err: <Self::PushError as BatchError>::Completable
-    ) -> Result<RetryResult<Self::BatchID, Self::PushRetry>, Self::PushError>
-    {
+        err: <Self::PushError as RecoverableError>::Completable
+    ) -> (
+        Result<
+            RetryIndefResult<
+                Self::BatchID,
+                Self::PushRetry,
+                Parties<Self::IndefParties>
+            >,
+            Self::PushError
+        >,
+        Option<StreamMulticastPullStreams<Stream::PullStreams>>
+    ) {
         match err {
             StreamMulticasterPushError::Start { start: err } => {
-                // Create the batch.
-                let batch = match self.complete_start_batch(ctx, err).map_err(
-                    |err| StreamMulticasterPushError::Start { start: err }
-                )? {
-                    RetryResult::Success(batch) => batch,
-                    RetryResult::Retry(retry) => {
-                        return Ok(RetryResult::Retry(
-                            StreamMulticasterPushError::Start { start: retry }
-                        ))
-                    }
-                };
-
-                // Add the message.
-                let mut flags = self.empty_flags();
-
-                if let RetryResult::Retry(retry) = self
-                    .add(ctx, &mut flags, msg, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Add {
-                        batch: batch,
-                        add: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
-                            batch: batch,
-                            add: retry
-                        }
-                    ));
-                }
-
-                // Finish the batch.
-                let mut flags = self.empty_flags();
-
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
+                let (res, streams) = self.complete_start_batch(ctx, err);
+                let res = res
+                    .map_err(|err| StreamMulticasterPushError::Start {
+                        start: err
                     })
-                    .map(|()| batch))
+                    .and_then(|res| {
+                        res.map_retry(|retry| {
+                            StreamMulticasterPushError::Start { start: retry }
+                        })
+                        .flat_map_ok(|batch| {
+                            // Add the message.
+                            let mut flags = self.empty_flags();
+
+                            self.add(ctx, &mut flags, msg, &batch)
+                                .map_err(|err| {
+                                    StreamMulticasterPushError::Add {
+                                        batch: batch,
+                                        add: err
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    StreamMulticasterPushError::Add {
+                                        batch: batch,
+                                        add: retry
+                                    }
+                                })
+                                .flat_map_ok(|()| {
+                                    // Finish the batch.
+                                    let mut flags = self.empty_flags();
+
+                                    Ok(self
+                                        .finish_batch(ctx, &mut flags, &batch)
+                                        .map_err(|err| {
+                                            StreamMulticasterPushError::Finish {
+                                                batch: batch,
+                                                finish: err
+                                            }
+                                        })?
+                                        .map_retry(|retry| {
+                                            StreamMulticasterPushError::Finish {
+                                                batch: batch,
+                                                finish: retry
+                                            }
+                                        })
+                                        .map(|()| batch))
+                                })
+                                .map(RetryIndefResult::from)
+                        })
+                    });
+
+                (res, streams)
             }
             StreamMulticasterPushError::Add { batch, add: err } => {
-                // Add the message.
+                // Finish the batch.
                 let mut flags = self.empty_flags();
-
-                if let RetryResult::Retry(retry) = self
+                let res = self
                     .complete_add(ctx, &mut flags, msg, &batch, err)
                     .map_err(|err| StreamMulticasterPushError::Add {
                         batch: batch,
                         add: err
-                    })?
-                {
-                    return Ok(RetryResult::Retry(
-                        StreamMulticasterPushError::Add {
+                    })
+                    .and_then(|res| {
+                        res.map_retry(|retry| StreamMulticasterPushError::Add {
                             batch: batch,
                             add: retry
-                        }
-                    ));
-                }
+                        })
+                        .flat_map_ok(|()| {
+                            // Finish the batch.
+                            let mut flags = self.empty_flags();
 
-                // Finish the batch.
-                let mut flags = self.empty_flags();
+                            Ok(self
+                                .finish_batch(ctx, &mut flags, &batch)
+                                .map_err(|err| {
+                                    StreamMulticasterPushError::Finish {
+                                        batch: batch,
+                                        finish: err
+                                    }
+                                })?
+                                .map_retry(|retry| {
+                                    StreamMulticasterPushError::Finish {
+                                        batch: batch,
+                                        finish: retry
+                                    }
+                                })
+                                .map(|()| batch))
+                        })
+                        .map(RetryIndefResult::from)
+                    });
 
-                Ok(self
-                    .finish_batch(ctx, &mut flags, &batch)
-                    .map_err(|err| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
-                    })
-                    .map(|()| batch))
+                (res, None)
             }
             StreamMulticasterPushError::Finish { batch, finish: err } => {
                 // Finish the batch.
                 let mut flags = self.empty_flags();
-
-                Ok(self
+                let res = self
                     .complete_finish_batch(ctx, &mut flags, &batch, err)
                     .map_err(|err| StreamMulticasterPushError::Finish {
                         batch: batch,
                         finish: err
-                    })?
-                    .map_retry(|retry| StreamMulticasterPushError::Finish {
-                        batch: batch,
-                        finish: retry
                     })
-                    .map(|()| batch))
+                    .map(RetryIndefResult::from)
+                    .map(|res| {
+                        res.map_retry(|retry| {
+                            StreamMulticasterPushError::Finish {
+                                batch: batch,
+                                finish: retry
+                            }
+                        })
+                        .map(|()| batch)
+                    });
+
+                (res, None)
             }
         }
     }
@@ -3497,7 +4004,7 @@ where
     fn cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::PushError as BatchError>::Permanent
+        err: <Self::PushError as RecoverableError>::Permanent
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         let mut flags = self.empty_flags();
@@ -3566,7 +4073,7 @@ where
     fn complete_cancel_push(
         &mut self,
         ctx: &mut Ctx,
-        err: <Self::CancelPushError as BatchError>::Completable
+        err: <Self::CancelPushError as RecoverableError>::Completable
     ) -> Result<RetryResult<(), Self::CancelPushRetry>, Self::CancelPushError>
     {
         match err {
@@ -3597,6 +4104,15 @@ impl<BatchID> From<Vec<Option<BatchID>>> for StreamMulticasterBatch<BatchID> {
     }
 }
 
+impl Display for MulticastStreamIdx {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        write!(f, "multicast stream #{}", self.0)
+    }
+}
+
 impl<Report, Party> Display for StreamMulticasterReportError<Report, Party>
 where
     Report: Display,
@@ -3615,6 +4131,80 @@ where
     }
 }
 
+impl<Stream, Refresh> Display for StreamMulticasterCreateError<Stream, Refresh>
+where
+    Stream: Display,
+    Refresh: Display
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCreateError::Stream { err } => err.fmt(f),
+            StreamMulticasterCreateError::Refresh { err } => err.fmt(f)
+        }
+    }
+}
+
+impl Display for StreamMulticasterBatchPartiesError {
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterBatchPartiesError::NotFound { batch_id } => {
+                write!(f, "batch {} not found", batch_id)
+            }
+        }
+    }
+}
+
+impl<Start, Cancel, Flags, BatchID> Debug
+    for StreamMulticasterCancelPushRetry<Start, Cancel, Flags, BatchID>
+where
+    Start: Debug,
+    Cancel: Debug,
+    BatchID: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCancelPushRetry::Start { start, .. } => {
+                write!(f, "Start {{ start: {:?}, }}", start)
+            }
+            StreamMulticasterCancelPushRetry::Cancel {
+                cancel,
+                batch_id,
+                ..
+            } => write!(
+                f,
+                "Cancel {{ cancel: {:?}, batch_id: {:?} }}",
+                cancel, batch_id
+            )
+        }
+    }
+}
+
+impl<Cancel, Flags, BatchID> Debug
+    for StreamMulticasterCancelPushError<Cancel, Flags, BatchID>
+where
+    Cancel: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterCancelPushError::Cancel { cancel, .. } => {
+                cancel.fmt(f)
+            }
+        }
+    }
+}
+
 impl<Cancel, Flags, BatchID> Display
     for StreamMulticasterCancelPushError<Cancel, Flags, BatchID>
 where
@@ -3628,6 +4218,23 @@ where
             StreamMulticasterCancelPushError::Cancel { cancel, .. } => {
                 cancel.fmt(f)
             }
+        }
+    }
+}
+
+impl<Select, Create, Selections, Batches> Debug
+    for StreamMulticasterStartError<Select, Create, Selections, Batches>
+where
+    Select: Debug,
+    Create: Debug
+{
+    fn fmt(
+        &self,
+        f: &mut Formatter<'_>
+    ) -> Result<(), Error> {
+        match self {
+            StreamMulticasterStartError::Select { select, .. } => select.fmt(f),
+            StreamMulticasterStartError::Create { create, .. } => create.fmt(f)
         }
     }
 }

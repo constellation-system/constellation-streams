@@ -1,4 +1,4 @@
-// Copyright © 2024-25 The Johns Hopkins Applied Physics Laboratory LLC.
+// Copyright © 2024-26 The Johns Hopkins Applied Physics Laboratory LLC.
 //
 // This program is free software: you can redistribute it and/or
 // modify it under the terms of the GNU Affero General Public License,
@@ -24,10 +24,10 @@
 
 use constellation_common::codec::per::PERCodec;
 
-pub use crate::generated::xciap::Xciap16Header;
-pub use crate::generated::xciap::Xciap256Header;
 pub use crate::generated::xciap::Xciap4Header;
+pub use crate::generated::xciap::Xciap16Header;
 pub use crate::generated::xciap::Xciap64Header;
+pub use crate::generated::xciap::Xciap256Header;
 pub use crate::generated::xciap::XciapHeader;
 
 pub type XCIAP4HeaderPERCodec = PERCodec<Xciap4Header, 38>;
@@ -183,9 +183,13 @@ impl XciapHeader {
 }
 
 #[cfg(test)]
-use constellation_common::codec::Codec;
-#[cfg(test)]
 use constellation_common::codec::DatagramCodec;
+#[cfg(test)]
+use constellation_common::codec::Decoder;
+#[cfg(test)]
+use constellation_common::codec::Encoder;
+#[cfg(test)]
+use constellation_common::config::Create;
 
 #[test]
 fn test_xciap4header_codec() {
