@@ -2448,18 +2448,14 @@ where
                    "received acceptance for {} (ID {})",
                    hash, id);
 
-            if outbound.hashes.insert(id, hash).is_none() {
-                Ok(None)
-            } else {
-                Err(LargeObjRecvError::Collision)
-            }
+            let _ = outbound.hashes.remove(&id).is_none();
         } else {
             trace!(target: "large-obj-proto",
                    "redundant accept for {}",
                    hash);
-
-            Ok(None)
         }
+
+        Ok(None)
     }
 
     pub fn recv_req_obj_msg(

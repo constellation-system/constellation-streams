@@ -194,6 +194,7 @@ where
     Ctx: 'static + Send {
     config: DispatchThreadConfig<Types::ChansConfig, Types::ModeConfig>,
     ctx: ThreadInnerCtx<Ctx>,
+    notify_token: Token,
     notify: Notify
 }
 
@@ -226,6 +227,7 @@ where
     dispatcher: Disp,
     mode_config: Types::ModeConfig,
     shutdown: ShutdownFlag,
+    notify_token: Token,
     notify: Notify,
     nevents: usize
 }
@@ -1065,11 +1067,14 @@ where
         &mut self,
         ctx: &mut DispatchThreadCtx<Types::Chans, Ctx>,
         live: &HashSet<Token>,
+        forced: bool,
         now: Instant
     ) -> bool {
         let mut valid = true;
 
-        if self.pending.next_outbound().is_some_and(|when| when <= now) {
+        if forced ||
+            self.pending.next_outbound().is_some_and(|when| when <= now)
+        {
             trace!(target: "dispatch-entry",
                    "pushing messages");
 
@@ -1238,6 +1243,7 @@ where
         let starter = DispatchThreadStarter {
             config: config,
             notify: notify.clone(),
+            notify_token: token,
             ctx: ctx
         };
 
@@ -1254,6 +1260,7 @@ where
         let DispatchThreadStarter {
             config,
             notify,
+            notify_token,
             ctx
         } = self;
 
@@ -1265,7 +1272,12 @@ where
             .name(String::from("dispatch-thread"))
             .spawn(move || {
                 match DispatchThread::create(
-                    config, dispatcher, ctx, notify, shutdown
+                    config,
+                    dispatcher,
+                    ctx,
+                    notify,
+                    notify_token,
+                    shutdown
                 ) {
                     Ok(dispatch) => dispatch.run(),
                     Err(err) => error!(target: "dispatch-thread",
@@ -1288,6 +1300,7 @@ where
         dispatcher: Disp,
         mut ctx: ThreadInnerCtx<Ctx>,
         notify: Notify,
+        notify_token: Token,
         shutdown: ShutdownFlag
     ) -> Result<Self, DispatchThreadCreateError<Types::ChansCreateError>> {
         let (chans_config, mode_config, nevents, _, ndispatched, _) =
@@ -1315,7 +1328,8 @@ where
             parties: parties,
             ctx: ctx,
             nevents: nevents,
-            notify: notify
+            notify: notify,
+            notify_token: notify_token
         })
     }
 
@@ -1943,8 +1957,12 @@ where
             }
         }
 
+        let forced = live.contains(&self.notify_token);
+
         // Finally, if there are outbound messages pending, send them.
-        let outbounds: Vec<DispatchedID> = if let Some(outbounds) = outbounds {
+        let outbounds: Vec<DispatchedID> = if let Some(outbounds) = outbounds &&
+            !forced
+        {
             outbounds
                 .into_iter()
                 .chain(self.dispatched.iter().flat_map(|(id, ent)| {
@@ -1958,24 +1976,23 @@ where
         } else {
             self.dispatched
                 .iter()
-                .flat_map(|(id, ent)| {
-                    if ent.notify.collect() {
-                        Some(id.clone())
-                    } else {
-                        None
-                    }
+                .map(|(id, ent)| {
+                    let _ = ent.notify.collect();
+
+                    id.clone()
                 })
                 .collect()
         };
 
-        for token in outbounds.into_iter() {
-            if let Some(ent) = self.dispatched.get_mut(&token) {
-                valid &= ent.push_outbound_msgs(&mut self.ctx, &live, now)
+        for id in outbounds.into_iter() {
+            if let Some(ent) = self.dispatched.get_mut(&id) {
+                valid &=
+                    ent.push_outbound_msgs(&mut self.ctx, &live, forced, now)
             } else {
                 // This shouldn't happen.
                 error!(target: "dispatch-thread",
                        "entry for send for {} not found",
-                       token);
+                       id);
             }
         }
 
@@ -2575,6 +2592,7 @@ fn test_recv_session_send() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -2719,6 +2737,7 @@ fn test_recv_session_retry_send() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -2882,6 +2901,7 @@ fn test_recv_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -2985,6 +3005,7 @@ fn test_send_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -3137,6 +3158,7 @@ fn test_recv_session_send_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -3337,6 +3359,7 @@ fn test_recv_session_send_retry_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -3528,6 +3551,7 @@ fn test_recv_session_send_retry_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -3789,6 +3813,7 @@ fn test_recv_session_send_retry_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -4040,6 +4065,7 @@ fn test_recv_session_send_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -4244,6 +4270,7 @@ fn test_recv_session_send_complete_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -4480,6 +4507,7 @@ fn test_recv_session_send_complete_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -4741,6 +4769,7 @@ fn test_recv_session_send_complete_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -4990,6 +5019,7 @@ fn test_recv_session_recv_one() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -5138,6 +5168,7 @@ fn test_recv_session_recv_two() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -5311,6 +5342,7 @@ fn test_recv_session_recv_collide() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -5539,6 +5571,7 @@ fn test_recv_session_recv_collide_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -5748,6 +5781,7 @@ fn test_recv_session_recv_collide_retry_shutdown() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -6036,6 +6070,7 @@ fn test_recv_session_recv_collide_retry_shutdown_error() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -6272,6 +6307,7 @@ fn test_recv_session_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -6472,6 +6508,7 @@ fn test_recv_session_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -6673,6 +6710,7 @@ fn test_recv_session_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -6931,6 +6969,7 @@ fn test_recv_session_refresh_complete_imm_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -7139,6 +7178,7 @@ fn test_recv_session_refresh_complete_imm_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -7398,6 +7438,7 @@ fn test_recv_session_refresh_complete_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -7658,6 +7699,7 @@ fn test_recv_session_refresh_complete_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -7960,6 +8002,7 @@ fn test_recv_session_refresh_permanent() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -8143,6 +8186,7 @@ fn test_recv_session_refresh_complete_imm_permanent() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -8326,6 +8370,7 @@ fn test_recv_session_refresh_complete_permanent() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -8563,6 +8608,7 @@ fn test_recv_session_refresh_complete_imm_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -8823,6 +8869,7 @@ fn test_recv_session_refresh_complete_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -9124,6 +9171,7 @@ fn test_recv_session_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -9378,6 +9426,7 @@ fn test_recv_session_refresh_retry_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -9684,6 +9733,7 @@ fn test_recv_session_refresh_retry_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -9940,6 +9990,7 @@ fn test_recv_session_refresh_retry_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -10245,6 +10296,7 @@ fn test_recv_session_refresh_retry_permanent() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -10471,6 +10523,7 @@ fn test_recv_session_send_indef() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -10620,6 +10673,7 @@ fn test_recv_session_send_indef_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -10832,6 +10886,7 @@ fn test_recv_session_send_indef_retry_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -11092,6 +11147,7 @@ fn test_recv_session_send_indef_complete_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -11352,6 +11408,7 @@ fn test_recv_session_send_indef_indef_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -11559,6 +11616,7 @@ fn test_recv_session_send_indef_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -11826,6 +11884,7 @@ fn test_recv_session_send_indef_retry_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -12141,6 +12200,7 @@ fn test_recv_session_send_indef_complete_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -12455,6 +12515,7 @@ fn test_recv_session_send_indef_indef_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -12711,6 +12772,7 @@ fn test_recv_session_send_indef_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -12928,6 +12990,7 @@ fn test_recv_session_send_indef_retry_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -13193,6 +13256,7 @@ fn test_recv_session_send_indef_complete_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -13458,6 +13522,7 @@ fn test_recv_session_send_indef_indef_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -13667,6 +13732,7 @@ fn test_recv_session_send_indef_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -13936,6 +14002,7 @@ fn test_recv_session_send_indef_retry_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -14253,6 +14320,7 @@ fn test_recv_session_send_indef_complete_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -14569,6 +14637,7 @@ fn test_recv_session_send_indef_indef_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -14834,6 +14903,7 @@ fn test_recv_session_send_indef_listen_refresh() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -15052,6 +15122,7 @@ fn test_recv_session_send_indef_listen_refresh_retry() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -15322,6 +15393,7 @@ fn test_recv_session_send_indef_listen_refresh_complete_imm() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
@@ -15542,6 +15614,7 @@ fn test_recv_session_send_indef_listen_refresh_complete() {
             dispatcher,
             ctx,
             notify,
+            Token(0),
             ShutdownFlag::new()
         )
         .expect("Expected success");
