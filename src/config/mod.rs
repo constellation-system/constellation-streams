@@ -1270,7 +1270,7 @@ fn test_connection_config() {
     let channames = vec!["chan-1", "chan-2"];
     let endpoints = vec![endpoint];
     let expected = ConnectionConfig::new(channames, endpoints);
-    let actual = serde_yaml::from_str(yaml).unwrap();
+    let actual = yaml_serde::from_str(yaml).unwrap();
 
     assert_eq!(expected, actual);
 }
@@ -1309,7 +1309,7 @@ fn test_connection_config() {
 // retry: retry,
 // endpoint: endpoint
 // };
-// let actual = serde_yaml::from_str(yaml).unwrap();
+// let actual = yaml_serde::from_str(yaml).unwrap();
 //
 // assert_eq!(expected, actual);
 // }
