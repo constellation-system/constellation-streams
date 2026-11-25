@@ -16,14 +16,15 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
-//! Functionality for obtaining raw streams from a set of channels.
+//! Functionality for obtaining low-level streams from a set of
+//! channels.
 //!
 //! This module provides traits that define the abstractions for
 //! creating raw streams from a set of channels.  This provides the
 //! means for obtaining the foundational streams from which all other
 //! stream abstractions are then built.
 //!
-//! This module also provides [SharedPrivateChannels] and related types,
+//! This module also provides [`SharedPrivateChannels`] and related types,
 //! which can represent a combination of both shared (true multicast)
 //! and private (unicast) streams in a single type.
 use std::collections::HashSet;
@@ -70,6 +71,7 @@ use crate::stream::PushStreamReportError;
 use crate::stream::PushStreamShared;
 use crate::stream::PushStreamSharedSingle;
 
+#[doc(hidden)]
 pub mod test;
 
 /// Trait for determining whether a given channel parameter can pair
@@ -77,14 +79,25 @@ pub mod test;
 ///
 /// This is used in multiplexing to determine whether to pair off
 /// parameters and counterparty addresses.
+///
+/// # Type Parameters
+///
+/// - `Addr`: Type of addresses.
 pub trait ChannelParam<Addr>: Clone + Debug + Display + Eq + Hash {
     /// Check whether this parameter set can accept the address `addr`.
+    ///
+    /// # Parameters
+    ///
+    /// - `addr`: The address to check.
     fn accepts_addr(
         &self,
         addr: &Addr
     ) -> bool;
 }
 
+/// Trait for obtaining channel IDs from a name.
+///
+/// This permits channels to be given human-readable names.
 pub trait ChannelsID {
     /// Type of channel IDs.
     type ChannelID: Clone + Debug + Display + Eq + Hash;
@@ -104,42 +117,62 @@ pub trait ChannelsID {
     ) -> Option<Self::ChannelID>;
 }
 
-/// Trait for sets of channels that can produce private streams.
+/// Trait for producers of low-level streams (typically wrappers for channels).
 ///
-/// Typically, this trait will be implemented by a structure that acts
-/// as a channel registry, binding individual channel configurations
-/// to names, and then using the configurations to create private
-/// streams.
+/// This trait acts as the interface between the streams API and the
+/// lower-level channels API.  Typically, this trait will be
+/// implemented by a structure that acts as a channel registry,
+/// binding individual channel configurations to names, and then using
+/// the configurations to create private streams.
+///
+/// # Type Parameters
+///
+/// - `Ctx`: Type of contexts.
+///
+/// # Process for Obtaining Channels
 ///
 /// The process for obtaining streams is designed to support the needs
 /// of a variety of types of unreliable datagram channels.  The
 /// process goes as follows:
 ///
-///  1. A channel undergoes a setup step, which produces a "parameter set". This
-///     is often a binding address.  Depending on the nature of the channel,
-///     multiple concrete parameter sets may result from the setup process.
+///  1. A channel undergoes a setup step, which produces a "channel
+///     parameter". This is often a binding address.  Depending on the
+///     nature of the channel, multiple concrete parameters may result
+///     from the setup process.
 ///
-///  2. Parameter sets are checked for compatibility with counterparty addresses
-///     using the [ChannelParam] trait.
+///  2. Parameters are checked for compatibility with counterparty
+///     addresses using the [`ChannelParam`] trait.
 ///
-///  3. A parameter set and a compatible counterparty address are used to obtain
+///  3. A parameter and a compatible counterparty address are used to obtain
 ///     an individual stream from the channel, which may involve some degree of
 ///     protocol negotiation.
 ///
 ///  4. An individual stream is returned, providing a connection over the given
 ///     channel to the counterparty.  The exact nature of this stream and its
 ///     API depend on the details of the underlying channels.
+///
+/// ## Motivating Case
+///
+/// The motivating case for this process (and the one that forces this
+/// level of complexity) comes from SOCKS5 UDP; however, the same will
+/// hold for any UDP-based proxy protocol.  The initial negotiation
+/// for SOCKS5 UDP sets up an association between an external port on
+/// the proxy and the client.  This returns an address (which may
+/// contain a DNS name) through which the client can communicate via
+/// the association.  The client then must resolve the DNS name, which
+/// can in principal produce *multiple* concrete IP addresses, and
+/// which can change over time.
 pub trait Channels<Ctx>: ChannelsID {
     /// Type of parameters for obtaining streams.
     ///
     /// Channel parameters are used to obtain individual streams from
     /// a channel.  These can be checked for compatibility with an
-    /// address using [accepts_addr](ChannelParam::accepts_addr).
+    /// address using [`accepts_addr`](ChannelParam::accepts_addr).
     type Param: ChannelParam<Self::Addr>;
     /// Type of iterator on parameters.
     ///
     /// This provides both the ID of the originating channel, and the
-    /// channel parameter.
+    /// channel parameter and time for the next refresh.
     type ParamsIter<I>: Iterator<
         Item = (
             Self::ChannelID,
@@ -152,7 +185,8 @@ pub trait Channels<Ctx>: ChannelsID {
     type ParamsError: Debug + Display + ScopedError;
     /// Outbound negotiator parameter.
     ///
-    /// This usually corresponds to verify endpoints for TLS streams.
+    /// This usually corresponds to verification endpoints for TLS
+    /// channels.
     type OutNegoParam;
     /// Type of counterparty addresses to which to connect.
     type Addr: Clone + Debug + Display + Eq + Hash;
@@ -166,15 +200,16 @@ pub trait Channels<Ctx>: ChannelsID {
     /// This will attempt any negotiations necessary to establish the
     /// stream.  If negotiations conclude immediately, then the stream
     /// will be returned.  Otherwise, it will be returned by a
-    /// subsequent call to [listen](Channels::listen).  Subsequent
-    /// calls to this function with the same `endpoint` will return an
-    /// error.
+    /// subsequent call to [`listen`](ChannelsListen::listen).  Subsequent
+    /// calls to this function with the same `endpoint` while
+    /// negotiations are still ongoing, or before the resulting stream
+    /// has been successfully shut down will return an error.
     ///
     /// This may also attempt to refresh the set of addresses, and
     /// will return a new set if this happens.
     ///
     /// Streams obtained from this function must eventually be shut
-    /// down with [shutdown_stream](Channels::shutdown_stream).
+    /// down with [`shutdown_stream`](ChannelsShutdown::shutdown_stream).
     ///
     /// # Parameter
     ///
@@ -183,7 +218,7 @@ pub trait Channels<Ctx>: ChannelsID {
     /// - `channel`: The channel ID on which to create the stream.
     ///
     /// - `param`: The channel parameter to use.  These are obtained from this
-    ///   function, or from [params](Channels::params).
+    ///   function, or from [`params`](Channels::params).
     ///
     /// - `endpoint`: The counterparty address.
     ///
@@ -195,8 +230,8 @@ pub trait Channels<Ctx>: ChannelsID {
     ///
     /// 1. The authenticated session, if there is one.
     ///
-    /// 1. If a refresh occurred, a [Vec] containing
-    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
+    /// 1. If a refresh occurred, a [`Vec`] containing
+    ///    [`ChannelID`](ChannelsID::ChannelID)s that have been refreshed.
     ///
     /// 1. When the next refresh occurs.
     fn req_stream(
@@ -215,17 +250,13 @@ pub trait Channels<Ctx>: ChannelsID {
         Self::ReqStreamError
     >;
 
-    /// Obtain the current set of all channel parameters, and the time
-    /// at which they will need to be refreshed.
-    ///
-    /// If parameters never need to be refreshed again, `None` will be
-    /// returned.
+    /// Obtain the current set of all channel parameters.
     ///
     /// # Parameters
     ///
     /// - `ctx`: The context to use.
     ///
-    /// - `channels`: [Iterator] for channel IDs for which to get parameters.
+    /// - `channels`: [`Iterator`] for channel IDs for which to get parameters.
     fn params<I>(
         &mut self,
         ctx: &mut Ctx,
@@ -235,6 +266,15 @@ pub trait Channels<Ctx>: ChannelsID {
         I: Iterator<Item = Self::ChannelID>;
 }
 
+/// Trait for listening for incoming streams.
+///
+/// This permits low-level streams to be obtained from a listen-type
+/// interface.  This also provides a means for obtaining streams whose
+/// negotiations could not be completed immediately.
+///
+/// # Parameters
+///
+/// - `Ctx`: Type of contexts.
 pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     /// Type of iterators indicating which streams have available messoges.
     ///
@@ -258,33 +298,37 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     ///
     /// 1. The channel parameter for which this session was received.
     ///
-    /// 1. The [Stream](Channels::Stream) representing the session.
+    /// 1. The [`Stream`](Channels::Stream) representing the session.
     type StreamIter: Iterator<
         Item = (Self::Addr, Self::ChannelID, Self::Param, Self::Stream)
     >;
     /// Type of errors that can occur when
-    /// [listen](ChannelsListen::listen)ing.
+    /// [`listen`](ChannelsListen::listen)ing.
     type ListenError: Debug + Display + ScopedError;
 
     /// Listen for new messages and/or incoming sessions.
+    ///
+    /// This will produce streams for incoming connections, and also
+    /// any negotiations started by [`req_stream`](Channels::req_stream)
+    /// that could not be completed immediately.
     ///
     /// # Parameters
     ///
     /// - `ctx`: The context to use.
     ///
-    /// - `tokens`: The set of live [Token]s.
+    /// - `tokens`: The set of live [`Token`]s.
     ///
     /// # Return Value
     ///
     /// A tuple containing four elements;
     ///
-    /// 1. An [Iterator](ChannelsListen::StreamIter) of new incoming sessions.
+    /// 1. An [`Iterator`](ChannelsListen::StreamIter) of new incoming sessions.
     ///
-    /// 1. An [Iterator](ChannelsListen::EndpointsIter) containing endpoints for
+    /// 1. An [`Iterator`](ChannelsListen::EndpointIter) containing endpoints for
     ///    existing sessions that have received new messages.
     ///
-    /// 1. If a refresh occurred, a [Vec] containing
-    ///    [ChannelID](Channels::ChannelID)s that have been refreshed.
+    /// 1. If a refresh occurred, a [`Vec`] containing
+    ///    [`ChannelID`](ChannelsID::ChannelID)s that have been refreshed.
     ///
     /// 1. If `Some`, then he earliest next time at which a `listen` should take
     ///    place, regardless of polling; if `None`, then the next listen should
@@ -304,12 +348,27 @@ pub trait ChannelsListen<Ctx>: Channels<Ctx> {
     >;
 }
 
+/// Trait for shutting down streams.
+///
+/// This trait permits streams obtained from
+/// [`req_stream`](Channels::req_stream) or
+/// [`listen`](ChannelsListen::listen).  To be shut down cleanly.
+///
+/// # Type Parameters
+///
+/// - `Ctx`: Type of contexts.
 pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
+    /// Type of errors that can occur shutting down a stream.
     type StreamShutdownError: Debug + Display + ScopedError;
+    /// Type of retry information from shutting down a stream.
     type StreamShutdownRetry: RetryWhen;
+    /// Type of errors that can occur listening during shutdown.
     type ShutdownListenError: Debug + Display + ScopedError;
 
     /// Shut down a given stream.
+    ///
+    /// Following success of this call, the stream can be safely
+    /// requested again from [`req_stream`](Channels::req_stream).
     ///
     /// # Parameters
     ///
@@ -318,15 +377,15 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     /// - `channel`: The channel ID on which to create the stream.
     ///
     /// - `param`: The channel parameter to use.  These are obtained from this
-    ///   function, or from [params](Channels::params).
+    ///   function, or from [`params`](Channels::params).
     ///
-    /// - `session`: The session to shut down.
+    /// - `stream`: The stream to shut down.
     ///
     /// # Return Value
     ///
     /// A pair containing the following:
     ///
-    /// 1. A set of new [Param](Channels::Param) if a refresh was done.
+    /// 1. A set of new [`Param`](Channels::Param) if a refresh was done.
     ///
     /// 1. When the next refresh occurs.
     fn shutdown_stream(
@@ -334,7 +393,7 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         ctx: &mut Ctx,
         channel: &Self::ChannelID,
         param: &Self::Param,
-        session: Self::Stream
+        stream: Self::Stream
     ) -> Result<
         RetryResult<
             (Option<Vec<Self::Param>>, Option<Instant>),
@@ -343,6 +402,22 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         Self::StreamShutdownError
     >;
 
+    /// Retry shutting down a stream.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context to use.
+    ///
+    /// - `channel`: The channel ID on which to create the stream.
+    ///
+    /// - `param`: The channel parameter to use.  These are obtained from this
+    ///   function, or from [`params`](Channels::params).
+    ///
+    /// - `retry`: The retry information.
+    ///
+    /// # Return Value
+    ///
+    /// Same as for [`shutdown_stream`](ChannelsShutdown::shutdown_stream).
     fn retry_shutdown_stream(
         &mut self,
         ctx: &mut Ctx,
@@ -357,11 +432,15 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
         Self::StreamShutdownError
     >;
 
-    /// Variant of [listen](ChannelsListen::listen) for shutting down.
+    /// Variant of [`listen`](ChannelsListen::listen) for shutting down.
     ///
-    /// This is used to listen for input in the shutdown process.
+    /// This is used to listen for input in the shutdown process for
+    /// the [`Channels`] instance as a whole.
+    ///
+    /// *This should not be used during normal operations.*
+    ///
     /// This will not generate new sessions, but will result in
-    /// shutting down existing ones.  This will consume the `Channels`
+    /// shutting down existing ones.  This will consume the [`Channels`]
     /// instance, returning it if the shutdown process needs to
     /// continue.
     ///
@@ -369,7 +448,7 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     ///
     /// - `ctx`: The context to use.
     ///
-    /// - `tokens`: The set of live [Token]s.
+    /// - `tokens`: The set of live [`Token`]s.
     ///
     /// # Return Value
     ///
@@ -388,28 +467,28 @@ pub trait ChannelsShutdown<Ctx>: Channels<Ctx> + Sized {
     ) -> Result<Option<(Self, Option<Instant>)>, Self::ShutdownListenError>;
 }
 
-/// An implementation of [Channels] that is always empty.
+/// An implementation of [`Channels`] that is always empty.
 ///
 /// This is primarily used for testing purposes.
 pub struct NullChannels;
 
-/// Channel ID type for [NullChannels].
+/// Channel ID type for [`NullChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NullChannelsID;
 
-/// Channel param type for [NullChannels].
+/// Channel param type for [`NullChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NullChannelsParam;
 
-/// Address type for [NullChannels].
+/// Address type for [`NullChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct NullChannelsAddr;
 
-/// Implementation of [Channels] that combines private and shared channels.
+/// Implementation of [`Channels`] that combines private and shared channels.
 ///
 /// This allows for shared and private channels to be handled through
-/// the same [Channels] instance, and ultimately to create
-/// [SharedPrivateChannelStream]s to handle both cases through a
+/// the same [`Channels`] instance, and ultimately to create
+/// [`SharedPrivateChannelStream`]s to handle both cases through a
 /// single common interface.  This stream type contains destination
 /// addresses for all shared streams, which it transparently adds into
 /// all batches.  This allows both shared and private streams to be
@@ -426,9 +505,11 @@ pub struct SharedPrivateChannels<Private, Shared> {
     shared: Option<Shared>
 }
 
+#[doc(hidden)]
 #[cfg(test)]
 pub struct TestChannel {}
 
+/// A general multiplexed type for [`SharedPrivateChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SharedPrivateValue<Private, Shared> {
     /// ID for the private channels.
@@ -443,6 +524,7 @@ pub enum SharedPrivateValue<Private, Shared> {
     }
 }
 
+/// A general multiplexed [`Iterator`] for [`SharedPrivateChannels`].
 pub enum SharedPrivateIter<Private, Shared> {
     /// ID for the private channels.
     Private {
@@ -456,6 +538,7 @@ pub enum SharedPrivateIter<Private, Shared> {
     }
 }
 
+/// Stream iterator for [`SharedPrivateChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SharedPrivateStreamIter<
     PrivateID,
@@ -480,6 +563,7 @@ pub struct SharedPrivateStreamIter<
     shared: Option<SharedIter>
 }
 
+/// Endpoint iterator for [`SharedPrivateChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SharedPrivateEndpointIter<
     PrivateID,
@@ -500,7 +584,7 @@ pub struct SharedPrivateEndpointIter<
     shared: Option<SharedIter>
 }
 
-/// Param iterator for [SharedPrivateChannels].
+/// Parameter iterator for [`SharedPrivateChannels`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SharedPrivateParamIter<
     PrivateID,
@@ -518,7 +602,7 @@ pub struct SharedPrivateParamIter<
     shared: Option<SharedIter>
 }
 
-/// Param error for [SharedPrivateChannels].
+/// Param error for [`SharedPrivateChannels`].
 #[derive(Debug)]
 pub enum SharedPrivateError<Private, Shared> {
     /// Param error for the private channels.
@@ -535,10 +619,10 @@ pub enum SharedPrivateError<Private, Shared> {
     Shutdown
 }
 
-/// Type of streams for [SharedPrivateChannels].
+/// Type of streams for [`SharedPrivateChannels`].
 ///
-/// This implements the basic [PushStream], [PushStreamAdd], and
-/// [PushStreamPrivate] traits that would be expected for *private*
+/// This implements the basic [`PushStream`], [`PushStreamAdd`], and
+/// [`PushStreamPrivate`] traits that would be expected for *private*
 /// channels.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SharedPrivateChannelStream<Private, Shared, Party> {

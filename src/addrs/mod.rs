@@ -18,7 +18,7 @@
 
 //! Traits for sources of addresses.
 //!
-//! The [Addrs] trait defined in this module provides an abstraction
+//! The [`Addrs`] trait defined in this module provides an abstraction
 //! for obtaining addresses from some set of sources.  The most
 //! typical use of this is with a DNS-style resolver, with the names
 //! serving as the origins.  `Addrs` provides basic functionality for
@@ -32,6 +32,7 @@ use std::time::Instant;
 use constellation_common::error::ScopedError;
 use constellation_common::retry::RetryResult;
 
+#[doc(hidden)]
 pub mod test;
 
 /// Trait for sources of addresses that may need to be periodically
@@ -44,7 +45,7 @@ pub trait Addrs {
     /// Type of address sources.
     ///
     /// This is the thing from which an address is derived.  In the
-    /// DNS example, this is the DNS name.
+    /// DNS example, this is the DNS name (a string).
     type Origin;
     /// Type of addresses.
     type Addr: Clone + Debug + Display + Eq + Hash;
@@ -58,7 +59,7 @@ pub trait Addrs {
 
     /// Get the earliest future time that addresses will be refreshed.
     ///
-    /// All calls to [addrs](Addrs::addrs) between now and the
+    /// All calls to [`addrs`](Addrs::addrs) between now and the
     /// return value of this function will be redundant.
     ///
     /// Note: this refers only to the refresh time policy for
@@ -77,24 +78,57 @@ pub trait Addrs {
     ///
     /// The next refresh time will be `None` if this does not need to
     /// be refreshed ever.
+    ///
+    /// # Return Value
+    ///
+    /// On success, a pair consisting of the following:
+    ///
+    /// 1. An [`Iterator`] over the set of addresses.
+    ///
+    /// 1. The time of the next refresh, or `None`.
     fn addrs(
         &mut self
     ) -> Result<RetryResult<(Self::AddrsIter, Option<Instant>)>, Self::AddrsError>;
 }
 
-/// Sub-trait of [Addrs] that can be created from a configuration object.
+/// Sub-trait of [`Addrs`] that can be created from a configuration object.
+///
+/// # Type Parameters
+///
+/// - `Ctx`: Type of contexts.
 pub trait AddrsCreate<Ctx>: Sized + Addrs {
     /// Type of configurations from which this is created.
+    ///
+    /// This should *not* specify [`Origin`](Addrs::Origin)s to be
+    /// resolved; that should be done dynamically.
     type Config;
+    /// Configuration object for [`Origin`](Addrs::Origin)s.
+    ///
+    /// This should specify a single [`Origin`](Addrs::Origin) to be
+    /// resolved.
     type OriginConfig: Clone + Into<Self::Origin>;
     /// Type of errors that can occur during creation.
     type CreateError: Debug + Display;
 
     /// Create an instance of this `Addrs` from its configuration.
+    ///
+    /// # Type Parameters
+    ///
+    /// - `I`: Type of iterators of
+    ///   [`OriginConfig`](AddrsCreate::OriginConfig)s.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context object to use.
+    ///
+    /// - `config`: The configuration object for creating this instance.
+    ///
+    /// - `origins`: An [`Iterator`] of
+    ///   [`OriginConfig`](AddrsCreate::OriginConfig)s to resolve.
     fn create<I>(
         ctx: &mut Ctx,
         config: Self::Config,
-        origin: I
+        origins: I
     ) -> Result<Self, Self::CreateError>
     where
         I: Iterator<Item = Self::OriginConfig>;

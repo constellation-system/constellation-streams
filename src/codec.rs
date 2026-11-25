@@ -19,8 +19,8 @@
 //! Low-level streams from low-level I/O traits and codecs.
 //!
 //! This module provides implementations of the stream interfaces for
-//! combinations of low-level I/O ([Read] and [Write]) instances
-//! together with [DatagramCodec]s.  This provides the base-level
+//! combinations of low-level I/O ([`Read`] and [`Write`]) instances
+//! together with [`DatagramCodec`]s.  This provides the base-level
 //! implementations of private unicast streams.
 use std::convert::Infallible;
 use std::fmt::Display;
@@ -66,14 +66,29 @@ use crate::stream::PushStreamPartyID;
 use crate::stream::PushStreamPrivate;
 use crate::stream::PushStreamPrivateSingle;
 
-/// Private unicast stream built from a [Read]/[Write] instance and a
-/// [DatagramCodec].
+/// Private unicast stream built from a [`Read`]/[`Write`] instance and an
+/// [`Encoder`]/[`Decoder`].
 ///
 /// This represents a private unicast stream that directly encodes and
 /// sends messages.  This instance performs no batching at all, and
 /// will ignore all batching-related API calls.  It will immediately
 /// encode and send messages when its implementation of
-/// [add](PushStreamAdd::add) is called.
+/// [`add`](PushStreamAdd::add) is called.
+///
+/// This stream is typically used with underlying channels that
+/// support a datagram-type interface.
+///
+/// # Type Parameters
+///
+/// - `OutMsg`: Type of outbound messages.
+///
+/// - `InMsg`: Type of inbound messages.
+///
+/// - `IO`: Type of the low-level [`Read`]/[`Write`] instance.
+///
+/// - `Enc`: Type of [`Encoder`]s used for outbound messages.
+///
+/// - `Dec`: Type of [`Decoder`]s used for inbound messages.
 pub struct DatagramCodecStream<OutMsg, InMsg, IO, Enc, Dec> {
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
@@ -85,6 +100,29 @@ pub struct DatagramCodecStream<OutMsg, InMsg, IO, Enc, Dec> {
     io: IO
 }
 
+/// Private unicast stream built from a [`Read`]/[`Write`] instance and a
+/// [`BytestreamEncoder`]/[`BytestreamDecoder`].
+///
+/// This represents a private unicast stream that directly encodes and
+/// sends messages.  This instance performs no batching at all, and
+/// will ignore all batching-related API calls.  It will immediately
+/// encode and send messages when its implementation of
+/// [`add`](PushStreamAdd::add) is called.
+///
+/// This stream is typically used with underlying channels that
+/// support a stream-type interface.
+///
+/// # Type Parameters
+///
+/// - `OutMsg`: Type of outbound messages.
+///
+/// - `InMsg`: Type of inbound messages.
+///
+/// - `IO`: Type of the low-level [`Read`]/[`Write`] instance.
+///
+/// - `Enc`: Type of [`Encoder`]s used for outbound messages.
+///
+/// - `Dec`: Type of [`Decoder`]s used for inbound messages.
 pub struct BytestreamCodecStream<OutMsg, InMsg, IO, Enc, Dec> {
     outmsg: PhantomData<OutMsg>,
     inmsg: PhantomData<InMsg>,
@@ -97,6 +135,10 @@ pub struct BytestreamCodecStream<OutMsg, InMsg, IO, Enc, Dec> {
 }
 
 /// Errors that can occur when sending an object fragment.
+///
+/// # Type Parameters
+///
+/// - `Stream`: Type of low-level I/O errors.
 #[derive(Debug)]
 pub enum DatagramCodecFragError<Stream> {
     /// An error occurred in the framgent logic.
@@ -111,6 +153,11 @@ pub enum DatagramCodecFragError<Stream> {
     }
 }
 
+/// Placeholder type for batch IDs on [`DatagramCodecStream`] and
+/// [`BytestreamCodecStream`].
+///
+/// This contains no information, as [`DatagramCodecStream`] and
+/// [`BytestreamCodecStream`] do not actually create batches.
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, PartialOrd)]
 pub struct CodecBatchID;
 
@@ -146,6 +193,15 @@ impl<OutMsg, InMsg, IO, Enc, Dec>
 where
     IO: Write
 {
+    /// Create a `BytestreamCodecStream` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `encoder`: The [`Encoder`] to use.
+    ///
+    /// - `decoder`: The [`Decoder`] to use.
+    ///
+    /// - `io`: The low-level I/O object to use.
     #[inline]
     pub fn create(
         encoder: Enc,
@@ -161,11 +217,13 @@ where
         }
     }
 
+    /// Get a reference to the underlying I/O object.
     #[inline]
     pub fn inner(&self) -> &IO {
         &self.io
     }
 
+    /// Decompose this into the underlying I/O object.
     #[inline]
     pub fn into_inner(self) -> IO {
         self.io
@@ -177,6 +235,15 @@ impl<OutMsg, InMsg, IO, Enc, Dec>
 where
     IO: Write
 {
+    /// Create a `BytestreamCodecStream` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `encoder`: The [`Encoder`] to use.
+    ///
+    /// - `decoder`: The [`Decoder`] to use.
+    ///
+    /// - `io`: The low-level I/O object to use.
     #[inline]
     pub fn create(
         encoder: Enc,
@@ -192,11 +259,13 @@ where
         }
     }
 
+    /// Get a reference to the underlying I/O object.
     #[inline]
     pub fn inner(&self) -> &IO {
         &self.io
     }
 
+    /// Decompose this into the underlying I/O object.
     #[inline]
     pub fn into_inner(self) -> IO {
         self.io
