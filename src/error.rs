@@ -17,6 +17,9 @@
 // <https://www.gnu.org/licenses/>.
 
 //! Error-management utilities.
+//!
+//! This module contains several common error types used throughout
+//! this package.
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -30,19 +33,31 @@ use constellation_common::util::LazyInitVec;
 
 use crate::stream::CompoundBatchID;
 
+// XXX Possibly rename this and move it into common.
+
+/// Trait for errors that may contain specific information.
 pub trait ErrorReportInfo<Info> {
+    /// Extract the information from the error, if it exists.
     fn report_info(&self) -> Option<Info>;
 }
 
 /// Common type of errors that can occur with compound batches.
 ///
 /// This is a convenience type for any implementations that use
-/// [CompoundBatches](crate::stream::CompoundBatches).
+/// [`CompoundBatches`](crate::stream::CompoundBatches).
+///
+/// # Type Parameters
+///
+/// - `Idx`: Type of indexes.
+///
+/// - `Success`: Type of information recorded for successes.
+///
+/// - `Err`: Type of information recorded for errors.
 #[derive(Debug)]
 pub enum CompoundBatchError<Idx, Success, Err> {
     /// An error occurred in the underlying batch function.
     Batch {
-        /// An [ErrorSet] representing the errors that occurred in the
+        /// An [`ErrorSet`] representing the errors that occurred in the
         /// batch function.
         errs: ErrorSet<Idx, Success, Err>
     },
@@ -57,11 +72,19 @@ pub enum CompoundBatchError<Idx, Success, Err> {
 /// performing a batch operation.
 ///
 /// This type represents a common idiom used in the implementation of
-/// [PushStream](crate::stream::PushStream) combinators, particularly
+/// [`PushStream`](crate::stream::PushStream) combinators, particularly
 /// those that involve multiple sub-streams.  It is often necessary to
 /// collect results from an operation that contain a mix of successes
 /// and errors, so that the call can be either retried or aborted.
 /// This type implements this functionality.
+///
+/// # Type Parameters
+///
+/// - `Idx`: Type of indexes.
+///
+/// - `Success`: Type of information recorded for successes.
+///
+/// - `Err`: Type of information recorded for errors.
 #[derive(Debug)]
 pub struct ErrorSet<Idx, Success, Err> {
     /// Successes that occurred for each index.
@@ -70,10 +93,10 @@ pub struct ErrorSet<Idx, Success, Err> {
     errors: Vec<(Idx, Err)>
 }
 
-/// Wrapper around a [RecoverableError] that contains a set of parties.
+/// Wrapper around a [`RecoverableError`] that contains a set of parties.
 ///
 /// This is useful for some implementations of
-/// [PushStreamSharedSingle](crate::stream::PushStreamSharedSingle).
+/// [`PushStreamSharedSingle`](crate::stream::PushStreamSharedSingle).
 #[derive(Debug)]
 pub struct PartiesBatchError<Parties, Err> {
     /// Set of parties.
@@ -177,6 +200,13 @@ impl<T> ErrorReportInfo<T> for Infallible {
 }
 
 impl<Parties, Err> PartiesBatchError<Parties, Err> {
+    /// Create a `PartiesBatchError` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `parties`: The parties.
+    ///
+    /// - `error`: The error.
     #[inline]
     pub fn new(
         parties: Parties,
@@ -188,11 +218,23 @@ impl<Parties, Err> PartiesBatchError<Parties, Err> {
         }
     }
 
+    /// Decompose this `PartiesBatchError` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The parties.
+    ///
+    /// 1. The error.
     #[inline]
     pub fn take(self) -> (Parties, Err) {
         (self.parties, self.err)
     }
 
+    // XXX see if this is really necessary.
+
+    /// Decompose this `PartiesBatchError` into just the parties.
     #[inline]
     pub fn take_parties(self) -> Parties {
         self.parties
@@ -322,6 +364,13 @@ where
 }
 
 impl<Idx, Success, Err> ErrorSet<Idx, Success, Err> {
+    /// Create an `ErrorSet` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `successes`: The indexes and information for successes.
+    ///
+    /// - `errors`: The indexes and information for errors.
     #[inline]
     pub fn create(
         successes: Vec<(Idx, Success)>,
@@ -333,16 +382,27 @@ impl<Idx, Success, Err> ErrorSet<Idx, Success, Err> {
         }
     }
 
+    /// Get the indexes and information for successes.
     #[inline]
     pub fn successes(&self) -> &[(Idx, Success)] {
         &self.successes
     }
 
+    /// Get the indexes and information for errors.
     #[inline]
     pub fn errors(&self) -> &[(Idx, Err)] {
         &self.errors
     }
 
+    /// Decompose an `ErrorSet` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The indexes and information for successes.
+    ///
+    /// 1. The indexes and information for errors.
     #[inline]
     pub fn take(self) -> (Vec<(Idx, Success)>, Vec<(Idx, Err)>) {
         (self.successes, self.errors)

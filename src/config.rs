@@ -16,7 +16,15 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+// XXX Size hints in this module need to be cleaned up.
+
 //! Configuration objects.
+//!
+//! This module provides configuration objects for creating various
+//! types in this crate.  Configuration objects support
+//! serialization/deserialization through [`serde`], and are designed
+//! specifically to be serialized and deserialized as YAML using
+//! `yaml_serde`.
 use std::time::Duration;
 
 use constellation_common::retry::Retry;
@@ -44,7 +52,7 @@ use serde::Serialize;
 ///
 /// # YAML Format
 ///
-/// The YAML format has four fields, each of which has a default value:
+/// The YAML format has four fields, all of which are optional:
 ///
 /// - `min-batch-slots`: The minimum number of batch slots that can ever exist.
 ///   The default is `16`.
@@ -99,10 +107,10 @@ pub struct BatchSlotsConfig {
 ///
 /// The YAML format has two fields, both of which are mandatory:
 ///
-/// * `channel-names`: An array of names of channels (defined elsewhere) that
+/// - `channel-names`: An array of names of channels (defined elsewhere) that
 ///   can be used to reach the endpoints.
 ///
-/// * `endpoints`: An array of endpoints (often IP addresses and/or Unix socket
+/// - `endpoints`: An array of endpoints (often IP addresses and/or Unix socket
 ///   addresses).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -116,6 +124,18 @@ where
     endpoints: Vec<ConnectionEndpoint<Verify, Endpoint>>
 }
 
+/// Description of a connection endpoint.
+///
+///
+/// # YAML Format
+///
+/// The YAML format has two fields, one of which is mandatory:
+///
+/// - `addr`: The endpoint address.
+///
+/// - `verify`: The verification address (optional).  This is
+///   typically used to set a specific verification address for TLS
+///   sessions.  This field is optional.
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "connection-endpoint")]
@@ -190,6 +210,56 @@ pub struct ConnectionEndpoint<Verify, Endpoint> {
 ///
 ///  - The badness value is then subtracted from the goodness value to get the
 ///    score.
+///
+/// # YAML Format
+///
+/// The YAML format has the following fields, all of which are optional:
+///
+/// - `success-score`: The factor by which a score is increased on
+///   success.
+///
+/// - `success-max-count`: The maximum number of successes to remember.
+///
+/// - `success-decay-rate`: The rate at which success scores decay
+///   with time.
+///
+/// - `success-max-decay-time`: The length of time for which a success
+///   is remembered.
+///
+/// - `success-cancel-fails`: The number of failures that can be
+///   canceled by a subsequent success.
+///
+/// - `fail-score`: The factor by which a score is multiplied on
+///   failure.
+///
+/// - `fail-max-count`: The maximum number of failures to remember.
+///
+/// - `fail-decay-rate`: The rate at which failure scores decay
+///   with time.
+///
+/// - `fail-max-decay-time`: The length of time for which a failure
+///   is remembered.
+///
+/// - `retry-steepness`: Steepness of the logistic curve used for the
+///   retry factor.
+///
+/// - `retry-max-count`: Maximum number of retries.
+///
+/// ## Examples
+///
+/// ```yaml
+/// success-score: 0.2
+/// success-max-count: 5
+/// success-decay-rate: 1.0
+/// success-max-decay-time: 5.0
+/// success-cancel-fails: 4
+/// fail-score: 1.2
+/// fail-max-count: 5
+/// fail-decay-rate: 1.0
+/// fail-max-decay-time: 5.0
+/// retry-steepness: 4.0
+/// retry-max-count: 6.0
+/// ```
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
@@ -219,6 +289,26 @@ pub struct FarSchedulerConfig {
     retry_max_count: usize
 }
 
+/// Parameters for a
+/// [`LargeObjProto`](crate::large_obj::LargeObjProto) instance.
+///
+/// # YAML Format
+///
+/// The YAML format has the following fields, all of which are optional:
+///
+/// - `retry`: A [`Retry`] configuration for resending fragments.
+///
+/// - `encoder`: Configuration for the encoder for payload messages.
+///
+/// - `decoder`: Configuration for the decoder for payload messages.
+///
+/// - `tombstone-duration`: The length of time to remember a message
+///   hash, and report any new message with that hash as already
+///   received.
+///
+/// - `inbound-size-hint`: The expected number of inbound transfers.
+///
+/// - `outbound-size-hint`: The expected number of outbound transfers.
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "far-scheduler-config")]
@@ -257,22 +347,24 @@ where
 ///
 /// # YAML Format
 ///
-/// The YAML format has five fields, only one of which is mandatory:
+/// The YAML format has six fields, only one of which is mandatory:
 ///
-/// * `connections`: An array of [ConnectionConfig] structures, each specifying
+/// - `connections`: An array of [ConnectionConfig] structures, each specifying
 ///   a combination of endpoints and channels to reach those endpoints. Multiple
 ///   such structures are allowed, in order to permit users to group endpoints
 ///   and channels appropriately.
 ///
-/// * `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
+/// - `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
 ///   scheduler.
 ///
-/// * `resolve`: A structure specifying the parameters for the name resolved.
+/// - `epochs`: Configuration for the ID generator for epoch IDs.
+///
+/// - `resolve`: A structure specifying the parameters for the name resolved.
 ///   The exact format depends on the `Resolver` type parameter.
 ///
-/// * `retry`: Retry configuration used for generating backoff delays.
+/// - `retry`: Retry configuration used for generating backoff delays.
 ///
-/// * `size-hint`: Size hint used to create the set of streams.
+/// - `size-hint`: Size hint used to create the set of streams.
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
@@ -299,6 +391,18 @@ where
     size_hint: Option<usize>
 }
 
+/// Configuration of a single party in a
+/// [`StreamMulticaster`](crate::multicast::StreamMulticaster).
+///
+/// This maps a configuration for a single party's stream to a party name.
+///
+/// # YAML Format
+///
+/// The YAML format has two fields:
+///
+/// - `party`: The party's name.
+///
+/// - `stream`: The party's stream configuration.
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "party-config")]
@@ -308,6 +412,24 @@ pub struct MulticastPartyConfig<PartyID, Stream> {
     stream: Stream
 }
 
+/// Configuration for a [`poll`](crate::threads::poll) thread.
+///
+/// # YAML Format
+///
+/// The YAML format has three fields, one of which is mandatory:
+///
+/// - `msg-authn`: Configuration for the message authenticator.
+///
+/// - `num-events`: Size hint for the number of delayed push events
+///   likely to be live at any point.  This field is optional.
+///
+/// - `num-sessions`: Size hint for the number of channels likely to
+///   be live at any point.  This field is optional.
+///
+/// Additionally, configurations for the
+/// [`Channels`](crate::channels::Channels) instance, the
+/// [`PushMode`](crate::threads::PushMode), and the stream used to
+/// send messages are directly incorporated (flattened).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "poll-config")]
@@ -324,10 +446,31 @@ pub struct PollThreadConfig<Channels, Mode, Stream, MsgAuthN> {
         default = "PollThreadConfig::<Channels, Mode, Stream, MsgAuthN>::default_nevents"
     )]
     num_events: usize,
+    // XXX this should be something we can obtain from the stream
+    // configuration.
     #[serde(default)]
     num_sessions: Option<usize>
 }
 
+/// Configuration for a [`dispatch`](crate::threads::dispatch) thread.
+///
+/// # YAML Format
+///
+/// The YAML format has three fields, all of which are optional:
+///
+/// - `num-events`: Size hint for the number of delayed push events
+///   likely to be live at any point.  This field is optional.
+///
+/// - `num-sessions`: Size hint for the number of channels likely to
+///   be live at any point.  This field is optional.
+///
+/// - `num-dispatched`: Size hint for the number of counterparties
+///   likely to be live at any point.  This field is optional.
+///
+/// Additionally, configurations for the
+/// [`Channels`](crate::channels::Channels) instance and the
+/// [`PushMode`](crate::threads::PushMode) are directly incorporated
+/// (flattened).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "dispatch-config")]
@@ -340,15 +483,27 @@ pub struct DispatchThreadConfig<Channels, Mode> {
     #[serde(
         default = "DispatchThreadConfig::<Channels, Mode>::default_nevents"
     )]
+    // XXX Some of these we should be able to figure out from the
+    // configuration.
     num_events: usize,
     #[serde(default)]
     num_sessions: Option<usize>,
     #[serde(default)]
     num_dispatched: Option<usize>,
+    // XXX this field probably needs to be gotten rid of.
     #[serde(default)]
     num_tokens: Option<usize>
 }
 
+/// Configuration for a
+/// [`PrivateDatagramPushMode`](crate::threads::private::PrivateDatagramPushMode).
+///
+/// # YAML Format
+///
+/// The YAML format has a single optional field:
+///
+/// - `retries-hint`: The number of retries expected to be live at any
+///   point.
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -360,19 +515,18 @@ pub struct PrivateDatagramModeConfig {
     retries_hint: Option<usize>
 }
 
-#[derive(
-    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
-)]
-#[serde(rename_all = "kebab-case")]
-#[serde(rename = "party-config")]
-pub struct SharedLargeObjModeConfig {
-    /// Size hint for the pending retries.
-    #[serde(default)]
-    msg_retries_hint: Option<usize>,
-    #[serde(default)]
-    frag_retries_hint: Option<usize>
-}
-
+/// Configuration for a
+/// [`PrivateLargeObjPushMode`](crate::threads::private::PrivateLargeObjPushMode).
+///
+/// # YAML Format
+///
+/// The YAML format has two fields, both of which are optional:
+///
+/// - `msg-retries-hint`: The maximum number of message retries
+///   expected to be live at any point.
+///
+/// - `frag-retries-hint`: The maximum number of fragment retries
+///   expected to be live at any point.
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -386,6 +540,40 @@ pub struct PrivateLargeObjModeConfig {
     frag_retries_hint: Option<usize>
 }
 
+/// Configuration for a
+/// [`SharedLargeObjPushMode`](crate::threads::shared::SharedLargeObjPushMode).
+///
+/// # YAML Format
+///
+/// The YAML format has two fields, both of which are optional:
+///
+/// - `msg-retries-hint`: The maximum number of message retries
+///   expected to be live at any point.
+///
+/// - `frag-retries-hint`: The maximum number of fragment retries
+///   expected to be live at any point.
+#[derive(
+    Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
+)]
+#[serde(rename_all = "kebab-case")]
+#[serde(rename = "party-config")]
+pub struct SharedLargeObjModeConfig {
+    /// Size hint for the pending retries.
+    #[serde(default)]
+    msg_retries_hint: Option<usize>,
+    #[serde(default)]
+    frag_retries_hint: Option<usize>
+}
+
+/// Configuration for a
+/// [`SharedDatagramPushMode`](crate::threads::shared::SharedDatagramPushMode).
+///
+/// # YAML Format
+///
+/// The YAML format has a single optional field:
+///
+/// - `retries-hint`: The number of retries expected to be live at any
+///   point.
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -397,6 +585,18 @@ pub struct SharedDatagramModeConfig {
     retries_hint: Option<usize>
 }
 
+/// Configuration object for a
+/// [`StreamMulticaster`](crate::multicast::StreamMulticaster).
+///
+/// # YAML Format
+///
+/// The YAML format has a single field:
+///
+/// - `parties`: A sequence of [`MulticastPartyConfig`]s describing
+///   each party.
+///
+/// Additionally, a [`BatchSlotsConfig`] is directly incorporated
+/// (flattened).
 #[derive(Clone, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[serde(rename = "stream-multicaster")]
@@ -407,6 +607,21 @@ pub struct StreamMulticasterConfig<PartyID, Stream> {
     parties: Vec<MulticastPartyConfig<PartyID, Stream>>
 }
 
+/// Configuration object for a
+/// [`DispatchSelector`](crate::select::dispatch::DispatchSelector).
+///
+/// # YAML Format
+///
+/// The YAML format has four fields, only one of which is mandatory:
+///
+/// - `scheduler`: A [FarSchedulerConfig] structure to use for configuring the
+///   scheduler.
+///
+/// - `epochs`: Configuration for the ID generator for epoch IDs.
+///
+/// - `retry`: Retry configuration used for generating backoff delays.
+///
+/// - `size-hint`: Size hint used to create the set of streams.
 #[derive(
     Clone, Debug, Default, Deserialize, PartialEq, PartialOrd, Serialize,
 )]
@@ -429,6 +644,19 @@ where
 }
 
 impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
+    /// Create a `DispatchThreadConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `channels`: Configuration for the source of channels.
+    ///
+    /// - `mode`: Configuration for the push mode used to send messages.
+    ///
+    /// - `nevents`: Size hint for the number of delayed push events
+    ///   likely to be live at any point.
+    ///
+    /// - `nsessions`: Size hint for the number of channels likely to
+    ///   be live at any point.
     #[inline]
     pub fn new(
         channels: Channels,
@@ -448,26 +676,31 @@ impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
         }
     }
 
+    /// Get a reference to the configuration for the channel source.
     #[inline]
     pub fn channels(&self) -> &Channels {
         &self.channels
     }
 
+    /// Get a reference to the configuration for the push mode.
     #[inline]
     pub fn mode(&self) -> &Mode {
         &self.mode
     }
 
+    /// Get the size hint for the number of delayed push events.
     #[inline]
     pub fn nevents(&self) -> usize {
         self.num_events
     }
 
+    /// Get the size hint for the number of live sessions.
     #[inline]
     pub fn nsession(&self) -> Option<usize> {
         self.num_sessions
     }
 
+    /// Get the size hint for the number of live parties.
     #[inline]
     pub fn ndispatched(&self) -> Option<usize> {
         self.num_dispatched
@@ -478,6 +711,24 @@ impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
         self.num_tokens
     }
 
+    /// Decompose this `DispatchThreadConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. Configuration for the source of channels.
+    ///
+    /// 1. Configuration for the push mode used to send messages.
+    ///
+    /// 1. Size hint for the number of delayed push events
+    ///    likely to be live at any point.
+    ///
+    /// 1. Size hint for the number of channels likely to
+    ///    be live at any point.
+    ///
+    /// 1. Size hint for the number of counterparties
+    ///    likely to be live at any point.
     #[inline]
     pub fn take(
         self
@@ -507,6 +758,23 @@ impl<Channels, Mode> DispatchThreadConfig<Channels, Mode> {
 impl<Channels, Mode, Stream, MsgAuthN>
     PollThreadConfig<Channels, Mode, Stream, MsgAuthN>
 {
+    /// Create a `PollThreadConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `channels`: Configuration for the source of channels.
+    ///
+    /// - `mode`: Configuration for the push mode used to send messages.
+    ///
+    /// - `stream`: Configuration for the stream used to send messages.
+    ///
+    /// - `msg_auth`: Configuration for message authentication.
+    ///
+    /// - `nevents`: Size hint for the number of delayed push events
+    ///   likely to be live at any point.
+    ///
+    /// - `nsessions`: Size hint for the number of channels likely to
+    ///   be live at any point.
     #[inline]
     pub fn new(
         channels: Channels,
@@ -526,36 +794,62 @@ impl<Channels, Mode, Stream, MsgAuthN>
         }
     }
 
+    /// Get a reference to the configuration for the channel source.
     #[inline]
     pub fn channels(&self) -> &Channels {
         &self.channels
     }
 
+    /// Get a reference to the configuration for the push mode.
     #[inline]
     pub fn mode(&self) -> &Mode {
         &self.mode
     }
 
+    /// Get a reference to the configuration for the stream used to
+    /// send messages.
     #[inline]
     pub fn stream(&self) -> &Stream {
         &self.stream
     }
 
+    /// Get a reference to the configuration for message authentication.
     #[inline]
     pub fn msg_authn(&self) -> &MsgAuthN {
         &self.msg_authn
     }
 
+    /// Get the size hint for the number of delayed push events.
     #[inline]
     pub fn nevents(&self) -> usize {
         self.num_events
     }
 
+    /// Get the size hint for the number of live sessions.
     #[inline]
     pub fn nsession(&self) -> Option<usize> {
         self.num_sessions
     }
 
+    /// Decompose this `PollThreadConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. Configuration for the source of channels.
+    ///
+    /// 1. Configuration for the push mode used to send messages.
+    ///
+    /// 1. Configuration for the stream used to send messages.
+    ///
+    /// 1. Configuration for message authentication.
+    ///
+    /// 1. Size hint for the number of delayed push events
+    ///    likely to be live at any point.
+    ///
+    /// 1. Size hint for the number of channels likely to
+    ///    be live at any point.
     #[inline]
     pub fn take(
         self
@@ -576,6 +870,12 @@ impl<Channels, Mode, Stream, MsgAuthN>
 }
 
 impl PrivateDatagramModeConfig {
+    /// Create a `PrivateDatagramModeConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `retries_hint`: The expected maximum number of retried sends
+    ///   live at any point.
     #[inline]
     pub fn new(retries_hint: Option<usize>) -> Self {
         PrivateDatagramModeConfig {
@@ -583,11 +883,18 @@ impl PrivateDatagramModeConfig {
         }
     }
 
+    /// Get the expected maximum number of retried sends live at any point.
     #[inline]
     pub fn retries_hint(&self) -> Option<usize> {
         self.retries_hint
     }
 
+    /// Decompose this `PrivateDatagramModeConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns the expected maximum number of retried sends live at
+    /// any point.
     #[inline]
     pub fn take(self) -> Option<usize> {
         self.retries_hint
@@ -595,6 +902,15 @@ impl PrivateDatagramModeConfig {
 }
 
 impl PrivateLargeObjModeConfig {
+    /// Create a `PrivateLargeObjModeConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `msg_retries_hint`: The maximum number of message retries
+    ///   expected to be live at any point.
+    ///
+    /// - `frag_retries_hint`: The maximum number of fragment retries
+    ///   expected to be live at any point.
     #[inline]
     pub fn new(
         msg_retries_hint: Option<usize>,
@@ -606,16 +922,32 @@ impl PrivateLargeObjModeConfig {
         }
     }
 
+    /// Get the maximum number of message retries expected to be live
+    /// at any point.
     #[inline]
     pub fn frag_retries_hint(&self) -> Option<usize> {
         self.frag_retries_hint
     }
 
+    /// Get the maximum number of fragment retries expected to be live
+    /// at any point.
     #[inline]
     pub fn msg_retries_hint(&self) -> Option<usize> {
         self.msg_retries_hint
     }
 
+    /// Decompose this `PrivateLargeObjModeConfig` into its
+    /// components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The maximum number of message retries expected to be live
+    ///    at any point.
+    ///
+    /// 1. The maximum number of fragment retries expected to be live
+    ///    at any point.
     #[inline]
     pub fn take(self) -> (Option<usize>, Option<usize>) {
         (self.msg_retries_hint, self.frag_retries_hint)
@@ -623,6 +955,12 @@ impl PrivateLargeObjModeConfig {
 }
 
 impl SharedDatagramModeConfig {
+    /// Create a `SharedDatagramModeConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `retries_hint`: The expected maximum number of retried sends
+    ///   live at any point.
     #[inline]
     pub fn new(retries_hint: Option<usize>) -> Self {
         SharedDatagramModeConfig {
@@ -630,11 +968,18 @@ impl SharedDatagramModeConfig {
         }
     }
 
+    /// Get the expected maximum number of retried sends live at any point.
     #[inline]
     pub fn retries_hint(&self) -> Option<usize> {
         self.retries_hint
     }
 
+    /// Decompose this `PrivateDatagramModeConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns the expected maximum number of retried sends live at
+    /// any point.
     #[inline]
     pub fn take(self) -> Option<usize> {
         self.retries_hint
@@ -642,6 +987,15 @@ impl SharedDatagramModeConfig {
 }
 
 impl SharedLargeObjModeConfig {
+    /// Create a `SharedLargeObjModeConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `msg_retries_hint`: The maximum number of message retries
+    ///   expected to be live at any point.
+    ///
+    /// - `frag_retries_hint`: The maximum number of fragment retries
+    ///   expected to be live at any point.
     #[inline]
     pub fn new(
         msg_retries_hint: Option<usize>,
@@ -653,16 +1007,32 @@ impl SharedLargeObjModeConfig {
         }
     }
 
+    /// Get the maximum number of message retries expected to be live
+    /// at any point.
     #[inline]
     pub fn frag_retries_hint(&self) -> Option<usize> {
         self.frag_retries_hint
     }
 
+    /// Get the maximum number of fragment retries expected to be live
+    /// at any point.
     #[inline]
     pub fn msg_retries_hint(&self) -> Option<usize> {
         self.msg_retries_hint
     }
 
+    /// Decompose this `SharedLargeObjModeConfig` into its
+    /// components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The maximum number of message retries expected to be live
+    ///    at any point.
+    ///
+    /// 1. The maximum number of fragment retries expected to be live
+    ///    at any point.
     #[inline]
     pub fn take(self) -> (Option<usize>, Option<usize>) {
         (self.msg_retries_hint, self.frag_retries_hint)
@@ -887,8 +1257,11 @@ where
 {
     /// Create a new `ConnectionConfig` from its components.
     ///
-    /// The arguments of this function correspond to similarly-named
-    /// fields in the YAML format.  See documentation for details.
+    /// # Parameters
+    ///
+    /// - `channel_names`: A set of channel IDs to use.
+    ///
+    /// - `endpoints`: A set of [`ConnectionEndpoint`]s to connect to.
     #[inline]
     pub fn new(
         channel_names: Vec<Channel>,
@@ -923,6 +1296,13 @@ where
 }
 
 impl<Verify, Endpoint> ConnectionEndpoint<Verify, Endpoint> {
+    /// Create a `ConnectionEndpoint` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `addr`: The endpoint address to which to connect.
+    ///
+    /// - `verify`: The verification information.
     #[inline]
     pub fn new(
         addr: Endpoint,
@@ -934,16 +1314,27 @@ impl<Verify, Endpoint> ConnectionEndpoint<Verify, Endpoint> {
         }
     }
 
+    /// Get a reference to the endpoint to which to connect.
     #[inline]
     pub fn addr(&self) -> &Endpoint {
         &self.addr
     }
 
+    /// Get a reference to the verification information.
     #[inline]
     pub fn verify(&self) -> &Verify {
         &self.verify
     }
 
+    /// Decompose this `ConnectionEndpoint` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The endpoint address to which to connect.
+    ///
+    /// 1. The verification information.
     #[inline]
     pub fn take(self) -> (Endpoint, Verify) {
         (self.addr, self.verify)
@@ -978,6 +1369,28 @@ where
     Encoder: Default,
     IDs: Default
 {
+    /// Create a `LargeObjProtoConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `retry`: [`Retry`] configuration for retrying sends.
+    ///
+    /// - `encoder`: [`Encoder`](constellation_common::codec::Encoder)
+    ///   configuration for encoding payload messages.
+    ///
+    /// - `decoder`: [`Decoder`](constellation_common::codec::Decoder)
+    ///   configuration for decoding payload messages.
+    ///
+    /// - `ids`: ID generator configuration.
+    ///
+    /// - `tombstone_duration`: How long to remember hashes for
+    ///   completed transfers.
+    ///
+    /// - `inbound_size_hint`: Expected maximum number of simultaneous
+    ///    inbound transfers.
+    ///
+    /// - `outbound_size_hint`: Expected maximum number of simultaneous
+    ///    outbound transfers.
     #[inline]
     pub fn new(
         retry: Retry,
@@ -999,41 +1412,74 @@ where
         }
     }
 
+    /// Get the expected maximum number of simultaneous inbound
+    /// transfers.
     #[inline]
     pub fn inbound_size_hint(&self) -> &Option<usize> {
         &self.inbound_size_hint
     }
 
+    /// Get the expected maximum number of simultaneous outbound
+    /// transfers.
     #[inline]
     pub fn outbound_size_hint(&self) -> &Option<usize> {
         &self.outbound_size_hint
     }
 
+    /// Get the time for which to remember hashes for completed
+    ///   transfers
     #[inline]
     pub fn tombstone_duration(&self) -> Duration {
         self.tombstone_duration
     }
 
+    /// Get the [`Retry`] configuration for retrying sends.
     #[inline]
     pub fn retry(&self) -> &Retry {
         &self.retry
     }
 
+    /// Get the [`Decoder`](constellation_common::codec::Decoder)
+    /// configuration for decoding payload messages.
     #[inline]
     pub fn decoder(&self) -> &Decoder {
         &self.decoder
     }
 
+    /// Get the [`Encoder`](constellation_common::codec::Encoder)
+    /// configuration for encoding payload messages.
     #[inline]
     pub fn encoder(&self) -> &Encoder {
         &self.encoder
     }
 
+    /// Get the ID generator configuration.
     #[inline]
     pub fn ids(&self) -> &IDs {
         &self.ids
     }
 
+    /// Decompose a `LargeObjProtoConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. [`Retry`] configuration for retrying sends.
+    ///
+    /// 1. [`Encoder`](constellation_common::codec::Encoder)
+    ///    configuration for encoding payload messages.
+    ///
+    /// 1. [`Decoder`](constellation_common::codec::Decoder)
+    /// configuration for decoding payload messages.
+    ///
+    /// 1. ID generator configuration.
+    ///
+    /// 1. How long to remember hashes for completed transfers.
+    ///
+    /// 1. Expected maximum number of simultaneous inbound transfers.
+    ///
+    /// 1. Expected maximum number of simultaneous outbound transfers.
     #[inline]
     pub fn take(
         self
@@ -1073,6 +1519,22 @@ where
     Verify: Default,
     Epochs: Default
 {
+    /// Create a `PartyConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `scheduler`: The [`FarSchedulerConfig`] for the channel scheduler.
+    ///
+    /// - `resolve`: The resolver configuration.
+    ///
+    /// - `epochs`: The ID generator configuration for epoch IDs.
+    ///
+    /// - `retry`: The [`Retry`] configuration for name resolution.
+    ///
+    /// - `connections`: The [`ConnectionConfig`]s describing how to
+    ///   connect to the counterparty.
+    ///
+    /// - `size_hint`: The expected maximum number of channel options.
     #[inline]
     pub fn new(
         scheduler: FarSchedulerConfig,
@@ -1130,9 +1592,24 @@ where
         self.size_hint
     }
 
-    /// Deconstruct this into the scheduler configuration, the
-    /// resolver configuration, the size hint, and the retry
-    /// configuration, the set of possible connections.
+    /// Decompose this `PartyConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The [`FarSchedulerConfig`] for the channel scheduler.
+    ///
+    /// 1. The resolver configuration.
+    ///
+    /// 1. The ID generator configuration for epoch IDs.
+    ///
+    /// 1. The [`Retry`] configuration for name resolution.
+    ///
+    /// 1. The expected maximum number of channel options.
+    ///
+    /// 1. The [`ConnectionConfig`]s describing how to connect to the
+    ///    counterparty.
     #[inline]
     pub fn take(
         self
@@ -1186,6 +1663,13 @@ impl<PartyID, Stream> StreamMulticasterConfig<PartyID, Stream> {
 }
 
 impl<PartyID, Stream> MulticastPartyConfig<PartyID, Stream> {
+    /// Create a `MulticastPartyConfig` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `party`: The party name.
+    ///
+    /// - `stream`: The stream configuration for the party.
     #[inline]
     pub fn new(
         party: PartyID,
@@ -1197,16 +1681,27 @@ impl<PartyID, Stream> MulticastPartyConfig<PartyID, Stream> {
         }
     }
 
+    /// Get a reference to the party name.
     #[inline]
     pub fn party(&self) -> &PartyID {
         &self.party
     }
 
+    /// Get a reference to the stream configuration for the party.
     #[inline]
     pub fn stream(&self) -> &Stream {
         &self.stream
     }
 
+    /// Decompose this `MulticastPartyConfig` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a tuple consisting of the following:
+    ///
+    /// 1. The party name.
+    ///
+    /// 1. The stream configuration for the party.
     #[inline]
     pub fn take(self) -> (PartyID, Stream) {
         (self.party, self.stream)

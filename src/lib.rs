@@ -47,8 +47,14 @@
 //! ## Push API
 //!
 //! The "push" API handles batching as a first-class concept, with
-//! sending of single messages being a derived form.  It also provides
-//! a number of useful combinators for building push streams:
+//! sending of single messages being a derived form.  The
+//! [`PushStream`](crate::stream::PushStream) trait is the top-level
+//! trait for this API, which handles completing batches.  Key
+//! subtraits are [`PushStreamAdd`](crate::stream::PushStreamAdd),
+//! which handles adding messages to a batch, and
+//! [`PushStreamPrivate`](crate::stream::PushStreamPrivate)/[`PushStreamShared`](crate::stream::PushStreamShared),
+//! which handle creating batches.  It also provides a number of
+//! useful combinators for building push streams:
 //!
 //! - [`StreamSelector`](crate::select::StreamSelector): Selects from among
 //!   several options for communicating with a given counterparty, and maintains

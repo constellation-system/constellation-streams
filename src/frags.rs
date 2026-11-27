@@ -16,6 +16,13 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+//! Data fragment management for
+//! [`LargeObjProto`](crate::large_obj::LargeObjProto).
+//!
+//! This module provides traits and base implementations for managing
+//! collections of data fragments as part of the large object transfer
+//! protocol.
+
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Error;
@@ -32,21 +39,36 @@ use constellation_common::retry::next_retry_definite;
 use crate::error::ErrorReportInfo;
 use crate::generated::large_obj::LargeObjFragReq;
 
+/// Trait for a collection of data fragments.
 pub trait Frags {
+    /// Type of ancillary information carried with this instance.
     type Param: Clone;
+    /// Type of errors that can occur receiving a request.
     type RecvReqError: Debug + Display + ScopedError;
 
+    /// Get the ancillary information for this instance.
     fn param(retry: Retry) -> Self::Param;
 
+    /// Create an instance from the ancillary information and the full
+    /// data buffer.
+    ///
+    /// # Parameters
+    ///
+    /// - `param`: The ancillary data.
+    ///
+    /// - `data`: The full data buffer.
     fn from_data(
         param: Self::Param,
         data: Vec<u8>
     ) -> Self;
 
+    /// Indicate whether there are any remaining fragments.
     fn is_empty(&self) -> bool;
 
+    /// Get the total number of bytes in the
     fn nbytes(&self) -> usize;
 
+    /// Update the internal state with a request message.
     fn recv_req(
         &mut self,
         req: &LargeObjFragReq
@@ -67,6 +89,13 @@ struct InnerFrags {
     frags: Vec<Frag>
 }
 
+/// A [`Frags`] instance that handles inbound data transfers.
+///
+/// This is a buffer for receiving a large data object in the form of
+/// a number of fragments, and generating fragment requests and
+/// acknowledgements.  Data fragments can be recieved with
+/// [`recv`](InboundFrags::recv).  Requests and acknowledgements can
+/// be generate with [`reqs_acks`](InboundFrags::reqs_acks).
 pub struct InboundFrags {
     frags: InnerFrags,
     when: Option<Instant>,
@@ -74,6 +103,19 @@ pub struct InboundFrags {
     data: Vec<u8>
 }
 
+/// A [`Frags`] instance that handles outbound data transfers.
+///
+/// This is a record-keeper for data fragments of a single large
+/// object that need to be sent.  Fragments to send can be obtained
+/// from [`offer_frag`](OutboundFrags::offer_frag) or
+/// [`data_frags`](OutboundFrags::data_frags).  The state of fragments
+/// that need to be sent can be updated with
+/// [`recv_ack`](OutboundFrags::recv_ack), which acknowledges receipt
+/// of a fragment, and [`recv_need`](OutboundFrags::recv_need), which
+/// indicates need of a fragment.
+/// [`recv_ack`](OutboundFrags::recv_ack) and
+/// [`recv_need`](OutboundFrags::recv_need) can be recieved any number
+/// of times for a given fragment, and can override each other.
 pub struct OutboundFrags {
     frags: InnerFrags,
     curr: usize,
@@ -94,22 +136,30 @@ struct FragsBytesIter<'a> {
     idx: usize
 }
 
+/// Errors that can occur recieving data for an [`InboundFrags`].
 #[derive(Debug)]
 pub enum InboundRecvError {
     OutOfBounds
 }
 
+/// Errors that can occur recieving requests for an [`OutboundFrags`].
 #[derive(Debug)]
 pub enum OutboundRecvError {
     OutOfBounds
 }
 
+/// Errors that can occur generating outgoing data for an [`OutboundFrags`].
 #[derive(Debug)]
 pub enum OutboundDataError {
     Empty
 }
 
 impl InboundFrags {
+    /// Create an `InboundFrags`.
+    ///
+    /// # Parameters
+    ///
+    /// - `len`: The total size of the data object to be recieved.
     #[inline]
     pub fn new(len: usize) -> Self {
         InboundFrags {
@@ -120,6 +170,14 @@ impl InboundFrags {
         }
     }
 
+    /// Create an `InboundFrags` with a size hint for the total number
+    /// of fragments expected.
+    ///
+    /// # Parameters
+    ///
+    /// - `len`: The total size of the data object to be recieved.
+    ///
+    /// - `hint`: The expected total number of fragments.
     #[inline]
     pub fn with_capacity(
         len: usize,
@@ -133,6 +191,7 @@ impl InboundFrags {
         }
     }
 
+    /// Get the size of the received object in bytes.
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.data.len()
@@ -155,12 +214,19 @@ impl InboundFrags {
         }
     }
 
+    /// Get the time of the next request message.
     #[inline]
     pub fn when(&self) -> Option<Instant> {
         self.when
     }
 
     /// Receive fragment data.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: Offset of the received data.
+    ///
+    /// - `data`: The received data.
     pub fn recv(
         &mut self,
         offset: usize,
@@ -179,8 +245,22 @@ impl InboundFrags {
     }
 
     /// Attempt to generate requests and acknowledgements for fragments.
+    ///
+    /// # Parameters
+    ///
+    /// - `buf`: The buffer into which to store acknowledgements.  The
+    ///   format of tuples is as follows:
+    ///
+    ///   1. `true` for an acknowledgement, `false` for a request.
+    ///
+    ///   1. The offset of the fragment.
+    ///
+    ///   1. The size of the fragment.
+    ///
+    /// - `retry`: The [`Retry`] configuration for acknowledgements.
     pub fn reqs_acks(
         &mut self,
+        // XXX make this not be tuples
         buf: &mut [(bool, usize, usize)],
         retry: &Retry
     ) -> RetryResult<(usize, Option<Instant>)> {
@@ -319,6 +399,13 @@ impl Frags for OutboundFrags {
 }
 
 impl OutboundFrags {
+    /// Create a new `OutboundFrags` from its components.
+    ///
+    /// # Parameters
+    ///
+    /// - `retry`: [`Retry`] configuration for sending fragments.
+    ///
+    /// - `data`: The full outgoing data object.
     #[inline]
     pub fn new(
         retry: Retry,
@@ -332,6 +419,16 @@ impl OutboundFrags {
         }
     }
 
+    /// Create a new `OutboundFrags` from its components with a size
+    /// hint for theexpected total number of fragments..
+    ///
+    /// # Parameters
+    ///
+    /// - `retry`: [`Retry`] configuration for sending fragments.
+    ///
+    /// - `data`: The full outgoing data object.
+    ///
+    /// - `hint`: Size hint for the expected total number of fragments.
     #[inline]
     pub fn with_capacity(
         retry: Retry,
@@ -347,6 +444,12 @@ impl OutboundFrags {
     }
 
     /// Get a reference to the `len` bytes of data at `offset`.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: The offset of the data.
+    ///
+    /// - `len`: The size of the data.
     #[inline]
     pub fn data(
         &self,
@@ -363,6 +466,16 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data acknowledgements.
+    ///
+    /// This will stop the data fragment from being sent again.  This
+    /// *can* be recieved after a
+    /// [`recv_need`](OutboundFrags::recv_need) for the same data.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: The offset of the data.
+    ///
+    /// - `len`: The size of the data.
     pub fn recv_ack(
         &mut self,
         offset: usize,
@@ -380,6 +493,16 @@ impl OutboundFrags {
     }
 
     /// Receive fragment data requests.
+    ///
+    /// This will cause the data to be sent again.  This *can* be
+    /// recieved after a [`recv_ack`](OutboundFrags::recv_ack) for
+    /// the same data.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: The offset of the data.
+    ///
+    /// - `len`: The size of the data.
     pub fn recv_need(
         &mut self,
         offset: usize,
@@ -396,6 +519,17 @@ impl OutboundFrags {
         }
     }
 
+    /// Generate an offer for a fragment of a given size.
+    ///
+    /// This will consult internal data structures and generate data
+    /// fragment as an offer.  Internal structures will also be
+    /// update, and subsequent calls to this function may not generate
+    /// the same offer.
+    ///
+    /// # Parameters
+    ///
+    /// - `max_bytes`: Maximum number of bytes for which to generate
+    /// an offer.
     pub fn offer_frag(
         &mut self,
         max_bytes: usize
@@ -435,9 +569,22 @@ impl OutboundFrags {
         }
     }
 
-    /// Attempt to generate data fragments to deliver.
+    /// Generate some number of data fragments to send.
+    ///
+    /// This will consult internal data structures and generate some
+    /// number of data fragments to send.  Internal structures will
+    /// also be update, and subsequent calls to this function may not
+    /// generate the same fragments.
+    ///
+    /// # Parameters
+    ///
+    /// - `buf`: Buffer of `(offset,length)` tuples to send.
+    ///
+    /// - `max_bytes`: Maximum number of bytes for which to generate
+    /// an offer.
     pub fn data_frags(
         &mut self,
+        // XXX make this not a tuple
         buf: &mut [(usize, usize)],
         max_bytes: usize
     ) -> Result<RetryResult<Option<(usize, Instant)>>, OutboundDataError> {

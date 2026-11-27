@@ -18,13 +18,13 @@
 
 //! Adaptive ranking and selection from a set of streams.
 //!
-//! This module implements [StreamSelector], a scheduling-based
+//! This module implements [`StreamSelector`], a scheduling-based
 //! mechanism for selecting from a set of stream options.  The set of
-//! options is obtained from a set of combinations of [Addrs] and
-//! [Channels] instances.  This is then ranked by a [Scheduler]
+//! options is obtained from a set of combinations of [`Addrs`] and
+//! [`Channels`] instances.  This is then ranked by a [`Scheduler`]
 //! instance, which selects from one of the options on demand.
 //!
-//! The instances for [PushStream] and its child traits use this to
+//! The instances for [`PushStream`] and its child traits use this to
 //! allow the entire set of stream options to be treated as if they
 //! were a single stream.
 
@@ -125,7 +125,7 @@ pub struct ConnChannelID<ChannelID> {
     conn_idx: ConnectionsIdx
 }
 
-/// Threaded version of [StreamSelectorConnections]
+/// Threaded version of [`StreamSelectorConnections`]
 struct ThreadedStreamSelectorConnections<
     Resolve: Addrs<Addr = Ctx::Addr>,
     Ctx: Channels<()>
@@ -140,7 +140,7 @@ struct ThreadedStreamSelectorConnections<
     params: HashMap<Resolve::Origin, Ctx::OutNegoParam>
 }
 
-/// Type of batch ID's produce by [StreamSelector].
+/// Type of batch ID's produce by [`StreamSelector`].
 #[derive(Clone, Debug)]
 pub struct StreamSelectorBatch<Epoch, BatchID> {
     /// The stream on which the batch exists.
@@ -149,13 +149,13 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
     batch_id: BatchID
 }
 
-/// Stream-like abstraction for constructing and selecting among
-/// different streams for a given party.
+/// [`PushStreamPrivate`] instance for selecting among different
+/// streams for a given party.
 ///
 /// In its most basic functioning, this type maintains a set of
-/// connection options, each of which contains an [Addrs] instance
+/// connection options, each of which contains an [`Addrs`] instance
 /// that provides possible endpoint addresses, together with a
-/// [Channels] instance that provides a set of low-level channels for
+/// [`Channels`] instance that provides a set of low-level channels for
 /// communicating with the endpoint addresses.  Multiple such pairings
 /// can be maintained to avoid spurious pairings (for example, an IP
 /// address endpoint and a Unix socket channel).
@@ -166,12 +166,12 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// to produce a total set of connection options.  This process
 /// proceeds as follows:
 ///
-///  1. Each connection option's [Addrs] instance is periodically refreshed to
+///  1. Each connection option's [`Addrs`] instance is periodically refreshed to
 ///     get a new set of endpoint addresses.  In the case of DNS names, this
 ///     will resolve the name to obtain a set of IP addresses.
 ///
 ///  2. When a connection option's set of endpoint addresses changes, the set of
-///     channels is obtained from its [Channels] instance. All possible pairings
+///     channels is obtained from its [`Channels`] instance. All possible pairings
 ///     of channels and endpoint addresses are checked for compatibility.  The
 ///     full set of compatible channel-endpoint pairings then becomes the set of
 ///     streams for this connection option.
@@ -187,7 +187,7 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 ///     cancelled).  Any streams that are no longer valid (for example, because
 ///     a DNS mapping changed) will be shut down, however.
 ///
-/// A [Scheduler] structure is maintained for the set of possible
+/// A [`Scheduler`] structure is maintained for the set of possible
 /// streams, and is used to select amongst them for the sending of any
 /// single message or batch.  An actual stream and its corresponding
 /// low-level channel will not be established until the possible
@@ -196,8 +196,8 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 ///
 /// # Stream Abstractions
 ///
-/// This type also implements the [PushStream], [PushStreamAdd],
-/// [PushStreamPrivate], and [PushStreamShared] traits, allowing
+/// This type implements the [`PushStream`], [`PushStreamAdd`],
+/// [`PushStreamPrivate`], and [`PushStreamShared`] traits, allowing
 /// it to function as an abstract stream in and of itself.  When used
 /// in this manner, the scheduler is used to select from one of the
 /// possible streams to create a batch.  All subsequent batch
@@ -208,6 +208,14 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// be cancelled, and all subsequent operations will report an error.
 /// Note that this is allowed by the overall stream abstraction, which
 /// is based on unreliable datagram protocols.
+///
+/// # Type Parameters
+///
+/// - `Epochs`: Type of ID generators for epoch IDs.
+///
+/// - `Resolve`: Type of [`Addrs`] instance for resolving parameters.
+///
+/// - `Ctx`: Type of contexts.
 pub struct StreamSelector<Epochs, Resolve, Ctx>
 where
     Epochs: Create + Iterator,
@@ -229,6 +237,12 @@ where
 }
 
 /// Container for core mutable state.
+///
+/// # Type Parameters
+///
+/// - `Epochs`: Type of ID generators for epoch IDs.
+///
+/// - `Ctx`: Type of contexts.
 struct StreamSelectorState<Epochs, Ctx>
 where
     Epochs: Iterator,
@@ -266,18 +280,31 @@ struct StreamEntry<Addr, ChannelID, Param, Stream> {
     stream: Option<Stream>
 }
 
+/// Description of a selected stream.
 pub(crate) enum SelectedStream<ID, Stream> {
-    New { id: ID, stream: Stream },
-    Existing { stream: Stream }
+    /// A new stream was created due to selection.
+    New {
+        /// ID of the new stream.
+        id: ID,
+        /// The new stream.
+        stream: Stream
+    },
+    /// An existing stream was selected.
+    Existing {
+        /// The existing stream.
+        stream: Stream
+    }
 }
 
+/// [`Iterator`] instance for created
+/// [`PullStream`](crate::stream::PullStream)s.
 pub struct SelectedPullStreams<ID, Stream> {
     id: ID,
     stream: Stream
 }
 
-/// Type of [Selections](PushStreamShared::Selections) used by
-/// [StreamSelector].
+/// Type of [`Selections`](PushStreamShared::Selections) used by
+/// [`StreamSelector`].
 #[derive(Clone)]
 pub struct SelectorSelections<ID, Inner> {
     id: Option<ID>,
@@ -320,7 +347,7 @@ pub enum StreamSelectorConnectionCreateError<Addrs> {
     }
 }
 
-/// Errors that can occur when creating a [StreamSelector].
+/// Errors that can occur when creating a [`StreamSelector`].
 #[derive(Debug)]
 pub enum StreamSelectorCreateError<Addrs, Epochs> {
     /// Error occurred creating the connection options.
@@ -329,7 +356,7 @@ pub enum StreamSelectorCreateError<Addrs, Epochs> {
     },
     /// Error occurred during the initial refresh.
     Refresh { err: RefreshError },
-    /// Error occurred creating the [Epochs] instance.
+    /// Error occurred creating the `Epochs` instance.
     Epochs { err: Epochs }
 }
 
@@ -347,7 +374,7 @@ pub enum StreamSelectorReportError<Report> {
     MutexPoison
 }
 
-/// Errors that can occur when selecting a stream on a [StreamSelector].
+/// Errors that can occur when selecting a stream on a [`StreamSelector`].
 #[derive(Debug)]
 pub enum StreamSelectorSelectError<Item> {
     /// Error occurred while selecting the stream.
@@ -362,7 +389,7 @@ pub enum StreamSelectorSelectError<Item> {
     }
 }
 
-/// Errors that can occur when selecting a stream on a [StreamSelector].
+/// Errors that can occur when selecting a stream on a [`StreamSelector`].
 #[derive(Debug)]
 pub enum StreamSelectorSelectRefreshError<Addrs, Param, Item> {
     /// Error occurred while refreshing the connections.
@@ -380,7 +407,7 @@ pub enum StreamSelectorSelectRefreshError<Addrs, Param, Item> {
 }
 
 /// Errors that can occur getting existing streams on a
-/// [StreamSelector].
+/// [`StreamSelector`].
 ///
 /// This is a template used by many concrete error types.
 #[derive(Debug)]
@@ -404,7 +431,7 @@ pub enum SelectorStreamError<Epoch> {
     MutexPoison
 }
 
-/// Errors that can occur with batches on a [StreamSelector].
+/// Errors that can occur with batches on a [`StreamSelector`].
 ///
 /// This is a template used by many concrete error types.
 #[derive(Debug)]
@@ -421,7 +448,7 @@ pub enum SelectorBatchError<Epoch, Err> {
     }
 }
 
-/// Errors that can occur with batches on a [StreamSelector].
+/// Errors that can occur with batches on a [`StreamSelector`].
 ///
 /// This is a template used by many concrete error types.
 #[derive(Debug)]
@@ -463,7 +490,7 @@ pub enum SelectorBatchSelectError<Select, Parties, Stream, Epoch> {
 }
 
 /// Retry information for
-/// [abort_start_batch](PushStream::abort_start_batch).
+/// [`abort_start_batch`](PushStreamPrivate::abort_start_batch).
 #[derive(Clone, Debug)]
 pub struct SelectorAbortRetry<Epoch, Stream> {
     /// Dense ID of the selected stream.
@@ -472,7 +499,7 @@ pub struct SelectorAbortRetry<Epoch, Stream> {
     stream: Stream
 }
 
-/// Retry information for starting batches for [StreamSelector].
+/// Retry information for starting batches for [`StreamSelector`].
 #[derive(Clone, Debug)]
 pub struct SelectorStartRetry<PartyID> {
     when: Instant,
@@ -1554,7 +1581,7 @@ where
     /// Select a stream from among the set of possible streams.
     ///
     /// This will first refresh the set of possible streams as per
-    /// [refresh](StreamSelector::refresh).  Then, the scheduler
+    /// [`refresh`](StreamSelector::refresh).  Then, the scheduler
     /// will be used to select from among the possible streams.  Both
     /// the stream and its dense index will be returned.
     fn select_stream(
