@@ -16,6 +16,18 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+//! Adaptive ranking and selection from a set of streams, for
+//! dispatched sessions.
+//!
+//! This module provides [`DispatchSelector`], which is a more limited
+//! implementation of the functionality provided by
+//! [`StreamSelector`](crate::select::StreamSelector), suitable for
+//! dispatched sessions.  [`DispatchSelector`] keeps a collection of
+//! streams and manages a scheduler for selecting among them; however,
+//! it does not have a [`Channels`](crate::channels::Channels)
+//! instance for obtaining a set of possible streams.  Streams are
+//! provided exclusively through its [`StreamReporter`] instance.
+
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Debug;
@@ -91,6 +103,31 @@ use crate::stream::StreamReporter;
 use crate::stream::StreamRetry;
 use crate::stream::StreamShutdown;
 
+/// [`PushStreamPrivate`] instance for selecting among different
+/// streams for a given party.
+///
+/// This type provides adaptive stream selection and scheduling
+/// capabilities similar to
+/// [`StreamSelector`](crate::select::StreamSelector); however, it
+/// does not maintain a [`Channels`](crate::channels::Channels)
+/// instance for obtaining candidate streams; rather, it selects from
+/// among streams that have been provided by its [`StreamReporter`]
+/// instance.
+///
+/// This is typically used as a stream implementation for sessions
+/// that are dynamically dispatched in response to a thread using
+/// [`listen`](crate::channels::ChannelsListen::listen) to obtain
+/// incoming sessions.
+///
+/// # Type Parameters
+///
+/// - `Epochs`: Type of epoch ID generators.
+///
+/// - `StreamID`: Type of IDs for underlying streams.
+///
+/// - `Stream`: Type of underlying streams.
+///
+/// - `Ctx`: Type of contexts.
 pub struct DispatchSelector<Epochs, StreamID, Stream, Ctx>
 where
     Epochs: Create + Iterator,
@@ -131,16 +168,22 @@ struct StreamEntry<StreamID, Stream> {
     stream: Stream
 }
 
-/// Errors that can occur when creating a [StreamSelector].
+/// Errors that can occur when creating a [`DispatchSelector`].
 #[derive(Debug)]
 pub enum DispatchSelectorCreateError<Epochs> {
     /// Error occurred during the initial refresh.
-    Refresh { err: RefreshError },
-    /// Error occurred creating the [Epochs] instance.
-    Epochs { err: Epochs }
+    Refresh {
+        /// The error that occurred during the initial refresh.
+        err: RefreshError
+    },
+    /// Error occurred creating the `Epochs` instance.
+    Epochs {
+    /// The error that occurred creating the `Epochs` instance.
+        err: Epochs
+    }
 }
 
-/// Errors that can occur when selecting a stream on a [StreamSelector].
+/// Errors that can occur when selecting a stream on a [`DispatchSelector`].
 #[derive(Debug)]
 pub enum DispatchSelectorSelectError<Item> {
     /// Error occurred while selecting the stream.
@@ -161,21 +204,32 @@ pub enum DispatchSelectorSelectError<Item> {
 #[derive(Debug)]
 pub enum DispatchSelectorReportError<Report, StreamID> {
     /// Error occurred reporting the stream.
-    Report { err: Report },
+    Report {
+        /// The error that occurred reporting the stream.
+        err: Report
+    },
     /// Error occurred refreshing the scheduler.
     Refresh {
+    /// The error that occurred refreshing the scheduler.
         err: DispatchSelectorRefreshError<StreamID>
     },
     /// Mutex poisoned.
     MutexPoison
 }
 
+/// Errors that can occur refreshing a scheduler.
 #[derive(Debug)]
 pub enum DispatchSelectorRefreshError<StreamID> {
     /// Error occurred refreshing the scheduler.
-    Refresh { err: RefreshError },
+    Refresh {
+        /// The error that occurred refreshing the scheduler.
+        err: RefreshError
+    },
     /// Index assignment skipped an index.
-    BadID { id: StreamID }
+    BadID {
+        /// The stream ID.
+        id: StreamID
+    }
 }
 
 impl<StreamID> ScopedError for DispatchSelectorRefreshError<StreamID> {
@@ -769,9 +823,10 @@ where
     /// Select a stream from among the set of possible streams.
     ///
     /// This will first refresh the set of possible streams as per
-    /// [refresh](StreamSelector::refresh).  Then, the scheduler
-    /// will be used to select from among the possible streams.  Both
-    /// the stream and its dense index will be returned.
+    /// [`refresh`](crate::select::StreamSelector::refresh).  Then,
+    /// the scheduler will be used to select from among the possible
+    /// streams.  Both the stream and its dense index will be
+    /// returned.
     pub fn select_stream(
         &mut self
     ) -> Result<
@@ -808,6 +863,14 @@ where
         }
     }
 
+    /// Destroy this `DispatchSelector` and obtain its underlying streams.
+    ///
+    /// This is typically used for shutting down a stream, so that the
+    /// underlying streams can also be shut down.
+    ///
+    /// # Return Value
+    ///
+    /// An array of `(id, stream)` pairs for all the underlying streams.
     #[inline]
     pub fn take(self) -> Result<Vec<(StreamID, Stream)>, MutexPoison> {
         Ok(Arc::into_inner(self.state)

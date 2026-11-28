@@ -18,9 +18,16 @@
 
 //! Synthetic multicasting combinator for streams.
 //!
-//! This module implements [StreamMulticaster], which provides a
-//! synthetic multicasting capability for [PushStream]s.  See its
-//! documentation for full details.
+//! This module implements [`StreamMulticaster`], which provides a
+//! synthetic multicasting capability for [`PushStream`]s.  This
+//! permits multicast-like functionality to be implemented using a set
+//! of unicast streams.  This can also be combined with
+//! [`StreamSelector`](crate::select::StreamSelector) to implement
+//! synthetic multicast with selection of channels.  Finally, this can
+//! also be combined with
+//! [`SharedPrivateChannelStream`](crate::channels::SharedPrivateChannelStream)
+//! to implement synthetic multicast that is able to use a mix of
+//! unicast and true multicast channels.
 
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -81,6 +88,7 @@ use crate::stream::StreamRetry;
 use crate::stream::StreamShutdown;
 use crate::threads::SelfPartyCtx;
 
+/// Newtype for stream IDs in a [`StreamMulticaster`].
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct MulticastStreamIdx(usize);
 
@@ -100,12 +108,14 @@ struct StreamMulticasterBatch<BatchID> {
     batch_ids: Vec<Option<BatchID>>
 }
 
+/// [`Selections`](crate::stream::PushStreamShared::Selections)
+/// implementation for [`StreamMulticaster`].
 #[derive(Clone)]
 pub struct StreamMulticasterSelections<Inner> {
     inner: Vec<Option<Inner>>
 }
 
-/// Synthetic multicasting combinator for [PushStream]s.
+/// Synthetic multicasting combinator for [`PushStream`]s.
 ///
 /// This combinator maintains a separate stream for each of a set of
 /// counterparties, and replicates batching commands on each of these
@@ -114,9 +124,15 @@ pub struct StreamMulticasterSelections<Inner> {
 /// In its most simple use case, this can be used to implement
 /// synthetic multicasting functionality on top of unicast streams.
 /// However, this combinator can also work with
-/// [StreamSelector](crate::select::StreamSelector) and
-/// [SharedPrivateChannelStream](crate::channels::SharedPrivateChannelStream)
+/// [`StreamSelector`](crate::select::StreamSelector) and
+/// [`SharedPrivateChannelStream`](crate::channels::SharedPrivateChannelStream)
 /// to manage a combination of unicast and true multicast channels.
+///
+/// # Type Parameters
+///
+/// - `Party`: Type of counterparty IDs.
+///
+/// - `Stream`: Type of underlying streams.
 pub struct StreamMulticaster<
     Party: Clone + Debug + Display + Eq + Hash,
     Stream: PushStream<Ctx>,
@@ -131,18 +147,34 @@ pub struct StreamMulticaster<
     batches: CompoundBatches<StreamMulticasterBatch<Stream::BatchID>>
 }
 
+/// [`Iterator`] over [`PullStream`](crate::stream::PullStream)s generated from
+/// [`select`](PushStreamShared::select) for [`StreamMulticaster`].
+///
+/// # Type Parameters
+///
+/// - `T`: Type of [`PullStream`](crate::stream::PullStream)
+///   [`Iterator`]s for the underlying streams.
 pub struct StreamMulticastPullStreams<T>
 where
     T: IntoIterator {
     inners: Vec<T>
 }
 
+/// [`Frags`] instance for [`StreamMulticaster`].
+///
+/// # Type Parameters
+///
+/// - `F`: [`Frags`] instance for the underlying streams.
 pub struct StreamMulticasterFrags<F>
 where
     F: Frags {
     frags: Vec<F>
 }
 
+/// Retry object for [`StreamMulticaster`].
+///
+/// This is a general implementation of retry information for many
+/// operations.
 #[derive(Clone, Debug)]
 pub struct MulticastRetry<Retry>
 where
@@ -249,10 +281,19 @@ pub enum StreamMulticasterPushReportError<Start, Add, Finish> {
     }
 }
 
+/// Errors that can occur creating a [`StreamMulticaster`].
 #[derive(Debug)]
 pub enum StreamMulticasterCreateError<Stream, Refresh> {
-    Stream { err: Stream },
-    Refresh { err: Refresh }
+    /// An error occurred creating an underlying stream.
+    Stream {
+        /// The error that occurred creating the underlying stream.
+        err: Stream
+    },
+    /// An error occurred refreshing an underlying stream.
+    Refresh {
+        /// The error that occurred refreshing an underlying stream.
+        err: Refresh
+    }
 }
 
 /// Retry information for an attempt to cancel a push operation.
@@ -299,9 +340,15 @@ pub enum StreamMulticasterReportError<Report, Party> {
     }
 }
 
+/// Errors that can occur getting counterparty information about a
+/// batch.
 #[derive(Debug)]
 pub enum StreamMulticasterBatchPartiesError {
-    NotFound { batch_id: CompoundBatchID }
+    /// The batch was not found.
+    NotFound {
+        /// The batch ID.
+        batch_id: CompoundBatchID
+    }
 }
 
 impl From<usize> for MulticastStreamIdx {
@@ -850,6 +897,11 @@ where
         }
     }
 
+    /// Get an underlying stream.
+    ///
+    /// # Parameters
+    ///
+    /// - `idx`: The index of the stream to get.
     #[inline]
     pub fn stream(
         &self,

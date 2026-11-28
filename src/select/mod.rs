@@ -18,7 +18,7 @@
 
 //! Adaptive ranking and selection from a set of streams.
 //!
-//! This module implements [`StreamSelector`], a scheduling-based
+//! This module provides [`StreamSelector`], a scheduling-based
 //! mechanism for selecting from a set of stream options.  The set of
 //! options is obtained from a set of combinations of [`Addrs`] and
 //! [`Channels`] instances.  This is then ranked by a [`Scheduler`]
@@ -152,7 +152,7 @@ pub struct StreamSelectorBatch<Epoch, BatchID> {
 /// [`PushStreamPrivate`] instance for selecting among different
 /// streams for a given party.
 ///
-/// In its most basic functioning, this type maintains a set of
+/// In its most basic functioning, `StreamSelector` maintains a set of
 /// connection options, each of which contains an [`Addrs`] instance
 /// that provides possible endpoint addresses, together with a
 /// [`Channels`] instance that provides a set of low-level channels for
@@ -1493,6 +1493,8 @@ where
             Ok(RetryResult::Retry(min_retry))
         }
     }
+
+    // XXX get rid of these.
 
     /// Report a success for a given stream.
     #[inline]

@@ -16,7 +16,17 @@
 // License along with this program.  If not, see
 // <https://www.gnu.org/licenses/>.
 
+// XXX Get rid of transfer IDs.  Just do hashes.
+
 //! Large-object transfer protocol.
+//!
+//! This module provides [`LargeObjProto`].  This is a protocol
+//! implementation based on the
+//! [`PushStream`](crate::stream::PushStream) API that implements
+//! fragmentation and transfer of arbitrary-sized objects over
+//! channnels with limited-sized MTUs.
+//!
+//! *This protocol is still in development and will likely change.*
 
 use std::array::TryFromSliceError;
 use std::cmp::Ordering;
@@ -87,17 +97,39 @@ use crate::stream::LargeObjOfferStream;
 use crate::stream::Parties;
 use crate::stream::PushStreamReportError;
 
+#[doc(hidden)]
 pub mod test;
 
+// XXX this may be an artifact of an old thread design.  It might be
+// possible to replace this with the basic SharedMsgs/PrivateMsgs trait.
+
+/// Trait for generating messages for [`LargeObjProto`].
+///
+/// # Type Parameters
+///
+/// - `H`: [`HashAlgo`] to use.
+///
+/// - `Msg`: Type of messages generated.
 pub trait LargeObjMsgs<H, Msg>: Sized
 where
     H: HashAlgo + Clone,
     H::HashID: Clone + Display + Hash + HashID + Eq {
+    /// Errors that can occur with [add_msgs](LargeObjMsgs::add_msgs).
     type AddMsgsError<Encode>: Debug + Display + ScopedError
     where
         Encode: Debug + Display + ScopedError;
 
     /// Use `sender` to add outbound large object messages.
+    ///
+    /// # Type Parameters
+    ///
+    /// - `Enc`: Type of [`Encoder`] used for encoding messages.
+    ///
+    /// - `F`: Type of [`Frags`] used to generate fragments.
+    ///
+    /// # Parameters
+    ///
+    /// - `sender`: The [`LargeObjSender`] to use to send messages.
     fn add_msgs<Enc, F>(
         &mut self,
         sender: &mut LargeObjSender<H, Msg, Enc, F>
@@ -108,33 +140,57 @@ where
         F: Frags;
 }
 
+/// Type trait for [`LargeObjProto`].
+///
+/// This trait contains only associated types.  It exists to manage
+/// the complexity of the relationships between the many type
+/// parameters that [`LargeObjProto`] would otherwise have.
 pub trait LargeObjProtoTypes<InMsg, OutMsg> {
     /// Type of principals assigned to messages.
     type Prin: Debug + Display + Clone;
     /// Type of session principals.
     type SessionPrin: Clone + Debug + Display + Eq + Hash;
+    /// Type of configuration objects for [IDs](LargeObjProtoTypes::IDs).
     type IDsConfig: Default;
+    /// Type of ID generators.
     type IDs: Create<Config = Self::IDsConfig> + Iterator<Item = LargeObjID>;
+    /// Type of hash IDs produced by [Hash](LargeObjProtoTypes::Hash).
     type HashID: Clone + Debug + Display + Hash + HashID + Eq;
     /// Hash algorithm to use.
     type Hash: Clone + HashAlgo<HashID = Self::HashID>;
-    /// Type of wrapper messages.
+    /// Type of wrapped payload messages handled by
+    /// [MsgAuthN](LargeObjProtoTypes::MsgAuthN).
     type Wrapper;
+    /// Type of configuration objects for
+    /// [Decoder](LargeObjProtoTypes::Decoder).
     type DecoderConfig: Default;
+    /// Type of decoding error produced by
+    /// [Decoder](LargeObjProtoTypes::Decoder).
     type DecodeError: Debug + Display;
+    /// [`Decoder`] instance used for payload messages.
     type Decoder: Create<Config = Self::DecoderConfig>
         + Decoder<Self::Wrapper, DecodeError = Self::DecodeError>;
+    /// Type of configuration objects for
+    /// [Encoder](LargeObjProtoTypes::Encoder).
     type EncoderConfig: Default;
+    /// Type of encoding error produced by
+    /// [Encoder](LargeObjProtoTypes::Encoder).
     type EncodeError: Debug + Display + ScopedError;
+    /// [`Encoder`] instance used for payload messages.
     type Encoder: Clone
         + Create<Config = Self::EncoderConfig>
         + Encoder<OutMsg, EncodeError = Self::EncodeError>;
-    /// Type of message source.
+    /// Type of message source for payload messages.
     type Msgs: LargeObjMsgs<Self::Hash, OutMsg>;
-    /// Type of message receiver.
+    /// Type of message receiver for payload messages.
     type Recv: AuthNMsgRecv<Self::Prin, Self::AuthNMsg> + Clone;
+    /// Type of authenticated payload messages produced by
+    /// [MsgAuthN](LargeObjProtoTypes::MsgAuthN).
     type AuthNMsg: AuthNedDestruct<Self::Prin, InMsg>;
+    /// Type of authentication errors produced by
+    /// [MsgAuthN](LargeObjProtoTypes::MsgAuthN).
     type AuthNError: Debug + Display;
+    /// Type of payload message authenticator.
     type MsgAuthN: MsgAuthN<
             InMsg,
             Self::Wrapper,
@@ -143,7 +199,7 @@ pub trait LargeObjProtoTypes<InMsg, OutMsg> {
             AuthNMsg = Self::AuthNMsg,
             Error = Self::AuthNError
         >;
-    /// Message authentication types.
+    /// Type trait for payload message authentication.
     type AuthNTypes: MsgAuthNTypes<
             InMsg,
             Wrapper = Self::Wrapper,
@@ -163,9 +219,11 @@ const LARGE_OBJ_METADATA_BITS: usize = LARGE_OBJ_METADATA_SIZE * 8;
 const LARGE_OBJ_FRAG_HEADER_SIZE: usize = 18;
 const LARGE_OBJ_FRAG_HEADER_BITS: usize = LARGE_OBJ_FRAG_HEADER_SIZE * 8;
 
+/// PER codec for [`LargeObjProto`] headers.
 pub type LargeObjFragHeaderPERCodec =
     PERCodec<LargeObjFragHeader, LARGE_OBJ_FRAG_HEADER_BITS>;
 
+/// PER codec for [`LargeObjProto`] metadata messages.
 pub type LargeObjMetadataPERCodec =
     PERCodec<LargeObjMetadata, LARGE_OBJ_METADATA_BITS>;
 
@@ -174,6 +232,10 @@ pub type LargeObjMetadataPERCodec =
 pub struct LargeObjID(u64);
 
 /// Message codec for large-object transfer protocol messages.
+///
+/// # Type Parameters
+///
+/// - `H`: [`HashAlgo`] to use.
 #[derive(Clone)]
 pub struct LargeObjMsgCodec<H>
 where
@@ -183,7 +245,7 @@ where
     hash: H
 }
 
-/// Representation of a fragment of a large object.
+/// A fragment sent by [`LargeObjProto`].
 #[derive(Clone, Debug, Hash, PartialEq)]
 pub struct LargeObjFrag {
     /// Offset of the fragment into the large object.
@@ -193,6 +255,8 @@ pub struct LargeObjFrag {
 }
 
 /// Abstracted representaton of large-object protocol messages.
+///
+/// - `H`: [`HashAlgo`] to use.
 #[derive(Clone, Debug, Hash, PartialEq)]
 pub enum LargeObjMsg<H>
 where
@@ -287,10 +351,18 @@ where
     }
 }
 
+/// Errors that can occur adding outbound messages to a
+/// [`LargeObjProto`].
 #[derive(Debug)]
 pub enum LargeObjProtoAddOutboundError<Encode> {
-    Encode { err: Encode },
+    /// Error occurred encoding the message.
+    Encode {
+        /// The error that occurred encoding the message.
+        err: Encode
+    },
+    /// The ID generator was exhausted.
     NoIDs,
+    /// The mutex was poisoned.
     MutexPoison
 }
 
@@ -337,6 +409,18 @@ where
     hashes: HashMap<LargeObjID, H>
 }
 
+/// An offshoot of [`LargeObjProto`] that can be used for adding
+/// payload messages to be sent.
+///
+/// # Type Parameters
+///
+/// - `H`: [`HashAlgo`] to use.
+///
+/// - `Msg`: Type of messages generated.
+///
+/// - `Enc`: Type of [`Encoder`] used for outbound messages.
+///
+/// - `F`: Type of [`Frags`] instance used for managing fragments.
 pub struct LargeObjSender<H, Msg, Enc, F>
 where
     Enc: Create + Encoder<Msg>,
@@ -352,6 +436,40 @@ where
     hash: H
 }
 
+/// Large object transfer protocol engine.
+///
+/// This manages a protocol for fragmenting and transferring
+/// arbitrary-sized objects over multiple unreliable datagram channels
+/// using the [`PushStream`](crate::stream::PushStream) API.  Because
+/// of its use of this API, this protocol engine is capable of
+/// delivering fragments over multiple different channels of differing
+/// reliabilities.
+///
+/// `LargeObjProto` manages fragmentation, transmission and
+/// retransmission, and reassembly of objects.  Fragments can be any
+/// size, and can be requested and acknowledged by the receiver.
+///
+/// `LargeObjProto` is also designed to serve as the backbone of a
+/// future content-addressable storage protocol.  Objects are
+/// identified by hashes, and the transfer of an object of a given
+/// hash is idempotent, for a given length of time.  *This means that
+/// protocol users _must_ ensure that message hashes are unique.*
+///
+/// *Large object protocol is still in development, and the protocol
+/// and its API will almost certainly change.*
+///
+/// # Type Parameters
+///
+/// - `InMsg`: Type of inbound messages.
+///
+/// - `OutMsg`: Type of outbound messages.
+///
+/// - `PartyID`: Type of counterparty identifiers.
+///
+/// - `F`: Type of [`Frags`] instance used.
+///
+/// - `Types`: [`LargeObjProtoTypes`] instance providing other type
+///   parameters.
 pub struct LargeObjProto<InMsg, OutMsg, PartyID, F, Types>
 where
     Types: LargeObjProtoTypes<InMsg, OutMsg>,
@@ -363,7 +481,6 @@ where
     parties: Arc<RwLock<HashMap<Types::SessionPrin, PartyID>>>,
     inbound: Arc<Mutex<LargeObjInbound<Types::HashID, Types::SessionPrin>>>,
     param: Arc<RwLock<F::Param>>,
-    // XXX Replace this with a map from parties to frags parameters
     ids: Arc<Mutex<Types::IDs>>,
     tombstone_duration: Duration,
     notify: Notify,
@@ -376,118 +493,265 @@ where
     hash: Types::Hash
 }
 
+/// Retry object for pushing [`LargeObjProto`] messages.
 pub enum LargeObjPushRetry<H, Frags, Offer> {
-    Frags { retry: Frags, id: LargeObjID },
-    Offer { retry: Offer, hash: H },
-    Retry { when: Instant }
+    /// Retry sending fragments.
+    Frags {
+        /// Retry information for the underlying stream.
+        retry: Frags,
+        /// Transfer ID.
+        id: LargeObjID
+    },
+    /// Retry sending an offer.
+    Offer {
+        /// Retry information for the underlying stream.
+        retry: Offer,
+        /// Hash ID of the offer.
+        hash: H
+    },
+    /// Retry sending protocol messages.
+    Retry {
+        /// When to try again.
+        when: Instant
+    }
 }
 
+/// Errors that can occur sending fragments.
 #[derive(Debug)]
 pub enum LargeObjPushError<H, Frags, Offer> {
-    Frags { err: Frags, id: LargeObjID },
-    Offer { err: Offer, hash: H },
-    NoObjID { hash: H, id: LargeObjID },
-    NoID { id: LargeObjID },
-    NoObj { hash: H },
+    /// An error occurred pushing fragments.
+    Frags {
+        /// The error from the underlying stream.
+        err: Frags,
+        /// The transfer ID.
+        id: LargeObjID
+    },
+    /// An error occurred pushing an offer.
+    Offer {
+        /// The error from the underlying stream.
+        err: Offer,
+        /// The offer hash ID.
+        hash: H
+    },
+    /// No entry existed for a transfer ID and hash.
+    ///
+    /// This should never happen.
+    NoObjID {
+        /// The object hash.
+        hash: H,
+        /// The transfer ID.
+        id: LargeObjID
+    },
+    /// No entry existed for a transfer ID.
+    ///
+    /// This should never happen.
+    NoID {
+        /// The transfer ID.
+        id: LargeObjID
+    },
+    /// No object ID was found for a hash.
+    ///
+    /// This should never happen.
+    NoObj {
+        /// The object hash.
+        hash: H
+    },
+    /// Mutex was poisoned.
     MutexPoison
 }
 
+/// Errors that can occur sending protocol messages.
 #[derive(Debug)]
 pub enum LargeObjSendError<H, Prin, Msgs> {
-    Msgs { err: Msgs },
-    NoObj { hash: H, id: LargeObjID },
-    NoPrin { prin: Prin },
+    /// An error occurred obtaining messages.
+    Msgs {
+        /// The error from the message generator.
+        err: Msgs
+    },
+    /// No entry existed for a transfer ID and hash.
+    ///
+    /// This should never happen.
+    NoObj {
+        /// The object hash.
+        hash: H,
+        /// The transfer ID.
+        id: LargeObjID
+    },
+    /// Unknown principal.
+    NoPrin {
+        /// The principal.
+        prin: Prin
+    },
+    /// Mutex wwas poisoned.
     MutexPoison
 }
 
+/// Errors that can occur receiving messages.
 #[derive(Debug)]
 pub enum LargeObjRecvError<H, Auth, Decode, Upstream, Frags> {
+    /// An error occurred in the upstream receiver.
     Upstream {
+        /// The error that occurred in the upstream receiver.
         err: Upstream
     },
+    /// An error occurred decoding the message.
     Decode {
+        /// The error that occurred decoding the message.
         err: Decode
     },
+    /// An error occurred in message authentication.
     Auth {
+        /// The error that occurred in message authentication.
         err: Auth
     },
+    /// An error occurred receiving a protocol message on an outbound
+    /// transfer.
     OutboundRecv {
+        /// Hash ID of the object.
         hash: H,
+        /// Transfer ID.
         id: LargeObjID,
+        /// The error that occurred receiving the protocol message.
         err: Frags
     },
+    /// An error occurred receiving a protocol message on an inbound
+    /// transfer.
     InboundRecv {
+        /// Hash ID of the object.
         hash: H,
+        /// Transfer ID.
         id: LargeObjID,
+        /// The error that occurred receiving the protocol message.
         err: InboundRecvError
     },
+    // XXX This doesn't s
     FinishedPending {
         hash: H,
         id: LargeObjID
     },
+    /// No entry was found for a given transfer.
+    ///
+    /// This should never happen.
     NotFound {
+        /// Hash ID of the object.
         hash: H,
-        id: LargeObjID
+        /// Transfer ID.
+        id: LargeObjID,
     },
+    /// No hash entry was found for a given transfer.
+    ///
+    /// This should never happen.
     NoHash {
+        /// Hash ID of the object.
         hash: H,
-        id: LargeObjID
+        /// Transfer ID.
+        id: LargeObjID,
     },
+    /// No transfer was found for a given hash.
+    ///
+    /// This should never happen.
     NoObj {
+        /// Hash ID of the object.
         hash: H,
-        id: LargeObjID
+        /// Transfer ID.
+        id: LargeObjID,
     },
+    /// A different tranfer exists under the same hash ID.
+    ///
+    /// This should never happen.
     Collision,
+    /// Authentication of a payload message failed.
     AuthNFail,
+    /// ID generator was exhausted.
     NoID,
+    /// Mutex was poisoned.
     MutexPoison
 }
 
+/// Errors that can occur creating a [`LargeObjProto`].
 #[derive(Debug)]
 pub enum LargeObjProtoCreateError<Encoder, Decoder, IDs> {
+    /// An error occurred creating the [`Encoder`].
     Encoder { err: Encoder },
+    /// An error occurred creating the [`Decoder`].
     Decoder { err: Decoder },
+    /// An error occurred creating the ID generator.
     IDs { err: IDs }
 }
 
+/// Errors that can occur encoding a protocol message.
 #[derive(Debug)]
 pub enum LargeObjMsgEncodeError {
+    /// An error occurred encoding a metadata message.
     Metadata {
+        /// The error that occurred encoding the metadata message.
         err: <LargeObjMetadataPERCodec
               as Encoder<LargeObjMetadata>>::EncodeError
     },
+    /// An error occurred encoding a fragment header.
     FragHeader {
+        /// The error that occurred encoding the fragment header.
         err: <LargeObjFragHeaderPERCodec
               as Encoder<LargeObjFragHeader>>::EncodeError
     },
+    /// Encoding buffer was too short.
     TooShort
 }
 
+/// Errors that can occur decoding a protocol message.
 #[derive(Debug)]
 pub enum LargeObjMsgDecodeError {
+    /// An error occurred decoding a metadata message.
     Metadata {
+        /// The error that occurred decoding the metadata message.
         err: <LargeObjMetadataPERCodec
               as Decoder<LargeObjMetadata>>::DecodeError
     },
+    /// An error occurred decoding a fragment header.
     FragHeader {
+        /// The error that occurred decoding the fragment header.
         err: <LargeObjFragHeaderPERCodec
               as Decoder<LargeObjFragHeader>>::DecodeError
     },
+    /// An error occurred converting a hash ID.
     Hash {
+        /// The error that occurred converting the hash ID.
         err: TryFromSliceError
     },
+    /// Encoding buffer was too short.
     TooShort
 }
 
+/// Errors that can occur generating outgoing data fragments.
 #[derive(Debug)]
 pub enum LargeObjDataError {
-    Frags { err: OutboundDataError },
+    /// An error occurred obtaining the data fragments.
+    Frags {
+        /// The error that occurred obtaining the data fragments.
+        err: OutboundDataError
+    },
+    /// Offset was larger than the data object.
+    ///
+    /// This should never happen.
     OutOfBounds
 }
 
+/// A choice between a fragment message or an offer.
 pub enum FragsOrOffer<HashID, Frags, Offer> {
-    Frags { id: LargeObjID, err: Frags },
-    Offer { hash: HashID, err: Offer }
+    /// Fragments for an existing transfer.
+    Frags {
+        /// The transfer ID.
+        id: LargeObjID,
+        /// The fragments.
+        err: Frags
+    },
+    /// An offer for a new transfer.
+    Offer {
+        /// The hash ID of the object.
+        hash: HashID,
+        /// The offer.
+        err: Offer
+    }
 }
 
 impl From<usize> for LargeObjID {
@@ -554,6 +818,13 @@ where
 }
 
 impl LargeObjFrag {
+    /// Create a new `LargeObjFrag`.
+    ///
+    /// # Parameters
+    ///
+    /// - `offset`: The offset of the data.
+    ///
+    /// - `data`: The data fragment.
     #[inline]
     pub fn new(
         offset: u64,
@@ -565,21 +836,33 @@ impl LargeObjFrag {
         }
     }
 
+    /// Get the offset of the data fragment.
     #[inline]
     pub fn offset(&self) -> u64 {
         self.offset
     }
 
+    /// Get the data fragment.
     #[inline]
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
+    /// Get the size ofthe data fragment in bytes.
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.data.len()
     }
 
+    /// Decompose a `LargeObjFrag` into its components.
+    ///
+    /// # Return Value
+    ///
+    /// Returns a pair consisting of the following:
+    ///
+    /// 1. The offset of the data.
+    ///
+    /// 1. The data fragment.
     #[inline]
     pub fn take(self) -> (u64, Vec<u8>) {
         (self.offset, self.data)
@@ -602,14 +885,24 @@ where
     /// Maximum number of bytes that can be sent with a datagram.
     pub const LARGE_OBJ_DATAGRAM_MAX_DATA: usize = 1024;
 
+    /// Create an [`Offer`](LargeObjMsg::Offer) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `frags`: The [`OutboundFrags`] from which to obtain the
+    ///   offered data.
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `nbytes`: The size of the message in bytes.
     #[inline]
     pub fn offer(
         frags: &mut OutboundFrags,
         hash: H,
-        max_bytes: usize
+        nbytes: usize
     ) -> Result<RetryResult<(Self, Instant)>, LargeObjDataError> {
         frags
-            .offer_frag(max_bytes)
+            .offer_frag(nbytes)
             .map_err(|err| LargeObjDataError::Frags { err: err })?
             .map_ok(|(offset, len, when)| match frags.data(offset, len) {
                 Ok(data) => Ok((
@@ -627,19 +920,37 @@ where
             })
     }
 
+    /// Create an [`Accept`](LargeObjMsg::Accept) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `nbytes`: The size of the message in bytes.
+    ///
+    /// - `id`: The transfer ID.
     #[inline]
     pub fn accept(
         hash: H,
-        size: usize,
+        nbytes: usize,
         id: LargeObjID
     ) -> Self {
         LargeObjMsg::Accept {
             hash: hash,
-            size: size as u64,
+            size: nbytes as u64,
             id: id
         }
     }
 
+    /// Create a [`ReqObj`](LargeObjMsg::ReqObj) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `nbytes`: The size of the message in bytes.
+    ///
+    /// - `id`: The transfer ID.
     #[inline]
     pub fn req_obj(
         hash: H,
@@ -653,15 +964,25 @@ where
         }
     }
 
+    /// Create a [`Frags`](LargeObjMsg::Frags) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `frags`: The [`OutboundFrags`] from which to obtain the
+    ///   fragments.
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `nbytes`: The size of the message in bytes.
     pub fn frags(
         frags: &mut OutboundFrags,
         id: LargeObjID,
-        max_bytes: usize
+        nbytes: usize
     ) -> Result<RetryResult<Option<(Self, Instant)>>, LargeObjDataError> {
         let mut buf = [(0, 0); 16];
 
         frags
-            .data_frags(&mut buf, max_bytes)
+            .data_frags(&mut buf, nbytes)
             .map_err(|err| LargeObjDataError::Frags { err: err })?
             .map_ok(|res| match res {
                 Some((nmsgs, when)) => {
@@ -691,6 +1012,14 @@ where
             })
     }
 
+    /// Create a [`Req`](LargeObjMsg::Req) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The transfer ID.
+    ///
+    /// - `reqs`: An [`Iterator`] of requests, obtained from a
+    ///   [`Frags`] instance.
     #[inline]
     pub fn reqs<I>(
         id: LargeObjID,
@@ -717,6 +1046,13 @@ where
         LargeObjMsg::Req { id: id, reqs: reqs }
     }
 
+    /// Create a [`Finish`](LargeObjMsg::Finish) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `id`: The transfer ID.
     #[inline]
     pub fn finish(
         hash: H,
@@ -1439,6 +1775,14 @@ where
     H::HashID: Clone + Display + Hash + HashID + Eq,
     F: Frags
 {
+    /// Add a message to be sent by the [`LargeObjProto`] instance.
+    ///
+    /// Once added, the protocol engine will handle retries until the
+    /// counterparty has indicated receipt of the entire message.
+    ///
+    /// # Parameters
+    ///
+    /// - `msg`: Message to send.
     pub fn add_outbound(
         &mut self,
         msg: &Msg
@@ -1506,7 +1850,24 @@ where
     PartyID: Clone,
     F: Frags
 {
-    /// Create a protocol instance.
+    /// Create a `LargeObjProto` instance.
+    ///
+    /// # Parameters
+    ///
+    /// - `config`: Configuration object for the `LargeObjProto`
+    ///   instance.
+    ///
+    /// - `upstream`: [`AuthNMsgRecv`] instance for receiving payload
+    ///   messages.
+    ///
+    /// - `msgs`: Message generator for payload messages.
+    ///
+    /// - `auth`: Message authenticator for payload messages.
+    ///
+    /// - `hash`: Hash algorithm instance.
+    ///
+    /// - `notify`: [`Notify`] for signalling available protocol
+    ///   messages.
     pub fn create(
         config: LargeObjProtoConfig<
             Types::EncoderConfig,
@@ -1575,6 +1936,7 @@ where
         })
     }
 
+    /// Get the [`LargeObjSender`] for this `LargeObjProto`.
     #[inline]
     pub fn sender(
         &self
@@ -1588,7 +1950,17 @@ where
         }
     }
 
-    /// Set the allowed parties for this protocol instance.
+    /// Set the allowed counterparties for this protocol instance.
+    ///
+    /// # Type Parameters
+    ///
+    /// - `I`: Type of [`Iterator`]s over counterparties.
+    ///
+    /// # Parameters
+    ///
+    /// - `param`: Metadata to be included with each counterparty.
+    ///
+    /// - `parties`: An [`Iterator`] of party IDs.
     pub fn set_parties<I>(
         &mut self,
         param: F::Param,
@@ -2096,6 +2468,17 @@ where
         }
     }
 
+    /// Receive an [`Offer`](LargeObjMsg::Offer) message's contents.
+    ///
+    /// # Parameters
+    ///
+    /// - `prin`: The princpal for the counterparty.
+    ///
+    /// - `hash`: The hash ID for the message.
+    ///
+    /// - `size`: The size of the message in bytes.
+    ///
+    /// - `frag`: A data fragment for the message.
     pub fn recv_offer_msg(
         &mut self,
         prin: &<Types::AuthNTypes as MsgAuthNTypes<InMsg>>::SessionPrin,
@@ -2295,6 +2678,13 @@ where
         Ok(out)
     }
 
+    /// Receive a [`Frags`](LargeObjMsg::Frags) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The transfer ID.
+    ///
+    /// - `recv`: The data fragments.
     pub fn recv_frags_msg(
         &mut self,
         id: LargeObjID,
@@ -2414,6 +2804,13 @@ where
         }
     }
 
+    /// Receive an [`Accept`](LargeObjMsg::Accept) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The message hash ID.
+    ///
+    /// - `id`: The transfer ID.
     pub fn recv_accept_msg(
         &mut self,
         hash: Types::HashID,
@@ -2458,6 +2855,13 @@ where
         Ok(None)
     }
 
+    /// Receive a [`ReqObj`](LargeObjMsg::ReqObj) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The hash ID of the object.
+    ///
+    /// - `id`: The transfer ID.
     pub fn recv_req_obj_msg(
         &mut self,
         hash: Types::HashID,
@@ -2528,6 +2932,13 @@ where
         }
     }
 
+    /// Receive a [`Req`](LargeObjMsg::Req) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `id`: The transfer ID.
+    ///
+    /// - `reqs`: The fragment requests.
     pub fn recv_reqs_msg(
         &mut self,
         id: LargeObjID,
@@ -2596,6 +3007,13 @@ where
         }
     }
 
+    /// Receive a [`Finish`](LargeObjMsg::Finish) message.
+    ///
+    /// # Parameters
+    ///
+    /// - `hash`: The hash ID of the message.
+    ///
+    /// - `id`: The transfer ID of the message.
     pub fn recv_finish_msg(
         &mut self,
         hash: Types::HashID,
